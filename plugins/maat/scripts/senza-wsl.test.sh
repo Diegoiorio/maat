@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# senza-wsl.test.sh — Windows senza WSL (pk08, blocco A: D5, R8, A10). Tutto gira con il PATH ridotto: niente wsl ne'
-# wsl.exe (su Windows via anche System32, dove sta; FIC_PYTHON tiene lo stesso interprete), su progetti sintetici in
-# una cartella temporanea, con moduli `ambiente: nativo` salvo dove il caso vuole un modulo wsl:
-#   1. maat-doctor.sh, copia_wsl auto -> exit 0 con «WSL assente» (solo Windows: altrove «piattaforma non Windows»);
-#   2. gates.sh, un modulo `ambiente: wsl` senza WSL -> i suoi gate BLOCKED con il motivo, mai PASS; il modulo nativo
-#      accanto gira. Controprova: senza la regola (mutante di gates.sh) i controlli del modulo wsl escono FAIL;
-#   3. run_cp di run-phase.sh su un modulo nativo (l'approccio dei casi 7a/7b di run-phase.test.sh, wsl finto che
-#      registra): counterproof.sh diretto, wsl mai chiamato. Controprova: `wsl` cablato in run_cp (mutante di
-#      run-phase.sh) -> il wsl finto e' chiamato, rosso;
-#   4. watch-phase.sh senza wsl (la sua controprova, `wsl` fisso, e' in phase-events.test.sh).
-# Su Linux gira tutto (wsl non c'e'); solo la riga «WSL assente» del doctor e' di Windows: SALTATO con il motivo.
-#   bash plugins/maat/scripts/senza-wsl.test.sh          (Git Bash o Linux)
+# senza-wsl.test.sh — Windows without WSL (pk08, block A: D5, R8, A10). Everything runs with a reduced PATH: no wsl and no
+# wsl.exe (on Windows System32 goes too, where it lives; FIC_PYTHON keeps the same interpreter), on synthetic projects in
+# a temporary directory, with `ambiente: nativo` modules except where the case wants a wsl module:
+#   1. maat-doctor.sh, copia_wsl auto -> exit 0 with «WSL assente» (Windows only: elsewhere «piattaforma non Windows»);
+#   2. gates.sh, an `ambiente: wsl` module without WSL -> its gates BLOCKED with the reason, never PASS; the native module
+#      next to it runs. Counterproof: without the rule (gates.sh mutant) the wsl module checks exit FAIL;
+#   3. run_cp of run-phase.sh on a native module (the approach of cases 7a/7b of run-phase.test.sh, a fake wsl that
+#      records): counterproof.sh directly, wsl never called. Counterproof: `wsl` hard-wired in run_cp (mutant of
+#      run-phase.sh) -> the fake wsl is called, red;
+#   4. watch-phase.sh without wsl (its counterproof, fixed `wsl`, is in phase-events.test.sh).
+# On Linux everything runs (there is no wsl); only the doctor's «WSL assente» line is Windows-specific: SALTATO with the reason.
+#   bash plugins/maat/scripts/senza-wsl.test.sh          (Git Bash or Linux)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
@@ -31,7 +31,7 @@ check "premessa: wsl e wsl.exe fuori dal PATH" '! command -v wsl >/dev/null 2>&1
 repo() { (cd "$1" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false &&
   git add -A && git commit -qm init) || { echo "repo sintetico non creato: $1" >&2; exit 2; }; }
 
-# --- 1. maat-doctor.sh: moduli nativi, copia_wsl auto -------------------------------------------------------------------
+# --- 1. maat-doctor.sh: native modules, copia_wsl auto -------------------------------------------------------------------
 mkdir -p "$T/bin" "$T/home/.claude"
 printf '#!/bin/sh\necho "2.1.285 (Claude Code)"\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"
 P=$T/p; mkdir -p "$P/.claude/.ai-workflow"
@@ -52,7 +52,7 @@ else
   check "doctor fuori da Windows, moduli nativi -> exit 0, «WSL non serve»" '[ "$rc" = 0 ] && ! grep -q "^MANCA" "$T/out" && grep -q "^OK piattaforma non Windows: WSL non serve" "$T/out"'
 fi
 
-# --- 2. gates.sh: modulo wsl senza WSL -> BLOCKED con il motivo; il modulo nativo gira ----------------------------------
+# --- 2. gates.sh: wsl module without WSL -> BLOCKED with the reason; the native module runs ----------------------------------
 G=$T/g; mkdir -p "$G/.claude" "$G/n" "$G/w"
 cat > "$G/.claude/maat.json" <<'EOF'
 {"versione_schema": 1,
@@ -73,10 +73,10 @@ else
   check "controprova: senza la regola i controlli del modulo wsl sono FAIL, non BLOCKED (il caso sopra sarebbe rosso)" 'grep -q "^controlli-w: FAIL" "$T/out" && ! grep -q "WSL assente" "$T/out"'
 fi
 
-# --- 3. run_cp di run-phase.sh: modulo nativo, counterproof.sh diretto, mai wsl -----------------------------------------
-# Come run-phase.test.sh (casi 7a/7b): claude, gates.sh e finalize.sh finti, lock in una cartella temporanea, il piano
-# in formato 2 con una mutazione e la sua lista scritta da `plan-check.sh gen` (controprove del driver), counterproof.sh
-# finto (FIC_COUNTERPROOF) e un wsl finto nel PATH che registra ed esce 127.
+# --- 3. run_cp of run-phase.sh: native module, counterproof.sh directly, never wsl -----------------------------------------
+# As in run-phase.test.sh (cases 7a/7b): fake claude, gates.sh and finalize.sh, lock in a temporary directory, the plan
+# in format 2 with a mutation and its list written by `plan-check.sh gen` (driver counterproofs), fake counterproof.sh
+# (FIC_COUNTERPROOF) and a fake wsl in the PATH that records and exits 127.
 export FIC_LOCK="$T/lock" FIC_REPO="$T/repo"
 mkdir -p "$FIC_REPO/modules/api/app" "$FIC_REPO/modules/api/tests"; printf 'uno\n' > "$FIC_REPO/a.py"; repo "$FIC_REPO"
 cat > "$T/claude" <<'EOF'
@@ -107,8 +107,8 @@ printf '%s\n' "# P" "## Requisiti funzionali" "1. RF1 — A." "## Piano di imple
 export PLAN_CHECK_ROOT="$FIC_REPO" MAAT_CONFIG="$T/cfg-nativo.json"
 bash "$HERE/plan-check.sh" gen "$SPP" > "$T/out" 2>&1
 check "  (fixture: gen ha scritto procedura.txt e mutations.json)" '[ -f "$R3/gen/procedura.txt" ] && grep -q "\"id\": \"T1\"" "$R3/counterproof/mutations.json"'
-cprun() { # <run-phase.sh> <label>: controprove del driver senza FIC_CP_CMD, wsl finto nel PATH. Un mutante e' un altro
-  # plugin: la sua impronta si conferma prima del lancio e quella del plugin vero si riconferma dopo (run-phase.test.sh)
+cprun() { # <run-phase.sh> <label>: driver counterproofs without FIC_CP_CMD, fake wsl in the PATH. A mutant is another
+  # plugin: its fingerprint is confirmed before the launch and the real plugin's is confirmed again after (run-phase.test.sh)
   rm -f "$T/wsl.log"
   [ "$1" = "$HERE/run-phase.sh" ] || bash "$1" --harness-fp "$FIC_REPO" > "$R3/harness.fp"
   CPD="$T/$2.cpd" FAKE_WSL_LOG="$T/wsl.log" PATH="$WB:$PATH" CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" FIC_FINALIZE="$T/fin" \
@@ -126,7 +126,7 @@ else
   check "controprova: wsl cablato in run_cp -> il modulo nativo passa da wsl (il caso sopra sarebbe rosso)" '[ -f "$T/wsl.log" ] && [ ! -f "$T/s2-review.cpd" ] && grep -qx "exit=127" "$R3/log/s2-review.counterproof"'
 fi
 
-# --- 4. watch-phase.sh senza wsl -----------------------------------------------------------------------------------------
+# --- 4. watch-phase.sh without wsl -----------------------------------------------------------------------------------------
 RD="$T/run con spazi"; mkdir -p "$RD/log"
 { printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"text","text":"▶ lavoro"}]}}'
   printf '%s\n' '{"type":"result","is_error":false,"result":"ESITO FASE 1: OK","duration_ms":1000,"num_turns":1}'; } > "$RD/log/f.jsonl"

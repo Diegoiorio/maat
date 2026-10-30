@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-# vitest-fast.sh — DEPRECATO: involucro di test-fast.sh, per i comandi gia' documentati. Stessi argomenti, stessa uscita.
+# vitest-fast.sh — DEPRECATED: wrapper of test-fast.sh, for the commands already documented. Same arguments, same output.
 exec bash "$(dirname "$0")/test-fast.sh" "$@"

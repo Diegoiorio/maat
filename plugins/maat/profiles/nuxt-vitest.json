@@ -1,6 +1,6 @@
 {
   "profilo": "nuxt-vitest",
-  "descrizione": "Frontend Nuxt 3 con vitest ed eslint, test accanto ai file, copia WSL veloce (test-fast.sh), lint con base, auto-import.",
+  "descrizione": "Nuxt 3 frontend with vitest and eslint, tests next to the files, fast WSL copy (test-fast.sh), lint with a baseline, auto-import.",
   "sezioni": {
     "framework": ["nuxt-autoimport"]
   },

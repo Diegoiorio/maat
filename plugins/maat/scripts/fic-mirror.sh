@@ -1,120 +1,120 @@
-# fic-mirror.sh — funzioni condivise della copia WSL (harness-pt03): destinazione, impronta delle dipendenze,
-# semina di node_modules, cancellazione della copia di un worktree. Si INCLUDE con `.` da test-fast.sh,
-# counterproof.sh e (via WSL) corpus/replay.sh: non si esegue, e non ha effetti finche' non si chiama una funzione.
-# Scrive solo sotto $HOME/fic-mirror-<hash> (mai in $HOME/fic-mirror, mai nel repository).
+# fic-mirror.sh — shared functions of the WSL copy (harness-pt03): destination, dependency fingerprint,
+# seeding of node_modules, deletion of a worktree's copy. It is SOURCED with `.` by test-fast.sh,
+# counterproof.sh and (via WSL) corpus/replay.sh: it is not executed, and has no effect until a function is called.
+# It writes only under $HOME/fic-mirror-<hash> (never in $HOME/fic-mirror, never in the repository).
 #
-# CARTELLA DEI PACCHETTI: la decide il CHIAMANTE, nessun default. E' la radice dei pacchetti del modulo
-# (`radice_pacchetti` di maat.json), relativa al repository; la copia la tiene allo stesso percorso relativo,
-# <copia> = $FIC_MIRROR/<cartella>. Il chiamante la passa nei due argomenti <origine> = <radice>/<cartella> e
-# <copia> = $FIC_MIRROR/<cartella>; le funzioni ne ricavano <cartella> (fic__pkg) per trovare le copie collegate
-# (quella del tree principale, quella della radice di una corsia) allo stesso percorso. Una <copia> fuori da
-# $FIC_MIRROR e' un errore del chiamante: motivo e uscita 1, mai una cartella indovinata.
+# PACKAGES DIRECTORY: the CALLER decides it, no default. It is the module's packages root
+# (`radice_pacchetti` in maat.json), relative to the repository; the copy keeps it at the same relative path,
+# <copy> = $FIC_MIRROR/<dir>. The caller passes it in the two arguments <source> = <root>/<dir> and
+# <copy> = $FIC_MIRROR/<dir>; the functions derive <dir> from them (fic__pkg) to find the linked copies
+# (the one of the main tree, the one of a lane's root) at the same path. A <copy> outside
+# $FIC_MIRROR is a caller error: reason and exit 1, never a guessed directory.
 #
-# DESTINAZIONE (fic_mirror_init <radice>): $HOME/fic-mirror dal tree principale, $HOME/fic-mirror-<primi 12
-# caratteri dello sha256 della radice> da un worktree collegato (git-dir diverso da git-common-dir).
-# Worktree creato da Git per Windows: il suo file .git dice "gitdir: C:/…", che il git di WSL non risolve; qui
-# si traduce in /mnt/c/… ed e' esportato come GIT_DIR (con GIT_WORK_TREE = radice), cosi' valgono sia la
-# destinazione sia il manifest. FIC_WSL_MNT cambia la radice delle unita' (default /mnt; serve ai test).
+# DESTINATION (fic_mirror_init <root>): $HOME/fic-mirror from the main tree, $HOME/fic-mirror-<first 12
+# characters of the sha256 of the root> from a linked worktree (git-dir different from git-common-dir).
+# Worktree created by Git for Windows: its .git file says "gitdir: C:/…", which the WSL git does not resolve; here
+# it is translated to /mnt/c/… and exported as GIT_DIR (with GIT_WORK_TREE = root), so that both the
+# destination and the manifest work. FIC_WSL_MNT changes the drives root (default /mnt; used by the tests).
 #
-# IMPRONTA DELLE DIPENDENZE (fic_deps_fp): tutti i package.json fuori da node_modules/.nuxt/.output e i
-# package-lock.json, sul contenuto SENZA CR: due checkout con fine riga diverse danno la stessa impronta.
-# fic_deps_ok accetta anche un .fic-deps scritto prima di questa regola (impronta dei byte).
+# DEPENDENCY FINGERPRINT (fic_deps_fp): all package.json files outside node_modules/.nuxt/.output and the
+# package-lock.json files, on the content WITHOUT CR: two checkouts with different line endings give the same fingerprint.
+# fic_deps_ok also accepts a .fic-deps written before this rule (fingerprint of the bytes).
 #
-# SEMINA (fic_seed_node_modules): la copia di un worktree senza node_modules li prende dalla copia del tree
-# principale con hardlink (rsync --link-dest: niente installazioni, niente spazio), SOLO se quella copia e'
-# valida per il tree principale e le dipendenze del worktree coincidono (impronta normalizzata) con quelle del
-# tree principale. Le cache (.cache, .vite, .vitest) non si seminano: le scrive il run, come file nuovi.
-# Una fonte della semina stantia (copia del tree principale o della radice) si riallinea prima, sotto il SUO lock.
+# SEEDING (fic_seed_node_modules): the copy of a worktree without node_modules takes them from the copy of the main
+# tree with hardlinks (rsync --link-dest: no installs, no space), ONLY if that copy is
+# valid for the main tree and the worktree dependencies match (normalised fingerprint) those of the
+# main tree. The caches (.cache, .vite, .vitest) are not seeded: the run writes them, as new files.
+# A stale seeding source (copy of the main tree or of the root) is realigned first, under ITS lock.
 #
-# RIALLINEAMENTO AUTOMATICO (fic_deps_autorefresh, dentro il lock della copia; lo chiamano test-fast.sh e
-# counterproof.sh quando fic_deps_ok e' falso): mai un'installazione, mai la rete, solo copie locali.
-# - origine con node_modules -> fic_deps_refresh, la stessa operazione del --setup (rsync dall'origine, node_modules
-#   compresi, stesse esclusioni, poi l'impronta);
-# - worktree senza node_modules -> copia del tree principale riallineata se stantia (dal tree principale, che
-#   deve avere node_modules; sotto il lock di quella copia), poi semina di nuovo, se le dipendenze coincidono;
-# - copia di corsia -> copia della radice riallineata come sopra (sotto il suo lock), poi semina di nuovo da quella;
-# - nessuna fonte con node_modules, o dipendenze del worktree diverse da quelle del tree principale -> motivo, e il
-#   chiamante esce BLOCKED. Durante il rsync .fic-deps vale "interrotto": un rsync fallito lascia la copia stantia.
-# Ordine dei lock: dalla copia derivata (corsia, worktree) verso la copia della radice e quella del tree principale,
-# mai il contrario: nessun ciclo.
-# Limite dichiarato: un hardlink condivide l'inode; un processo che riscrivesse SUL POSTO un file di
-# node_modules della copia del worktree cambierebbe anche quello della copia principale. vitest/eslint non
-# lo fanno (le cache escluse sopra); un --setup del worktree riscrive i file con rsync, che sostituisce.
+# AUTOMATIC REALIGNMENT (fic_deps_autorefresh, inside the copy's lock; called by test-fast.sh and
+# counterproof.sh when fic_deps_ok is false): never an install, never the network, only local copies.
+# - source with node_modules -> fic_deps_refresh, the same operation as --setup (rsync from the source, node_modules
+#   included, same exclusions, then the fingerprint);
+# - worktree without node_modules -> copy of the main tree realigned if stale (from the main tree, which
+#   must have node_modules; under that copy's lock), then seeded again, if the dependencies match;
+# - lane copy -> copy of the root realigned as above (under its lock), then seeded again from it;
+# - no source with node_modules, or worktree dependencies different from those of the main tree -> reason, and the
+#   caller exits BLOCKED. During the rsync .fic-deps holds "interrotto": a failed rsync leaves the copy stale.
+# Lock order: from the derived copy (lane, worktree) towards the copy of the root and that of the main tree,
+# never the other way round: no cycle.
+# Declared limit: a hardlink shares the inode; a process that rewrote IN PLACE a file of
+# node_modules of the worktree copy would also change the one of the main copy. vitest/eslint do not
+# do it (the caches are excluded above); a --setup of the worktree rewrites the files with rsync, which replaces them.
 #
-# CANCELLAZIONE (fic_mirror_forget <radice di un worktree>): la copia di QUEL worktree, mai quella del tree
-# principale; se un run la tiene (uno qualunque dei suoi lock <cartella>/.fic-lock), resta. La chiama replay.sh
-# alla fine di un rigioco. I lock si cercano nella copia (fic__locks): la cancellazione non dipende dalla cartella.
+# DELETION (fic_mirror_forget <root of a worktree>): the copy of THAT worktree, never the one of the main
+# tree; if a run holds it (any of its <dir>/.fic-lock locks), it stays. replay.sh calls it
+# at the end of a replay. The locks are looked up in the copy (fic__locks): deletion does not depend on the directory.
 #
-# ESCLUSIONI DEL SYNC (FIC_MIRROR_EXCL, l'unica variabile che l'inclusione definisce): un elenco solo del nucleo,
-# usato da test-fast.sh e counterproof.sh per ogni modulo — dipendenze installate, file generati e cache dei runner
-# (node_modules, .nuxt, .output, coverage, .turbo, .venv, __pycache__, .pytest_cache) e lo stato della copia
-# (/.fic-*). Una cartella che in un modulo non c'e' non cambia nulla; counterproof.sh ci aggiunge le cartelle di
-# `collega_nel_worktree` del modulo.
+# SYNC EXCLUSIONS (FIC_MIRROR_EXCL, the only variable that sourcing defines): a single list of the core,
+# used by test-fast.sh and counterproof.sh for every module — installed dependencies, generated files and runner caches
+# (node_modules, .nuxt, .output, coverage, .turbo, .venv, __pycache__, .pytest_cache) and the copy state
+# (/.fic-*). A directory that a module lacks changes nothing; counterproof.sh adds the directories of
+# the module's `collega_nel_worktree`.
 #
-# PULIZIA (fic_mirror_pulisci <copia> <radice relativa> [<runner> [glob dei preparati…]]): toglie dalla copia le
-# cartelle che contengono i `preparati` del modulo (glob relativi alla radice; una voce senza cartella toglie i suoi
-# file) e, se il runner delle controprove e' vitest, le cache di vite/vitest (adattatore vitest del nucleo, come
-# FIC_VITE_CACHE_DIR). Modulo senza preparati e senza runner vitest: niente da ripulire. Quando: lo decide il
-# chiamante (counterproof.sh a ogni sync, test-fast.sh quando cambiano dipendenze o tsconfig generato).
+# CLEANUP (fic_mirror_pulisci <copy> <relative root> [<runner> [globs of preparati…]]): removes from the copy the
+# directories that contain the module's `preparati` (globs relative to the root; an entry without a directory removes its
+# files) and, if the counterproof runner is vitest, the vite/vitest caches (core vitest adapter, like
+# FIC_VITE_CACHE_DIR). Module without preparati and without a vitest runner: nothing to clean. When: the
+# caller decides (counterproof.sh at every sync, test-fast.sh when dependencies or the generated tsconfig change).
 #
-# CORSIE (harness-pt13): fic_lane_init <k> (k = 1..9, dopo fic_mirror_init) sposta FIC_MIRROR sulla copia della
-# corsia, <copia della radice>-<k>, col suo <cartella>/.fic-lock e le sue cache vite/vitest; FIC_LANE_BASE resta
-# la copia della radice. La semina della copia di corsia prende node_modules in hardlink da QUELLA copia (valida
-# per le dipendenze attuali), non da ~/fic-mirror. fic_lane_forget <radice> <k> cancella la sola copia di corsia
-# (~/fic-mirror-<k> o ~/fic-mirror-<12 hex>-<k>), mai una copia della radice; se un run la tiene, resta.
+# LANES (harness-pt13): fic_lane_init <k> (k = 1..9, after fic_mirror_init) moves FIC_MIRROR to the lane's
+# copy, <copy of the root>-<k>, with its <dir>/.fic-lock and its vite/vitest caches; FIC_LANE_BASE stays
+# the copy of the root. Seeding of the lane copy takes node_modules as hardlinks from THAT copy (valid
+# for the current dependencies), not from ~/fic-mirror. fic_lane_forget <root> <k> deletes only the lane copy
+# (~/fic-mirror-<k> or ~/fic-mirror-<12 hex>-<k>), never a copy of the root; if a run holds it, it stays.
 #
-# COPIA CON RIPIEGO (pk08, fic_sync [--delete] [--checksum] [--exclude=<p>…] <origine>/ <copia>/): `rsync -a` con gli
-# stessi argomenti se rsync c'e'; altrimenti (Git Bash su Windows senza WSL) fic__sync_ripiego, con lo stesso risultato
-# osservabile, piu' lento:
-# - esclusioni come rsync: un nome senza / a ogni profondita', /x ancorato alla radice del trasferimento, a/b in coda
-#   al percorso; nella copia i percorsi esclusi non si cancellano (come rsync senza --delete-excluded);
-# - --delete: cio' che nella copia non c'e' nell'origine (fuori dalle esclusioni) si cancella; una cartella che
-#   contiene percorsi esclusi (es. node_modules) resta, con quelli, e perde solo il resto, come rsync (review di pk08);
-# - differenze note da rsync, non corrette (nessun pattern del harness le tocca): in un pattern con / il `*` di find
-#   -path attraversa anche le /, quello di rsync no; la / finale di un pattern (rsync: solo cartelle) si toglie e il
-#   pattern vale anche per i file;
-# - un file si riscrive (unlink, poi tar) se manca, se cambia tipo, se il bit x o l'impronta sha256 differiscono:
-#   sempre il confronto del contenuto, come --checksum; cartelle e link simbolici come rsync -a.
-# Uscita: 0 · 23 copia non riuscita (come rsync) · 2 opzione che il ripiego non gestisce. Lo usa counterproof.sh;
-# test-fast.sh e le funzioni qui sopra (semina, riallineamento) restano su rsync: la copia veloce vuole WSL.
+# COPY WITH FALLBACK (pk08, fic_sync [--delete] [--checksum] [--exclude=<p>…] <source>/ <copy>/): `rsync -a` with the
+# same arguments if rsync is available; otherwise (Git Bash on Windows without WSL) fic__sync_ripiego, with the same
+# observable result, slower:
+# - exclusions as in rsync: a name without / at any depth, /x anchored to the transfer root, a/b at the end
+#   of the path; in the copy the excluded paths are not deleted (like rsync without --delete-excluded);
+# - --delete: what is in the copy but not in the source (outside the exclusions) is deleted; a directory that
+#   contains excluded paths (e.g. node_modules) stays, with them, and loses only the rest, like rsync (pk08 review);
+# - known differences from rsync, not corrected (no harness pattern hits them): in a pattern with / the `*` of find
+#   -path also crosses /, rsync's does not; the trailing / of a pattern (rsync: directories only) is removed and the
+#   pattern also applies to files;
+# - a file is rewritten (unlink, then tar) if missing, if its type changes, if the x bit or the sha256 fingerprint differ:
+#   always the content comparison, like --checksum; directories and symbolic links like rsync -a.
+# Exit: 0 · 23 copy failed (like rsync) · 2 option the fallback does not handle. Used by counterproof.sh;
+# test-fast.sh and the functions above (seeding, realignment) stay on rsync: the fast copy wants WSL.
 #
-# LOCK SENZA flock (pk08, fic_lock_dir <cartella> [<attesa in s>, vuota = senza tetto] · fic_unlock_dir <cartella>):
-# mkdir atomico di <cartella>, con dentro il pid di chi la tiene. Un lock il cui pid non vive piu' (KILL, morte della
-# shell) e' orfano: chi attende lo riprende, uno alla volta (<cartella>.rec, anch'esso un mkdir) e dopo aver riletto
-# il pid; e' l'equivalente di flock, che si libera da se' quando muore chi lo tiene. Anche un lock SENZA pid (morte fra
-# il mkdir e la scrittura del pid) e' orfano, se la sua cartella ha piu' di 10 s (mtime): si riprende allo stesso modo
-# (review di pk08). Non si riprende un .rec orfano: l'attesa scade, e il chiamante da' il percorso.
-# Chi ha fatto il mkdir scrive il pid senza sovrascrivere (noclobber) e lo rilegge: se il file c'era gia' o il pid
-# riletto non e' il suo (un processo fermo oltre 10 s fra mkdir e scrittura, nel frattempo ripreso da un altro), il
-# lock non e' suo e riprova come in attesa (review giro 2 di pk08). Limiti dichiarati: la soglia dei 10 s confronta
-# l'orologio locale (`date +%s`) con la mtime scritta dal file system, che su drvfs (/mnt/<lettera>/) o su una cartella
-# di rete puo' avere un orologio diverso: uno scarto di qualche secondo anticipa o ritarda la ripresa di un lock senza
-# pid; e resta una finestra stretta (il processo fermo scrive il pid proprio fra il controllo di chi riprende e il suo
-# rm) che solo un lock del sistema operativo chiuderebbe.
-# Il rilascio e' del chiamante (trap EXIT): fic_unlock_dir toglie la cartella solo se il pid e' il suo.
+# LOCK WITHOUT flock (pk08, fic_lock_dir <dir> [<wait in s>, empty = no limit] · fic_unlock_dir <dir>):
+# atomic mkdir of <dir>, with inside the pid of the holder. A lock whose pid is no longer alive (KILL, death of the
+# shell) is orphaned: whoever waits takes it over, one at a time (<dir>.rec, also a mkdir) and after rereading
+# the pid; it is the equivalent of flock, which frees itself when its holder dies. A lock WITHOUT a pid (death between
+# the mkdir and the pid write) is also orphaned, if its directory is older than 10 s (mtime): it is taken over the same way
+# (pk08 review). An orphaned .rec is not taken over: the wait expires, and the caller reports the path.
+# Whoever did the mkdir writes the pid without overwriting (noclobber) and rereads it: if the file was already there or the
+# pid read back is not its own (a process stalled over 10 s between mkdir and write, taken over by another meanwhile), the
+# lock is not its own and it retries as when waiting (pk08 review round 2). Declared limits: the 10 s threshold compares
+# the local clock (`date +%s`) with the mtime written by the file system, which on drvfs (/mnt/<letter>/) or on a network
+# directory may have a different clock: a skew of a few seconds advances or delays the takeover of a lock without
+# a pid; and a narrow window remains (the stalled process writes the pid exactly between the check of the taker and its
+# rm) that only an operating-system lock would close.
+# Release is up to the caller (trap EXIT): fic_unlock_dir removes the directory only if the pid is its own.
 
 FIC_MIRROR_EXCL=(--exclude=node_modules --exclude=.nuxt --exclude=.output --exclude=coverage --exclude=.turbo
   --exclude=.venv --exclude=__pycache__ --exclude=.pytest_cache --exclude='/.fic-*')
 
-fic_mirror_pulisci() { # <copia> <radice relativa ("" = la copia stessa)> [<runner> [glob dei preparati…]] → 0 · 1 rm fallito
-  local dst=$1 base=$1${2:+/$2} run=${3:-} g v IFS=   # pk08: IFS vuoto, una voce con spazi non si divide nel rm
+fic_mirror_pulisci() { # <copy> <relative root ("" = the copy itself)> [<runner> [globs of preparati…]] → 0 · 1 rm failed
+  local dst=$1 base=$1${2:+/$2} run=${3:-} g v IFS=   # pk08: empty IFS, an entry with spaces is not split in the rm
   shift 2; [ $# -gt 0 ] && shift
   for g in "$@"; do
     case "$g" in */*) v=${g%/*} ;; *) v=$g ;; esac
-    case "/$v/" in *"/../"*|//*) continue ;; esac   # mai fuori dalla radice
+    case "/$v/" in *"/../"*|//*) continue ;; esac   # never outside the root
     [ -n "$v" ] && [ "$v" != . ] || continue
-    rm -rf -- "$base"/$v || return 1   # $v senza virgolette: una cartella col * si espande nella copia
+    rm -rf -- "$base"/$v || return 1   # $v unquoted: a directory with * expands in the copy
   done
   if [ "$run" = vitest ]; then
     rm -rf -- "$base/node_modules/.vite" "$dst/node_modules/.vite" "$dst/node_modules/.vitest" || return 1
   fi
 }
 
-fic_sync() { # [--delete] [--checksum] [--exclude=<p>…] <origine>/ <copia>/ → rsync -a, o il ripiego senza rsync
+fic_sync() { # [--delete] [--checksum] [--exclude=<p>…] <source>/ <copy>/ → rsync -a, or the fallback without rsync
   if command -v rsync >/dev/null 2>&1; then rsync -a "$@"; else fic__sync_ripiego "$@"; fi
 }
 
-fic__escludi() { # <pattern…> → FIC__FX: le esclusioni come espressione di find, con la semantica di rsync
+fic__escludi() { # <pattern…> → FIC__FX: the exclusions as a find expression, with rsync semantics
   local p
   FIC__FX=()
   for p in "$@"; do
@@ -129,13 +129,13 @@ fic__escludi() { # <pattern…> → FIC__FX: le esclusioni come espressione di f
   if [ ${#FIC__FX[@]} -gt 0 ]; then FIC__FX=("${FIC__FX[@]:1}"); else FIC__FX=(-false); fi
 }
 
-fic__sync_ripiego() { # gli argomenti di fic_sync, senza rsync: find + sha256sum + tar
+fic__sync_ripiego() { # the arguments of fic_sync, without rsync: find + sha256sum + tar
   local del=0 src dst p s d i ts td
   local -a ex=() nuovi=() comuni=() cartelle=() hs=() hd=()
   while [ $# -gt 2 ]; do
     case "$1" in
       --delete) del=1 ;;
-      --checksum) ;;   # il ripiego confronta sempre il contenuto
+      --checksum) ;;   # the fallback always compares the content
       --exclude=*) ex+=("${1#--exclude=}") ;;
       *) echo "fic_sync: opzione non gestita dal ripiego senza rsync: $1" >&2; return 2 ;;
     esac
@@ -145,16 +145,16 @@ fic__sync_ripiego() { # gli argomenti di fic_sync, senza rsync: find + sha256sum
   src=${1%/} dst=${2%/}
   [ -d "$src" ] && mkdir -p "$dst" || return 23
   fic__escludi ${ex[@]+"${ex[@]}"}
-  if [ "$del" = 1 ]; then   # nella copia, fuori dalle esclusioni, cio' che nell'origine non c'e'
+  if [ "$del" = 1 ]; then   # in the copy, outside the exclusions, what is not in the source
     while IFS= read -r -d '' p; do
-      [ -e "$dst/$p" ] || [ -L "$dst/$p" ] || continue   # gia' tolto con la cartella che lo conteneva
+      [ -e "$dst/$p" ] || [ -L "$dst/$p" ] || continue   # already removed with the directory that contained it
       [ -e "$src/$p" ] || [ -L "$src/$p" ] && continue
-      if [ -d "$dst/$p" ] && [ ! -L "$dst/$p" ] &&   # con dentro degli esclusi: resta, il resto lo toglie questo giro
+      if [ -d "$dst/$p" ] && [ ! -L "$dst/$p" ] &&   # with excluded entries inside: it stays, this round removes the rest
          [ -n "$(cd "$dst" && find "$p" -mindepth 1 \( "${FIC__FX[@]}" \) -print -quit)" ]; then continue; fi
       rm -rf -- "${dst:?}/$p" || return 23
     done < <(cd "$dst" && find . -mindepth 1 \( "${FIC__FX[@]}" \) -prune -o -print0)
   fi
-  while IFS= read -r -d '' p; do   # dall'origine, cartelle prima del contenuto
+  while IFS= read -r -d '' p; do   # from the source, directories before their content
     s=$src/$p d=$dst/$p
     if [ -L "$s" ]; then
       [ -L "$d" ] && [ "$(readlink "$s")" = "$(readlink "$d")" ] && continue
@@ -169,7 +169,7 @@ fic__sync_ripiego() { # gli argomenti di fic_sync, senza rsync: find + sha256sum
       else nuovi+=("$p"); fi
     fi
   done < <(cd "$src" && find . -mindepth 1 \( "${FIC__FX[@]}" \) -prune -o -print0)
-  if [ ${#comuni[@]} -gt 0 ]; then   # impronte dei file a comune, in blocco: una riga per file, nello stesso ordine
+  if [ ${#comuni[@]} -gt 0 ]; then   # fingerprints of the common files, in bulk: one line per file, in the same order
     ts=$(mktemp) && td=$(mktemp) || return 23
     if (cd "$src" && printf '%s\0' "${comuni[@]}" | xargs -0 sha256sum) > "$ts" &&
        (cd "$dst" && printf '%s\0' "${comuni[@]}" | xargs -0 sha256sum) > "$td"; then
@@ -182,55 +182,55 @@ fic__sync_ripiego() { # gli argomenti di fic_sync, senza rsync: find + sha256sum
   if [ ${#cartelle[@]} -gt 0 ]; then
     (cd "$dst" && printf '%s\0' "${cartelle[@]}" | xargs -0 mkdir -p --) || return 23
   fi
-  if [ ${#nuovi[@]} -gt 0 ]; then   # unlink + scrittura nuova, come rsync (mai sul posto: un hardlink resta intatto)
+  if [ ${#nuovi[@]} -gt 0 ]; then   # unlink + new write, like rsync (never in place: a hardlink stays intact)
     (cd "$dst" && printf '%s\0' "${nuovi[@]}" | xargs -0 rm -f --) || return 23
     (cd "$src" && printf '%s\0' "${nuovi[@]}" | tar --null --no-recursion -T - -cf -) | (cd "$dst" && tar -xpf -)
     [ "${PIPESTATUS[0]}${PIPESTATUS[1]}" = 00 ] || return 23
   fi
 }
 
-fic_lock_dir() { # <cartella di lock> [<attesa in s>, vuota = senza tetto] → 0 preso · 1 oltre l'attesa
+fic_lock_dir() { # <lock dir> [<wait in s>, empty = no limit] → 0 taken · 1 past the wait
   local d=$1 wait=${2:-} me=${BASHPID:-$$} t0=$SECONDS p
   while :; do
     until mkdir "$d" 2>/dev/null; do
       p=$(cat "$d/pid" 2>/dev/null)
       if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null && mkdir "$d.rec" 2>/dev/null; then
-        p=$(cat "$d/pid" 2>/dev/null)   # riletto sotto .rec: nel frattempo un altro puo' averlo ripreso e preso
+        p=$(cat "$d/pid" 2>/dev/null)   # reread under .rec: meanwhile another process may have taken it over and acquired it
         if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; then rm -rf -- "$d"; fi
         rmdir "$d.rec" 2>/dev/null
         continue
       fi
-      if [ -z "$p" ] && fic__lock_vecchio "$d" && mkdir "$d.rec" 2>/dev/null; then   # senza pid da oltre 10 s: orfano
-        [ -z "$(cat "$d/pid" 2>/dev/null)" ] && fic__lock_vecchio "$d" && rm -rf -- "$d"   # riletto sotto .rec
+      if [ -z "$p" ] && fic__lock_vecchio "$d" && mkdir "$d.rec" 2>/dev/null; then   # without pid for over 10 s: orphaned
+        [ -z "$(cat "$d/pid" 2>/dev/null)" ] && fic__lock_vecchio "$d" && rm -rf -- "$d"   # reread under .rec
         rmdir "$d.rec" 2>/dev/null
         continue
       fi
       [ -z "$wait" ] || [ $((SECONDS - t0)) -lt "$wait" ] || return 1
       sleep 0.2
     done
-    if ! (set -C; echo "$me" > "$d/pid") 2>/dev/null; then   # noclobber: un pid gia' scritto e' di un altro
+    if ! (set -C; echo "$me" > "$d/pid") 2>/dev/null; then   # noclobber: a pid already written belongs to another process
       p=$(cat "$d/pid" 2>/dev/null)
-      if [ -d "$d" ] && [ -z "$p" ]; then rm -rf -- "$d"; return 1; fi   # cartella nostra, pid non scrivibile
+      if [ -d "$d" ] && [ -z "$p" ]; then rm -rf -- "$d"; return 1; fi   # our directory, pid not writable
     fi
-    [ "$(cat "$d/pid" 2>/dev/null)" = "$me" ] && return 0   # riletto: solo il proprio pid vuol dire lock preso
-    [ -z "$wait" ] || [ $((SECONDS - t0)) -lt "$wait" ] || return 1   # ripreso da un altro: non e' nostro, si riprova
+    [ "$(cat "$d/pid" 2>/dev/null)" = "$me" ] && return 0   # reread: only our own pid means the lock is taken
+    [ -z "$wait" ] || [ $((SECONDS - t0)) -lt "$wait" ] || return 1   # taken over by another: it is not ours, retry
     sleep 0.2
   done
 }
 
-fic__lock_vecchio() { # <cartella>: 0 se c'e' e la sua mtime ha piu' di 10 s (stat GNU, poi BSD); ignota -> 1
+fic__lock_vecchio() { # <dir>: 0 if it exists and its mtime is older than 10 s (GNU stat, then BSD); unknown -> 1
   local m
   m=$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null) || return 1
   case $m in ''|*[!0-9]*) return 1 ;; esac
   [ $(( $(date +%s) - m )) -ge 10 ]
 }
 
-fic_unlock_dir() { # <cartella di lock> [<pid>, default il proprio]: la toglie solo se il lock e' di <pid>
+fic_unlock_dir() { # <lock dir> [<pid>, default our own]: removes it only if the lock belongs to <pid>
   local d=$1 me=${2:-${BASHPID:-$$}}
   [ "$(cat "$d/pid" 2>/dev/null)" = "$me" ] && rm -rf -- "$d"
 }
 
-fic_git_env() { # $1 radice: .git FILE con "gitdir: X:/…" → GIT_DIR tradotto in <FIC_WSL_MNT>/x/… e GIT_WORK_TREE
+fic_git_env() { # $1 root: .git FILE with "gitdir: X:/…" → GIT_DIR translated to <FIC_WSL_MNT>/x/… and GIT_WORK_TREE
   local g d
   [ -f "$1/.git" ] || return 0
   g=$(sed -n '1s/^gitdir:[[:space:]]*//p' "$1/.git" | tr -d '\r')
@@ -241,7 +241,7 @@ fic_git_env() { # $1 radice: .git FILE con "gitdir: X:/…" → GIT_DIR tradotto
   export GIT_DIR GIT_WORK_TREE
 }
 
-fic_mirror_init() { # $1 radice → FIC_TOP, FIC_MAIN (tree principale), FIC_MIRROR; 1 se git non li determina
+fic_mirror_init() { # $1 root → FIC_TOP, FIC_MAIN (main tree), FIC_MIRROR; 1 if git does not determine them
   local gd gcd g
   FIC_TOP="" FIC_MAIN="" FIC_MIRROR="" FIC_LANE_BASE=""
   fic_git_env "$1"
@@ -254,18 +254,18 @@ fic_mirror_init() { # $1 radice → FIC_TOP, FIC_MAIN (tree principale), FIC_MIR
   else FIC_MIRROR=$HOME/fic-mirror-$(printf '%s' "$FIC_TOP" | sha256sum | cut -c1-12); fi
 }
 
-fic__pkg() { # <copia> → <cartella> (stdout), se <copia> = $FIC_MIRROR/<cartella>; altrimenti motivo e 1
+fic__pkg() { # <copy> → <dir> (stdout), if <copy> = $FIC_MIRROR/<dir>; otherwise reason and 1
   case "$1" in
     "$FIC_MIRROR"/?*) printf '%s\n' "${1#"$FIC_MIRROR"/}" ;;
     *) echo "copia fuori da ${FIC_MIRROR:-<copia non inizializzata>}: $1 (il chiamante passa \$FIC_MIRROR/<cartella>)"; return 1 ;;
   esac
 }
 
-fic__locks() { # <copia della radice> → i suoi .fic-lock (uno per cartella dei pacchetti), node_modules esclusi
+fic__locks() { # <copy of the root> → its .fic-lock files (one per packages directory), node_modules excluded
   find "$1" -name node_modules -prune -o -name .fic-lock -type f -print 2>/dev/null
 }
 
-fic_deps_fp() { # <origine: cartella dei pacchetti> [raw] → impronta; `raw` = i byte (la regola di prima)
+fic_deps_fp() { # <source: packages directory> [raw] → fingerprint; `raw` = the bytes (the old rule)
   local raw=${2:-} f h
   (cd "$1" && find . \( -name node_modules -o -name .nuxt -o -name .output \) -prune -o \
       \( -name package.json -o -name package-lock.json \) -type f -print | LC_ALL=C sort |
@@ -275,15 +275,15 @@ fic_deps_fp() { # <origine: cartella dei pacchetti> [raw] → impronta; `raw` = 
     done) | sha256sum | cut -c1-64
 }
 
-fic_deps_ok() { # <origine> <copia>: le dipendenze sono quelle registrate dal --setup
+fic_deps_ok() { # <source> <copy>: the dependencies are those recorded by --setup
   local rec; rec=$(cat "$2/.fic-deps" 2>/dev/null) && [ -n "$rec" ] || return 1
   [ "$(fic_deps_fp "$1")" = "$rec" ] || [ "$(fic_deps_fp "$1" raw)" = "$rec" ]
 }
 
-fic_deps_refresh() { # <origine con node_modules> <copia> → 0 fatto · 1 no, motivo su stdout
-  # L'operazione del --setup: rsync dall'origine, node_modules compresi, poi l'impronta. Il lock e' del chiamante.
-  # Durante il rsync .fic-deps vale "interrotto": un rsync fallito lascia la copia stantia (la riprova il run dopo),
-  # mai con l'impronta vecchia su node_modules a meta'.
+fic_deps_refresh() { # <source with node_modules> <copy> → 0 done · 1 no, reason on stdout
+  # The --setup operation: rsync from the source, node_modules included, then the fingerprint. The lock belongs to the caller.
+  # During the rsync .fic-deps holds "interrotto": a failed rsync leaves the copy stale (the next run retries),
+  # never with the old fingerprint on half-copied node_modules.
   local src=$1 dst=$2 rc
   [ -d "$src/node_modules" ] || { echo "l'origine non ha node_modules ($src)"; return 1; }
   mkdir -p "$dst" && echo interrotto > "$dst/.fic-deps" || { echo "copia non scrivibile: $dst"; return 1; }
@@ -292,10 +292,10 @@ fic_deps_refresh() { # <origine con node_modules> <copia> → 0 fatto · 1 no, m
   fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }
 }
 
-fic__seed_copy() { # <fonte> <origine> <copia>: node_modules in hardlink, poi l'impronta
-  # Senza lock (lo tiene il chiamante). Su una copia gia' seminata: .fic-deps "interrotto" durante la semina, e le
-  # cartelle node_modules della copia che nella fonte non ci sono piu' (pacchetto tolto) si cancellano: sono
-  # hardlink, la fonte non si tocca.
+fic__seed_copy() { # <seed source> <source> <copy>: node_modules as hardlinks, then the fingerprint
+  # No lock (the caller holds it). On an already seeded copy: .fic-deps "interrotto" during seeding, and the
+  # node_modules directories of the copy that are no longer in the seed source (package removed) are deleted: they are
+  # hardlinks, the seed source is not touched.
   local mm=$1 src=$2 dst=$3 nms
   if [ -f "$dst/.fic-deps" ]; then echo interrotto > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }; fi
   nms=$(cd "$mm" && find . -name node_modules -type d -prune -print | sed 's|^\./||') || { echo "fonte non leggibile: $mm"; return 1; }
@@ -310,25 +310,25 @@ fic__seed_copy() { # <fonte> <origine> <copia>: node_modules in hardlink, poi l'
   fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }
 }
 
-fic__source_fresh() { # <origine della fonte> <fonte> <nome> <cartella>: la fonte della semina vale per la sua origine
-  # Se e' stantia la riallinea, sotto il SUO lock (fd 8), come la copia di una radice (fic__refresh_root).
-  # 0 valida · 1 no, motivo su stdout. Una riga su stderr quando riallinea.
+fic__source_fresh() { # <origin of the seed source> <seed source> <name> <dir>: the seed source is valid for its origin
+  # If it is stale it realigns it, under ITS lock (fd 8), like the copy of a root (fic__refresh_root).
+  # 0 valid · 1 no, reason on stdout. One line on stderr when it realigns.
   local o=$1 mm=$2 nome=$3 pkg=$4 out
   [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "manca la $nome ($mm)"; return 1; }
   fic_deps_ok "$o" "$mm" && return 0
   out=$(
     exec 8>"$mm/.fic-lock" || { echo "lock della $nome non apribile"; exit 1; }
     flock -w "${FIC_LOCK_WAIT:-900}" 8 || { echo "$nome occupata oltre ${FIC_LOCK_WAIT:-900}s"; exit 1; }
-    fic_deps_ok "$o" "$mm" && exit 0   # riallineata nel frattempo da un altro run
+    fic_deps_ok "$o" "$mm" && exit 0   # realigned meanwhile by another run
     fic__refresh_root "$o" "$mm" "$pkg" || exit 1
     fic_deps_ok "$o" "$mm" || { echo "$nome ancora stantia dopo il riallineamento"; exit 1; }
   ) || { echo "$nome stantia, riallineamento non riuscito: ${out//$'\n'/; }"; return 1; }
   [ -z "$out" ] || echo "fic-mirror: $nome ($mm) stantia: ${out//$'\n'/; }" >&2
 }
 
-fic__refresh_root() { # <origine> <copia della radice> <cartella>, lock della copia gia' preso
-  # Origine con node_modules: fic_deps_refresh. Senza (worktree): semina di nuovo dalla copia del tree principale,
-  # riallineata prima se stantia. Stdout: cosa ha fatto, o il motivo (uscita 1).
+fic__refresh_root() { # <source> <copy of the root> <dir>, lock of the copy already taken
+  # Source with node_modules: fic_deps_refresh. Without (worktree): seed again from the copy of the main tree,
+  # realigned first if stale. Stdout: what it did, or the reason (exit 1).
   local src=$1 dst=$2 pkg=$3 mm main
   mm=$HOME/fic-mirror/$pkg
   if [ -d "$src/node_modules" ]; then fic_deps_refresh "$src" "$dst" && echo "copia riallineata dall'origine"; return; fi
@@ -341,10 +341,10 @@ fic__refresh_root() { # <origine> <copia della radice> <cartella>, lock della co
   fic__seed_copy "$mm" "$src" "$dst" && echo "copia riseminata da ~/fic-mirror (node_modules in hardlink)"
 }
 
-fic_deps_autorefresh() { # <origine> <copia = $FIC_MIRROR/<cartella>>: riallinea una copia con le dipendenze stantie
-  # Il chiamante tiene il lock della copia e ricontrolla fic_deps_ok dopo. Mai un'installazione: solo copie locali.
-  # Copia di corsia: la copia della radice riallineata (sotto il suo lock), poi semina di nuovo da quella.
-  # 0 fatto, una riga su stdout · 1 no, motivo su stdout.
+fic_deps_autorefresh() { # <source> <copy = $FIC_MIRROR/<dir>>: realigns a copy with stale dependencies
+  # The caller holds the copy's lock and rechecks fic_deps_ok afterwards. Never an install: only local copies.
+  # Lane copy: the copy of the root realigned (under its lock), then seeded again from it.
+  # 0 done, one line on stdout · 1 no, reason on stdout.
   local src=$1 dst=$2 old new out pkg
   pkg=$(fic__pkg "$dst") || { echo "$pkg"; return 1; }
   old=$(cut -c1-12 "$dst/.fic-deps" 2>/dev/null); new=$(fic_deps_fp "$src" | cut -c1-12)
@@ -358,13 +358,13 @@ fic_deps_autorefresh() { # <origine> <copia = $FIC_MIRROR/<cartella>>: riallinea
   echo "dipendenze cambiate (impronta ${old:-assente} -> $new): $out"
 }
 
-fic_seed_node_modules() { # <origine> <copia = $FIC_MIRROR/<cartella>> → 0 seminata · 1 no, motivo su stdout
-  # Richiede fic_mirror_init gia' chiamata sulla radice dell'origine. La fonte stantia si riallinea (fic__source_fresh).
+fic_seed_node_modules() { # <source> <copy = $FIC_MIRROR/<dir>> → 0 seeded · 1 no, reason on stdout
+  # Requires fic_mirror_init already called on the root of the source. A stale seed source is realigned (fic__source_fresh).
   local src=$1 dst=$2 mm pkg
   [ -n "$FIC_MIRROR" ] && [ "$FIC_MIRROR" != "$HOME/fic-mirror" ] || { echo "non e' la copia di un worktree"; return 1; }
   pkg=$(fic__pkg "$dst") || { echo "$pkg"; return 1; }
   mm=$HOME/fic-mirror/$pkg
-  if [ -n "${FIC_LANE_BASE:-}" ]; then   # copia di corsia: dalla copia della SUA radice (fic_lane_init)
+  if [ -n "${FIC_LANE_BASE:-}" ]; then   # lane copy: from the copy of ITS root (fic_lane_init)
     mm=$FIC_LANE_BASE/$pkg
     [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "manca la copia della radice ($mm): un run senza FIC_LANE o --setup"; return 1; }
     fic__source_fresh "$src" "$mm" "copia della radice" "$pkg" || return 1
@@ -377,12 +377,12 @@ fic_seed_node_modules() { # <origine> <copia = $FIC_MIRROR/<cartella>> → 0 sem
   mkdir -p "$dst" || { echo "copia non creabile: $dst"; return 1; }
   (
     flock -w "${FIC_LOCK_WAIT:-900}" 9 || { echo "copia del worktree occupata"; exit 1; }
-    [ -d "$dst/node_modules" ] && [ -f "$dst/.fic-deps" ] && exit 0   # seminata nel frattempo da un altro run
+    [ -d "$dst/node_modules" ] && [ -f "$dst/.fic-deps" ] && exit 0   # seeded meanwhile by another run
     fic__seed_copy "$mm" "$src" "$dst" || exit 1
   ) 9>"$dst/.fic-lock"
 }
 
-fic_mirror_forget() { # <radice di un worktree>: cancella la SUA copia · 0 fatto o niente da fare · 1 rifiuto o in uso
+fic_mirror_forget() { # <root of a worktree>: deletes ITS copy · 0 done or nothing to do · 1 refused or in use
   local lk
   fic_mirror_init "$1" || { echo "fic-mirror: radice non determinabile (git): $1"; return 1; }
   case "$FIC_MIRROR" in "$HOME"/fic-mirror-????????????) ;; *) echo "fic-mirror: rifiuto, non e' la copia di un worktree: $FIC_MIRROR"; return 1 ;; esac
@@ -391,8 +391,8 @@ fic_mirror_forget() { # <radice di un worktree>: cancella la SUA copia · 0 fatt
   echo "fic-mirror: copia cancellata: $FIC_MIRROR"
 }
 
-fic__forget_dir() { # <copia della radice>: cancellata se nessuno dei suoi lock e' tenuto · 1 in uso, lasciata
-  # Tutti i lock presi (flock -n) prima di cancellare e tenuti fino alla fine, nella stessa subshell.
+fic__forget_dir() { # <copy of the root>: deleted if none of its locks is held · 1 in use, left
+  # All locks taken (flock -n) before deleting and held until the end, in the same subshell.
   ( local lk fd
     while IFS= read -r lk; do
       [ -n "$lk" ] || continue
@@ -401,13 +401,13 @@ fic__forget_dir() { # <copia della radice>: cancellata se nessuno dei suoi lock 
     rm -rf "$1" )
 }
 
-fic_lane_init() { # <k>: dopo fic_mirror_init, FIC_MIRROR = copia della corsia k · 1 se k non e' 1..9 o manca la radice
+fic_lane_init() { # <k>: after fic_mirror_init, FIC_MIRROR = copy of lane k · 1 if k is not 1..9 or the root is missing
   case "${1:-}" in [1-9]) ;; *) return 1 ;; esac
   [ -n "$FIC_MIRROR" ] || return 1
   FIC_LANE_BASE=$FIC_MIRROR FIC_MIRROR=$FIC_MIRROR-$1
 }
 
-fic_lane_forget() { # <radice> <k>: cancella la copia della corsia k · 0 fatto o niente da fare · 1 rifiuto o in uso
+fic_lane_forget() { # <root> <k>: deletes the copy of lane k · 0 done or nothing to do · 1 refused or in use
   fic_mirror_init "$1" && fic_lane_init "${2:-}" || { echo "fic-mirror: corsia o radice non determinabile: $1 ${2:-}"; return 1; }
   case "$FIC_MIRROR" in "$HOME"/fic-mirror-[1-9]|"$HOME"/fic-mirror-????????????-[1-9]) ;;
     *) echo "fic-mirror: rifiuto, non e' la copia di una corsia: $FIC_MIRROR"; return 1 ;; esac

@@ -1,92 +1,92 @@
 #!/usr/bin/env bash
-# plan-check.sh — controlli DETERMINISTICI del ciclo /plan-review-cycle.
+# plan-check.sh — DETERMINISTIC checks of the /plan-review-cycle loop.
 #
-# Porta in un controllo meccanico cio' che la skill altrimenti affida al giudizio dell'orchestratore
-# (che e' lo stesso che ha appena scritto il piano). Non giudica il contenuto del piano: solo
-# struttura, confini e differenze.
+# Turns into a mechanical check what the skill would otherwise leave to the orchestrator judgment
+# (the same orchestrator that has just written the plan). It does not judge the plan content: only
+# structure, boundaries and differences.
 #
-#   plan-check.sh delta        <baseline> <corrente>      range cambiati + xref, per il giro delta
-#   plan-check.sh lint         <spec> [--baseline <copia>] struttura della sezione del piano
-#   plan-check.sh contract     <spec>                      contratto di verifica, per /implementation-review-cycle
-#   plan-check.sh basis        <spec>                      l'approvazione e' ancora quella di questa spec e di questo piano?
-#   plan-check.sh lint2        <spec>                      struttura del piano in FORMATO 2 (Plan format: 2)
-#   plan-check.sh gen          <spec> [--run-dir <dir>]    procedura generata dal piano in formato 2 (comandi, mutations.json)
-#   plan-check.sh route        <spec> [--diff <file>]      L5: superfici rilevate dai file, percorso leggero o pieno
-#   plan-check.sh s2           <spec> --delta <f> --gate <f> [--respinti <n>]   S2: delta e occhi freschi puliti?
-#   plan-check.sh skeleton     <spec>                      scheletro (passi, file, superfici, righe) sotto o sopra il tetto
-#   plan-check.sh split        <madre> [<figlia>…]         partizione dei requisiti fra le figlie di una catena
-#   plan-check.sh closed       <spec>                      l'anello e' chiuso? (Finalize: IMPLEMENTED fresca) · uscita 0|1
-#   plan-check.sh basis        <spec> --write-tests        (formato 2) registra "tests <fp>" nell'Approved basis
-#   plan-check.sh accept|tests|stubs|rossi|l2 <spec> …     fase test-red e L2 (harness-pt11, sotto: cmd_f2x)
+#   plan-check.sh delta        <baseline> <corrente>      changed ranges + xref, for the delta round
+#   plan-check.sh lint         <spec> [--baseline <copia>] structure of the plan section
+#   plan-check.sh contract     <spec>                      verification contract, for /implementation-review-cycle
+#   plan-check.sh basis        <spec>                      is the approval still the one of this spec and this plan?
+#   plan-check.sh lint2        <spec>                      structure of a FORMAT 2 plan (Plan format: 2)
+#   plan-check.sh gen          <spec> [--run-dir <dir>]    procedure generated from a format 2 plan (commands, mutations.json)
+#   plan-check.sh route        <spec> [--diff <file>]      L5: surfaces detected from the files, light or full path
+#   plan-check.sh s2           <spec> --delta <f> --gate <f> [--respinti <n>]   S2: delta and fresh eyes clean?
+#   plan-check.sh skeleton     <spec>                      skeleton (steps, files, surfaces, lines) below or above the cap
+#   plan-check.sh split        <madre> [<figlia>…]         partition of the requirements among the children of a chain
+#   plan-check.sh closed       <spec>                      is the ring closed? (fresh Finalize: IMPLEMENTED) · exit 0|1
+#   plan-check.sh basis        <spec> --write-tests        (format 2) records "tests <fp>" in the Approved basis
+#   plan-check.sh accept|tests|stubs|rossi|l2 <spec> …     test-red phase and L2 (harness-pt11, below: cmd_f2x)
 #
-# Uscita: 0 = ok · 1 = VIOLAZIONE (o, per delta, ERRORE DURO) · 2 = errore d'uso.
-# Gli AVVISO sono stampati ma non cambiano l'uscita.
+# Exit: 0 = ok · 1 = VIOLAZIONE (or, for delta, ERRORE DURO) · 2 = usage error.
+# AVVISO lines are printed but do not change the exit code.
 #
-# FORMATO 2 — riga "Plan format: 2" sotto "## Piano di implementazione" (definito in SKILL.md, "Plan format 2").
-# Senza la riga il piano e' in formato 1: lint, delta, contract e basis si comportano come prima, byte per byte;
-# lint2 e gen rispondono "non si applica" con uscita 0. lint2, gen e route leggono le tabelle con Python
-# (python.sh del full cycle), sulle righe di annotate: stesso confine del piano, stessi recinti.
-#   lint2  VIOLAZIONE: requisito della tracciabilita' senza test · test fuori da un passo · file di un passo fuori
-#          da "### File toccati" · blocco senza scrive: · tabella dei test o mutazione malformata · rischio aperto
-#          senza test · stringa/data-test tolti ma ancora asseriti da un test che il piano non tocca · riga del
-#          piano di test con asserzione "resta verde" (test esistente di non-regressione: va nella nota sotto la
-#          tabella, la tracciabilita' scrive "non verificabile a test (invarianza, ...)").
-#   gen    scrive <run-dir>/gen/procedura.txt (righe "chiave: valore": Plan format, Impronta piano, Test level,
+# FORMAT 2 — line "Plan format: 2" under "## Piano di implementazione" (defined in SKILL.md, "Plan format 2").
+# Without that line the plan is in format 1: lint, delta, contract and basis behave as before, byte for byte;
+# lint2 and gen answer "non si applica" with exit 0. lint2, gen and route read the tables with Python
+# (python.sh of the full cycle), on the annotate lines: same plan boundary, same fences.
+#   lint2  VIOLAZIONE: traceability requirement without a test · test outside a step · file of a step not
+#          in "### File toccati" · block without scrive: · malformed test table or mutation · open risk
+#          without a test · string/data-test removed but still asserted by a test the plan does not touch · test
+#          plan row with a "resta verde" assertion (existing non-regression test: it goes in the note under the
+#          table, and the traceability says "non verificabile a test (invarianza, ...)").
+#   gen    writes <run-dir>/gen/procedura.txt ("key: value" lines: Plan format, Impronta piano, Test level,
 #          vitest, pytest, altri, cmd vitest|pytest|lint|counterproof, mutazioni, "blocco <id>: scrive=… · dopo=…")
-#          e <run-dir>/counterproof/mutations.json nel formato di script/test/counterproof.sh (tolto se nessuna
-#          riga ha una mutazione). <run-dir> di default: <spec senza .md>.run. Uscita 1 su riga malformata.
-#   route  stampa le superfici rilevate (percorsi + parole chiave distruttive nel piano e nel --diff), quelle
-#          dichiarate e "Percorso: leggero|pieno — <motivo>"; uscita 0 (e' una risposta).
-#   s2     legge le due risposte (prima riga "Impronta piano: <fp12>", poi il contratto del revisore) e stampa
-#          "S2: APPROVA | CORREGGI | RILANCIA | IMPRONTA DIVERSA | STOP — <motivo>"; uscita 0.
+#          and <run-dir>/counterproof/mutations.json in the format of script/test/counterproof.sh (removed if no
+#          row has a mutation). Default <run-dir>: <spec without .md>.run. Exit 1 on a malformed row.
+#   route  prints the detected surfaces (paths + destructive keywords in the plan and in --diff), the declared
+#          ones and "Percorso: leggero|pieno — <motivo>"; exit 0 (it is an answer).
+#   s2     reads the two responses (first line "Impronta piano: <fp12>", then the reviewer contract) and prints
+#          "S2: APPROVA | CORREGGI | RILANCIA | IMPRONTA DIVERSA | STOP — <motivo>"; exit 0.
 #
-# SPEZZAMENTO E CATENE (harness-pt12, L6):
-#   skeleton  (formato 2; formato 1: "non si applica", uscita 0) conta i passi di "### Passi", i file (File
-#          toccati + file dei passi), le superfici dichiarate e le righe del piano; stampa "Scheletro: SOTTO IL
-#          TETTO" (uscita 0) o "Scheletro: SOPRA IL TETTO — <cosa>" (uscita 1: proposta di taglio, nessuna deroga).
-#          Tetti: <=15 passi, <=40 file (lo scheletro) e <=400 righe (il piano completo, stesso comando).
-#          La decisione dell'utente di NON spezzare sta nella spec, sopra il piano: "Taglio: rifiutato — <data>";
-#          con quella riga lo scheletro sopra il tetto lo dice e la riporta, ma esce 0 (piano unico, nessuno stop).
-#   split     ogni ID (RF<n>, CA<n>, anche puntato: RF5.4) DEFINITO dalla madre nelle sezioni "Requisiti funzionali"
-#          e "Criteri di accettazione" (a inizio di un titolo, di una voce di elenco o di una riga di tabella) sta in
-#          UNA e una sola figlia; nessuna figlia ha ID che la madre non ha; ogni figlia ha "Dipende da:" e
-#          "Interfaccia per:" (sopra il piano, a inizio riga). Figlie: dagli argomenti, in ordine di catena, oppure
-#          dalla riga "Figlie:" della madre. Uscita 1 = VIOLAZIONE (STOP).
-#   basis di una FIGLIA (una spec della stessa cartella la elenca nella sua riga "Figlie:"): la Basis aggiunge
-#          "madre <fp>" (le sezioni della madre sopra il piano), per l'anello k>1 "prec <fp>" (spec e piano
-#          dell'anello k-1) e, a k-1 chiuso (plan-check.sh closed), "interfaccia
-#          <fp>" (i file in backtick della sua riga "Interfaccia per:" nel suo ultimo .post-tree; chiuso = come
-#          `closed`: Finalize: IMPLEMENTED fresca, nessun ripiego legacy). STALE se uno dei
-#          campi registrati e' cambiato; STALE (madre|prec) se la Basis attuale ha il campo e la registrata no;
-#          a k-1 chiuso e senza "interfaccia" registrata (piano approvato mentre k-1 implementava: L6), STALE
-#          (touched: <file>) se QUALUNQUE file citato dal piano (fra backtick, :riga e ::nome tolti) sta nel
-#          touched.txt di k-1: si fa il giro delta a k-1 chiuso. Una spec fuori da una catena: Basis invariata.
-# Radice del repository: PLAN_CHECK_ROOT, altrimenti git della cartella della spec, altrimenti la cartella corrente.
+# SPLITTING AND CHAINS (harness-pt12, L6):
+#   skeleton  (format 2; format 1: "non si applica", exit 0) counts the steps of "### Passi", the files (File
+#          toccati + files of the steps), the declared surfaces and the plan lines; prints "Scheletro: SOTTO IL
+#          TETTO" (exit 0) or "Scheletro: SOPRA IL TETTO — <cosa>" (exit 1: a split proposal, no waiver).
+#          Caps: <=15 steps, <=40 files (the skeleton) and <=400 lines (the full plan, same command).
+#          The user decision NOT to split lives in the spec, above the plan: "Taglio: rifiutato — <data>";
+#          with that line a skeleton above the cap says so and reports it, but exits 0 (single plan, no stop).
+#   split     every ID (RF<n>, CA<n>, also dotted: RF5.4) DEFINED by the parent in the "Requisiti funzionali"
+#          and "Criteri di accettazione" sections (at the start of a heading, a list item or a table row) is in
+#          ONE and only one child; no child has IDs the parent lacks; every child has "Dipende da:" and
+#          "Interfaccia per:" (above the plan, at line start). Children: from the arguments, in chain order, or
+#          from the parent "Figlie:" line. Exit 1 = VIOLAZIONE (STOP).
+#   basis of a CHILD (a spec in the same folder lists it in its "Figlie:" line): the Basis adds
+#          "madre <fp>" (the parent sections above the plan), for ring k>1 "prec <fp>" (spec and plan
+#          of ring k-1) and, once k-1 is closed (plan-check.sh closed), "interfaccia
+#          <fp>" (the backticked files of its "Interfaccia per:" line in its last .post-tree; closed = as in
+#          `closed`: fresh Finalize: IMPLEMENTED, no legacy fallback). STALE if one of the
+#          recorded fields has changed; STALE (madre|prec) if the current Basis has the field and the recorded one does not;
+#          with k-1 closed and no "interfaccia" recorded (plan approved while k-1 was implementing: L6), STALE
+#          (touched: <file>) if ANY file cited by the plan (in backticks, :line and ::name stripped) is in
+#          the touched.txt of k-1: a delta round is done with k-1 closed. A spec outside a chain: Basis unchanged.
+# Repository root: PLAN_CHECK_ROOT, otherwise git of the spec folder, otherwise the current folder.
 #
-# Invarianti (vedi SKILL.md e la memoria sulle trappole dei gate su markdown):
-# - i file spec sono CRLF: ogni lettura toglie i \r, e diff usa --strip-trailing-cr;
-# - la sezione del piano va da "## Piano di implementazione" a "## Review implementazione" o a fine
-#   file: una H2 dentro il piano NON la chiude (succede, es. spec-restyling-ui-soft);
-# - tutto cio' che sta dentro un blocco di codice (``` o ~~~) non conta come struttura.
+# Invariants (see SKILL.md and the memory on the traps of markdown gates):
+# - spec files are CRLF: every read strips the \r, and diff uses --strip-trailing-cr;
+# - the plan section runs from "## Piano di implementazione" to "## Review implementazione" or to the end of
+#   the file: an H2 inside the plan does NOT close it (it happens, e.g. spec-restyling-ui-soft);
+# - everything inside a code block (``` or ~~~) does not count as structure.
 #
-# Test: plan-check.test.sh (ogni controllo ha la sua controprova rossa).
+# Tests: plan-check.test.sh (every check has its red counterproof).
 
 set -uo pipefail
 set -f
 
-# Vocabolario unico delle superfici a rischio (definito in SKILL.md, Step 0). CRITICHE = quelle che
-# attivano il pavimento di verifica e, se il round 1 approva subito, il gate fresh-eyes.
+# Single vocabulary of the risk surfaces (defined in SKILL.md, Step 0). CRITICHE = those that
+# trigger the verification floor and, if round 1 approves right away, the fresh-eyes gate.
 SURFACES="permessi dati contratto-api import logica-condivisa distruttiva"
 CRITICAL="permessi dati distruttiva"
-# Token fra backtick troppo generici per fare da riferimento incrociato.
+# Backticked tokens too generic to serve as a cross-reference.
 XREF_STOP=" std full min true false none null APPROVED DRAFT legacy TODO nessuna "
 XREF_MAX_LINES=8
-XREF_MAX_HITS=15   # un token che compare in piu' righe di cosi' e' rumore, non un riferimento
+XREF_MAX_HITS=15   # a token that appears in more lines than this is noise, not a reference
 
 die_usage() { echo "uso: $0 delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]" >&2; exit 2; }
 
-# annotate FILE → righe "NR<TAB>zona<TAB>infence<TAB>testo"
-# zona: above | plan | changelog | review. infence=1 anche sulle righe-recinto stesse.
+# annotate FILE → lines "NR<TAB>zona<TAB>infence<TAB>testo"
+# zona: above | plan | changelog | review. infence=1 also on the fence lines themselves.
 annotate() {
   tr -d '\r' < "$1" | awk '
     BEGIN { zone = "above"; infence = 0 }
@@ -105,10 +105,10 @@ annotate() {
     }'
 }
 
-# above_norm: toglie gli spazi a fine riga e le righe vuote in coda (stdin → stdout).
+# above_norm: strips trailing spaces and trailing blank lines (stdin → stdout).
 above_norm() { sed 's/[[:space:]]*$//' | awk 'NF { for (i = 0; i < b; i++) print ""; b = 0; print; next } { b++ }'; }
 
-# test_zone: stampa "NR<TAB>testo" delle righe di "### Piano di test" (fuori recinti), dall'annotate su stdin.
+# test_zone: prints "NR<TAB>testo" of the lines of "### Piano di test" (outside fences), from the annotate on stdin.
 test_zone() {
   awk -F'\t' '
     $2 != "plan" { if (in_t) exit; next }
@@ -116,23 +116,23 @@ test_zone() {
     in_t && $3 == 0 && $4 ~ /^##?#?[ \t]/ { exit }
     in_t { print $1 "\t" $4 }'
 }
-# Una riga di pavimento e' una VOCE DI ELENCO dentro "### Piano di test": una menzione in prosa
-# altrove ("coperto dal [pavimento: permessi] sotto") non e' una seconda riga di pavimento.
+# A floor line is a LIST ITEM inside "### Piano di test": a mention in prose
+# elsewhere ("coperto dal [pavimento: permessi] sotto") is not a second floor line.
 PAV_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[pavimento:'
-# Una riga [e2e-locator: <spec>] e' l'e2e mirato che il piano prescrive A OGNI LIVELLO quando cambia uno
-# spec e2e o una stringa/classe/attributo usata dai suoi locator: fuori dai tetti come il pavimento.
+# An [e2e-locator: <spec>] line is the targeted e2e that the plan prescribes AT EVERY LEVEL when an e2e
+# spec changes or a string/class/attribute used by its locators changes: outside the caps like the floor.
 E2E_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[e2e-locator:'
 
-# warn_line <token>: "NR<TAB>testo" della prima riga "⚠️ Superficie <token>" del piano, fuori dai
-# recinti (annotate su stdin). Il token deve seguire "⚠️ Superficie" (tollerati `, * e _ del markdown):
-# una riga ⚠️ su un'ALTRA superficie non copre questa.
+# warn_line <token>: "NR<TAB>testo" of the first "⚠️ Superficie <token>" line of the plan, outside the
+# fences (annotate on stdin). The token must follow "⚠️ Superficie" (markdown `, * and _ tolerated):
+# a ⚠️ line on ANOTHER surface does not cover this one.
 warn_line() {
   awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "⚠️ Superficie") { print $1 "\t" $4 }' \
     | grep -E "⚠️ Superficie[[:space:]*_\`]+$1([^[:alnum:]_-]|\$)" | head -1 || true
 }
-# waiver_of <testo della riga ⚠️>: il motivo della deroga "statica sufficiente: <motivo>", o vuoto.
+# waiver_of <text of the ⚠️ line>: the reason of the "statica sufficiente: <motivo>" waiver, or empty.
 waiver_of() { printf '%s\n' "$1" | sed -n 's/.*statica sufficiente:[[:space:]]*//p' | sed 's/[[:space:]]*$//'; }
-# declared_surfaces: i token validi di "Superfici a rischio:" (annotate su stdin), separati da spazi.
+# declared_surfaces: the valid tokens of "Superfici a rischio:" (annotate on stdin), space separated.
 declared_surfaces() {
   local d s out=""
   d=$(awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Superfici a rischio:") == 1 { sub(/^Superfici a rischio:[ \t]*/, "", $4); print $4; exit }')
@@ -141,7 +141,7 @@ declared_surfaces() {
   done
   printf '%s\n' "$out"
 }
-# section_range <nome H3>: "offset=N limit=M" della sottosezione del piano (annotate su stdin).
+# section_range <H3 name>: "offset=N limit=M" of the plan subsection (annotate on stdin).
 section_range() {
   awk -F'\t' -v name="$1" '
     $2 != "plan" { if (s) exit; next }
@@ -150,7 +150,7 @@ section_range() {
     s { last = $1 }
     END { if (s) printf "offset=%d limit=%d\n", s, last - s + 1 }'
 }
-# fmt2_of: 1 se il piano (annotate su stdin) ha la riga "Plan format: 2" fuori dai recinti, altrimenti 0.
+# fmt2_of: 1 if the plan (annotate on stdin) has the "Plan format: 2" line outside fences, otherwise 0.
 fmt2_of() { awk -F'\t' '$2 == "plan" && $3 == 0 && $4 ~ /^Plan format:[ \t]*2[ \t]*$/ { f = 1 } END { print f ? 1 : 0 }'; }
 
 # ─────────────────────────────────────────────────────────────────────────── delta
@@ -168,7 +168,7 @@ cmd_delta() {
   total_new=$(printf '%s\n' "$ann" | wc -l)
   total_old=$(tr -d '\r' < "$base" | wc -l)
 
-  # Hunk → range sul file corrente (1-based). Una cancellazione pura diventa la riga dopo cui cadeva.
+  # Hunk → range on the current file (1-based). A pure deletion becomes the line after which it fell.
   printf '%s\n' "$d" | awk -v tn="$total_new" -v to="$total_old" '
     /^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$/ {
       match($0, /[acd]/); op = substr($0, RSTART, 1)
@@ -185,7 +185,7 @@ cmd_delta() {
         print "ERRORE DURO: il diff copre oltre il 90% del file (riformattazione o fine riga) — trattalo come baseline mancante: giro a scope pieno"
         exit 1
       }
-      # fonde range vicini (distanza <= 3) per non spendere chiamate del revisore
+      # merges nearby ranges (distance <= 3) so as not to spend reviewer calls
       for (i = 1; i <= k; i++) {
         if (m && rs[i] <= me + 3) { if (re[i] > me) me = re[i]; continue }
         if (m) printf "range: offset=%d limit=%d\n", ms, me - ms + 1
@@ -195,7 +195,7 @@ cmd_delta() {
     }' > "$TMPD/ranges" || { cat "$TMPD/ranges"; return 1; }
   cat "$TMPD/ranges"
 
-  # xref: token fra backtick delle righe cambiate, cercati nelle ALTRE righe del piano.
+  # xref: backticked tokens of the changed lines, searched in the OTHER lines of the plan.
   awk '{ split($2, a, "="); split($3, b, "="); for (i = a[2]; i < a[2] + b[2]; i++) print i }' "$TMPD/ranges" | sort -un > "$TMPD/inrange"
   printf '%s\n' "$ann" | awk -F'\t' 'NR==FNR { r[$1] = 1; next } ($1 in r) { print $4 }' "$TMPD/inrange" - \
     | grep -o '`[^`]*`' | tr -d '`' | sort -u > "$TMPD/tokens" || true
@@ -213,7 +213,7 @@ cmd_delta() {
     [ "$hits" -gt 0 ] && [ "$hits" -le "$XREF_MAX_HITS" ] || continue
     while IFS= read -r ln; do printf '%d\t%d\t%s\n' "$hits" "$ln" "$tok" >> "$TMPD/cand"; done < "$TMPD/hits"
   done < "$TMPD/tokens"
-  # piu' raro prima; una riga sola per numero di riga; tetto XREF_MAX_LINES
+  # rarest first; a single line per line number; cap XREF_MAX_LINES
   sort -t$'\t' -k1,1n -k2,2n "$TMPD/cand" | awk -F'\t' -v max="$XREF_MAX_LINES" '!seen[$2]++ { print "xref: riga " $2 " (" $3 ")"; if (++n >= max) exit }'
   return 0
 }
@@ -237,7 +237,7 @@ cmd_lint() {
     viol "nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1
   fi
 
-  # Righe di stato: una sola occorrenza ancorata nel piano (changelog compreso), fuori dai recinti.
+  # Status lines: a single anchored occurrence in the plan (changelog included), outside fences.
   local lit n ln prev=""
   for lit in "Plan status:" "Test level:" "Superfici a rischio:"; do
     n=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '($2 == "plan" || $2 == "changelog") && $3 == 0 && index($4, l) == 1' | wc -l)
@@ -247,13 +247,13 @@ cmd_lint() {
     ln=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '$2 == "plan" && $3 == 0 && index($4, l) == 1 { print $1; exit }')
     if [ -n "$prev" ] && [ -n "$ln" ] && [ "$ln" -ne $((prev + 1)) ]; then warn "'$lit' non sta nella riga subito sotto la precedente riga di stato"; fi
     [ -n "$ln" ] && prev="$ln"
-    # Nel changelog il letterale non va citato nemmeno in mezzo alla riga: e' li' che nasce il duplicato.
+    # In the changelog the literal must not be quoted even mid-line: that is where the duplicate comes from.
     if printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '$2 == "changelog" && index($4, l) > 1 { f = 1 } END { exit !f }'; then
       warn "il changelog cita il letterale '$lit' in mezzo a una riga — scrivilo in prosa, e' a un a-capo dal diventare un duplicato"
     fi
   done
 
-  # Approved basis: scritta all'approvazione (la scrive la skill, mai a mano); una sola.
+  # Approved basis: written at approval (written by the skill, never by hand); only one.
   n=$(printf '%s
 ' "$ann" | awk -F'	' '($2 == "plan" || $2 == "changelog") && $3 == 0 && index($4, "Approved basis:") == 1' | wc -l)
   if [ "$n" -gt 1 ]; then viol "'Approved basis:' compare $n volte a inizio riga nel piano: dev'essere UNA"
@@ -262,7 +262,7 @@ cmd_lint() {
     warn "piano APPROVED senza riga 'Approved basis:' (piano legacy: non si ritocca a mano, la riga arriva alla prossima approvazione)"
   fi
 
-  # Superfici dichiarate: solo token del vocabolario (i backtick si tollerano, le note no).
+  # Declared surfaces: vocabulary tokens only (backticks are tolerated, notes are not).
   local decl; decl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Superfici a rischio:") == 1 { sub(/^Superfici a rischio:[ \t]*/, "", $4); print $4; exit }')
   local declared="" s nnone=0 ntok=0
   if [ -n "$decl" ]; then
@@ -277,7 +277,7 @@ cmd_lint() {
     [ "$nnone" -eq 1 ] && [ "$ntok" -gt 1 ] && viol "'Superfici a rischio' dice 'nessuna' insieme ad altre superfici"
   fi
 
-  # Pavimento: voce di elenco in "### Piano di test", su superficie CRITICA e DICHIARATA, una per superficie.
+  # Floor: list item in "### Piano di test", on a CRITICAL and DECLARED surface, one per surface.
   local tz; tz=$(printf '%s\n' "$ann" | test_zone)
   local pav; pav=$(printf '%s\n' "$tz" | cut -f2- | grep -E "$PAV_RE" | grep -o '\[pavimento:[^]]*\]' | sed 's/^\[pavimento:[[:space:]]*//; s/[[:space:]]*\]$//' || true)
   if [ -n "$pav" ]; then
@@ -288,9 +288,9 @@ cmd_lint() {
     printf '%s\n' "$pav" | sort | uniq -d | while IFS= read -r s; do echo "VIOLAZIONE: piu' di una riga [pavimento: $s] — il pavimento e' UNA verifica per superficie"; done
     printf '%s\n' "$pav" | sort | uniq -d | grep -q . && rc=1
   fi
-  # Superficie critica dichiarata senza pavimento ne' riga ⚠️ che la NOMINI: AVVISO (lo giudica L3).
-  # Una riga ⚠️ su un'altra superficie non la copre. Deroga ("statica sufficiente:") senza motivo o
-  # spezzata a capo: AVVISO — a valle `contract` la leggerebbe come obbligo.
+  # Declared critical surface with neither a floor nor a ⚠️ line that NAMES it: AVVISO (L3 judges it).
+  # A ⚠️ line on another surface does not cover it. Waiver ("statica sufficiente:") without a reason or
+  # broken across lines: AVVISO — downstream `contract` would read it as an obligation.
   local wl wn wt nxt
   for s in $declared; do
     case " $CRITICAL " in *" $s "*) ;; *) continue ;; esac
@@ -310,15 +310,15 @@ cmd_lint() {
     fi
   done
 
-  # e2e mirati per locator: al massimo 2 (oltre, una riga ⚠️ e il regression-watch).
+  # targeted e2e by locator: at most 2 (beyond that, a ⚠️ line and the regression-watch).
   local ne2e; ne2e=$(printf '%s\n' "$tz" | cut -f2- | grep -cE "$E2E_RE" || true)
   [ "${ne2e:-0}" -le 2 ] || warn "$ne2e righe [e2e-locator: — al massimo 2; oltre, una riga ⚠️ e il regression-watch"
 
-  # Lunghezza di "### Piano di test" rispetto al livello (AVVISO: la giudica L3, qui si misura).
-  # Non contano le righe vuote, quelle di pavimento, quelle [e2e-locator: e le righe ⚠️: fuori dal tetto.
+  # Length of "### Piano di test" relative to the level (AVVISO: L3 judges it, here it is measured).
+  # Not counted: blank lines, floor lines, [e2e-locator: lines and ⚠️ lines: outside the cap.
   local lvl; lvl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Test level:") == 1 { sub(/^Test level:[ \t]*/, "", $4); sub(/[ \t].*$/, "", $4); print $4; exit }')
   if printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && $4 ~ /^###[ \t]+([0-9]+\.[ \t]*)?Piano di test/ { f = 1 } END { exit !f }'; then
-    # Formato 2: intestazione e separatore della tabella dei test e le righe "⚠️ Rischio aperto" non contano.
+    # Format 2: header and separator of the test table and the "⚠️ Rischio aperto" lines do not count.
     local f2; f2=$(printf '%s\n' "$ann" | fmt2_of)
     local tlen; tlen=$(printf '%s\n' "$tz" | cut -f2- | grep -vE "$PAV_RE" | grep -vE "$E2E_RE" | grep -v '⚠️ Superficie' \
       | { if [ "$f2" = 1 ]; then grep -vE '^[[:space:]]*\|[[:space:]]*(ID[[:space:]]*\||:?-)' | grep -v '⚠️ Rischio aperto'; else cat; fi; } \
@@ -329,13 +329,13 @@ cmd_lint() {
     esac
   fi
 
-  # Con baseline: la spec sopra il piano e la review di implementazione non si toccano.
+  # With baseline: the spec above the plan and the implementation review must not be touched.
   if [ -n "$base" ]; then
     [ -f "$base" ] || { echo "baseline assente: $base" >&2; return 2; }
     local bann; bann=$(annotate "$base")
     local b_above c_above b_rev c_rev
-    # Spazi e righe vuote in CODA alla parte sopra il piano non contano: la riga vuota che precede
-    # "## Piano di implementazione" la aggiunge chi scrive il piano, non chi ha scritto la spec.
+    # Trailing spaces and blank lines at the END of the part above the plan do not count: the blank line before
+    # "## Piano di implementazione" is added by whoever writes the plan, not by whoever wrote the spec.
     b_above=$(printf '%s\n' "$bann" | awk -F'\t' '$2 == "above" { print $4 }' | above_norm | sha256sum)
     c_above=$(printf '%s\n' "$ann"  | awk -F'\t' '$2 == "above" { print $4 }' | above_norm | sha256sum)
     [ "$b_above" = "$c_above" ] || viol "le sezioni della SPEC sopra '## Piano di implementazione' sono cambiate rispetto alla baseline — questo ciclo non le puo' toccare"
@@ -349,8 +349,8 @@ cmd_lint() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────── contract
-# Il contratto di verifica del piano, come lo consuma /implementation-review-cycle: un solo parser per
-# i due lati, cosi' il livello, le superfici e gli obblighi non vengono ri-dedotti a mano a valle.
+# The verification contract of the plan, as /implementation-review-cycle consumes it: a single parser for
+# both sides, so that level, surfaces and obligations are not re-derived by hand downstream.
 cmd_contract() {
   [ $# -eq 1 ] && [ -f "$1" ] || die_usage
   local ann; ann=$(annotate "$1")
@@ -362,8 +362,8 @@ cmd_contract() {
   echo "${st:-Plan status: (assente)}"
   n=$(printf '%s\n' "$ann" | awk -F'\t' '($2 == "plan" || $2 == "changelog") && $3 == 0 && index($4, "Test level:") == 1' | wc -l)
   lvl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Test level:") == 1 { sub(/^Test level:[ \t]*/, "", $4); sub(/[ \t].*$/, "", $4); print $4; exit }')
-  # n conta anche il changelog (dove il letterale e' un duplicato), lvl solo il piano: una riga che
-  # vive solo nel changelog non e' un livello.
+  # n also counts the changelog (where the literal is a duplicate), lvl only the plan: a line that
+  # lives only in the changelog is not a level.
   if [ "$n" -eq 0 ] || { [ "$n" -eq 1 ] && [ -z "$lvl" ]; }; then echo "Test level: legacy (assente)"
   elif [ "$n" -gt 1 ]; then echo "Test level: legacy (duplicata: $n)"
   else echo "Test level: $lvl"; fi
@@ -372,7 +372,7 @@ cmd_contract() {
   local tz; tz=$(printf '%s\n' "$ann" | test_zone)
   for s in $(printf '%s\n' "$ann" | declared_surfaces); do
     case " $CRITICAL " in *" $s "*) ;; *) continue ;; esac
-    # PAV_RE via ENVIRON: `awk -v` interpreterebbe gli escape della regex (`\.` `\[`).
+    # PAV_RE via ENVIRON: `awk -v` would interpret the regex escapes (`\.` `\[`).
     pl=$(printf '%s\n' "$tz" | PAV="$PAV_RE" awk -F'\t' -v s="$s" '$2 ~ ENVIRON["PAV"] {
       t = $2; gsub(/\[pavimento:[ \t]*/, "[pavimento: ", t); gsub(/[ \t]*\]/, "]", t)
       if (index(t, "[pavimento: " s "]")) { print $1; exit } }')
@@ -384,7 +384,7 @@ cmd_contract() {
     if [ -n "$why" ]; then echo "Statica sufficiente: $s — $why (riga $wn)"
     else echo "Obbligo: $s — ⚠️ senza deroga (riga $wn)"; fi
   done
-  # Formato 2: anche le righe "⚠️ Rischio aperto" (difetto trovato tardi, con un test assegnato) sono focus di rischio.
+  # Format 2: the "⚠️ Rischio aperto" lines (defect found late, with an assigned test) are risk focuses too.
   local f2; f2=$(printf '%s\n' "$ann" | fmt2_of)
   printf '%s\n' "$ann" | awk -F'\t' -v f2="$f2" '$2 == "plan" && $3 == 0 && (index($4, "⚠️ Superficie") || (f2 == 1 && index($4, "⚠️ Rischio aperto"))) {
     t = $4; sub(/^[ \t]*([-*][ \t]+)?/, "", t); print "Rischio: riga " $1 " — " t }'
@@ -395,32 +395,32 @@ cmd_contract() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────── basis
-# L'approvazione del piano legata a cio' che ha approvato. Due impronte (sha256, 12 caratteri):
-#   spec = le sezioni sopra "## Piano di implementazione" (come nel lint --baseline: spazi e righe vuote
-#          in coda non contano);
-#   plan = il CORPO del piano: senza il changelog (note e riga di metrica si scrivono dopo l'approvazione)
-#          e senza la riga "Approved basis:" stessa. I blocchi di codice contano.
-# CR tolti, spazi a fine riga tolti. La review di implementazione non conta: e' scritta dopo, da un altro.
-# La skill scrive all'approvazione "Approved basis: spec <fp> · plan <fp>"; /implementation-review-cycle
-# registra le stesse due impronte come "Reviewed contract:". Riga assente → LEGACY (nessun controllo).
-# Limiti dichiarati: una riga "Approved basis:" indentata o cancellata rende il piano LEGACY (il lint avvisa
-# su APPROVED senza riga); il testo sotto un titolo #### dopo il changelog conta come changelog; le note
-# del changelog (optional) non sono nell impronta.
-full_line() { sed 's/^[^\t]*\t[^\t]*\t[^\t]*\t//'; }   # la riga intera: $4 si fermerebbe al primo TAB
+# The plan approval bound to what it approved. Two fingerprints (sha256, 12 characters):
+#   spec = the sections above "## Piano di implementazione" (as in lint --baseline: trailing spaces and
+#          blank lines do not count);
+#   plan = the plan BODY: without the changelog (notes and metric line are written after approval)
+#          and without the "Approved basis:" line itself. Code blocks count.
+# CRs stripped, trailing spaces stripped. The implementation review does not count: it is written later, by someone else.
+# At approval the skill writes "Approved basis: spec <fp> · plan <fp>"; /implementation-review-cycle
+# records the same two fingerprints as "Reviewed contract:". Missing line → LEGACY (no check).
+# Declared limits: an indented or deleted "Approved basis:" line makes the plan LEGACY (lint warns
+# on APPROVED without the line); text under a #### heading after the changelog counts as changelog; the
+# changelog notes (optional) are not in the fingerprint.
+full_line() { sed 's/^[^\t]*\t[^\t]*\t[^\t]*\t//'; }   # the whole line: $4 would stop at the first TAB
 basis_of() {
   local s p
   s=$(printf '%s\n' "$1" | awk -F'\t' '$2 == "above"' | full_line | above_norm | sha256sum | cut -c1-12)
   p=$(printf '%s\n' "$1" | awk -F'\t' '$2 == "plan" && !($3 == 0 && index($4, "Approved basis:") == 1)' | full_line | above_norm | sha256sum | cut -c1-12)
   printf 'spec %s · plan %s\n' "$s" "$p"
 }
-# ─────────────────────────────────────────────────────────────────────────── catene (harness-pt12)
-# head_val <file> <letterale>: il valore della prima riga "<letterale> …" sopra il piano, fuori dai recinti.
+# ─────────────────────────────────────────────────────────────────────────── chains (harness-pt12)
+# head_val <file> <letterale>: the value of the first "<letterale> …" line above the plan, outside fences.
 head_val() { annotate "$1" | awk -F'\t' -v l="$2" '$2 != "above" { exit } $3 == 0 && index($4, l) == 1 { v = substr($4, length(l) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'; }
-# figlie_of <madre>: i nomi (senza .md) della riga "Figlie:", in ordine di catena, uno per riga.
+# figlie_of <madre>: the names (without .md) of the "Figlie:" line, in chain order, one per line.
 figlie_of() { head_val "$1" "Figlie:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
-# req_ids <file>: gli ID (RF<n>, CA<n>, anche puntati) DEFINITI in "Requisiti funzionali" e "Criteri di
-# accettazione" sopra il piano, fuori dai recinti: a inizio di un titolo, di una voce di elenco o di una riga di
-# tabella (il primo della riga). Unici, nell'ordine.
+# req_ids <file>: the IDs (RF<n>, CA<n>, also dotted) DEFINED in "Requisiti funzionali" and "Criteri di
+# accettazione" above the plan, outside fences: at the start of a heading, a list item or a table
+# row (the first one on the line). Unique, in order.
 req_ids() {
   annotate "$1" | awk -F'\t' '
     $2 != "above" { exit }
@@ -431,8 +431,8 @@ req_ids() {
       x = substr($4, RSTART, RLENGTH); match(x, /(RF|CA)[0-9]+(\.[0-9]+)*$/); id = substr(x, RSTART)
       if (!(id in seen)) { seen[id] = 1; print id } }'
 }
-# madre_of <spec>: "<madre><TAB><k><TAB><n><TAB><precedente|->" se una spec della stessa cartella elenca questa
-# nella sua riga "Figlie:" (la prima, in ordine di nome); altrimenti niente.
+# madre_of <spec>: "<madre><TAB><k><TAB><n><TAB><precedente|->" if a spec in the same folder lists this one
+# in its "Figlie:" line (the first one, in name order); otherwise nothing.
 madre_of() {
   local d b m k
   d=$(dirname "$1"); b=$(basename "$1" .md)
@@ -446,11 +446,11 @@ madre_of() {
     return 0
   done < <(find "$d" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -l '^Figlie:' {} + 2>/dev/null | LC_ALL=C sort)
 }
-# closed_why <spec>: stampa perche' l'anello NON e' chiuso (niente = chiuso). Un solo criterio, usato anche da
-# cycle-state.sh (plan-check.sh closed): Review status APPROVED, Feature status IMPLEMENTED e una riga
-# "Finalize: IMPLEMENTED — snapshot <x12> — … · <ora UTC>" FRESCA, con le regole di finalize_gap di cycle-state.sh:
-# <x12> = impronta del "Reviewed snapshot:" attuale e ora non piu' vecchia dell'ultima review lanciata
-# (<run-dir>/log/<n>-*review*.jsonl). Nessun ripiego legacy: senza Finalize l'anello e' aperto.
+# closed_why <spec>: prints why the ring is NOT closed (nothing = closed). A single criterion, also used by
+# cycle-state.sh (plan-check.sh closed): Review status APPROVED, Feature status IMPLEMENTED and a FRESH
+# "Finalize: IMPLEMENTED — snapshot <x12> — … · <ora UTC>" line, with the finalize_gap rules of cycle-state.sh:
+# <x12> = fingerprint of the current "Reviewed snapshot:" and a time not older than the last launched review
+# (<run-dir>/log/<n>-*review*.jsonl). No legacy fallback: without Finalize the ring is open.
 closed_why() {
   local sec rs fs fz snap fs12 now ts rl rt run="${1%.md}.run"
   sec=$(tr -d '\r' < "$1" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
@@ -480,15 +480,15 @@ cmd_closed() {
   if [ -z "$w" ]; then echo "Anello: CHIUSO"; return 0; fi
   echo "Anello: APERTO — $w"; return 1
 }
-# last_post_tree <run-dir>: il tree dell'ultimo .post-tree (etichetta di numero piu' alto), o niente.
+# last_post_tree <run-dir>: the tree of the last .post-tree (highest number label), or nothing.
 last_post_tree() {
   local l; l=$(ls "$1/log" 2>/dev/null | sed -n 's/^\([0-9][0-9]*-[^.]*\)\.post-tree$/\1/p' | sort -t- -k1,1n | tail -1)
   [ -n "$l" ] && tr -d '\r\n ' < "$1/log/$l.post-tree"
 }
-# code_paths: i percorsi fra backtick delle righe su stdin (con una /), senza ::nome e :riga.
+# code_paths: the backticked paths of the lines on stdin (with a /), without ::name and :line.
 code_paths() { grep -o '`[^`]*`' | tr -d '`' | grep '/' | sed -E 's/::.*//; s/:[0-9]+(-[0-9]+)?$//; s/[[:space:]].*$//' | grep . | LC_ALL=C sort -u || true; }
-# iface_fp <spec precedente> <tree> <radice>: impronta dei file della sua riga "Interfaccia per:" in quel tree
-# (path + blob, oppure ABSENT); niente se la riga non nomina file.
+# iface_fp <previous spec> <tree> <root>: fingerprint of the files of its "Interfaccia per:" line in that tree
+# (path + blob, or ABSENT); nothing if the line names no files.
 iface_fp() {
   local l p out=""
   l=$(head_val "$1" "Interfaccia per:" | code_paths)
@@ -500,11 +500,11 @@ iface_fp() {
   printf '%s' "$out" | sha256sum | cut -c1-12
 }
 
-# TESTS (harness-pt11, solo formato 2): la fase test-red, chiusa OK, aggiunge in coda alla riga " · tests <fp>"
-# (basis --write-tests): <fp> = sha256 (12) delle righe "<sha256 senza CR>  <path>" dei file dei test di
-# accettazione (tabella del piano di test; `tests` le stampa). Si confronta SOLO quando c'e': diversa ->
-# "Status: STALE (tests)" (un test di accettazione cambiato dopo test-red e' una deviazione). In formato 2 in piu'
-# "Tests: <fp attuale>" e "Tests status: FRESH | STALE | ASSENTE". Formato 1: output invariato, byte per byte.
+# TESTS (harness-pt11, format 2 only): the test-red phase, closed OK, appends " · tests <fp>" to the line
+# (basis --write-tests): <fp> = sha256 (12) of the lines "<sha256 without CR>  <path>" of the acceptance test
+# files (test plan table; `tests` prints them). Compared ONLY when present: different ->
+# "Status: STALE (tests)" (an acceptance test changed after test-red is a deviation). In format 2 also
+# "Tests: <current fp>" and "Tests status: FRESH | STALE | ASSENTE". Format 1: output unchanged, byte for byte.
 cmd_basis() {
   local spec="" wt=0
   while [ $# -gt 0 ]; do
@@ -522,7 +522,7 @@ cmd_basis() {
     echo "nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1
   fi
   cur=$(basis_of "$ann")
-  # Catena (harness-pt12): i campi madre / prec / interfaccia, solo per una figlia.
+  # Chain (harness-pt12): the madre / prec / interfaccia fields, only for a child.
   local ch madre="" k="" nk="" prev="" pclosed=0 ptree="" f
   ch=$(madre_of "$1")
   if [ -n "$ch" ]; then
@@ -551,7 +551,7 @@ cmd_basis() {
   rp=$(printf '%s\n' "$rec" | sed -n 's/.*plan[[:space:]]\{1,\}\([0-9a-f]\{12\}\).*/\1/p')
   cs=$(printf '%s\n' "$cur" | sed -n 's/.*spec \([0-9a-f]*\).*/\1/p')
   cp=$(printf '%s\n' "$cur" | sed -n 's/.*plan \([0-9a-f]*\).*/\1/p')
-  if [ $wt -eq 1 ]; then   # chiusura OK di test-red: registra l'impronta dei test nella riga
+  if [ $wt -eq 1 ]; then   # test-red closed OK: records the test fingerprint in the line
     [ "$f2" = 1 ] || { echo "basis --write-tests: solo per i piani in formato 2"; return 1; }
     [ -n "$rec" ] || { echo "basis --write-tests: nessuna riga Approved basis (piano non approvato)"; return 1; }
     [ "$rs" = "$cs" ] && [ "$rp" = "$cp" ] || { echo "basis --write-tests: approvazione STALE (spec o piano cambiati): non si registra"; return 1; }
@@ -576,8 +576,8 @@ cmd_basis() {
     if [ -n "$r" ]; then [ "$r" = "$c" ] || what="${what:+$what, }$fld"
     elif [ -n "$c" ] && [ "$fld" != interfaccia ]; then what="${what:+$what, }$fld"; fi
   done
-  # L6: piano approvato mentre l'anello precedente implementava (nessuna "interfaccia" registrata), ora chiuso:
-  # QUALUNQUE file citato dal piano e toccato dall'anello precedente → STALE, giro delta a k-1 chiuso.
+  # L6: plan approved while the previous ring was implementing (no "interfaccia" recorded), now closed:
+  # ANY file cited by the plan and touched by the previous ring → STALE, delta round with k-1 closed.
   if [ $pclosed -eq 1 ] && [ -z "$(printf '%s\n' "$rec" | sed -n 's/.*interfaccia[[:space:]]\{1,\}\([0-9a-f]\{12\}\).*/\1/p')" ]; then
     cited=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan"' | full_line | code_paths)
     hit=""
@@ -590,9 +590,9 @@ cmd_basis() {
   return 0
 }
 
-# ─────────────────────────────────────────────────────────────────────────── formato 2
-# Parser delle tabelle del formato 2, in Python (stdin = righe di annotate). Nessun apice singolo qui dentro,
-# e solo ASCII (i caratteri non ASCII come escape \u). need_py la scrive in un file di $TMPD (troppo lunga per `-c`).
+# ─────────────────────────────────────────────────────────────────────────── format 2
+# Parser of the format 2 tables, in Python (stdin = annotate lines). No single quote in here,
+# and ASCII only (non-ASCII characters as \u escapes). need_py writes it to a file in $TMPD (too long for `-c`).
 PY2='
 import json, os, re, sys
 
@@ -609,8 +609,8 @@ LIST = re.compile(r"[,;\u00b7]")
 PAV = re.compile(r"^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+\[pavimento:[ \t]*([^\]]*?)[ \t]*\]")
 E2E = re.compile(r"^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+\[e2e-locator:[ \t]*([^\]]*?)[ \t]*\]")
 RISK = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio aperto")
-# asserzione di un test esistente di non-regressione (harness-pt15, D): "resta verde", "rimane verde",
-# "restano verdi", "continua a passare"... in testa alla cella (dopo eventuali * _ \u00ab " di formattazione)
+# assertion of an existing non-regression test (harness-pt15, D): "resta verde", "rimane verde",
+# "restano verdi", "continua a passare"... at the start of the cell (after any * _ \u00ab " formatting)
 INVARIANZA = re.compile(r"^[\s*_\u00ab\"]*(?:rest(?:a|ano)\s+verd[ei]|riman(?:e|gono)\s+verd[ei]|continu(?:a|ano)\s+a\s+passare)\b", re.I)
 DESTR = re.compile(r"\bDELETE\b|\.delete\(|\bDROP\b|\bTRUNCATE\b|(?<![A-Za-z0-9_])rm ")
 TEST_HDR = ["id", "requisito", "file", "asserzione", "mutazione"]
@@ -732,7 +732,7 @@ def conf():
     import importlib.util
     p = os.environ.get("MAAT_CONFIG_PY") or ""
     try:
-        import sys; sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+        import sys; sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
         sp = importlib.util.spec_from_file_location("maat_config", p)
         mc = importlib.util.module_from_spec(sp)
         sp.loader.exec_module(mc)
@@ -886,7 +886,7 @@ def build(rows, root):
             c = c.strip()
             if ("/" in c or "." in c) and c not in files:
                 files.append(c)
-            # harness-pt11: `path` (nuovo) = file che il piano crea (scope della fase test-red, stub, L2)
+            # harness-pt11: `path` (new) = file the plan creates (scope of the test-red phase, stub, L2)
             if ("/" in c or "." in c) and i + 1 < len(tk) and tk[i + 1][0] == "t" \
                     and tk[i + 1][1].strip().lower().startswith("(nuovo)") and c not in newf:
                 newf.append(c)
@@ -1004,23 +1004,23 @@ def test_files(root):
                 yield os.path.join(d, f)
 
 
-# Un valore conta solo DENTRO un letterale del test (apici, virgolette, backtick) e INTERO: mai come pezzo di
-# una parola piu lunga. Una riga che asserisce la sua ASSENZA resta verde quando il valore sparisce: e un
-# AVVISO, non una violazione. Si decide PER LETTERALE, per posizione; la riga e di assenza solo se TUTTI i
-# letterali del valore lo sono. Un letterale e in posizione di assenza solo se:
-#   e seguito subito da "not in" (python: assert ... "X" not in body);
-#   sta DENTRO l argomento di .not.toContain( / .not.toHaveText( / .not.toMatch(;
-#   e l argomento di un find/get/query... a cui si applica DIRETTAMENTE .exists()).toBe(false), oppure
-#   .toBeNull() / .toBeFalsy() senza .not. davanti: un accesso concatenato prima del matcher (.attributes(
-#   .text() .classes() .element ...) chiede che l elemento esista, e il letterale resta positivo.
+# A value counts only INSIDE a literal of the test (single quotes, double quotes, backticks) and WHOLE: never as part of
+# a longer word. A line that asserts its ABSENCE stays green when the value disappears: it is an
+# AVVISO, not a violation. The decision is PER LITERAL, by position; the line is an absence line only if ALL the
+# literals of the value are. A literal is in absence position only if:
+#   it is immediately followed by "not in" (python: assert ... "X" not in body);
+#   it is INSIDE the argument of .not.toContain( / .not.toHaveText( / .not.toMatch(;
+#   it is the argument of a find/get/query... to which .exists()).toBe(false) applies DIRECTLY, or
+#   .toBeNull() / .toBeFalsy() without .not. in front: a chained access before the matcher (.attributes(
+#   .text() .classes() .element ...) requires the element to exist, and the literal stays positive.
 LITERAL = re.compile(r"\x27(?:[^\x27\\]|\\.)*\x27|\x22(?:[^\x22\\]|\\.)*\x22|`(?:[^`\\]|\\.)*`")
 NEG_CALL = re.compile(r"\.not\.(?:toContain|toHaveText|toMatch)\(")
 NULLISH = re.compile(r"(?<!\.not)\.(?:toBeNull|toBeFalsy)\(\)")  # REGOLA-NULLISH
 NOT_EXISTS = re.compile(r"\.exists\(\)\)\.toBe\(false\)")
 PY_NOT_IN = re.compile(r"^\s*not\s+in\b")
 QUERY = re.compile(r"\b(?:find|findAll|get|querySelector|querySelectorAll|query\w*|findBy\w+|findAllBy\w+|getBy\w+|getAllBy\w+)\(\s*$")
-# Non sono asserzioni: le righe di commento e il TITOLO di it/test/describe (il loro primo letterale);
-# non /re/.test( ne x.it( : prima del nome non ci devono essere un punto o una lettera.
+# Not assertions: comment lines and the TITLE of it/test/describe (their first literal);
+# nor /re/.test( or x.it( : there must be no dot or letter before the name.
 COMMENT = re.compile(r"^\s*(//|/\*|\*|#)")
 TITLE = re.compile(r"(?<![.\w])(?:it|test|describe)(?:\.\w+)*\(\s*(" + LITERAL.pattern + ")")
 
@@ -1112,11 +1112,11 @@ def lint2(M, root):
     for tid in M["order"]:
         if tid not in in_steps:
             E.append("riga %d: test %s non compare in nessun passo (colonna test)" % (tests[tid]["n"], tid))
-        # harness-pt11: la fase test-red verifica il rosso su un testo dell asserzione (ID + posizione)
+        # harness-pt11: the test-red phase verifies the red on a text of the assertion (ID + position)
         if not tests[tid]["texts"] and not tests[tid]["mut"]:  # CONTROLLO-ASSERZIONE-LINT2
             E.append("riga %d: test %s: asserzione senza testo fra backtick e senza mutazione: la fase test-red non puo dimostrare il rosso (scrivi il testo atteso del messaggio d errore fra backtick)" % (tests[tid]["n"], tid))
-        # harness-pt15 (D): un test ESISTENTE di non-regressione non si dimostra rosso sulla base con stub; nella
-        # tabella ferma il ciclo a test-red. Va in una nota sotto la tabella.
+        # harness-pt15 (D): an EXISTING non-regression test cannot be shown red on the stubbed base; in the
+        # table it stops the cycle at test-red. It goes in a note under the table.
         if INVARIANZA.match(tests[tid]["asserzione"]):  # CONTROLLO-NON-REGRESSIONE-LINT2
             E.append("riga %d: test %s: asserzione \"resta verde\": un test esistente di non-regressione non e una riga del Piano di test (test-red pretende ogni riga rossa sulla base con stub). Toglilo dalla tabella e mettilo nella nota sotto di essa (\"Test ESISTENTI di non-regressione\": file, cosa resta vero, requisito, comando se fuori dal gate); la tracciabilita lo cita come \"non verificabile a test (invarianza, non dimostrabile rossa): <test esistente>\"" % (tests[tid]["n"], tid))
     files = set(M["files"])
@@ -1138,7 +1138,7 @@ def lint2(M, root):
             E.append("riga %d: ### Stringhe e data-test vuole la tabella | azione | tipo | valore | (piu | verificato | facoltativa)" % tb["n"])
             continue
         for n, c in tb["rows"]:
-            ver = None   # deroga: colonna verificato = `file` - motivo (trattino lungo o corto)
+            ver = None   # waiver: verificato column = `file` - reason (long or short dash)
             if len(tb["hdr"]) == 4 and len(c) == 4:
                 v, c = c[3].strip(), c[:3]
                 if v.lower() not in NONE:
@@ -1193,7 +1193,7 @@ def lint2(M, root):
 
 def to_mnt(p):
     p = p.replace("\\", "/")
-    if p.startswith("//?/"):   # prefisso dei percorsi lunghi di Windows, tolto come maat_cygm
+    if p.startswith("//?/"):   # prefix of Windows long paths, stripped like maat_cygm
         p = p[4:]
     m = re.match(r"^([A-Za-z]):/(.*)$", p) or re.match(r"^/([A-Za-z])/(.*)$", p)
     return "/mnt/" + m.group(1).lower() + "/" + m.group(2) if m else p
@@ -1274,7 +1274,7 @@ def riga_cmd(m, tipo, root, run, file=(), test=()):
                 os.environ[k] = v
     d = to_mnt(root + ("/" + cart if cart else "")) if wsl else cart
     pre = ""
-    if wsl and os.environ.get("MAAT_CONFIG"):   # fuori da WSL la riga eredita l ambiente: niente da aggiungere
+    if wsl and os.environ.get("MAAT_CONFIG"):   # outside WSL the line inherits the environment: nothing to add
         pre = "export MAAT_CONFIG=" + mc.sq_se_serve(to_mnt(os.environ["MAAT_CONFIG"].replace("\\", "/"))) + "; "
     return avvolgi(wsl, pre + ("cd " + mc.sq_se_serve(d) + " && " if d else "") + riga) + nota
 
@@ -1300,11 +1300,11 @@ def gen(M, root, run, fp):
             print("VIOLAZIONE: " + e)
         return 1
     tests = M["tests"]
-    # liste vitest:/pytest: per RUNNER DICHIARATO del modulo del test (controprova.runner, come runner() e
-    # counterproof.sh), percorsi relativi alla radice del modulo; gli altri test (fuori dai moduli, sotto i pacchetti,
-    # runner comando o nessuno) in altri:, col percorso del repo. per_mod: i test di ogni modulo, per i comandi.
+    # vitest:/pytest: lists by DECLARED RUNNER of the test module (controprova.runner, like runner() and
+    # counterproof.sh), paths relative to the module root; the other tests (outside the modules, under the packages,
+    # comando runner or none) in altri:, with the repo path. per_mod: the tests of each module, for the commands.
     vit, pyt, other = [], [], []
-    per_mod = {"vitest": [], "pytest": []}   # [(modulo, [percorsi del repo])] nell ordine di prima comparsa
+    per_mod = {"vitest": [], "pytest": []}   # [(module, [repo paths])] in order of first appearance
     for tid in M["order"]:
         p = tests[tid]["path"]
         mt, kt = modulo(p)
@@ -1322,11 +1322,11 @@ def gen(M, root, run, fp):
         if x not in lst:
             lst.append(x)
     pav = [(PAV.match(t).group(1), t) for n, t in M["sec"].get("Piano di test", []) if PAV.match(t)]
-    # L2 (harness-pt11): dopo la fase test-red (test-red/rossi.json) le mutazioni dei file NUOVI con il rosso alla
-    # base con stub dimostrato si marcano assorbite; counterproof.sh le salta, finalize.sh le ricontrolla (l2).
-    # Criterio di finalize (final=True: stub = simboli esportati ORA): alla chiusura di test-red il codice sono gli
-    # stub appena registrati, quindi nulla cambia; rigenerata dopo l implementazione (cp_from_gen di run-phase.sh,
-    # promozione L2 del driver) non assorbe cio che finalize rifiuterebbe.
+    # L2 (harness-pt11): after the test-red phase (test-red/rossi.json) the mutations of NEW files with the red on
+    # the stubbed base proven are marked absorbed; counterproof.sh skips them, finalize.sh rechecks them (l2).
+    # Finalize criterion (final=True: stub = symbols exported NOW): when test-red closes the code is the
+    # stubs just recorded, so nothing changes; regenerated after the implementation (cp_from_gen of run-phase.sh,
+    # L2 promotion of the driver) it does not absorb what finalize would reject.
     l2 = l2_eval(M, root, run, True) if os.path.isfile(os.path.join(run, "test-red", "rossi.json")) else {}
     muts, absorbed = [], []
     for tid in M["order"]:
@@ -1335,7 +1335,7 @@ def gen(M, root, run, fp):
         if not m:
             continue
         mt, _kt = modulo(T["path"])
-        # il runner pytest delle controprove vuole il node id (<file>::<nome>), gli altri il nome del test
+        # the pytest runner of the counterproofs wants the node id (<file>::<nome>), the others the test name
         pyid = mt is not None and (mt.get("controprova") or {}).get("runner") == "pytest"
         e = {"id": tid, "file": m["file"], "simbolo": m["simbolo"],
              "mutazione": {"cerca": m["cerca"], "sostituisci": m["sostituisci"]},
@@ -1366,11 +1366,11 @@ def gen(M, root, run, fp):
     lines = ["Plan format: 2", "Impronta piano: " + fp, "Test level: " + M["level"],
              "vitest: " + (" ".join(vit) or "(nessuno)"), "pytest: " + (" ".join(pyt) or "(nessuno)"),
              "altri: " + (" ".join(other) or "(nessuno)")]
-    # i comandi: comandi.test e comandi.lint del modulo, espansi da comando() di maat-config.py (riga_cmd)
+    # the commands: comandi.test and comandi.lint of the module, expanded by comando() of maat-config.py (riga_cmd)
     for rn in ("vitest", "pytest"):
         for mt, g in per_mod[rn]:
             lines.append("cmd %s: %s" % (rn, riga_cmd(mt, "test", root, run, test=g)))
-    if M["level"] == "full":   # lint: ogni file del piano del modulo (radice o pacchetti), come gates.sh
+    if M["level"] == "full":   # lint: every file of the plan for the module (root or packages), like gates.sh
         for mt in conf()["moduli"]:
             if "lint" not in mt.get("comandi", {}):
                 continue
@@ -1535,7 +1535,7 @@ def skeleton(M):
     return 0
 
 
-# ---- harness-pt11: fase test-red (test di accettazione, stub, verifica dei rossi) e L2 ----
+# ---- harness-pt11: test-red phase (acceptance tests, stubs, verification of the reds) and L2 ----
 IMPORT_JS = re.compile(r"Failed to load url|Failed to resolve import|Cannot find module|Cannot find package|does not provide an export named|is not exported by|Failed to parse source|Transform failed|SyntaxError|ERR_MODULE_NOT_FOUND")
 IMPORT_PY = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|cannot import name")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -1756,7 +1756,7 @@ def vitest_blocks(text):
     lines = ANSI.sub("", text).split("\n")
     blocks, cur, ran = [], None, set()
     for l in lines:
-        s = re.match(r"^\s*Tests\s+([0-9]+)\s+failed", l)  # riepilogo del runner: quanti test rossi
+        s = re.match(r"^\s*Tests\s+([0-9]+)\s+failed", l)  # runner summary: how many tests are red
         if s:
             ran.add("#failed=" + s.group(1))
         r = RANL.match(l)
@@ -1785,7 +1785,7 @@ def vt_claim(T, b, trel):
     if not T["name"]:
         return "target"
     s = b["segs"]
-    # il piano puo nominare il test come vitest lo stampa ("describe > it") o col nome pieno di -t ("describe it")
+    # the plan may name the test as vitest prints it ("describe > it") or with the full -t name ("describe it")
     ids = set([sep.join(s[k:]) for k in range(len(s)) for sep in (" ", " > ")] + [s[-1]])
     return "target" if T["name"] in ids else "file"
 
@@ -1804,11 +1804,11 @@ def verdict(T, failed, suite, ran, passed, imp, trel):
         pos = posizione(T, raw, trel)
         if imp.search(msg):  # CLASSIFICAZIONE-IMPORT
             return "rosso_import", "rosso per un errore d import, non per l asserzione: non dimostrato", msg, pos
-        if not texts:  # CONTROLLO-ASSERZIONE: senza testo dell asserzione nessun rosso e dimostrato
+        if not texts:  # CONTROLLO-ASSERZIONE: without an assertion text no red is proven
             return "rosso_senza_asserzione", "nessun testo dell asserzione (backtick nella colonna asserzione o rosso se della mutazione): non dimostrato", msg, pos
         if texts and not any(nrm(x) in msg for x in texts):
             return "rosso_diverso", "rosso, ma non sull asserzione dichiarata (%s): non dimostrato" % " | ".join(texts), msg, pos
-        if not pos:  # CONTROLLO-POSIZIONE: ID + posizione nel file di test
+        if not pos:  # CONTROLLO-POSIZIONE: ID + position in the test file
             return "rosso_senza_asserzione", "rosso senza posizione nel file di test: non dimostrato", msg, pos
         return "dimostrato", "rosso sull asserzione dichiarata", msg, pos
     if suite:
@@ -1828,15 +1828,15 @@ def cmd_rossi(M, root, run, ev):
     sulla sua asserzione, nessuna suite esistente in conflitto. Scrive <run>/test-red/rossi.json.
     Uscita 0 OK (tutti dimostrati) - 1 STOP - 3 BLOCKED (evidenza assente o gate BLOCKED)."""
     tests = M["tests"]
-    # un gate tests-<modulo> per modulo di maat.json; il report si legge per il campo report del modulo
+    # one tests-<modulo> gate per module of maat.json; the report is read via the report field of the module
     mods = conf()["moduli"]
     gates = {"tests-" + m["nome"]: jload(os.path.join(ev, "tests-" + m["nome"] + ".json")) for m in mods}
     fmt = {"tests-" + m["nome"]: m.get("report", "nessuno") for m in mods}
     rad = {"tests-" + m["nome"]: radice(m) for m in mods}
     rep = {}
     for g, d in gates.items():
-        # NOT RUN (con lo spazio, phase-result.schema.json) come SKIPPED: test non eseguiti, mai bloccati;
-        # ogni altro esito (BLOCKED, NOT_RUN...) resta fuori da rep, cioe bloccato
+        # NOT RUN (with the space, phase-result.schema.json) as SKIPPED: tests not run, never blocked;
+        # any other outcome (BLOCKED, NOT_RUN...) stays out of rep, that is blocked
         if not isinstance(d, dict) or d.get("esito") not in ("PASS", "FAIL", "SKIPPED", "NOT RUN"):
             continue
         p = os.path.join(ev, d.get("report") or "-")
@@ -1853,7 +1853,7 @@ def cmd_rossi(M, root, run, ev):
             except OSError:
                 rep[g] = False
         else:
-            rep[g] = False   # report nessuno: gli esiti dei singoli test non si leggono
+            rep[g] = False   # report none: the outcomes of the single tests cannot be read
     out, blocked = {}, []
     if not M["order"]:
         print("AVVISO: la tabella del piano di test non ha righe: nessun test di accettazione da dimostrare rosso")
@@ -1909,22 +1909,22 @@ def cmd_rossi(M, root, run, ev):
                     b["own"] = tid
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
-    # conflitti: una suite ESISTENTE rossa sulla base con stub (un caso che nessun test di accettazione reclama),
-    # o un test esistente che asserisce l ASSENZA di un valore che il piano aggiunge (### Stringhe e data-test)
+    # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
+    # or an existing test asserting the ABSENCE of a value the plan adds (### Stringhe e data-test)
     def related(f):
         ids = [t for t in M["order"] if tests[t]["path"] == f] or M["order"]
         return "; ".join("%s: %s" % (t, tests[t]["asserzione"][:100]) for t in ids)
     confl = []
     def sotto_rad(g, x):
         return (rad[g] + "/" if rad[g] else "") + x
-    for g in [x for x in gates if fmt[x] == "junit"]:   # prima i JUnit, poi vitest: l ordine di prima
+    for g in [x for x in gates if fmt[x] == "junit"]:   # JUnit first, then vitest: the previous order
         for c in (rep.get(g) or []):
             if c["bad"] and c["own"] is None:
                 f = sotto_rad(g, c["cn"].replace(".", "/") + ".py") if c["cn"] else c["nm"]
                 confl.append("%s::%s \u2014 %s <-> %s" % (c["cn"] or "(raccolta)", c["nm"], nrm("\n".join(c["bad"]))[:200], related(f)))
     for g in [x for x in gates if fmt[x] == "vitest"]:
         fe = rep.get(g)
-        if fe:  # il riepilogo di vitest e i blocchi letti devono tornare: altrimenti il parser ha perso dei rossi
+        if fe:  # the vitest summary and the blocks read must add up: otherwise the parser has lost some reds
             nsum = [int(x.split("=")[1]) for x in fe[1] if x.startswith("#failed=")]
             nblk = len([b for b in fe[0] if b["segs"] is not None])
             if nsum and nsum[-1] != nblk:
@@ -1993,7 +1993,7 @@ def cmd_wbasis(spec, nr, fp):
 cmd = sys.argv[1]
 if cmd == "wbasis":
     sys.exit(cmd_wbasis(*sys.argv[2:5]))
-_CONF["root"] = sys.argv[2]   # la radice del repository: maat.json di default, letta alla prima domanda (conf)
+_CONF["root"] = sys.argv[2]   # the repository root: maat.json by default, read at the first question (conf)
 M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
     print("%s: non si applica (piano in formato 1, senza la riga Plan format: 2)" % cmd)
@@ -2023,9 +2023,9 @@ sys.exit(2)
 '
 
 need_py() {
-  # Il programma va in un file di $TMPD, mai in `-c`: oltre ~32k caratteri Windows rifiuta la riga di comando.
+  # The program goes into a file in $TMPD, never into `-c`: beyond ~32k characters Windows rejects the command line.
   printf '%s' "$PY2" > "$TMPD/plan_check_f2.py" || return 2
-  export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # il Python importa il lettore unico (conf)
+  export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0
   echo "plan-check: interprete Python non trovato (python.sh del full cycle)" >&2; return 2
@@ -2062,17 +2062,17 @@ cmd_gen() {
   printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" gen "$(repo_root "$spec")" "$run" "$fp"
 }
 
-# Fase test-red (harness-pt11), solo formato 2 (formato 1: "non si applica", uscita 2):
-#   accept <spec>                          scope della fase: "test <path>" (file di test del piano), "nuovo <path>"
-#   tests  <spec>                          righe dell'impronta dei test di accettazione ("<sha256>  <path>")
-#   stubs  <spec> [--run-dir <d>]          simboli degli stub dei file nuovi -> <d>/test-red/stubs.json
-#   rossi  <spec> --evidence <ev> [--run-dir <d>]   verifica dei rossi sulla base con stub, dall'evidenza di
-#          gates.sh (tests-be JUnit, tests-fe output del reporter): ogni test rosso sulla sua asserzione (testi fra
-#          backtick della colonna asserzione, altrimenti il rosso se della mutazione), import/raccolta = non
-#          dimostrato, verde = STOP, suite esistente rossa o test che asserisce l'assenza di un valore aggiunto dal
-#          piano = conflitto. Scrive <d>/test-red/rossi.json. Uscita 0 OK · 1 STOP · 3 BLOCKED.
-#   l2     <spec> [--run-dir <d>]          per finalize.sh: "L2 <id>: OK | NO — <motivo>" delle mutazioni su file
-#          nuovi, sul codice attuale (stub = simboli esportati, ogni simbolo in un test, impronta tests FRESH)
+# test-red phase (harness-pt11), format 2 only (format 1: "non si applica", exit 2):
+#   accept <spec>                          scope of the phase: "test <path>" (test file of the plan), "nuovo <path>"
+#   tests  <spec>                          lines of the acceptance test fingerprint ("<sha256>  <path>")
+#   stubs  <spec> [--run-dir <d>]          stub symbols of the new files -> <d>/test-red/stubs.json
+#   rossi  <spec> --evidence <ev> [--run-dir <d>]   verification of the reds on the stubbed base, from the evidence of
+#          gates.sh (tests-be JUnit, tests-fe reporter output): every test red on its assertion (backticked texts
+#          of the asserzione column, otherwise the rosso_se of the mutation), import/collection = not
+#          proven, green = STOP, existing suite red or test asserting the absence of a value added by the
+#          plan = conflict. Writes <d>/test-red/rossi.json. Exit 0 OK · 1 STOP · 3 BLOCKED.
+#   l2     <spec> [--run-dir <d>]          for finalize.sh: "L2 <id>: OK | NO — <motivo>" of the mutations on new
+#          files, on the current code (stub = exported symbols, every symbol in a test, tests fingerprint FRESH)
 cmd_f2x() {
   local sub=$1 spec="" run="" ev=""; shift
   while [ $# -gt 0 ]; do
@@ -2117,16 +2117,16 @@ cmd_route() {
   else printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" route "$(repo_root "$spec")"; fi
 }
 
-# S2 · delta ∥ occhi freschi. Ogni risposta e' un file: prima riga "Impronta piano: <fp12>" (il valore "plan"
-# di `basis` al lancio, scritto dall'orchestratore), poi il contratto del revisore (Decision:, Severity: …).
-# APPROVA solo se entrambe sono sull'impronta attuale e pulite: nessun blocker/major, NEMMENO respinto.
+# S2 · delta ∥ fresh eyes. Each response is a file: first line "Impronta piano: <fp12>" (the "plan" value
+# of `basis` at launch, written by the orchestrator), then the reviewer contract (Decision:, Severity: …).
+# APPROVA only if both are on the current fingerprint and clean: no blocker/major, NOT EVEN a rejected one.
 review_info() {   # <file> → "<impronta|-> <decisione|-> <n. blocker/major> <parziale 0|1>"
   local t fp d nb p=0
   t=$(tr -d '\r' < "$1")
   fp=$(printf '%s\n' "$t" | sed -n 's/^Impronta piano:[[:space:]]*\([0-9a-f]\{12\}\).*/\1/p' | head -1)
   d=$(printf '%s\n' "$t" | sed -n 's/^Decision:[[:space:]]*\([A-Z_]*\).*/\1/p' | head -1)
   nb=$(printf '%s\n' "$t" | grep -cE '^[[:space:]]*([0-9]+\.[[:space:]]*)?Severity:[[:space:]]*(blocker|major)' || true)
-  # parziale solo se la riga "Blocked on:" dice un motivo: "none" / "nessuno" non e' un blocco
+  # partial only if the "Blocked on:" line gives a reason: "none" / "nessuno" is not a block
   printf '%s\n' "$t" | grep -E 'Blocked on:' | grep -qviE 'Blocked on:[[:space:]]*(none|nessuno)[[:space:].]*$' && p=1
   echo "${fp:--} ${d:--} ${nb:-0} $p"
 }
@@ -2195,14 +2195,14 @@ cmd_split() {
   for f in "${kids[@]}"; do
     req_ids "$f" | awk -v k="$(basename "$f" .md)" '{ print $0 "\t" k }' >> "$TMPD/split.figlie"
   done
-  # CONTROLLO-PARTIZIONE: ogni ID della madre in una e una sola figlia (perso o duplicato = STOP)
+  # CONTROLLO-PARTIZIONE: every ID of the parent in one and only one child (lost or duplicated = STOP)
   while IFS= read -r id; do
     who=$(awk -F'\t' -v i="$id" '$1 == i { print $2 }' "$TMPD/split.figlie" | LC_ALL=C sort -u)
     n=$(printf '%s' "$who" | grep -c . || true)
     if [ "$n" -eq 0 ]; then sviol "$id della madre non sta in nessuna figlia (perso)"
     elif [ "$n" -gt 1 ]; then sviol "$id sta in $n figlie: $(printf '%s' "$who" | tr '\n' ' ' | sed 's/ $//') (duplicato)"; fi
   done < "$TMPD/split.madre"
-  # le figlie non aggiungono requisiti: ogni loro ID e' della madre
+  # the children add no requirements: each of their IDs belongs to the parent
   while IFS=$'\t' read -r id who; do
     grep -qxF -- "$id" "$TMPD/split.madre" || sviol "$who: $id non e' un ID della madre (le figlie non cambiano i requisiti)"
   done < "$TMPD/split.figlie"
@@ -2217,13 +2217,13 @@ cmd_split() {
 
 PC_HERE=$(cd "$(dirname "$0")" && pwd)
 . "$PC_HERE/lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin)
-# MAAT_CONFIG relativo (alla cartella di lavoro, anche con spazi) reso assoluto QUI, in bash, come run-phase.sh: le righe
-# cmd/cp di gen girano dopo un cd o dentro WSL, e os.path.abspath del Python di Windows su un /c/… darebbe C:\c\….
-# Forma C:/… dove c'e' cygpath (maat_cygm), altrimenti quella di `pwd`.
+# relative MAAT_CONFIG (to the working directory, even with spaces) made absolute HERE, in bash, like run-phase.sh: the
+# gen cmd/cp lines run after a cd or inside WSL, and os.path.abspath of Windows Python on a /c/… would give C:\c\….
+# C:/… form where cygpath exists (maat_cygm), otherwise that of `pwd`.
 if [ -n "${MAAT_CONFIG:-}" ]; then
   case $MAAT_CONFIG in
     /*|[A-Za-z]:[/\\]*) ;;
-    *) # forma Windows anche senza cygpath (pwd -W); cartella non raggiungibile -> relativo alla cartella corrente
+    *) # Windows form even without cygpath (pwd -W); folder not reachable -> relative to the current folder
        if _d=$(cd "$(dirname "$MAAT_CONFIG")" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); then
          MAAT_CONFIG=$_d/$(basename "$MAAT_CONFIG")
        else MAAT_CONFIG=$PWD/$MAAT_CONFIG; fi; unset _d ;;

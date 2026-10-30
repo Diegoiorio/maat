@@ -1,75 +1,75 @@
 #!/usr/bin/env bash
-# gates.sh — i gate del livello di test, eseguiti dal DRIVER (run-phase.sh) fuori dalle sotto-sessioni,
-# con l'evidenza su file e il riuso a chiave identica (harness-pt04, 1d-1e). Moduli e comandi vengono da
-# .claude/maat.json (lettore unico scripts/maat-config.py, interfaccia scripts/lib/maat-conf.sh), mai da qui (R3.3).
+# gates.sh — the gates of the test level, run by the DRIVER (run-phase.sh) outside the sub-sessions,
+# with evidence on file and reuse on an identical key (harness-pt04, 1d-1e). Modules and commands come from
+# .claude/maat.json (single reader scripts/maat-config.py, interface scripts/lib/maat-conf.sh), never from here (R3.3).
 #
-#   bash gates.sh --run-dir <run-dir> <livello> <file toccati…>
-#   bash gates.sh --verify <run-dir>/evidence/<chiave>
+#   bash gates.sh --run-dir <run-dir> <level> <touched files…>
+#   bash gates.sh --verify <run-dir>/evidence/<key>
 #
-# <livello>: min | std | full | legacy (legacy = std). I file sono relativi al repository (touched.txt).
+# <level>: min | std | full | legacy (legacy = std). Files are relative to the repository (touched.txt).
 #
-# INSTRADAMENTO: ogni file va al modulo di `maat_modulo_di` — «radice» (conta per test, controlli, lint e build del
-# modulo) o «pacchetti» (sotto radice_pacchetti ma fuori dalla radice: solo lint e build). Un file fuori da ogni
-# modulo non e' coperto da nessun gate: lo dice la riga «non coperto: …».
+# ROUTING: each file goes to the module of `maat_modulo_di` — «radice» (counts for the module's tests, checks, lint
+# and build) or «pacchetti» (under radice_pacchetti but outside the radice: lint and build only). A file outside every
+# module is covered by no gate: the line «non coperto: …» says so.
 #
-# GATE — quelli di `maat_gate_richiesti <livello>` (sezione `gate` di maat.json), un file JSON per ciascuno:
-#   tests-<modulo>      comandi.test sui test che regola_test (accanto, specchio, nessuna) seleziona per i file della
-#                       radice. Nessun test selezionato -> SKIPPED «nessun test esistente per: …»; nessun file sotto la
-#                       radice -> SKIPPED «nessun file sotto <radice>» (mai la suite intera); modulo SENZA comando di
-#                       test (o con regola nessuna) e con file toccati -> NOT RUN «dichiarato: nessun test», mai PASS;
-#   controlli-<modulo>  ogni voce {glob, comando, se_presente?} sui file toccati della radice che corrispondono al
-#                       glob, un'invocazione per file. FAIL se una voce eseguita esce != 0; PASS se almeno una e'
-#                       stata eseguita; SKIPPED se nessun file corrisponde; NOT RUN se tutte le voci pertinenti sono
-#                       saltate (se_presente assente dal PATH: voce SALTATA nel campo `voci` del JSON e nel motivo);
-#   lint, build         comandi.lint (con {base?…} = <run-dir>/base.txt, se esiste) e comandi.build sui file della
-#                       radice e dei pacchetti del modulo; `lint-<modulo>`/`build-<modulo>` se piu' moduli li dichiarano.
-#   Ogni comando gira dalla sua `cartella` (radice | radice_pacchetti | repo), con MAAT_MODULO=<modulo> nell'ambiente
-#   (non nella riga); ambiente wsl -> dentro WSL, nativo -> qui. I gate dei moduli nativi girano IN PARALLELO alla
-#   corsia wsl; nella corsia wsl vanno in serie (la copia di test-fast.sh ha un lock solo).
+# GATES — those of `maat_gate_richiesti <level>` (section `gate` of maat.json), one JSON file each:
+#   tests-<module>      comandi.test on the tests that regola_test (accanto, specchio, nessuna) selects for the files of the
+#                       radice. No test selected -> SKIPPED «nessun test esistente per: …»; no file under the
+#                       radice -> SKIPPED «nessun file sotto <radice>» (never the whole suite); module WITHOUT a test
+#                       command (or with regola nessuna) and with touched files -> NOT RUN «dichiarato: nessun test», never PASS;
+#   controlli-<module>  each entry {glob, comando, se_presente?} on the touched files of the radice that match the
+#                       glob, one invocation per file. FAIL if an executed entry exits != 0; PASS if at least one was
+#                       executed; SKIPPED if no file matches; NOT RUN if all the relevant entries were
+#                       skipped (se_presente missing from PATH: entry SALTATA in the `voci` field of the JSON and in the reason);
+#   lint, build         comandi.lint (with {base?…} = <run-dir>/base.txt, if it exists) and comandi.build on the files of the
+#                       radice and of the module's packages; `lint-<module>`/`build-<module>` if several modules declare them.
+#   Each command runs from its `cartella` (radice | radice_pacchetti | repo), with MAAT_MODULO=<module> in the environment
+#   (not in the command line); ambiente wsl -> inside WSL, nativo -> here. The gates of native modules run IN PARALLEL with the
+#   wsl lane; within the wsl lane they run serially (the test-fast.sh copy has a single lock).
 #
-# EVIDENZA: <run-dir>/evidence/<chiave>/<gate>.json con i campi gate, esito (PASS|FAIL|BLOCKED|SKIPPED|NOT RUN),
-# comando, exit, durata_s, report (file nella stessa cartella; null se il gate non e' stato eseguito), riepilogo,
-# motivo, file (selettori o path), chiave, eseguito_il, e `voci` per i controlli. Accanto: chiave.txt (le componenti
-# della chiave in chiaro) e argomenti.txt (livello e file, per --verify). Il formato del report lo dice il campo
-# `report` del MODULO, mai il nome del gate:
-#   junit    report <gate>.junit.xml ({report} del comando): PASS solo col JUnit leggibile e almeno un test;
-#   vitest   report <gate>.log: PASS solo con la riga "esito=" del wrapper e il riepilogo "Tests … passed";
-#   nessuno  report <gate>.log: PASS con uscita 0 e log non vuoto, come build.
-# lint e' giudicato dalla riga "esito=" del wrapper (test-fast.sh). MAI UN PASS SENZA REPORT: -> BLOCKED.
+# EVIDENCE: <run-dir>/evidence/<key>/<gate>.json with the fields gate, esito (PASS|FAIL|BLOCKED|SKIPPED|NOT RUN),
+# comando, exit, durata_s, report (file in the same directory; null if the gate was not run), riepilogo,
+# motivo, file (selectors or paths), chiave, eseguito_il, and `voci` for the checks. Next to it: chiave.txt (the key
+# components in clear) and argomenti.txt (level and files, for --verify). The report format is set by the
+# `report` field of the MODULE, never by the gate name:
+#   junit    report <gate>.junit.xml ({report} of the command): PASS only with a readable JUnit and at least one test;
+#   vitest   report <gate>.log: PASS only with the wrapper's "esito=" line and the "Tests … passed" summary;
+#   nessuno  report <gate>.log: PASS with exit 0 and a non-empty log, like build.
+# lint is judged by the wrapper's "esito=" line (test-fast.sh). NEVER A PASS WITHOUT A REPORT: -> BLOCKED.
 #
-# CHIAVE: sha256 di: tree del working tree INTERO (review-surface.sh tree: tracciati, staged e non tracciati non
-# ignorati), livello e comandi (radice del plugin -> <maat>, radice del progetto -> <repo>: la chiave non dipende da
-# dove e' installato il plugin; il cambio di versione lo intercetta l'impronta del harness), node e TZ in WSL (solo
-# se un modulo ha ambiente wsl), python= (l'interprete di {python} dei moduli che lo usano, precedenza di
-# maat-config.py; la versione di un modulo wsl e' quella di WSL), le voci `chiave` dei moduli ({etichetta, file} ->
-# impronta del file o «assente»; {etichetta, comando} -> la sua uscita, DENTRO WSL per un modulo wsl che usa {python}:
-# l'interprete esiste solo li'), TZ e CI (qui).
+# KEY: sha256 of: tree of the WHOLE working tree (review-surface.sh tree: tracked, staged and untracked not
+# ignored), level and commands (plugin root -> <maat>, project root -> <repo>: the key does not depend on
+# where the plugin is installed; a version change is caught by the harness fingerprint), node and TZ in WSL (only
+# if a module has ambiente wsl), python= (the {python} interpreter of the modules that use it, precedence of
+# maat-config.py; the version for a wsl module is the one in WSL), the `chiave` entries of the modules ({etichetta, file} ->
+# fingerprint of the file or «assente»; {etichetta, comando} -> its output, INSIDE WSL for a wsl module that uses {python}:
+# the interpreter exists only there), TZ and CI (here).
 #
-# {python} DI UN MODULO WSL (da un caso reale): senza FIC_GATES_VENV_PY l'interprete si cerca DENTRO WSL fra i
-# candidati di moduli[].python (stringa o lista, relativi alla radice; vince il primo che esiste), altrimenti
-# piattaforma.python (relativo al repo), altrimenti python3; un nome senza / si cerca nel PATH di WSL. Nessuno esiste
-# -> i gate del modulo che usano {python} sono BLOCKED «python WSL assente», mai PASS. Il comando della ricerca non ha
-# variabili di shell: `wsl -- bash -lc` lo fa passare da un primo interprete che le espanderebbe vuote. Per lo stesso
-# motivo una voce `chiave` eseguita in WSL non deve usare variabili di shell. Nessuna granularita' per modulo: un byte cambiato ovunque -> chiave
-# nuova, tutto si riesegue. Riuso SOLO a chiave identica e solo di PASS/FAIL/SKIPPED/NOT RUN col report presente: un
-# BLOCKED si riesegue. Se il tree cambia mentre i gate girano, quelli eseguiti diventano BLOCKED (l'evidenza non
-# sarebbe di nessun albero).
+# {python} OF A WSL MODULE (from a real case): without FIC_GATES_VENV_PY the interpreter is looked up INSIDE WSL among the
+# candidates of moduli[].python (string or list, relative to the radice; the first that exists wins), otherwise
+# piattaforma.python (relative to the repo), otherwise python3; a name without / is looked up in the WSL PATH. None exists
+# -> the module's gates that use {python} are BLOCKED «python WSL assente», never PASS. The lookup command has no
+# shell variables: `wsl -- bash -lc` passes it through a first shell that would expand them to empty. For the same
+# reason a `chiave` entry run in WSL must not use shell variables. No per-module granularity: one byte changed anywhere -> new
+# key, everything runs again. Reuse ONLY on an identical key and only of PASS/FAIL/SKIPPED/NOT RUN with the report present: a
+# BLOCKED gate runs again. If the tree changes while the gates run, those executed become BLOCKED (the evidence would
+# belong to no tree).
 #
-# Uscita: 0 tutti PASS/SKIPPED/NOT RUN · 1 almeno un FAIL · 3 almeno un BLOCKED, nessun FAIL (anche maat.json
-#   assente o non valido) · 2 uso.
-#   --verify: 0 FRESH (la chiave della cartella e' quella di adesso) · 1 STALE · 3 non verificabile (BLOCKED: maat.json
-#   assente o non valido, tree non calcolabile) · 2 uso.
-# Stdout: una riga per gate "<gate>: <ESITO> (eseguito|riuso) — <riepilogo o motivo>", la riga "non coperto: …" se
-#   qualche file e' fuori dai moduli, poi l'ultima "gates: esito=<ESITO>[ (NOT RUN dichiarato: <gate…>)]
-#   chiave=<chiave> evidence=<cartella>".
-# Variabili (per i test): FIC_GATES_ROOT repository (default: PROJECT_ROOT, il progetto della cartella di lavoro) ·
-# FIC_GATES_HARNESS radice del plugin (default MAAT_ROOT; scripts/review-surface.sh, scripts/python.sh,
-# scripts/lib/maat-conf.sh e il {maat} dei comandi) · FIC_GATES_WSL programma che riceve UN comando bash da eseguire
-# in WSL (default: wsl -- bash -lc) · FIC_GATES_VENV_PY interprete di {python} (vince su maat.json e sulla ricerca in
-# WSL; per un modulo wsl e' un percorso di WSL, usato cosi' com'e') · MAAT_CONFIG.
+# Exit: 0 all PASS/SKIPPED/NOT RUN · 1 at least one FAIL · 3 at least one BLOCKED, no FAIL (also maat.json
+#   missing or invalid) · 2 usage.
+#   --verify: 0 FRESH (the directory key is the current one) · 1 STALE · 3 not verifiable (BLOCKED: maat.json
+#   missing or invalid, tree not computable) · 2 usage.
+# Stdout: one line per gate "<gate>: <ESITO> (eseguito|riuso) — <summary or reason>", the line "non coperto: …" if
+#   some file is outside the modules, then the last one "gates: esito=<ESITO>[ (NOT RUN dichiarato: <gate…>)]
+#   chiave=<key> evidence=<directory>".
+# Variables (for tests): FIC_GATES_ROOT repository (default: PROJECT_ROOT, the project of the working directory) ·
+# FIC_GATES_HARNESS plugin root (default MAAT_ROOT; scripts/review-surface.sh, scripts/python.sh,
+# scripts/lib/maat-conf.sh and the {maat} of the commands) · FIC_GATES_WSL program that receives ONE bash command to run
+# in WSL (default: wsl -- bash -lc) · FIC_GATES_VENV_PY interpreter of {python} (wins over maat.json and over the lookup in
+# WSL; for a wsl module it is a WSL path, used as is) · MAAT_CONFIG.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin) e PROJECT_ROOT (cartella di lavoro)
+. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin) and PROJECT_ROOT (working directory)
 HROOT=${FIC_GATES_HARNESS:-$MAAT_ROOT}
 ROOT=${FIC_GATES_ROOT:-$PROJECT_ROOT}
 RS="$HROOT/scripts/review-surface.sh"
@@ -80,7 +80,7 @@ wslp() { # C:/x/y -> /mnt/c/x/y
   case $w in [A-Za-z]:/*) printf '/mnt/%s%s' "$(printf '%s' "${w:0:1}" | tr 'A-Z' 'a-z')" "${w:2}" ;; *) printf '%s' "$w" ;; esac
 }
 sq() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
-in_wsl() { # $1 = comando bash da eseguire dentro WSL
+in_wsl() { # $1 = bash command to run inside WSL
   if [ -n "${FIC_GATES_WSL:-}" ]; then "$FIC_GATES_WSL" "$1"; else MSYS_NO_PATHCONV=1 wsl -- bash -lc "$1"; fi
 }
 sha() { sha256sum | cut -c1-64; }
@@ -104,23 +104,23 @@ if [ -n "$verify" ]; then
   set -- ${args[@]+"${args[@]}"}
 fi
 [ -n "$run_dir" ] && [ $# -ge 1 ] || usage
-# Assoluto: i comandi dei test girano nella cartella del modulo, e un {report} relativo finirebbe li' (file nuovo
-# non ignorato => «albero cambiato durante i gate», report mai trovato). run-phase.sh passa la run dir relativa.
+# Absolute: the test commands run in the module directory, and a relative {report} would end up there (new file
+# not ignored => «albero cambiato durante i gate», report never found). run-phase.sh passes a relative run dir.
 case $run_dir in /*|[A-Za-z]:[/\\]*) ;; *) run_dir="$PWD/$run_dir" ;; esac
 level=$1; shift
 case $level in min|std|full|legacy) ;; *) echo "gates: livello sconosciuto: $level (min|std|full|legacy)" >&2; exit 2 ;; esac
 [ -n "$ROOT" ] || { maat_progetto; exit 4; }
 . "$HROOT/scripts/python.sh" || { echo "gates: interprete Python non trovato" >&2; exit 2; }
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
-py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # il codice arriva da una pipe: nessun file temporaneo
+py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # the code comes from a pipe: no temporary file
 
 blocca() { echo "gates: esito=BLOCKED ($1) chiave=- evidence=-"; exit 3; }
 TMPD=$(mktemp -d) || blocca "cartella temporanea non creabile"
 trap 'rm -rf "$TMPD"' EXIT
 errore() { tr -d '\r' < "$TMPD/err" | sed 's/^maat-config: //' | grep -v '^$' | head -3 | tr '\n' ' ' | sed 's/ *$//'; }
 
-# --- configurazione: il lettore unico, caricato una volta nella shell principale ---
-export PROJECT_ROOT=$ROOT   # il lettore trova <repo>/.claude/maat.json (MAAT_CONFIG vince)
+# --- configuration: the single reader, loaded once in the main shell ---
+export PROJECT_ROOT=$ROOT   # the reader finds <repo>/.claude/maat.json (MAAT_CONFIG wins)
 . "$HROOT/scripts/lib/maat-conf.sh" 2>"$TMPD/err" || blocca "lib/maat-conf.sh non caricabile: $(errore)"
 maat_conf_carica 2>"$TMPD/err" || blocca "maat.json: $(errore)"
 lettore() { "$FIC_PY" "$_MAAT_PY" "$@"; }
@@ -137,15 +137,15 @@ while n=$(maat_conf "moduli.$i.nome" 2>/dev/null); do
   M_REP[$n]=$(maat_conf "moduli.$i.report" --default nessuno)
   i=$((i + 1))
 done
-dichiara() { maat_conf "moduli.${M_IDX[$1]}.$2" >/dev/null 2>&1; }   # <modulo> <chiave.puntata>
+dichiara() { maat_conf "moduli.${M_IDX[$1]}.$2" >/dev/null 2>&1; }   # <module> <dotted.key>
 
 mapfile -t FILES < <(printf '%s\n' "$@" | tr -d '\r' | sed 's|^\./||' | grep -v '^$' | LC_ALL=C sort -u)
 
-# --- instradamento: radice (test, controlli, lint, build) o pacchetti (solo lint e build) ---
+# --- routing: radice (tests, checks, lint, build) or pacchetti (lint and build only) ---
 declare -A RADF ALLF
 UNCOV=()
 for f in ${FILES[@]+"${FILES[@]}"}; do
-  out=$(maat_modulo_di "$f" 2>"$TMPD/err" | tr -d '\r'); rc=$?   # pipefail: l'uscita del lettore
+  out=$(maat_modulo_di "$f" 2>"$TMPD/err" | tr -d '\r'); rc=$?   # pipefail: the reader's exit code
   case $rc in
     0) n=${out%% *}; dove=${out#* }
        [ "$dove" = radice ] && RADF[$n]+="$f"$'\n'
@@ -156,24 +156,24 @@ for f in ${FILES[@]+"${FILES[@]}"}; do
 done
 righe() { printf '%s' "${1:-}" | grep -v '^$'; }
 
-# --- i gate del livello e i loro comandi ---
+# --- the gates of the level and their commands ---
 gl=$(maat_gate_richiesti "$level" ${FILES[@]+"${FILES[@]}"} 2>"$TMPD/err" | tr -d '\r') || blocca "gate-richiesti: $(errore)"
 WROOT=$(wslp "$ROOT")
 base=""; [ -f "$run_dir/base.txt" ] && base=$(tr -d '\r\n ' < "$run_dir/base.txt")
 radice_di() { if [ "${M_AMB[$1]}" = wsl ]; then printf '%s' "$WROOT"; else printf '%s' "$ROOT"; fi; }
 maat_di() { if [ "${M_AMB[$1]}" = wsl ]; then wslp "$HROOT"; else printf '%s' "$HROOT"; fi; }
-# {maat} finisce in una riga di bash: Git Bash non deve riscrivere MAAT_ROOT (/mnt/c/… -> C:/Program Files/Git/mnt/c/…)
+# {maat} ends up in a bash command line: Git Bash must not rewrite MAAT_ROOT (/mnt/c/… -> C:/Program Files/Git/mnt/c/…)
 NOCONV="MAAT_ROOT${MSYS2_ENV_CONV_EXCL:+;$MSYS2_ENV_CONV_EXCL}"
-cartella() { if [ "$2" = . ]; then radice_di "$1"; else printf '%s/%s' "$(radice_di "$1")" "$2"; fi; }   # <modulo> <rel>
+cartella() { if [ "$2" = . ]; then radice_di "$1"; else printf '%s/%s' "$(radice_di "$1")" "$2"; fi; }   # <module> <rel>
 
-# {python} dei moduli wsl, cercato DENTRO WSL (vedi l'intestazione). Da un caso reale: il venv Windows derivato
-# (altre versioni di FastAPI) rispondeva diversamente dalla produzione e un test era passato verde.
+# {python} of wsl modules, looked up INSIDE WSL (see the header). From a real case: the derived Windows venv
+# (other FastAPI versions) answered differently from production and a test had passed green.
 declare -A PYW PYWMISS
-PYW_ASSENTE=/python-wsl-assente   # segnaposto: un comando che lo contiene e' BLOCKED, mai eseguito
+PYW_ASSENTE=/python-wsl-assente   # placeholder: a command that contains it is BLOCKED, never run
 if [ -z "${FIC_GATES_VENV_PY:-}" ]; then
   for m in ${MODS[@]+"${MODS[@]}"}; do
     [ "${M_AMB[$m]}" = wsl ] || continue
-    FIC_GATES_VENV_PY=$PYW_ASSENTE lettore python "$m" >/dev/null 2>&1 || continue   # il modulo non usa {python}
+    FIC_GATES_VENV_PY=$PYW_ASSENTE lettore python "$m" >/dev/null 2>&1 || continue   # the module does not use {python}
     i=${M_IDX[$m]} cand=() wp=() base=${M_RAD[$m]} probe_py=""
     if maat_conf "moduli.$i.python.0" >/dev/null 2>&1; then
       j=0; while c=$(maat_conf "moduli.$i.python.$j" 2>/dev/null); do cand+=("$c"); j=$((j + 1)); done
@@ -194,14 +194,14 @@ if [ -z "${FIC_GATES_VENV_PY:-}" ]; then
     else PYWMISS[$m]="python WSL assente: ${wp[*]}"; fi
   done
 fi
-con_py() { # <modulo> <comando…>: il comando con l'interprete di {python} del modulo (FIC_GATES_VENV_PY)
+con_py() { # <module> <command…>: the command with the module's {python} interpreter (FIC_GATES_VENV_PY)
   local m=$1 vpy=${FIC_GATES_VENV_PY:-} excl=${MSYS2_ENV_CONV_EXCL:-}; shift
   if [ -n "${PYW[$m]:-}" ]; then vpy=${PYW[$m]}; elif [ -n "${PYWMISS[$m]:-}" ]; then vpy=$PYW_ASSENTE; fi
-  # un percorso di WSL: Git Bash non deve riscriverlo per il Python di Windows (/mnt/c/… -> C:/Program Files/Git/…)
+  # a WSL path: Git Bash must not rewrite it for the Windows Python (/mnt/c/… -> C:/Program Files/Git/…)
   [ "${M_AMB[$m]}" = wsl ] && excl="FIC_GATES_VENV_PY${excl:+;$excl}"
   FIC_GATES_VENV_PY=$vpy MSYS2_ENV_CONV_EXCL=$excl "$@"
 }
-comando() { # <modulo> <tipo> [opzioni] -> C_REL (cartella relativa), C_CMD (comando), C_ERR; ritorna l'uscita del lettore
+comando() { # <module> <type> [options] -> C_REL (relative directory), C_CMD (command), C_ERR; returns the reader's exit code
   local m=$1 out rc; shift
   out=$(MSYS2_ENV_CONV_EXCL=$NOCONV MAAT_ROOT=$(maat_di "$m") con_py "$m" maat_comando "$m" "$@" 2>"$TMPD/err" | tr -d '\r'); rc=$?
   C_ERR=$(errore); C_REL=$(printf '%s\n' "$out" | sed -n 1p); C_CMD=$(printf '%s\n' "$out" | sed -n '2,$p')
@@ -210,8 +210,8 @@ comando() { # <modulo> <tipo> [opzioni] -> C_REL (cartella relativa), C_CMD (com
   fi
   return "$rc"
 }
-# Uscita 3 del lettore per un {python} non risolvibile («python non trovato»): un guasto d'ambiente, BLOCKED — mai
-# NOT RUN «dichiarato», che e' solo di cio' che maat.json dichiara (se_presente assente, nessun comando di test).
+# Reader exit 3 for an unresolvable {python} («python non trovato»): an environment fault, BLOCKED — never
+# NOT RUN «dichiarato», which is only for what maat.json declares (se_presente missing, no test command).
 senza_python() { case $C_ERR in *"python non trovato"*) return 0 ;; esac; return 1; }
 GATES=()
 declare -A GMOD GTIPO CMD EXEC GDIR SKIPWHY NRWHY BLKWHY GFILES CTL SALT
@@ -271,9 +271,9 @@ while IFS=$'\t' read -r g m tipo; do
       esac ;;
   esac
 done <<< "$gl"
-# Modulo `ambiente: wsl` senza WSL (wsl e wsl.exe fuori dal PATH; pk08, D5): i suoi gate da eseguire sono BLOCKED con il
-# motivo, mai eseguiti — lanciati darebbero «comando non trovato», cioe' un FAIL per i controlli e un BLOCKED senza
-# motivo per un report (la promessa del doctor: «i suoi gate saranno BLOCKED»). Con FIC_GATES_WSL decide quel programma.
+# Module with `ambiente: wsl` but no WSL (wsl and wsl.exe not in PATH; pk08, D5): its gates to run are BLOCKED with the
+# reason, never run — if launched they would give «comando non trovato», i.e. a FAIL for the checks and a BLOCKED without
+# reason for a report (the doctor's promise: «i suoi gate saranno BLOCKED»). With FIC_GATES_WSL, that program decides.
 if [ -z "${FIC_GATES_WSL:-}" ] && ! command -v wsl >/dev/null 2>&1 && ! command -v wsl.exe >/dev/null 2>&1; then
   for g in ${GATES[@]+"${GATES[@]}"}; do
     [ "${M_AMB[${GMOD[$g]}]}" = wsl ] && { [ -n "${CMD[$g]:-}" ] || [ -n "${BLKWHY[$g]:-}" ]; } &&
@@ -281,9 +281,9 @@ if [ -z "${FIC_GATES_WSL:-}" ] && ! command -v wsl >/dev/null 2>&1 && ! command 
   done
 fi
 
-# --- chiave ---
+# --- key ---
 file_sha() { if [ -f "$1" ]; then sha < "$1"; else echo assente; fi; }
-# radice del plugin e del progetto nella chiave: <maat> e <repo>, in tutte le forme (la piu' lunga prima)
+# plugin and project roots in the key: <maat> and <repo>, in all forms (the longest first)
 NK=$( { for x in "$HROOT" "$(win "$HROOT")" "$(wslp "$HROOT")"; do printf '%s\t%s\t<maat>\n' "${#x}" "$x"; done
         for x in "$ROOT" "$(win "$ROOT")" "$WROOT"; do printf '%s\t%s\t<repo>\n' "${#x}" "$x"; done; } | LC_ALL=C sort -t $'\t' -k1,1nr | awk -F '\t' '!v[$2]++')
 normk() { local s=$1 l x t; while IFS=$'\t' read -r l x t; do [ -n "$x" ] && s=${s//"$x"/$t}; done <<< "$NK"; printf '%s' "$s"; }
@@ -296,7 +296,7 @@ if [ -n "$wsl_mod" ]; then
   [ -n "$probe" ] || probe="node=wsl non raggiungibile"
 fi
 pyl=()
-declare -A KWSL   # moduli wsl che usano {python}: versione e voci comando della chiave in WSL
+declare -A KWSL   # wsl modules that use {python}: version and command entries of the key in WSL
 for m in ${MODS[@]+"${MODS[@]}"}; do
   p=$(con_py "$m" lettore python "$m" 2>/dev/null | tr -d '\r'); rc=$?
   [ $rc -eq 2 ] && continue
@@ -331,7 +331,7 @@ comp=$(
       case $tipo in
         file) echo "$et=$(file_sha "$d/$val")" ;;
         comando)
-          if [ -n "${KWSL[$m]:-}" ]; then   # stdin chiuso: wsl.exe consumerebbe le righe di questo ciclo
+          if [ -n "${KWSL[$m]:-}" ]; then   # stdin closed: wsl.exe would consume the lines of this loop
             echo "$et=$(in_wsl "if cd $(sq "$wd") 2>/dev/null; then bash -c $(sq "$val") 2>/dev/null </dev/null; else echo assente; fi" 2>/dev/null </dev/null | tr -d '\r' | paste -sd ' ' -)"
           elif [ -d "$d" ]; then echo "$et=$(cd "$d" && bash -c "$val" 2>/dev/null </dev/null | tr -d '\r' | paste -sd ' ' -)"; else echo "$et=assente"; fi ;;
         *) echo "$et=assente" ;;
@@ -355,16 +355,16 @@ printf '%s\n' "$comp" > "$EV/chiave.txt"
 printf '%s\n' "$level" ${FILES[@]+"${FILES[@]}"} > "$EV/argomenti.txt"
 WEV=$(win "$EV")
 
-# --- esecuzione ---
+# --- execution ---
 now_ms() { date +%s%3N; }
-esegui() { # <modulo> <cartella assoluta> <comando>: MAAT_MODULO nell'ambiente, non nella riga
-  # stderr unito DENTRO WSL: unito fuori, wsl.exe consegna due flussi che si sovrascrivono nel log (un blocco FAIL
-  # di vitest perso sotto il riepilogo => «Tn verde», «N falliti, N-1 blocchi»). Da un caso reale.
-  # MAAT_CONFIG (se impostata) arriva anche dentro WSL, tradotta: test-fast.sh vi legge la stessa configurazione
+esegui() { # <module> <absolute directory> <command>: MAAT_MODULO in the environment, not in the command line
+  # stderr merged INSIDE WSL: merged outside, wsl.exe delivers two streams that overwrite each other in the log (a vitest
+  # FAIL block lost under the summary => «Tn verde», «N falliti, N-1 blocchi»). From a real case.
+  # MAAT_CONFIG (if set) also reaches WSL, translated: test-fast.sh reads the same configuration from it
   if [ "${M_AMB[$1]}" = wsl ]; then in_wsl "{ export MAAT_MODULO=$(sq "$1")${MAAT_CONFIG:+; export MAAT_CONFIG=$(sq "$(wslp "$MAAT_CONFIG")")}; cd $(sq "$2") && $3; } 2>&1"
   else (cd "$2" && MAAT_MODULO=$1 bash -c "$3"); fi
 }
-run_gate() { # $1 = gate. Riuso a chiave identica, altrimenti esecuzione e JSON.
+run_gate() { # $1 = gate. Reuse on an identical key, otherwise execution and JSON.
   local g=$1 rc=0 r t0 kind why="" m=${GMOD[$1]} cmd="" x rp d c files=()
   if [ -n "$(py stato "$WEV" "$g")" ]; then echo riuso > "$EV/.$g.stato"; return 0; fi
   rm -f "$EV/$g.json" "$EV/$g.log" "$EV/$g.junit.xml" "$EV/.$g.voci"
@@ -401,7 +401,7 @@ for g in ${GATES[@]+"${GATES[@]}"}; do if [ "${M_AMB[${GMOD[$g]}]}" = wsl ]; the
 for g in ${WL[@]+"${WL[@]}"}; do run_gate "$g"; done
 wait $natpid
 
-# L'albero e' cambiato mentre i gate giravano: cio' che e' stato eseguito non e' evidenza di nessun albero.
+# The tree changed while the gates were running: what was executed is evidence of no tree.
 after=$(tree_now)
 if [ "$after" != "$TREE" ]; then
   for g in ${GATES[@]+"${GATES[@]}"}; do

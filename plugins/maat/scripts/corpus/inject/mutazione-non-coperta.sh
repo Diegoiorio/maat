@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# mutazione-non-coperta.sh <worktree> [--file <path> --from <testo> --to <testo>]
-# Difetto: una mutazione di comportamento che nessun test vede (mutante sopravvissuto). Default: il
-# confine della forma compatta degli importi in utils/goals.ts, `<=` → `<` (presente, identico e unico
-# a tutte le basi del corpus): cambia solo il valore esattamente alla soglia. Attribuita alla feature
-# (touched.txt) se una fase di codice precede quella rigiocata.
-# Chi lo prende: la review (una modifica senza test che la copra) e le controprove per mutazione.
+# mutazione-non-coperta.sh <worktree> [--file <path> --from <text> --to <text>]
+# Defect: a behaviour mutation that no test sees (surviving mutant). Default: the
+# boundary of the compact form of amounts in utils/goals.ts, `<=` → `<` (present, identical and unique
+# at all the corpus bases): only the value exactly at the threshold changes. Attributed to the feature
+# (touched.txt) if a code phase precedes the replayed one.
+# Who catches it: the review (a change without a test covering it) and the mutation counterproofs.
 . "$(dirname "$0")/_lib.sh"
 F=modules/app/apps/admin/utils/goals.ts
 FROM='Math.abs(cents) <= COMPACT_THRESHOLD_CENTS'

@@ -1,9 +1,9 @@
-# /full-implementation-cycle — riferimento
+# /full-implementation-cycle — reference
 
-Documentazione del ciclo che nessuna fase carica: la run directory, la modalita' inline, le catene, i permessi
-delle sotto-sessioni, e in fondo le regole che sono diventate codice. Le fasi leggono solo `SKILL.md` e il loro
-`workers/<fase>.md`; l'orchestratore `orchestratore.md`. La tabella di ripresa e' l'intestazione di
-`cycle-state.sh` (la stessa, in Python, in `${CLAUDE_PLUGIN_ROOT}/scripts/driver.py next`).
+Documentation of the cycle that no phase loads: the run directory, inline mode, chains, sub-session
+permissions, and at the end the rules that have become code. The phases read only `SKILL.md` and their own
+`workers/<fase>.md`; the orchestrator reads `orchestratore.md`. The resumption table is the header of
+`cycle-state.sh` (the same one, in Python, in `${CLAUDE_PLUGIN_ROOT}/scripts/driver.py next`).
 
 ## Inline mode
 
@@ -68,8 +68,8 @@ outside the project). It holds:
 - `log/<label>.altri-flussi` — paths changed during the phase that the sub-session **never named** in any
   `tool_use` (`run-phase.sh`, ALTRI FLUSSI): in test-red an out-of-scope one is another flow's work → into
   `do-not-touch.txt`, out of `touched.txt`, an `AVVISO` and no STOP (named, or a log without `result` → STOP); in
-  implement/fix it stays in `touched.txt`, only annotated. Prevention, said at S0: «durante il ciclo non modificare
-  file in questo working tree: per lavorare in parallelo usa un altro worktree
+  implement/fix it stays in `touched.txt`, only annotated. Prevention, said at S0: «do not change files in this working
+  tree during the cycle: to work in parallel use another worktree
   (`git worktree add ../<repo>-lavoro -b <branch> develop`)», or the cycle itself in its own worktree (`--worktree`,
   «Worktree mode» below);
 - `log/<label>.esito` — the phase's `ESITO FASE` line (from the final `result` event only) and the
@@ -277,54 +277,54 @@ runs. The lock does not attribute code: `touched.txt` does, measured around each
 Tests: `guard.test.sh`, `run-phase.test.sh`, `cycle-state.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/gates.test.sh`,
 `${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/finalize.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/blocks-independent.test.sh`.
 
-## Regole in codice (harness-pt14)
+## Rules in code (harness-pt14)
 
-Le regole uscite dalla prosa di `full-implementation-cycle`, `plan-review-cycle` e `implementation-review-cycle`
-quando l'orchestrazione e' passata al driver. Ognuna e' applicata dallo script indicato e sorvegliata dal test
-indicato; nessuna regola che non fosse gia' codice e' stata tolta: e' rimasta in prosa, nel file caricato dalla
-fase che la usa (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `freschezza.md`,
-`gate-manuali.md`, `light.md`, `prompt-revisore.md`, `workers/controprove.md`) o qui sopra.
+The rules that left the prose of `full-implementation-cycle`, `plan-review-cycle` and `implementation-review-cycle`
+when orchestration moved to the driver. Each one is applied by the script named and watched by the test named;
+no rule that was not already code has been removed: it stayed in prose, in the file loaded by the phase that
+uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `freschezza.md`,
+`gate-manuali.md`, `light.md`, `prompt-revisore.md`, `workers/controprove.md`) or above.
 
-| Regola (dove stava) | Script che la applica | Test |
+| Rule (where it was) | Script that applies it | Test |
 |---|---|---|
-| Scelta della fase successiva, tabella di ripresa (FIC «Resumption», passo 3) | `cycle-state.sh` / `driver.py next` | `cycle-state.test.sh`, `driver.test.sh` §9 |
-| Anti-loop: stessa fase e stesso `State:` → STOP (FIC «Resumption») | `driver.py run` | `driver.test.sh` §4, controprova §6 |
-| `ESITO FASE … STOP` → STOP; uscite 4/5/6/7 di run-phase come STOP/WAIT (FIC passo 5) | `driver.py run` | `driver.test.sh` §4 |
-| `NEEDS_VERIFICATION` ottenuto in questa invocazione → STOP (FIC «Resumption», «Termination») | `driver.py run` | `driver.test.sh` §4 |
-| Fase ancora in corso (`.running` senza `.exit`) → niente lancio (FIC passo 2) | `driver.py run` (exit 4) | `driver.test.sh` §4 |
-| Etichette numerate, prompt della fase `--worker=<fase>`, flag inoltrati (FIC passo 4) | `driver.py run` | `driver.test.sh` §4 |
-| Pacchetto di contesto prima di ogni fase (FIC passo 4.0) | `driver.py run` → `context-pack.sh` | `driver.test.sh` §4, `context-pack.test.sh` |
-| Catena: sulla madre in WAIT si lavora sull'anello che nomina; un anello chiuso riporta alla madre (FIC «Chains», «On the mother») | `driver.py run` | `driver.test.sh` §4 |
-| Senza certificato di equivalenza valido `run` prende Next/State da `cycle-state.sh` autonomo | `driver.py run` | `driver.test.sh` §4 |
-| Budget di fasi per invocazione | `driver.py run --max-fasi` | `driver.test.sh` §4 |
-| Budget dei fix (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` riga 11b | `cycle-state.test.sh` |
-| Esito strutturato: JSON valido per lo schema, deviazioni/bloccato_su → STOP, il piu' conservativo fra prosa e JSON (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, controprova §6 |
-| Deviazioni tutte `difensiva: ` (puramente difensive, nessun effetto sui casi del piano) → nessuno STOP: riga in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, nota nel changelog del piano (fuori dall'impronta), elenco alla review (una non difensiva = major); anche una sola senza prefisso → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, riga `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |
-| Attribuzione (`touched.txt`, `.pre/.post-tree`) e STOP se non misurata (FIC «Run directory», «Resumption») | `run-phase.sh`, `cycle-state.sh` riga 7 | `run-phase.test.sh` §5, `cycle-state.test.sh` |
-| File toccato fra gli esclusi → STOP (FIC «Resumption») | `cycle-state.sh` 10b | `cycle-state.test.sh` |
-| Suite del livello eseguite fuori dalla sotto-sessione, evidenza per chiave (FIC «Run directory», IRC Step 2.5) | `run-phase.sh` → `gates.sh` (`--verify`) | `gates.test.sh`, `run-phase.test.sh` |
-| Review ∥ VERIFY, scarto a chiave cambiata, controprove del driver solo su lista `gen` coerente (FIC «Run directory», «Worker review», IRC Step 2.5) | `run-phase.sh` | `run-phase.test.sh` §8, §8b-8d |
-| Firma dello stato finale, verdetto = AND, `Finalize:` fresca per il DONE (FIC «Run directory», IRC Step 3) | `finalize.sh`, `cycle-state.sh` 13f | `finalize.test.sh`, `cycle-state.test.sh` |
-| Verifica dei rossi di test-red e test di accettazione invariati dopo implement/fix; file di test nello `scrive:` di un blocco = modifica prescritta: funzioni di accettazione invariate (ast) o non verificabili → OK con `AVVISO` e impronta `tests` riregistrata, funzione cambiata → STOP (FIC «Worker test-red») | `run-phase.sh` (`verify_red`, `tests_guard`), `plan-check.sh rossi` | `run-phase.test.sh` §10, `plan-check.test.sh` |
-| Corsie: indipendenza dei blocchi, controllo a posteriori, liste unite, riga ESITO ricavata dal JSON della corsia se manca (FIC «Worker implement») | `blocks-independent.py`, `run-phase.sh` (`launch_lanes`), decisione in `driver.py` | `blocks-independent.test.sh`, `run-phase.test.sh` §11, `driver.test.sh` §7 |
-| Blocchi dell'implementer in formato 2 (FIC «Implement, in 2–4 blocks»): lotti col contesto stimato sotto il tetto | `driver.py` (`lotti`, riga `LOTTI`) | `driver.test.sh` §7 |
-| Catene: C1–C4, WAIT/STOP, diff dell'anello, chiusura (FIC «Chains») | `cycle-state.sh`, `run-phase.sh` (exit 7, `ring_prompt`, chiusura) | `cycle-state.test.sh`, `run-phase.test.sh` §9 |
-| Lock di codice e per spec (FIC «Sub-session permissions») | `run-phase.sh` | `run-phase.test.sh` §2-3 |
-| Impronta del harness (FIC passo 5, exit 6) | `run-phase.sh`, `cycle-state.sh` riga 0 | `run-phase.test.sh` §7, `cycle-state.test.sh` |
-| Divieti delle sotto-sessioni: PROD, ssh/rsync, git che cambia stato, docker, psql, installazioni (child-rules) | `guard.py` (hook PreToolUse) | `guard.test.sh` |
-| Nessuna fine turno senza `ESITO FASE` o con job non raccolti (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
-| Struttura del piano formato 2: tracciabilita' ↔ test ↔ passi ↔ file, blocchi, tabella dei test, stringhe tolte ancora asserite, presenza/assenza per posizione (PRC «Plan format 2», «Lint») | `plan-check.sh lint2` | `plan-check.test.sh` |
-| Test ESISTENTI di non-regressione fuori dalla tabella del Piano di test: riga con asserzione «resta verde» (o «rimane verde», «continua a passare») → VIOLAZIONE; vanno nella nota sotto la tabella, tracciabilità «non verificabile a test (invarianza, …)» (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
-| File GENERATI rigenerabili da implement/fix senza deviazione, col loro comando (FIC «Worker implement», «Worker fix», harness-pt15); un generato rigenerato da una sola corsia che lo dichiara è suo | `generati` di `.claude/maat.json` (`maat-config.py generati [--verifica]`, S9), `blocks-independent.py --posteriori` | `maat-config.test.sh` §8b, `blocks-independent.test.sh` |
-| Percorso leggero/pieno dai file (tabella dei percorsi, soglie) (PRC «L5») | `plan-check.sh route` | `plan-check.test.sh` |
-| Decisione S2: pulito sull'impronta corrente, respinti (PRC «Review ≤4 rounds») | `plan-check.sh s2` | `plan-check.test.sh` |
-| Tetti di dimensione (≤15 passi, ≤40 file, ≤400 righe) e taglio rifiutato (PRC «Size») | `plan-check.sh skeleton` | `plan-check.test.sh` |
-| Controllo del taglio in anelli (PRC «Size», punto 3) | `plan-check.sh split` | `plan-check.test.sh` |
-| Delta calcolato, vuoto o intero = errore, righe `xref:` (PRC «Step 2-bis») | `plan-check.sh delta` | `plan-check.test.sh` |
-| Campi della basis di un anello (madre, prec, interfaccia, L6 touched) e `tests` (PRC «Size» punto 4, Step 3) | `plan-check.sh basis` | `plan-check.test.sh` |
-| Pipeline L6: il piano dell'anello k+1 aspetta il piano di k (PRC «Size» punto 4) | `cycle-state.sh` C3 | `cycle-state.test.sh` |
-| Lettura del contratto del piano (IRC Step 1) | `plan-check.sh contract` | `plan-check.test.sh` |
-| Idoneita' al percorso solo-gate, EXCLUDED-CHANGED (IRC «Freshness») | `review-surface.sh check` | `test-review-surface.sh` |
-| Classificazione del lint fuori dalla `radice` del modulo (IRC Step 2.5) | `test-fast.sh --lint --base` | `test-fast.test.sh` |
-| Esecuzione ed esiti delle controprove (FIC «Counterproofs») | `counterproof.sh` | `counterproof.test.sh` |
-| Righe caricate per fase ≤300 (obiettivo di pt14) | `driver.py righe` | `driver.test.sh` §8 |
+| Choice of the next phase, resumption table (FIC «Resumption», step 3) | `cycle-state.sh` / `driver.py next` | `cycle-state.test.sh`, `driver.test.sh` §9 |
+| Anti-loop: same phase and same `State:` → STOP (FIC «Resumption») | `driver.py run` | `driver.test.sh` §4, counterproof §6 |
+| `ESITO FASE … STOP` → STOP; run-phase exits 4/5/6/7 as STOP/WAIT (FIC step 5) | `driver.py run` | `driver.test.sh` §4 |
+| `NEEDS_VERIFICATION` obtained in this invocation → STOP (FIC «Resumption», «Termination») | `driver.py run` | `driver.test.sh` §4 |
+| Phase still running (`.running` without `.exit`) → no launch (FIC step 2) | `driver.py run` (exit 4) | `driver.test.sh` §4 |
+| Numbered labels, `--worker=<fase>` phase prompt, forwarded flags (FIC step 4) | `driver.py run` | `driver.test.sh` §4 |
+| Context pack before each phase (FIC step 4.0) | `driver.py run` → `context-pack.sh` | `driver.test.sh` §4, `context-pack.test.sh` |
+| Chain: on a mother in WAIT, work on the ring it names; a closed ring leads back to the mother (FIC «Chains», «On the mother») | `driver.py run` | `driver.test.sh` §4 |
+| Without a valid equivalence certificate `run` takes Next/State from standalone `cycle-state.sh` | `driver.py run` | `driver.test.sh` §4 |
+| Phase budget per invocation | `driver.py run --max-fasi` | `driver.test.sh` §4 |
+| Fix budget (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` row 11b | `cycle-state.test.sh` |
+| Structured outcome: JSON valid for the schema, deviazioni/bloccato_su → STOP, the more conservative of prose and JSON wins (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, counterproof §6 |
+| Deviations all `difensiva: ` (purely defensive, no effect on the plan's cases) → no STOP: a line in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, a note in the plan changelog (outside the fingerprint), the list passed to the review (a non-defensive one = major); even one without the prefix → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, line `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |
+| Attribution (`touched.txt`, `.pre/.post-tree`) and STOP if not measured (FIC «Run directory», «Resumption») | `run-phase.sh`, `cycle-state.sh` row 7 | `run-phase.test.sh` §5, `cycle-state.test.sh` |
+| Touched file among the excluded ones → STOP (FIC «Resumption») | `cycle-state.sh` 10b | `cycle-state.test.sh` |
+| Level suites run outside the sub-session, evidence by key (FIC «Run directory», IRC Step 2.5) | `run-phase.sh` → `gates.sh` (`--verify`) | `gates.test.sh`, `run-phase.test.sh` |
+| Review ∥ VERIFY, discard on a changed key, driver counterproofs only on a coherent `gen` list (FIC «Run directory», «Worker review», IRC Step 2.5) | `run-phase.sh` | `run-phase.test.sh` §8, §8b-8d |
+| Signing of the final state, verdict = AND, a fresh `Finalize:` for DONE (FIC «Run directory», IRC Step 3) | `finalize.sh`, `cycle-state.sh` 13f | `finalize.test.sh`, `cycle-state.test.sh` |
+| Check of the test-red reds and acceptance tests unchanged after implement/fix; a test file in a block's `scrive:` = prescribed change: acceptance functions unchanged (ast) or not checkable → OK with `AVVISO` and `tests` fingerprint re-recorded, function changed → STOP (FIC «Worker test-red») | `run-phase.sh` (`verify_red`, `tests_guard`), `plan-check.sh rossi` | `run-phase.test.sh` §10, `plan-check.test.sh` |
+| Lanes: block independence, after-the-fact check, merged lists, ESITO line derived from the lane's JSON if missing (FIC «Worker implement») | `blocks-independent.py`, `run-phase.sh` (`launch_lanes`), decision in `driver.py` | `blocks-independent.test.sh`, `run-phase.test.sh` §11, `driver.test.sh` §7 |
+| Implementer blocks in format 2 (FIC «Implement, in 2–4 blocks»): lotti with estimated context under the ceiling | `driver.py` (`lotti`, line `LOTTI`) | `driver.test.sh` §7 |
+| Chains: C1–C4, WAIT/STOP, ring diff, closure (FIC «Chains») | `cycle-state.sh`, `run-phase.sh` (exit 7, `ring_prompt`, closure) | `cycle-state.test.sh`, `run-phase.test.sh` §9 |
+| Code lock and per-spec lock (FIC «Sub-session permissions») | `run-phase.sh` | `run-phase.test.sh` §2-3 |
+| Harness fingerprint (FIC step 5, exit 6) | `run-phase.sh`, `cycle-state.sh` row 0 | `run-phase.test.sh` §7, `cycle-state.test.sh` |
+| Sub-session prohibitions: PROD, ssh/rsync, state-changing git, docker, psql, installs (child-rules) | `guard.py` (PreToolUse hook) | `guard.test.sh` |
+| No end of turn without `ESITO FASE` or with uncollected jobs (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
+| Structure of a format-2 plan: traceability ↔ tests ↔ steps ↔ files, blocks, test table, removed strings still asserted, presence/absence by position (PRC «Plan format 2», «Lint») | `plan-check.sh lint2` | `plan-check.test.sh` |
+| EXISTING non-regression tests outside the table of the Piano di test: a row with the assertion «resta verde» (or «rimane verde», «continua a passare») → VIOLAZIONE; they go in the note under the table, traceability «non verificabile a test (invarianza, …)» (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
+| GENERATED files regenerable by implement/fix without a deviation, with their command (FIC «Worker implement», «Worker fix», harness-pt15); a generated file regenerated by a single lane that declares it is that lane's | `generati` of `.claude/maat.json` (`maat-config.py generati [--verifica]`, S9), `blocks-independent.py --posteriori` | `maat-config.test.sh` §8b, `blocks-independent.test.sh` |
+| Light/full path from the files (path table, thresholds) (PRC «L5») | `plan-check.sh route` | `plan-check.test.sh` |
+| S2 decision: clean on the current fingerprint, rejected findings (PRC «Review ≤4 rounds») | `plan-check.sh s2` | `plan-check.test.sh` |
+| Size ceilings (≤15 steps, ≤40 files, ≤400 lines) and refused cut (PRC «Size») | `plan-check.sh skeleton` | `plan-check.test.sh` |
+| Check of the cut into rings (PRC «Size», point 3) | `plan-check.sh split` | `plan-check.test.sh` |
+| Computed delta, empty or whole = error, `xref:` lines (PRC «Step 2-bis») | `plan-check.sh delta` | `plan-check.test.sh` |
+| Basis fields of a ring (madre, prec, interfaccia, L6 touched) and `tests` (PRC «Size» point 4, Step 3) | `plan-check.sh basis` | `plan-check.test.sh` |
+| L6 pipeline: ring k+1's plan waits for ring k's plan (PRC «Size» point 4) | `cycle-state.sh` C3 | `cycle-state.test.sh` |
+| Reading the plan contract (IRC Step 1) | `plan-check.sh contract` | `plan-check.test.sh` |
+| Eligibility for the gate-only path, EXCLUDED-CHANGED (IRC «Freshness») | `review-surface.sh check` | `test-review-surface.sh` |
+| Classification of lint outside the module's `radice` (IRC Step 2.5) | `test-fast.sh --lint --base` | `test-fast.test.sh` |
+| Execution and outcomes of the counterproofs (FIC «Counterproofs») | `counterproof.sh` | `counterproof.test.sh` |
+| Lines loaded per phase ≤300 (pt14 goal) | `driver.py righe` | `driver.test.sh` §8 |

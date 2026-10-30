@@ -1,225 +1,225 @@
 #!/usr/bin/env bash
-# run-phase.sh — lancia UNA fase di /full-implementation-cycle in una sottosessione Claude separata
-# (contesto vuoto), non interattiva, e ne salva il log stream-json.
+# run-phase.sh — launches ONE phase of /full-implementation-cycle in a separate Claude subsession
+# (empty context), non-interactive, and saves its stream-json log.
 #
-#   run-phase.sh <run-dir> <etichetta> <file-prompt>
-#   run-phase.sh --lock-status      libero / dentro il ciclo → exit 0 · occupato → exit 1 (per le skill a mano)
-#   run-phase.sh --harness-fp [<repo>]   stampa harness.fp (tre righe, sotto) · exit 1 se non calcolabile
-#   run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]   la decisione dei tre lettori, una riga (sotto)
-#   run-phase.sh --harness-paths         stampa i file dell'impronta (relativi a MAAT_ROOT) e .claude/maat.json
-#   run-phase.sh --valida <log.jsonl> <schema> <fase> <result.json>   il validatore interno dell'esito, da solo
-#                                        (termine di confronto di script/fic/driver.py equiv; sotto, VALIDA_PY)
+#   run-phase.sh <run-dir> <label> <prompt-file>
+#   run-phase.sh --lock-status      free / inside the cycle → exit 0 · busy → exit 1 (for skills run by hand)
+#   run-phase.sh --harness-fp [<repo>]   prints harness.fp (three lines, below) · exit 1 if not computable
+#   run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]   the decision of the three readers, one line (below)
+#   run-phase.sh --harness-paths         prints the fingerprint files (relative to MAAT_ROOT) and .claude/maat.json
+#   run-phase.sh --valida <log.jsonl> <schema> <phase> <result.json>   the internal outcome validator, on its own
+#                                        (reference for script/fic/driver.py equiv; below, VALIDA_PY)
 #
-# DRIVER (harness-pt14): le fasi le lancia script/fic/driver.py (`driver.py run`), sempre attraverso questo script.
-# Qui il driver entra in un punto solo, la validazione dell'esito (`driver.py valida`), e solo col certificato di
-# equivalenza valido (INVOLUCRO, sotto VALIDA_PY). Senza certificato questo script e' autonomo come prima.
+# DRIVER (harness-pt14): phases are launched by script/fic/driver.py (`driver.py run`), always through this script.
+# Here the driver enters at a single point, the outcome validation (`driver.py valida`), and only with a valid
+# equivalence certificate (WRAPPER, below VALIDA_PY). Without a certificate this script is standalone as before.
 #
-#   <run-dir>     .claude/.ai-workflow/spec-<name>.run   (gitignorata da "spec-*")
-#   <etichetta>   es. 01-plan, 02-implement, 03-review, 04-fix (la fase si legge dall'etichetta)
-#   <file-prompt> il prompt della fase, passato su stdin (niente limiti di lunghezza della riga)
+#   <run-dir>     .claude/.ai-workflow/spec-<name>.run   (gitignored by "spec-*")
+#   <label>       e.g. 01-plan, 02-implement, 03-review, 04-fix (the phase is read from the label)
+#   <prompt-file> the phase prompt, passed on stdin (no line-length limits)
 #
-# Scrive in <run-dir>/log/: <etichetta>.jsonl (log), .stderr, .running (mentre gira), .exit (codice),
-# .esito (riga "ESITO FASE …" dell'evento result + "state=<hash>" di cycle-state.sh, solo se la
-# sottosessione esce 0: e' cio' che fa passare cycle-state da implement/fix a review).
-# Fasi implement/fix: .pre-tree/.post-tree e <run-dir>/touched.txt (sotto, ATTRIBUZIONE).
-# GATE (harness-pt04): dopo un implement/fix finito OK e prima di ogni review, script/fic/gates.sh (livello
-# in vigore, file di touched.txt) gira QUI, fuori dalla sotto-sessione: esito in .gates, evidenza in
-# <run-dir>/evidence/<chiave>/; la review riceve la cartella in coda al prompt (.prompt = prompt effettivo).
-# La sotto-sessione ha anche un hook Stop (script/fic/stop-hook.py) accanto alla guardia.
-# ESITO STRUTTURATO (harness-pt08): la sotto-sessione riceve --json-schema con script/fic/schemas/
-# phase-result.schema.json (il contenuto: il CLI vuole lo schema, non il file) e, IN PIU', qui si rivalida il
-# blocco JSON dell'ultimo evento result (structured_output, altrimenti l'ultimo recinto ```json del testo) con lo
-# stesso schema: jsonschema se c'e', altrimenti il validatore minimo qui sotto; "fase" deve essere quella
-# dell'etichetta. Valido -> log/<label>.result.json (letto da cycle-state.sh). Assente o non valido -> nessun
-# result.json e .esito = "ESITO FASE <fase>: STOP — uscita non valida: <errori>", con la riga ESITO del testo
-# conservata sotto "originale=". La riga ESITO resta scritta sempre (compatibilita' e revert). Prosa e JSON
-# discordi: vale il piu' conservativo (prosa OK ma JSON STOP, deviazioni o bloccato_su -> .esito STOP con
-# originale=; prosa STOP -> resta STOP). .esito e' l'autorita'.
-# DEVIAZIONI DIFENSIVE: una deviazione che comincia con "difensiva: " (ramo di robustezza, ripiego per un caso che
-# piano o schema escludono, helper interno: nessun effetto sui casi previsti) non ferma la fase; se TUTTE lo sono,
-# l'esito e' quello che sarebbe senza deviazioni. Un implement/fix finito OK le registra: una riga
-# "<label><TAB><testo>" in <run-dir>/log/deviazioni-difensive.txt, un AVVISO in .esito e una nota nel changelog del
-# piano (fuori dall'impronta Approved basis: se l'impronta cambiasse la spec torna com'era). La review le riceve in
-# coda al prompt (riga "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): …"): una non puramente difensiva e' un major.
-# FINALIZE (harness-pt08): dopo una review uscita 0, script/fic/finalize.sh firma lo stato finale (conferma
-# IMPLEMENTED solo con l'evidenza alla chiave attuale, altrimenti NEEDS_VERIFICATION): esito in .finalize.
-# Fail-closed: finalize assente o uscito con un codice diverso da 0/1/3/4 -> .esito = "ESITO FASE review: STOP —
-# finalize non eseguito|fallito"; e cycle-state.sh non da' DONE senza una riga Finalize: IMPLEMENTED recente.
-# Finalize gira dopo la scrittura di result.json e riceve --copertura log/<label>.result.json (harness-pt09).
-# REVIEW IN PARALLELO CON LA VERIFICA (harness-pt09). Fase review: si calcola la chiave del tree (review-surface.sh
-# tree; con le controprove del driver anche lo sha256 di counterproof/mutations.json) e partono INSIEME, in
-# background, VERIFY = gates.sh (poi counterproof.sh — dentro WSL solo su Windows e con un modulo delle mutazioni
-# `ambiente: wsl`, altrimenti diretto (run_cp) — SOLO se mutations.json e' la lista di
-# `plan-check.sh gen` coerente col piano: <run>/gen/procedura.txt con l'"Impronta piano:" attuale e la lista
-# identica a una rigenerata qui in log/.gen-verifica.<pid>; niente sidecar *.meta. Altrimenti — formato 1, lista
-# scritta dal worker a un giro precedente, piano cambiato — le controprove restano del worker, che riscrive la
-# lista a ogni giro, come prima) e la sotto-sessione di review, col
-# prompt + la riga "VERIFY IN PARALLELO …" (il reviewer scrive gli ID dei test per requisito nel campo copertura,
-# non i risultati; verdetto provvisorio). A fine di entrambe la chiave si ricalcola: diversa (o non calcolabile)
-# -> entrambi i risultati scartati (spec rimessa com'era da log/<label>.spec-pre, .gates/.counterproof in
-# *.scartato, la cartella evidence/<chiave> indicata in .gates rinominata <chiave>.scartato — non piu' riusabile
-# da gates.sh ne' FRESH per finalize.sh —, <id>.json del giro cancellati anche in modo worker, evento
-# {"subtype":"fic_scartato"} nel log: l'esito si legge solo
-# dopo) e rilancio in SEQUENZA. La sequenza e' quella di prima (gate, poi review con EVIDENZE DEI GATE nel prompt)
-# e vale anche con FIC_REVIEW_PARALLEL=0, con una sezione di review registrata APPROVED (promozione e gate-only non
-# lanciano il reviewer: non cambiano) e con la chiave non calcolabile. Il modo sta in log/<label>.parallelo.
-# Verdetto = AND in finalize.sh: gate FAIL o controprova non rossa -> FAIL; BLOCKED -> NEEDS_VERIFICATION.
-# counterproof.sh del driver: esito in log/<label>.counterproof (exit=); uscita fuori da 0/1/2 -> i suoi <id>.json
-# si cancellano (non valgono: finalize li conta assenti); exit 5 (mirror non ripristinato) -> .esito STOP.
-# Variabili: FIC_REVIEW_PARALLEL (1 default, 0 = sequenza) · FIC_CP_CMD programma che riceve il percorso di
-# mutations.json al posto di counterproof.sh (test) · FIC_COUNTERPROOF percorso dello script
-# · FIC_PLAN_CHECK percorso di plan-check.sh. VERIFY in background scrive vpid= nell'owner del lock: finche' vive,
-# il lock non si libera (lock_alive, release), anche se run-phase viene ucciso.
-# CORSIE (harness-pt13, L1). Fase implement: prima di lanciare, `plan-check.sh gen` rigenera la procedura dal piano
-# attuale in una cartella a parte e script/fic/blocks-independent.py decide (log/<label>.corsie: esito, corsia k,
-# scope k, dipendenze). Esito parallelo -> sotto lo STESSO lock due sotto-sessioni `claude -p` insieme, ciascuna con
-# FIC_LANE=k (vitest-fast.sh usa la copia <copia della radice>-<k>; WSLENV la porta in WSL) e FIC_WRITE_SCOPE =
-# i file di scrive: dei suoi blocchi (guard.py nega Edit/Write fuori); prompt log/<label>.corsia-<k>.prompt = il
-# prompt + la riga "CORSIA k/2 …", log in log/<label>.corsia-<k>.jsonl, PID in cpid= e cpid2= dell'owner. A corsie
-# finite il CONTROLLO A POSTERIORI: path cambiati fra .pre-tree e il tree di ora (log/<label>.cambiati) divisi per
-# scope con blocks-independent.py --posteriori (log/<label>.posteriori): un file fuori dall'unione, attribuito a
-# entrambe le corsie (nel suo scope e dichiarato dall'altra nel "file" del JSON) o condiviso/generato -> STOP. Poi
-# in <label>.jsonl un solo evento result UNITO (ESITO, JSON: unione di file/deviazioni/gate, bloccato_su), che la
-# validazione di sempre legge. Corsia col solo JSON nel result (uscita strutturata, nessuna riga "ESITO FASE"): la
-# riga si ricava dall'oggetto valido ("ESITO FASE implement: <OK|STOP> — <motivo>"), come in serie; riga di testo e
-# oggetto discordi -> vince lo STOP. Le liste del preflight delle corsie (do-not-touch.<k>.txt, mixed.<k>.txt) si uniscono
-# (sort -u) in do-not-touch.txt e mixed.txt, le sole lette dalle fasi successive. I gate restano quelli del driver
-# sull'albero intero, a corsie finite (sotto).
-# Serie, come prima, con: FIC_LANES=0, fase diversa da implement, formato 1 o gen non riuscito, tree iniziale non
-# calcolato, blocchi dipendenti (una condizione falsa basta).
-# Con FIC_CORSIE=<file> (harness-pt14: lanciato da script/fic/driver.py) la decisione e' quella del driver, presa con
-# gli stessi comandi (gen in una cartella a parte, blocks-independent.py): il file diventa log/<label>.corsie e
-# launch_lanes parte come sempre. FIC_LANES=0 e il tree iniziale restano controllati qui.
-# Uscita: quella della sottosessione · 2 = uso · 3 = binario claude non trovato ·
-#         4 = un'altra fase di CODICE e' in corso (lock), o un'altra fase di PIANO sulla stessa spec
-#             (lock per spec) · 5 = guardia non attiva: non si lancia · 6 = STOP, harness cambiato dal
-#             primo lancio del ciclo (sotto, IMPRONTA DEL HARNESS): non si lancia · 7 = STOP della catena
-#             (sotto, CATENE): non si lancia.
+# Writes to <run-dir>/log/: <label>.jsonl (log), .stderr, .running (while running), .exit (code),
+# .esito ("ESITO FASE …" line of the result event + "state=<hash>" from cycle-state.sh, only if the
+# subsession exits 0: this is what moves cycle-state from implement/fix to review).
+# implement/fix phases: .pre-tree/.post-tree and <run-dir>/touched.txt (below, ATTRIBUTION).
+# GATES (harness-pt04): after an implement/fix finished OK and before every review, script/fic/gates.sh (level
+# in force, touched.txt files) runs HERE, outside the subsession: outcome in .gates, evidence in
+# <run-dir>/evidence/<key>/; the review receives the folder appended to the prompt (.prompt = actual prompt).
+# The subsession also has a Stop hook (script/fic/stop-hook.py) next to the guard.
+# STRUCTURED OUTCOME (harness-pt08): the subsession receives --json-schema with script/fic/schemas/
+# phase-result.schema.json (the content: the CLI wants the schema, not the file) and, IN ADDITION, here the
+# JSON block of the last result event (structured_output, otherwise the last ```json fence of the text) is revalidated with the
+# same schema: jsonschema if available, otherwise the minimal validator below; "fase" must be that
+# of the label. Valid -> log/<label>.result.json (read by cycle-state.sh). Missing or invalid -> no
+# result.json and .esito = "ESITO FASE <fase>: STOP — uscita non valida: <errori>", with the ESITO line of the text
+# kept under "originale=". The ESITO line is always written (compatibility and revert). Prose and JSON
+# disagree: the most conservative wins (prose OK but JSON STOP, deviations or bloccato_su -> .esito STOP with
+# originale=; prose STOP -> stays STOP). .esito is the authority.
+# DEFENSIVE DEVIATIONS: a deviation starting with "difensiva: " (robustness branch, fallback for a case that
+# plan or schema exclude, internal helper: no effect on the expected cases) does not stop the phase; if ALL are,
+# the outcome is what it would be without deviations. An implement/fix finished OK records them: a
+# "<label><TAB><text>" line in <run-dir>/log/deviazioni-difensive.txt, an AVVISO in .esito and a note in the plan's
+# changelog (outside the Approved basis fingerprint: if the fingerprint changed, the spec goes back as it was). The review receives them
+# appended to the prompt ("DEVIAZIONI DIFENSIVE (driver, run-phase.sh): …" line): one that is not purely defensive is a major.
+# FINALIZE (harness-pt08): after a review that exited 0, script/fic/finalize.sh signs the final state (confirms
+# IMPLEMENTED only with the evidence at the current key, otherwise NEEDS_VERIFICATION): outcome in .finalize.
+# Fail-closed: finalize missing or exited with a code other than 0/1/3/4 -> .esito = "ESITO FASE review: STOP —
+# finalize non eseguito|fallito"; and cycle-state.sh does not give DONE without a recent Finalize: IMPLEMENTED line.
+# Finalize runs after result.json is written and receives --copertura log/<label>.result.json (harness-pt09).
+# REVIEW IN PARALLEL WITH VERIFICATION (harness-pt09). Review phase: the tree key is computed (review-surface.sh
+# tree; with driver counterproofs also the sha256 of counterproof/mutations.json) and they start TOGETHER, in
+# background, VERIFY = gates.sh (then counterproof.sh — inside WSL only on Windows and with a mutations module
+# `ambiente: wsl`, otherwise direct (run_cp) — ONLY if mutations.json is the
+# `plan-check.sh gen` list consistent with the plan: <run>/gen/procedura.txt with the current "Impronta piano:" and the list
+# identical to one regenerated here in log/.gen-verifica.<pid>; no *.meta sidecars. Otherwise — format 1, list
+# written by the worker in a previous round, plan changed — the counterproofs stay with the worker, which rewrites the
+# list every round, as before) and the review subsession, with the
+# prompt + the "VERIFY IN PARALLELO …" line (the reviewer writes the test IDs per requirement in the copertura field,
+# not the results; provisional verdict). When both finish the key is recomputed: different (or not computable)
+# -> both results discarded (spec restored from log/<label>.spec-pre, .gates/.counterproof to
+# *.scartato, the evidence/<key> folder named in .gates renamed <key>.scartato — no longer reusable
+# by gates.sh nor FRESH for finalize.sh —, the round's <id>.json deleted also in worker mode, event
+# {"subtype":"fic_scartato"} in the log: the outcome is read only
+# afterwards) and relaunch in SEQUENCE. The sequence is the previous one (gates, then review with EVIDENZE DEI GATE in the prompt)
+# and also applies with FIC_REVIEW_PARALLEL=0, with a review section recorded APPROVED (promotion and gate-only do not
+# launch the reviewer: they do not change) and with the key not computable. The mode is in log/<label>.parallelo.
+# Verdict = AND in finalize.sh: gates FAIL or counterproof not red -> FAIL; BLOCKED -> NEEDS_VERIFICATION.
+# driver's counterproof.sh: outcome in log/<label>.counterproof (exit=); exit outside 0/1/2 -> its <id>.json
+# are deleted (they do not count: finalize treats them as missing); exit 5 (mirror not restored) -> .esito STOP.
+# Variables: FIC_REVIEW_PARALLEL (1 default, 0 = sequence) · FIC_CP_CMD program that receives the path of
+# mutations.json instead of counterproof.sh (tests) · FIC_COUNTERPROOF path of the script
+# · FIC_PLAN_CHECK path of plan-check.sh. VERIFY in background writes vpid= into the lock owner: while it lives,
+# the lock is not released (lock_alive, release), even if run-phase is killed.
+# LANES (harness-pt13, L1). implement phase: before launching, `plan-check.sh gen` regenerates the procedure from the current
+# plan in a separate folder and script/fic/blocks-independent.py decides (log/<label>.corsie: outcome, lane k,
+# scope k, dependencies). Parallel outcome -> under the SAME lock two `claude -p` subsessions together, each with
+# FIC_LANE=k (vitest-fast.sh uses the copy <root copy>-<k>; WSLENV carries it into WSL) and FIC_WRITE_SCOPE =
+# the scrive: files of its blocks (guard.py denies Edit/Write outside); prompt log/<label>.corsia-<k>.prompt = the
+# prompt + the "CORSIA k/2 …" line, log in log/<label>.corsia-<k>.jsonl, PIDs in cpid= and cpid2= of the owner. When the lanes
+# are done, the AFTER-THE-FACT CHECK: paths changed between .pre-tree and the current tree (log/<label>.cambiati) split by
+# scope with blocks-independent.py --posteriori (log/<label>.posteriori): a file outside the union, attributed to
+# both lanes (in its scope and declared by the other in the JSON "file") or shared/generated -> STOP. Then
+# in <label>.jsonl a single MERGED result event (ESITO, JSON: union of file/deviazioni/gate, bloccato_su), which the
+# usual validation reads. A lane with only JSON in the result (structured exit, no "ESITO FASE" line): the
+# line is derived from the valid object ("ESITO FASE implement: <OK|STOP> — <motivo>"), as in series; text line and
+# object disagree -> STOP wins. The lanes' preflight lists (do-not-touch.<k>.txt, mixed.<k>.txt) are merged
+# (sort -u) into do-not-touch.txt and mixed.txt, the only ones read by later phases. The gates stay the driver's
+# on the whole tree, once the lanes are done (below).
+# Series, as before, with: FIC_LANES=0, phase other than implement, format 1 or gen failed, initial tree not
+# computed, dependent blocks (one false condition is enough).
+# With FIC_CORSIE=<file> (harness-pt14: launched by script/fic/driver.py) the decision is the driver's, taken with
+# the same commands (gen in a separate folder, blocks-independent.py): the file becomes log/<label>.corsie and
+# launch_lanes starts as usual. FIC_LANES=0 and the initial tree are still checked here.
+# Exit: that of the subsession · 2 = usage · 3 = claude binary not found ·
+#         4 = another CODE phase is running (lock), or another PLAN phase on the same spec
+#             (per-spec lock) · 5 = guard not active: not launched · 6 = STOP, harness changed since the
+#             first launch of the cycle (below, HARNESS FINGERPRINT): not launched · 7 = chain STOP
+#             (below, CHAINS): not launched.
 #
-# CATENE (harness-pt12; le regole sono in cycle-state.sh, righe C1-C4).
-#   Anello: all'avvio di un implement di un anello k>1 (spec elencata nella riga Figlie: di una madre, nessun
-#   .pre-tree ancora nella sua run dir) si chiede a cycle-state.sh: "STOP — catena" (tree diverso dal .post-tree
-#   di k-1) o "WAIT — catena" (k-1 non chiuso) → exit 7, la sotto-sessione non parte.
-#   Review di un anello k>1: il driver scrive log/<label>.anello.diff = review-surface.sh diff dalla "Base anello"
-#   (.post-tree di k-1, mai HEAD) al tree attuale sui file del touched.txt dell'anello, e ne mette file e indice in
-#   coda al prompt (riga "DIFF DELL'ANELLO (driver, run-phase.sh): …"). Base assente o diff fallito → exit 7.
-#   Chiusura: etichetta NN-chiusura sulla run dir della MADRE. Fase di codice (lock), senza sotto-sessione se non
-#   serve: touched.txt = unione dei touched.txt degli anelli, base.txt = quello del primo anello, gate a livello
-#   full (script/fic/gates.sh) sull'albero finale. Se le figlie hanno righe [e2e-locator: <spec>] e i gate sono
-#   verdi, la sotto-sessione parte col prompt piu' la riga "E2E DELLA CATENA: <spec…>" (worker chiusura:
-#   /dev-verify, sotto la stessa guardia) e conta la sua riga "ESITO FASE chiusura: OK" (nessun --json-schema:
-#   la fase non e' nello schema dell'esito). Scrive <run-dir>/chiusura.txt: "Chiusura: IMPLEMENTED — base <b> ·
-#   tree <t> · gates PASS · e2e <…> · <ora UTC>" oppure "Chiusura: NEEDS_VERIFICATION — <motivo> · <ora UTC>", e
-#   log/<label>.esito. La madre e' DONE (cycle-state.sh) solo con la prima, sul codice attuale.
+# CHAINS (harness-pt12; the rules are in cycle-state.sh, rows C1-C4).
+#   Ring: at the start of an implement of a ring k>1 (spec listed in the Figlie: line of a mother, no
+#   .pre-tree yet in its run dir) cycle-state.sh is asked: "STOP — catena" (tree different from the .post-tree
+#   of k-1) or "WAIT — catena" (k-1 not closed) → exit 7, the subsession does not start.
+#   Review of a ring k>1: the driver writes log/<label>.anello.diff = review-surface.sh diff from the "Base anello"
+#   (.post-tree of k-1, never HEAD) to the current tree on the files of the ring's touched.txt, and appends file and index to
+#   the prompt ("DIFF DELL'ANELLO (driver, run-phase.sh): …" line). Base missing or diff failed → exit 7.
+#   Closing: label NN-chiusura on the MOTHER's run dir. Code phase (lock), without a subsession unless
+#   needed: touched.txt = union of the rings' touched.txt, base.txt = that of the first ring, gates at
+#   full level (script/fic/gates.sh) on the final tree. If the children have [e2e-locator: <spec>] lines and the gates are
+#   green, the subsession starts with the prompt plus the "E2E DELLA CATENA: <spec…>" line (closing worker:
+#   /dev-verify, under the same guard) and its "ESITO FASE chiusura: OK" line counts (no --json-schema:
+#   the phase is not in the outcome schema). Writes <run-dir>/chiusura.txt: "Chiusura: IMPLEMENTED — base <b> ·
+#   tree <t> · gates PASS · e2e <…> · <ora UTC>" or "Chiusura: NEEDS_VERIFICATION — <motivo> · <ora UTC>", and
+#   log/<label>.esito. The mother is DONE (cycle-state.sh) only with the former, on the current code.
 #
-# IMPRONTA DEL HARNESS (pt03; incidente ux-1..4: harness modificato da un'altra sessione sotto un ciclo).
-# Al primo lancio di un ciclo (run dir senza fasi girate: nessun .running, nessun .exit che non sia
-# 2/4/5) si scrive <run-dir>/harness.fp (pk04a-2), tre righe: "impronta=<64 esadecimali>", "versione=<version di
-# .claude-plugin/plugin.json>", "radice=<MAAT_ROOT, forma C:/…>". L'impronta e' lo sha256 delle righe
-# "<sha256 del contenuto senza CR> <percorso>" di tutti i file sotto MAAT_ROOT (percorso relativo, ordine LC_ALL=C)
-# tranne HARNESS_EXCLUDE, piu' in coda <progetto>/.claude/maat.json (assente: riga fissa ".claude/maat.json
-# ASSENTE"). Niente git: la cache dei plugin non e' un repository; le skill del progetto non ne fanno parte.
-# A ogni fase successiva si confronta con hfp_confronta (--harness-fp-confronta), la funzione UNICA usata anche da
-# cycle-state.sh e driver.py: UGUALE → si va avanti; CAMBIATO, FORMATO-PRECEDENTE (una riga sola di 64
-# esadecimali: ciclo iniziato col harness interno), ILLEGGIBILE (vuoto, troncato, senza impronta) o NON-CALCOLABILE
-# → STOP, exit 6, con la data della registrazione e il rimedio. Versione e radice non entrano nel confronto. Una
-# run dir senza harness.fp e con fasi gia' girate (ciclo avviato prima di questa regola) non si controlla.
+# HARNESS FINGERPRINT (pt03; incident ux-1..4: harness modified by another session under a running cycle).
+# At the first launch of a cycle (run dir with no phases run: no .running, no .exit other than
+# 2/4/5) <run-dir>/harness.fp is written (pk04a-2), three lines: "impronta=<64 hex digits>", "versione=<version from
+# .claude-plugin/plugin.json>", "radice=<MAAT_ROOT, C:/… form>". The fingerprint is the sha256 of the lines
+# "<sha256 of the content without CR> <path>" of all the files under MAAT_ROOT (relative path, LC_ALL=C order)
+# except HARNESS_EXCLUDE, plus <project>/.claude/maat.json at the end (missing: fixed line ".claude/maat.json
+# ASSENTE"). No git: the plugin cache is not a repository; the project's skills are not part of it.
+# At every later phase it is compared with hfp_confronta (--harness-fp-confronta), the SINGLE function also used by
+# cycle-state.sh and driver.py: UGUALE → go on; CAMBIATO, FORMATO-PRECEDENTE (a single line of 64
+# hex digits: cycle started with the internal harness), ILLEGGIBILE (empty, truncated, no fingerprint) or NON-CALCOLABILE
+# → STOP, exit 6, with the registration date and the remedy. Version and root are not part of the comparison. A
+# run dir without harness.fp and with phases already run (cycle started before this rule) is not checked.
 #
-# PERMESSI (decisione dell'utente, 2026-09-21). In modalita' -p le scritture sotto .claude/ — dove vive
-# la spec — passano SOLO in bypass: misurato, ne' acceptEdits ne' regole Edit(path) le sbloccano.
-# Quindi bypass + due strati:
-#   1. DENY per prefisso (sotto): ferma il comando diretto e le catene con &&, NON un comando avvolto
-#      in `wsl -- bash -lc '...'` o `bash -c '...'` (misurato);
-#   2. guard.py come hook PreToolUse (passato con --settings; misurato 2026-09-22: in -p + bypass l'hook
-#      scatta e l'exit 2 blocca anche il comando annidato). Guarda il comando intero: produzione e rilascio del
-#      progetto, accesso remoto diretto, git che cambia stato, docker, psql, installazioni, rm -rf; e nelle fasi
-#      plan/review le scritture fuori dalla cartella di lavoro. L'hook e' fail-open (se FALLISCE lascia
-#      passare): per questo, prima di lanciare, l'autotest gli fa negare la sonda di `maat-config.py
-#      sonda-produzione` (o, senza guardia.produzione, `git push --force origin x`) con lo STESSO comando
-#      dell'hook, e se non nega non si lancia (exit 5). Cosa resta scoperto: docstring di guard.py.
-#   Le guardie in una sotto-sessione sono DUE, ed e' voluto: questa (deny, senza --universal) e l'hook del plugin
-#   (hooks/hooks.json → guard-hook.sh → guard.py --universal, che con FIC_PHASE nega con exit 2: legge anche il
-#   contenuto di `bash script/x.sh`, i `cd` e le regole git sui worktree). pk01 D2: l'hook del plugin scatta anche
-#   nelle sotto-sessioni e si somma a --settings. Tutte e due leggono MAAT_CONFIG, esportato qui sotto.
-#   Niente MCP (--strict-mcp-config senza --mcp-config): nessuna fase della catena li usa; misurato
-#   2026-09-22, tool all'avvio 79 -> 31 (48 MCP: chrome-devtools, Drive, Docs). Capacita' in meno, non
-#   un risparmio di contesto (sono caricati in differita: -2k token).
-#   Il test controlla l'argomento; la misura sull'evento system/init si ripete a mano (phase-usage.py:
-#   colonna "tool all'avvio (mcp N)") dopo un aggiornamento del CLI.
+# PERMISSIONS (user decision, 2026-09-21). In -p mode writes under .claude/ — where the
+# spec lives — pass ONLY in bypass: measured, neither acceptEdits nor Edit(path) rules unlock them.
+# Hence bypass + two layers:
+#   1. DENY by prefix (below): stops the direct command and && chains, NOT a command wrapped
+#      in `wsl -- bash -lc '...'` or `bash -c '...'` (measured);
+#   2. guard.py as a PreToolUse hook (passed with --settings; measured 2026-09-22: in -p + bypass the hook
+#      fires and exit 2 blocks the nested command too). It looks at the whole command: production and release of the
+#      project, direct remote access, git that changes state, docker, psql, installs, rm -rf; and in the
+#      plan/review phases writes outside the working folder. The hook is fail-open (if it FAILS it lets
+#      through): that is why, before launching, the self-test makes it deny the probe of `maat-config.py
+#      sonda-produzione` (or, without guardia.produzione, `git push --force origin x`) with the SAME command
+#      as the hook, and if it does not deny, nothing is launched (exit 5). What stays uncovered: docstring of guard.py.
+#   The guards in a subsession are TWO, on purpose: this one (deny, without --universal) and the plugin hook
+#   (hooks/hooks.json → guard-hook.sh → guard.py --universal, which with FIC_PHASE denies with exit 2: it also reads the
+#   content of `bash script/x.sh`, the `cd`s and the git rules on worktrees). pk01 D2: the plugin hook fires also
+#   in subsessions and adds up with --settings. Both read MAAT_CONFIG, exported below.
+#   No MCP (--strict-mcp-config without --mcp-config): no phase of the chain uses them; measured
+#   2026-09-22, tools at startup 79 -> 31 (48 MCP: chrome-devtools, Drive, Docs). Less capability, not
+#   a context saving (they are loaded deferred: -2k tokens).
+#   The test checks the argument; the measurement on the system/init event is repeated by hand (phase-usage.py:
+#   column "tool all'avvio (mcp N)") after a CLI update.
 #
-# LOCK (fasi implement/review/fix): working tree, controprove, sync e context e2e del DEV sono
-# condivisi, quindi una sola fase di codice alla volta, di qualunque feature. Le fasi plan di spec
-# DIVERSE girano in parallelo; due plan sulla STESSA spec no (incidente ux-6: piano approvato
-# sovrascritto): ogni plan prende <run-dir>/plan.lock, stessa liveness, e il secondo esce 4 col
-# proprietario. Non e' un lock globale sul planning. Il lock e' una directory dentro .git (mai superficie di review) con i PID MSYS di
-# questo script e della sottosessione: vivo se almeno uno dei due esiste (`kill -0` vede anche i
-# processi di altre finestre Git Bash). NON il PID Windows letto da /proc/<pid>/winpid subito dopo
-# `&`: e' quello dello stub del fork, non di claude.exe (misurato 2026-09-22). Le skill lanciate a mano
-# (/implementation-review-cycle, /dev-verify --e2e) lo interrogano con --lock-status e si fermano se e'
-# occupato; non lo prendono.
+# LOCK (implement/review/fix phases): working tree, counterproofs, sync and DEV e2e context are
+# shared, so only one code phase at a time, of any feature. Plan phases of DIFFERENT
+# specs run in parallel; two plans on the SAME spec do not (incident ux-6: approved plan
+# overwritten): every plan takes <run-dir>/plan.lock, same liveness, and the second exits 4 with the
+# owner. It is not a global lock on planning. The lock is a directory inside .git (never review surface) with the MSYS PIDs of
+# this script and of the subsession: alive if at least one of the two exists (`kill -0` also sees the
+# processes of other Git Bash windows). NOT the Windows PID read from /proc/<pid>/winpid right after
+# `&`: that is the fork stub's, not claude.exe's (measured 2026-09-22). Skills launched by hand
+# (/implementation-review-cycle, /dev-verify --e2e) query it with --lock-status and stop if it is
+# busy; they do not take it.
 #
-# ATTRIBUZIONE (fasi implement/fix): tree del working tree prima e dopo la sottosessione; i path che
-# cambiano fra i due finiscono in <run-dir>/touched.txt e non possono essere esclusi dalla review. Col
-# lock preso nessun'altra fase di codice gira, quindi il delta e' della feature; una modifica umana
-# fatta nello stesso intervallo ci finisce dentro (sovra-inclusione: direzione sicura). Una fase
-# uccisa lascia .pre-tree senza .post-tree: la chiude la fase di codice successiva della stessa feature,
-# oppure — se e' di un'altra feature — quella che ne riprende il lock orfano, prima di cambiare il tree.
-# Il .post-tree esiste SOLO se tree iniziale, tree finale e diff sono riusciti: e' la prova che
-# cycle-state.sh chiede prima di mandare una fase implement/fix OK in review. Un fallimento qui e' un
-# AVVISO, ma il ciclo si ferma li' (fail-closed a valle, non una fase lasciata a meta' col lock).
+# ATTRIBUTION (implement/fix phases): tree of the working tree before and after the subsession; the paths that
+# change between the two end up in <run-dir>/touched.txt and cannot be excluded by the review. With the
+# lock taken no other code phase runs, so the delta belongs to the feature; a human change
+# made in the same interval ends up in it (over-inclusion: safe direction). A killed
+# phase leaves .pre-tree without .post-tree: it is closed by the next code phase of the same feature,
+# or — if it belongs to another feature — by the one that takes over its orphan lock, before changing the tree.
+# The .post-tree exists ONLY if initial tree, final tree and diff succeeded: it is the proof that
+# cycle-state.sh asks for before sending an OK implement/fix phase to review. A failure here is an
+# AVVISO, but the cycle stops there (fail-closed downstream, not a phase left half-done holding the lock).
 #
-# ALTRI FLUSSI (incidente: PRODUZIONE.md modificato dall'utente in un'altra sessione durante test-red). Il diff dei
-# tree non sa CHI ha scritto: per ogni path cambiato nella fase il driver chiede ai log della sotto-sessione
-# (NOMI_PY, sotto) se l'ha nominato. test-red: un path fuori scope mai nominato non ferma la fase; va in
-# do-not-touch.txt (forma del preflight), esce da touched.txt se ci e' entrato in questa fase, e c'e' un AVVISO
-# (.stderr, .esito dopo state=, log/<label>.avvisi, log/<label>.altri-flussi). Nominato, o log inservibili -> STOP
-# come prima. implement/fix, conservativo (formatter e generatori scrivono senza nominare): il path mai nominato
-# RESTA in touched.txt, annotato in log/<label>.altri-flussi con un AVVISO; nessuno STOP, nessun file tolto.
-# test-red: un path gia' in touched.txt prima della fase (lavoro della feature) e cambiato senza essere nominato
-# non puo' stare sia in touched.txt sia in do-not-touch -> STOP col motivo, decide l'utente.
-# LIMITE: un programma che calcola i path da se' (generatori, script Python/Node che percorrono cartelle, codegen
-# senza argomenti) scrive senza nominarli. Se la sotto-sessione di test-red ne lancia uno che scrive fuori scope, la
-# scrittura sembra di un altro flusso: niente STOP, il file va in do-not-touch (e l'AVVISO lo dice). Le regole di
-# NOMI_PY coprono i comandi che scrivono noti (antenate, glob, punto, --fix/--write/-u), non un programma arbitrario.
+# OTHER FLOWS (incident: PRODUZIONE.md modified by the user in another session during test-red). The tree
+# diff does not know WHO wrote: for every path changed in the phase the driver asks the subsession's logs
+# (NOMI_PY, below) whether it named it. test-red: an out-of-scope path never named does not stop the phase; it goes into
+# do-not-touch.txt (preflight form), leaves touched.txt if it entered it in this phase, and there is an AVVISO
+# (.stderr, .esito after state=, log/<label>.avvisi, log/<label>.altri-flussi). Named, or unusable logs -> STOP
+# as before. implement/fix, conservative (formatters and generators write without naming): the never-named path
+# STAYS in touched.txt, annotated in log/<label>.altri-flussi with an AVVISO; no STOP, no file removed.
+# test-red: a path already in touched.txt before the phase (feature work) and changed without being named
+# cannot be both in touched.txt and in do-not-touch -> STOP with the reason, the user decides.
+# LIMIT: a program that computes paths by itself (generators, Python/Node scripts walking folders, codegen
+# without arguments) writes without naming them. If the test-red subsession launches one that writes out of scope, the
+# write looks like another flow's: no STOP, the file goes into do-not-touch (and the AVVISO says so). The rules of
+# NOMI_PY cover the known writing commands (ancestors, glob, dot, --fix/--write/-u), not an arbitrary program.
 #
-# FASE TEST-RED (harness-pt11; etichetta *test-red*, solo piani in formato 2, fra piano APPROVED e implement):
-# fase di CODICE (lock, .pre-tree/.post-tree, touched.txt). La guardia le da' uno scope suo (FIC_SCOPE =
-# log/<label>.scope, da `plan-check.sh accept`): i file di test del piano + i file che il piano dichiara nuovi.
-# La sotto-sessione (agente acceptance-test-writer) scrive i test di accettazione e gli stub; poi, QUI, la
-# verifica del driver: gates.sh mirato (livello std, file di test del piano + touched.txt; esito in .gates) e
-# `plan-check.sh rossi` sull'evidenza (.rossi, <run-dir>/test-red/rossi.json): ogni test rosso sulla sua
-# asserzione, nessun import/raccolta, nessun verde, nessuna suite esistente in conflitto; altrimenti .esito =
-# "ESITO FASE test-red: STOP — …" (originale= sotto). Chiusura OK: test-red/stubs.json, test-red/tests.txt,
-# " · tests <fp>" nell'Approved basis (plan-check.sh basis --write-tests) e gen (controprove assorbite, L2).
-# Dopo implement e fix OK: i file dei test di accettazione confrontati con test-red/tests.txt; diversi ->
-# .esito STOP «deviazione: test di accettazione modificati» a prescindere dal report (gli stub no), salvo la
-# MODIFICA PRESCRITTA (file nello scrive: di un blocco, funzioni dei test di accettazione invariate o non
-# verificabili): OK con un AVVISO e l'impronta dei test riregistrata (vedi tests_guard).
-# S3 · TEST IN SOSTA (etichetta *test-stage*): nessun lock (non scrive lo spec ne' il tree), scope = la sola
-# <run-dir>/staging/, <run-dir>/staging.fp = impronta del piano al lancio. Una test-red trova lo staging con
-# l'impronta del piano attuale -> copia nel tree i file dello scope (staging -> staging.copiato), niente
-# sotto-sessione, e la verifica; impronta diversa -> staging scartato, la sotto-sessione scrive i test.
+# TEST-RED PHASE (harness-pt11; label *test-red*, format-2 plans only, between APPROVED plan and implement):
+# CODE phase (lock, .pre-tree/.post-tree, touched.txt). The guard gives it its own scope (FIC_SCOPE =
+# log/<label>.scope, from `plan-check.sh accept`): the plan's test files + the files the plan declares new.
+# The subsession (acceptance-test-writer agent) writes the acceptance tests and the stubs; then, HERE, the
+# driver's verification: targeted gates.sh (std level, the plan's test files + touched.txt; outcome in .gates) and
+# `plan-check.sh rossi` on the evidence (.rossi, <run-dir>/test-red/rossi.json): every test red on its own
+# assertion, no import/collection errors, no green, no existing suite in conflict; otherwise .esito =
+# "ESITO FASE test-red: STOP — …" (originale= below). Closing OK: test-red/stubs.json, test-red/tests.txt,
+# " · tests <fp>" in the Approved basis (plan-check.sh basis --write-tests) and gen (absorbed counterproofs, L2).
+# After implement and fix OK: the acceptance test files compared with test-red/tests.txt; different ->
+# .esito STOP «deviazione: test di accettazione modificati» regardless of the report (stubs do not count), except for a
+# PRESCRIBED CHANGE (file in a block's scrive:, acceptance test functions unchanged or not
+# verifiable): OK with an AVVISO and the test fingerprint re-recorded (see tests_guard).
+# S3 · PARKED TESTS (label *test-stage*): no lock (it writes neither the spec nor the tree), scope = only
+# <run-dir>/staging/, <run-dir>/staging.fp = plan fingerprint at launch. A test-red that finds the staging with
+# the current plan fingerprint -> copies the scope files into the tree (staging -> staging.copiato), no
+# subsession, and the verification; different fingerprint -> staging discarded, the subsession writes the tests.
 #
-# Per aggiornare QUESTO file mentre un ciclo gira: scrivere una copia e fare `mv` sopra l'originale.
-# Riscriverlo sul posto e' pericoloso: bash rilegge lo script dal disco mentre lo esegue.
+# To update THIS file while a cycle is running: write a copy and `mv` it over the original.
+# Rewriting it in place is dangerous: bash rereads the script from disk while executing it.
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT/MAAT_SCRIPTS (plugin) e PROJECT_ROOT (cartella di lavoro)
+. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT/MAAT_SCRIPTS (plugin) and PROJECT_ROOT (working folder)
 RS="$MAAT_SCRIPTS/review-surface.sh"
 
-# --- impronta del harness (vedi IMPRONTA DEL HARNESS) ---
-# L'elenco UNICO delle esclusioni, usato dal calcolo e da --harness-paths: ogni voce e' un glob confrontato con OGNI
-# componente del percorso relativo a MAAT_ROOT (le prime due escludono cartelle, le altre i file temporanei d'editor
-# e di merge ovunque si trovino). Niente .gitignore: sotto MAAT_ROOT entra ogni altro file.
+# --- harness fingerprint (see HARNESS FINGERPRINT) ---
+# The SINGLE list of exclusions, used by the computation and by --harness-paths: each entry is a glob matched against EVERY
+# component of the path relative to MAAT_ROOT (the first two exclude folders, the others editor and merge temporary
+# files wherever they are). No .gitignore: every other file under MAAT_ROOT is included.
 HARNESS_EXCLUDE=(__pycache__ assets '*.swp' '*.orig' .DS_Store '*~')
-# Il calcolo in UN processo (libreria standard): su Windows un processo per file costava secondi a ogni confronto.
-#   argv: elenco|impronta <MAAT_ROOT> <progetto> -- <HARNESS_EXCLUDE…> · uscita 1 = file non leggibile
-# elenco: i file del harness relativi a MAAT_ROOT (file regolari, non link), senza le componenti escluse (fnmatch,
-# maiuscole distinte), in ordine di byte UTF-8 (= LC_ALL=C sort). impronta: sha256 delle righe
-# "<sha256 del contenuto senza CR> <percorso>\n" di quei file, piu' in coda quella di <progetto>/.claude/maat.json
-# (o ".claude/maat.json ASSENTE\n").
+# The computation in ONE process (standard library): on Windows one process per file cost seconds at every comparison.
+#   argv: elenco|impronta <MAAT_ROOT> <project> -- <HARNESS_EXCLUDE…> · exit 1 = unreadable file
+# elenco: the harness files relative to MAAT_ROOT (regular files, not links), without the excluded components (fnmatch,
+# case-sensitive), in UTF-8 byte order (= LC_ALL=C sort). impronta: sha256 of the lines
+# "<sha256 of the content without CR> <path>\n" of those files, plus at the end that of <project>/.claude/maat.json
+# (or ".claude/maat.json ASSENTE\n").
 HFP_PY='
 import fnmatch, hashlib, os, sys
 modo, root, prog = sys.argv[1:4]
@@ -258,23 +258,23 @@ try:
 except OSError:
     sys.exit(1)
 '
-hfp_win() { # $1 = variabile, $2 = percorso → la variabile in forma C:/… su Windows; nessun processo se lo e' gia'
+hfp_win() { # $1 = variable, $2 = path → the variable in C:/… form on Windows; no process if it already is
   local w=$2
   [[ $w =~ ^[A-Za-z]:/ ]] || w=$(maat_cygm "$2") || w=$2
   printf -v "$1" '%s' "$w"
 }
-hfp_py1() { # "$@" = interprete → l'uscita di HFP_PY se valida (hfp_modo, hfp_r, hfp_p del chiamante), altrimenti 1
+hfp_py1() { # "$@" = interpreter → the HFP_PY output if valid (hfp_modo, hfp_r, hfp_p of the caller), otherwise 1
   local o
   o=$(PYTHONDONTWRITEBYTECODE=1 "$@" -c "$HFP_PY" "$hfp_modo" "$hfp_r" "$hfp_p" -- "${HARNESS_EXCLUDE[@]}" 2>/dev/null) || return 1
   if [ "$hfp_modo" = impronta ]; then [[ $o =~ ^[0-9a-f]{64}$ ]] || return 1
-  else [[ $'\n'$o$'\n' == *$'\n.claude-plugin/plugin.json\n'* ]] || return 1; fi   # il plugin ha sempre plugin.json
+  else [[ $'\n'$o$'\n' == *$'\n.claude-plugin/plugin.json\n'* ]] || return 1; fi   # the plugin always has plugin.json
   printf '%s\n' "$o"
 }
-hfp_py() { # $1 = elenco|impronta, $2 = radice del progetto (solo impronta) → l'uscita di HFP_PY
-  # L'impronta non dipende dall'interprete della guardia: si provano FIC_PYTHON, FIC_PY, il launcher py, python3,
-  # python e vale la prima uscita VALIDA (64 esadecimali; un elenco con .claude-plugin/plugin.json). Un FIC_PYTHON
-  # rotto resta cosi' un problema della guardia (exit 5), non un'impronta non calcolabile (exit 6), come col calcolo
-  # in bash. Niente python.sh: ne avvia due per scegliere. Nessun interprete valido: non-zero → NON-CALCOLABILE.
+hfp_py() { # $1 = elenco|impronta, $2 = project root (impronta only) → the HFP_PY output
+  # The fingerprint does not depend on the guard interpreter: FIC_PYTHON, FIC_PY, the py launcher, python3,
+  # python are tried and the first VALID output wins (64 hex digits; a list with .claude-plugin/plugin.json). A broken
+  # FIC_PYTHON thus stays a guard problem (exit 5), not a non-computable fingerprint (exit 6), as with the computation
+  # in bash. No python.sh: it starts two of them to choose. No valid interpreter: non-zero → NON-CALCOLABILE.
   local hfp_modo=$1 hfp_r hfp_p c
   hfp_win hfp_r "$MAAT_ROOT"; hfp_win hfp_p "${2:-.}"
   [ -n "${FIC_PYTHON:-}" ] && hfp_py1 "$FIC_PYTHON" && return 0
@@ -283,36 +283,36 @@ hfp_py() { # $1 = elenco|impronta, $2 = radice del progetto (solo impronta) → 
   for c in python3 python; do command -v "$c" >/dev/null 2>&1 && hfp_py1 "$c" && return 0; done
   return 1
 }
-hfp_elenco() { # stampa i file del harness, relativi a MAAT_ROOT, in ordine LC_ALL=C · non-zero se non elencabili
+hfp_elenco() { # prints the harness files, relative to MAAT_ROOT, in LC_ALL=C order · non-zero if they cannot be listed
   hfp_py elenco
 }
-harness_fp() { # $1 = radice del progetto → stampa l'impronta (64 esadecimali) · non-zero se non calcolabile
+harness_fp() { # $1 = project root → prints the fingerprint (64 hex digits) · non-zero if not computable
   local fp
   [ -n "$1" ] && [ -d "$1" ] && git -C "$1" rev-parse --git-dir >/dev/null 2>&1 || return 1
   fp=$(hfp_py impronta "$1") || return 1
   [[ $fp =~ ^[0-9a-f]{64}$ ]] || return 1
   printf '%s\n' "$fp"
 }
-hfp_stampa() { # $1 = radice del progetto → il contenuto di harness.fp, tre righe · non-zero se non calcolabile
+hfp_stampa() { # $1 = project root → the content of harness.fp, three lines · non-zero if not computable
   local fp v r
   fp=$(harness_fp "$1") || return 1
   v=$(tr -d '\r' < "$MAAT_ROOT/.claude-plugin/plugin.json" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
   r=$(maat_cygm "$MAAT_ROOT" 2>/dev/null || printf '%s' "$MAAT_ROOT")
   printf 'impronta=%s\nversione=%s\nradice=%s\n' "$fp" "$v" "$r"
 }
-hfp_impronta_di() { # $1 = harness.fp → "nuovo <impronta>" | "precedente <impronta>" | niente (illeggibile)
+hfp_impronta_di() { # $1 = harness.fp → "nuovo <impronta>" | "precedente <impronta>" | nothing (unreadable)
   local c l
   { c=$(< "$1"); } 2>/dev/null || return 0
   c=${c//$'\r'/}
   while IFS= read -r l; do
     [[ $l =~ ^impronta=([0-9a-f]{64})$ ]] && { echo "nuovo ${BASH_REMATCH[1]}"; return 0; }
   done <<< "$c"
-  [[ $c =~ ^[0-9a-f]{64}$ ]] && echo "precedente $c"   # formato precedente: una sola riga di 64 esadecimali
+  [[ $c =~ ^[0-9a-f]{64}$ ]] && echo "precedente $c"   # previous format: a single line of 64 hex digits
   return 0
 }
-hfp_confronta() { # $1 = harness.fp, $2 = radice del progetto → UNA riga, la decisione dei tre lettori (run-phase.sh,
+hfp_confronta() { # $1 = harness.fp, $2 = project root → ONE line, the decision of the three readers (run-phase.sh,
   # cycle-state.sh, driver.py): UGUALE | CAMBIATO <reg:12> <att:12> | FORMATO-PRECEDENTE <reg:12> <att:12> |
-  # ILLEGGIBILE <att:12> | NON-CALCOLABILE. Versione e radice sono informative: fuori dal confronto.
+  # ILLEGGIBILE <att:12> | NON-CALCOLABILE. Version and root are informative: outside the comparison.
   local now reg
   now=$(harness_fp "$2") || { echo NON-CALCOLABILE; return 0; }
   reg=$(hfp_impronta_di "$1")
@@ -341,10 +341,10 @@ if [ "${1:-}" = "--harness-fp-confronta" ]; then
   exit 0
 fi
 
-# --- esito strutturato: il validatore interno (vedi ESITO STRUTTURATO) e l'involucro del driver (harness-pt14) ---
-# VALIDA_PY stampa la riga ESITO (o lo STOP «uscita non valida» e, sotto, originale=<riga>) e scrive result.json
-# se valido. Argomenti: <log.jsonl> <schema> <fase> <result.json>. `run-phase.sh --valida …` lo esegue da solo
-# (sempre questo, mai il driver): e' il termine di confronto di `driver.py equiv`.
+# --- structured outcome: the internal validator (see STRUCTURED OUTCOME) and the driver wrapper (harness-pt14) ---
+# VALIDA_PY prints the ESITO line (or the «uscita non valida» STOP and, below it, originale=<line>) and writes result.json
+# if valid. Arguments: <log.jsonl> <schema> <phase> <result.json>. `run-phase.sh --valida …` runs it on its own
+# (always this one, never the driver): it is the reference for `driver.py equiv`.
 VALIDA_PY='
 import json, os, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
@@ -358,7 +358,7 @@ for ln in open(log, encoding="utf-8", errors="replace"):
     if isinstance(ev, dict) and ev.get("type") == "result":
         res = ev
     elif isinstance(ev, dict) and ev.get("subtype") == "fic_scartato":
-        res = None   # review parallela scartata (harness-pt09): vale solo quello che segue
+        res = None   # parallel review discarded (harness-pt09): only what follows counts
 if res is None or res.get("is_error"):
     sys.exit(0)
 text = res.get("result") or ""
@@ -441,11 +441,11 @@ with open(out + ".tmp", "w", encoding="utf-8") as fh:
     json.dump(obj, fh, ensure_ascii=False, indent=1)
     fh.write("\n")
 os.replace(out + ".tmp", out)
-# Prosa e JSON discordi: vale il piu conservativo (le stesse regole di cycle-state.sh sul JSON).
+# Prose and JSON disagree: the most conservative wins (the same rules as cycle-state.sh on the JSON).
 one = lambda s: " ".join(str(s).split())
 dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
 jstop = ""
-if [x for x in dev if not x.startswith("difensiva: ")]:   # tutte "difensiva: " -> nessuno STOP per deviazione
+if [x for x in dev if not x.startswith("difensiva: ")]:   # all "difensiva: " -> no STOP for deviation
     jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
 elif one(obj["bloccato_su"]).lower() != "nessuno":
     jstop = "bloccato su: " + one(obj["bloccato_su"])
@@ -460,20 +460,20 @@ elif jstop and re.match(r"ESITO FASE [^:]*: OK", riga):
 else:
     print(riga)
 '
-# INVOLUCRO (harness-pt14): `driver.py valida` al posto di VALIDA_PY solo se il certificato script/fic/driver.equiv
-# porta l'hash attuale di driver.py e di QUESTO file (equivalenza provata da `driver.py equiv --certifica`);
-# altrimenti il validatore interno. FIC_DRIVER=0 forza l'interno, FIC_DRIVER=1 il driver (test); FIC_DRIVER_PY e
-# FIC_DRIVER_CERT sostituiscono driver e certificato (test). Driver fallito -> validatore interno, con un AVVISO.
+# WRAPPER (harness-pt14): `driver.py valida` instead of VALIDA_PY only if the certificate script/fic/driver.equiv
+# carries the current hash of driver.py and of THIS file (equivalence proved by `driver.py equiv --certifica`);
+# otherwise the internal validator. FIC_DRIVER=0 forces the internal one, FIC_DRIVER=1 the driver (tests); FIC_DRIVER_PY and
+# FIC_DRIVER_CERT replace driver and certificate (tests). Driver failed -> internal validator, with an AVVISO.
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
 CERT=${FIC_DRIVER_CERT:-$MAAT_SCRIPTS/driver.equiv}
 fic_hash() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
-driver_on() { # 0 = delega al driver
+driver_on() { # 0 = delegate to the driver
   case "${FIC_DRIVER:-}" in 0) return 1 ;; 1) [ -f "$DRV" ]; return ;; esac
   [ -f "$DRV" ] && [ -f "$CERT" ] || return 1
   local c; c=$(tr -d '\r' < "$CERT")
   grep -qx "driver $(fic_hash "$DRV")" <<< "$c" && grep -qx "run-phase $(fic_hash "${BASH_SOURCE[0]}")" <<< "$c"
 }
-valida() { # <log> <schema> <fase> <result.json>: stampa l'esito (vedi VALIDA_PY)
+valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see VALIDA_PY)
   local o
   if driver_on; then
     if o=$("$FIC_PY" "$DRV" valida "$@"); then [ -n "$o" ] && printf '%s\n' "$o"; return 0; fi
@@ -487,17 +487,17 @@ if [ "${1:-}" = "--valida" ]; then
   "$FIC_PY" -c "$VALIDA_PY" "$2" "$3" "$4" "$5"; exit $?
 fi
 
-# --- attribuzione per nome (vedi ALTRI FLUSSI): la sotto-sessione ha nominato questi path? ---
-# NOMI_PY <radice del repo> <file dei path, uno per riga> <log.jsonl>… stampa "nominato<TAB>p" o "mai<TAB>p" per
-# ogni path. Si guardano gli input di TUTTI i tool_use dei log (anche annidati, anche dei sotto-agenti): nominato =
-# path relativo (anche con \), o la sola basename, in una stringa qualunque; oppure, in un `command` che scrive
-# (sed -i, rm, mv, cp, find, >, tee, git checkout/restore, --fix, --write, Remove-Item…), una directory antenata
-# (anche relativa a un `cd` di un'altra chiamata: una sequenza qualunque di segmenti della cartella del path), un
-# punto nudo, un glob senza cartella o sotto un'antenata (idem), la radice come bersaglio (non come `cd`), o un
-# comando che scrive su tutto il progetto (--fix, --write, npm run format, git checkout/restore/stash/reset…, gli
-# aggiornamenti di snapshot --update, --snapshot-update, --update-snapshots, -u di vitest/jest/npx/npm). Nel dubbio
-# nominato. Fail-closed: log illeggibili, nessun evento o nessun evento result -> tutti "nominato", exit 3.
-# `run-phase.sh --nominati <radice> <file-dei-path> <log.jsonl>…` lo esegue da solo (test).
+# --- attribution by name (see OTHER FLOWS): did the subsession name these paths? ---
+# NOMI_PY <repo root> <file of paths, one per line> <log.jsonl>… prints "nominato<TAB>p" or "mai<TAB>p" for
+# every path. The inputs of ALL the tool_use entries of the logs are examined (nested too, sub-agents too): named =
+# relative path (also with \), or the basename alone, in any string; or, in a `command` that writes
+# (sed -i, rm, mv, cp, find, >, tee, git checkout/restore, --fix, --write, Remove-Item…), an ancestor directory
+# (also relative to a `cd` of another call: any sequence of segments of the path's folder), a
+# bare dot, a glob without a folder or under an ancestor (same), the root as the target (not as `cd`), or a
+# command that writes over the whole project (--fix, --write, npm run format, git checkout/restore/stash/reset…, the
+# snapshot updates --update, --snapshot-update, --update-snapshots, -u of vitest/jest/npx/npm). When in doubt,
+# nominato. Fail-closed: unreadable logs, no events or no result event -> all "nominato", exit 3.
+# `run-phase.sh --nominati <root> <paths-file> <log.jsonl>…` runs it on its own (tests).
 NOMI_PY='
 import json, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
@@ -575,7 +575,7 @@ def relativo(pre):
         if pre == rr or pre.startswith(rr + "/"):
             return pre[len(rr):].lstrip("/")
     return pre
-def dentro(pn, d):   # d (radice tolta, ./ e ../ in testa tolti) e una sequenza contigua di segmenti della cartella di pn
+def dentro(pn, d):   # d (root removed, leading ./ and ../ removed) is a contiguous sequence of segments of the folder of pn
     d = re.sub(r"^(\.{1,2}(/|$))+", "", d).strip("/")
     return ("/" + pn).find("/" + d + "/") >= 0 if d else None
 def nominato(p):
@@ -588,14 +588,14 @@ def nominato(p):
             continue
         if TUTTO.search(c) or PUNTO.search(c):
             return True
-        # ogni argomento, per INTERO: una cartella antenata (dir, dir/) o il prefisso di un glob (dir/*.py, *.md).
-        # Anche RELATIVO a un cwd messo da un `cd` di un altra chiamata (il cwd persiste): basta che sia una
-        # sequenza contigua di segmenti della cartella del path (cd modulo/b; poi rm -r app/servizi)
+        # every argument, WHOLE: an ancestor folder (dir, dir/) or the prefix of a glob (dir/*.py, *.md).
+        # Also RELATIVE to a cwd set by a `cd` of another call (the cwd persists): it is enough for it to be a
+        # contiguous sequence of segments of the path folder (cd modulo/b; then rm -r app/servizi)
         for tok in TOKEN.findall(c):
             if "*" in tok:
                 pre = tok.split("*", 1)[0]
                 if dentro(pn, relativo(pre.rsplit("/", 1)[0] if "/" in pre else "")) is not False:
-                    return True   # None = glob senza cartella, o sotto la radice: tutto
+                    return True   # None = glob without a folder, or under the root: everything
             elif dentro(pn, relativo(tok)):
                 return True
         for rr in radici:
@@ -612,32 +612,32 @@ if [ "${1:-}" = "--nominati" ]; then
   shift; "$FIC_PY" -c "$NOMI_PY" "$@"; exit $?
 fi
 
-# --- lock delle fasi di codice (anche per --lock-status) ---
-# git.exe deve ricevere percorsi convertiti: con MSYS_NO_PATHCONV=1 `git -C /c/...` falliva e il lock
-# risultava "libero" (misurato 2026-09-22). E se git non trova il repository, niente lock calcolabile:
-# --lock-status dice "sconosciuto" (exit 1, come occupato) e nessuna fase parte. Mai fail-open.
+# --- code-phase lock (also for --lock-status) ---
+# git.exe must receive converted paths: with MSYS_NO_PATHCONV=1 `git -C /c/...` failed and the lock
+# appeared "free" (measured 2026-09-22). And if git does not find the repository, no computable lock:
+# --lock-status says "unknown" (exit 1, like busy) and no phase starts. Never fail-open.
 unset MSYS_NO_PATHCONV
 if [ -n "${FIC_LOCK:-}" ]; then
   LOCK=$FIC_LOCK
 else
-  # dalla CARTELLA DI LAVORO, non da PROJECT_ROOT (che fa vincere FIC_REPO, esportata alle fasi): in un worktree
-  # collegato e' .git/worktrees/<nome>, nel tree principale .git (pk04a-1, passo 3)
+  # from the WORKING FOLDER, not from PROJECT_ROOT (which makes FIC_REPO win, exported to the phases): in a linked
+  # worktree it is .git/worktrees/<name>, in the main tree .git (pk04a-1, step 3)
   gd=$(git rev-parse --absolute-git-dir 2>/dev/null) && [ -n "$gd" ] || {
     [ "${1:-}" = "--lock-status" ] && { echo "sconosciuto: git non trova il repository del lock"; exit 1; }
     echo "git non trova il repository: lock non calcolabile, fase non lanciata" >&2; exit 2; }
   LOCK=$gd/full-implementation-cycle.lock
 fi
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
-lock_alive() { # $1 = directory del lock (default: quello delle fasi di codice)
+lock_alive() { # $1 = lock directory (default: the code-phase one)
   local p c v L=${1:-$LOCK}
   if [ ! -f "$L/owner" ]; then
-    # appena creato da un altro (owner non ancora scritto) → vivo; vecchio e senza owner → orfano
+    # just created by someone else (owner not written yet) → alive; old and without owner → orphan
     [ -z "$(find "$L" -maxdepth 0 -mmin +1 2>/dev/null)" ]
     return
   fi
   p=$(sed -n 's/^pid=//p' "$L/owner"); c=$(sed -n 's/^cpid=//p' "$L/owner")
-  v=$(sed -n 's/^vpid=//p' "$L/owner")   # VERIFY in background della review parallela (harness-pt09)
-  local c2; c2=$(sed -n 's/^cpid2=//p' "$L/owner")   # seconda corsia dell'implement (harness-pt13)
+  v=$(sed -n 's/^vpid=//p' "$L/owner")   # background VERIFY of the parallel review (harness-pt09)
+  local c2; c2=$(sed -n 's/^cpid2=//p' "$L/owner")   # second lane of the implement (harness-pt13)
   alive "$p" || alive "$c" || alive "$v" || alive "$c2"
 }
 
@@ -653,8 +653,8 @@ fi
 dir=$1 label=$2 prompt=$3
 [ -f "$prompt" ] || { echo "prompt assente: $prompt" >&2; exit 2; }
 
-# Binario: CLAUDE_BIN se impostato; poi la versione piu' recente dentro l'estensione di VS Code (il
-# percorso cambia a ogni aggiornamento, quindi si cerca); poi `claude` nel PATH.
+# Binary: CLAUDE_BIN if set; then the most recent version inside the VS Code extension (the
+# path changes at every update, so it is searched for); then `claude` in PATH.
 CL=${CLAUDE_BIN:-}
 if [ -z "$CL" ]; then
   ext=$(ls -d "${USERPROFILE:-$HOME}"/.vscode/extensions/anthropic.claude-code-*-win32-x64 2>/dev/null | sort -V | tail -1)
@@ -663,11 +663,11 @@ fi
 [ -n "$CL" ] || CL=$(command -v claude 2>/dev/null || true)
 [ -n "$CL" ] || { echo "binario claude non trovato (imposta CLAUDE_BIN)" >&2; exit 3; }
 
-# DENY per prefisso (--disallowedTools): la genera la guardia (`guard.py --deny-list`, sezione «guardia» sotto):
-# nucleo + guardia.rilascio + guardia.vietati_extra di maat.json (pk05).
+# DENY by prefix (--disallowedTools): generated by the guard (`guard.py --deny-list`, «guardia» section below):
+# core + guardia.rilascio + guardia.vietati_extra from maat.json (pk05).
 DENY=()
 
-# Primo lancio del ciclo (IMPRONTA DEL HARNESS): deciso PRIMA di scrivere qualunque file della label.
+# First launch of the cycle (HARNESS FINGERPRINT): decided BEFORE writing any file of the label.
 fresh=1
 for f in "$dir"/log/*.running "$dir"/log/*.exit; do
   [ -f "$f" ] || continue
@@ -678,7 +678,7 @@ mkdir -p "$dir/log"
 log="$dir/log/$label.jsonl" err="$dir/log/$label.stderr" ex="$dir/log/$label.exit"
 finish() { echo "$1" > "$ex"; exit "$1"; }
 
-# --- fase, dall'etichetta (sconosciuta → trattata come sola lettura) ---
+# --- phase, from the label (unknown → treated as read-only) ---
 case "$label" in
   *chiusura*) phase=chiusura ;;
   *test-red*) phase=test-red ;; *test-stage*) phase=test-stage ;;
@@ -687,9 +687,9 @@ case "$label" in
 esac
 export FIC_PHASE=$phase
 
-# --- attribuzione (vedi ATTRIBUZIONE) ---
+# --- attribution (see ATTRIBUTION) ---
 tree_now() { (cd "$FIC_REPO" && bash "$RS" tree) 2>>"$err"; }
-close_pre() { # $1 = file .pre-tree, $2 = sua run dir: path cambiati fra quel tree e ora → touched.txt
+close_pre() { # $1 = .pre-tree file, $2 = its run dir: paths changed between that tree and now → touched.txt
   local pre post
   pre=$(cat "$1") && post=$(tree_now) && [ -n "$pre" ] && [ -n "$post" ] || { echo "AVVISO: attribuzione non calcolata per $1 (niente .post-tree: cycle-state.sh fermera' il ciclo)" >> "$err"; return 0; }
   (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$pre" "$post") >> "$2/touched.txt" 2>>"$err" \
@@ -697,19 +697,19 @@ close_pre() { # $1 = file .pre-tree, $2 = sua run dir: path cambiati fra quel tr
   sort -u -o "$2/touched.txt" "$2/touched.txt"
   echo "$post" > "${1%.pre-tree}.post-tree"
 }
-# --- altri flussi (vedi ALTRI FLUSSI): chi ha scritto un path cambiato durante la fase ---
-nominati() { # $1 = file dei path; stampa "nominato|mai<TAB>path" (NOMI_PY) sui log della fase · != 0 = non verificabile
+# --- other flows (see OTHER FLOWS): who wrote a path changed during the phase ---
+nominati() { # $1 = file of paths; prints "nominato|mai<TAB>path" (NOMI_PY) over the phase logs · != 0 = not verifiable
   local r lg=("$log") f
   r=$(maat_cygm "$FIC_REPO" 2>/dev/null || printf '%s' "$FIC_REPO")
   for f in "$dir/log/$label".corsia-[12].jsonl; do [ -f "$f" ] && lg+=("$f"); done
   "$FIC_PY" -c "$NOMI_PY" "$r" "$1" "${lg[@]}" 2>>"$err" | tr -d '\r'
   return "${PIPESTATUS[0]}"
 }
-avviso() { # $1 = riga di avviso: nello .stderr della label, in log/<label>.avvisi (poi in .esito) e su stderr
+avviso() { # $1 = warning line: into the label's .stderr, into log/<label>.avvisi (then into .esito) and on stderr
   printf '%s\n' "$1" | tee -a "$err" "$dir/log/$label.avvisi" >&2
 }
-altri_flussi() { # implement/fix, versione conservativa: i path cambiati nella fase e mai nominati RESTANO in
-  # touched.txt (la review li vede), annotati in log/<label>.altri-flussi con un avviso. Nessuno STOP.
+altri_flussi() { # implement/fix, conservative version: the paths changed in the phase and never named STAY in
+  # touched.txt (the review sees them), annotated in log/<label>.altri-flussi with a warning. No STOP.
   local t0 t1 nm p c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi"
   t0=$(cat "$pre_file" 2>/dev/null); t1=$(cat "${pre_file%.pre-tree}.post-tree" 2>/dev/null)
   [ -n "$t0" ] && [ -n "$t1" ] || return 0
@@ -727,9 +727,9 @@ altri_flussi() { # implement/fix, versione conservativa: i path cambiati nella f
 }
 
 owned=0 cpid="" cpid2="" vpid="" held=""
-# Rilascio: mai finche' la sottosessione e' viva, ne' VERIFY in background (review parallela, harness-pt09).
-# Se run-phase riceve SIGTERM (TaskStop) mentre `claude` continua a scrivere codice, o mentre gates.sh e
-# counterproof.sh girano, il lock resta; si potra' riprendere quando nessuno di loro vive.
+# Release: never while the subsession is alive, nor the background VERIFY (parallel review, harness-pt09).
+# If run-phase receives SIGTERM (TaskStop) while `claude` keeps writing code, or while gates.sh and
+# counterproof.sh are running, the lock stays; it can be taken over when none of them is alive.
 release() {
   [ $owned -eq 1 ] || return 0
   alive "$cpid" && return 0
@@ -737,16 +737,16 @@ release() {
   alive "$vpid" && return 0
   rm -rf "$held"; owned=0
 }
-# I lock si prendono PRIMA di toccare log/<label>.*: un secondo lancio con la stessa etichetta della
-# fase viva (etichette sequenziali ripetute: incidente ux-6) non deve troncarne il log ne' scriverne .exit.
-notes=""   # messaggi da mettere nello .stderr della label, una volta presa
-busy() { # $1 = directory del lock occupato, $2 = prima riga del messaggio
+# Locks are taken BEFORE touching log/<label>.*: a second launch with the same label as the
+# live phase (repeated sequential labels: incident ux-6) must neither truncate its log nor write its .exit.
+notes=""   # messages to put into the label's .stderr, once taken
+busy() { # $1 = busy lock directory, $2 = first line of the message
   local msg o_run o_label
   msg="$2 — $([ -f "$1/owner" ] && tr '\n' ' ' < "$1/owner")
 Rilancia quando ha finito. Se sei certo che nessuna fase stia girando: rm -rf \"$1\""
   echo "$msg" >&2
   o_run=$(sed -n 's/^run=//p' "$1/owner" 2>/dev/null); o_label=$(sed -n 's/^label=//p' "$1/owner" 2>/dev/null)
-  # proprietario illeggibile o stessa etichetta nella stessa run dir: i file della label sono della fase viva
+  # unreadable owner or same label in the same run dir: the label files belong to the live phase
   if [ -z "$o_label" ] || { [ "$o_run" = "$dir" ] && [ "$o_label" = "$label" ]; }; then
     echo "stessa etichetta (o proprietario non ancora scritto): log/$label.* non toccati" >&2
     exit 4
@@ -754,11 +754,11 @@ Rilancia quando ha finito. Se sei certo che nessuna fase stia girando: rm -rf \"
   rm -f "$dir/log/$label.esito" "$dir/log/$label.result.json"; : > "$log"; echo "$msg" > "$err"
   finish 4
 }
-take_lock() { # $1 = directory del lock, $2 = messaggio se occupato; imposta orphan_run
+take_lock() { # $1 = lock directory, $2 = message if busy; sets orphan_run
   local L=$1 tries=0
   until mkdir "$L" 2>/dev/null; do
     if lock_alive "$L" || [ $tries -ge 3 ]; then busy "$L" "$2"; fi
-    # Presa atomica dell'orfano: il mv riesce a UN solo concorrente; gli altri riprovano il mkdir.
+    # Atomic takeover of the orphan: the mv succeeds for ONE contender only; the others retry the mkdir.
     if mv "$L" "$L.orfano.$$" 2>/dev/null; then
       notes="$notes${notes:+
 }$3 ripreso (processi non piu' vivi): $([ -f "$L.orfano.$$/owner" ] && tr '\n' ' ' < "$L.orfano.$$/owner")"
@@ -775,14 +775,14 @@ take_lock() { # $1 = directory del lock, $2 = messaggio se occupato; imposta orp
 code_phase=0
 case "$phase" in implement|review|fix|chiusura|test-red) code_phase=1 ;; esac
 orphan_run=""
-if [ "$phase" = plan ]; then   # lock per spec (vedi LOCK): <run-dir>/plan.lock
+if [ "$phase" = plan ]; then   # per-spec lock (see LOCK): <run-dir>/plan.lock
   take_lock "$dir/plan.lock" "lock del piano occupato: un'altra fase di piano sulla STESSA spec e' in corso" "lock del piano orfano"
-  orphan_run=""   # un plan non cambia il tree: niente attribuzione da chiudere
+  orphan_run=""   # a plan does not change the tree: no attribution to close
 elif [ $code_phase -eq 1 ]; then
   take_lock "$LOCK" "lock occupato: un'altra fase di codice e' in corso" "lock orfano"
 fi
 
-# --- da qui i file della label sono nostri: si azzerano (anche quelli del watcher di un lancio precedente) ---
+# --- from here on the label files are ours: they are reset (also those of a previous launch's watcher) ---
 rm -f "$ex" "$dir/log/$label.esito" "$log.result" "$log.pos" "$log.pending" "$dir/log/$label.gates" "$dir/log/$label.prompt" \
   "$dir/log/$label.result.json" "$dir/log/$label.finalize" "$dir/log/$label.parallelo" "$dir/log/$label.counterproof" \
   "$dir/log/$label.spec-pre" "$dir/log/$label.gates.scartato" "$dir/log/$label.counterproof.scartato" \
@@ -792,19 +792,19 @@ rm -f "$ex" "$dir/log/$label.esito" "$log.result" "$log.pos" "$log.pending" "$di
 printf '%s' "${notes:+$notes
 }" > "$err"
 
-# FIC_REPO gia' impostata vince (serve ai test, con un repo temporaneo).
-FIC_REPO=$PROJECT_ROOT   # = FIC_REPO se impostata, altrimenti il toplevel git della cartella di lavoro
+# FIC_REPO already set wins (needed by the tests, with a temporary repo).
+FIC_REPO=$PROJECT_ROOT   # = FIC_REPO if set, otherwise the git toplevel of the working folder
 [ -n "$FIC_REPO" ] || { echo "non e' un repository git" >> "$err"; finish 2; }
 export FIC_REPO
 PC="$MAAT_SCRIPTS/plan-check.sh"
 SPEC_F="${dir%.run}.md"
 TR="$dir/test-red"
-if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then   # harness-pt11: solo formato 2
+if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then   # harness-pt11: format 2 only
   { [ -f "$SPEC_F" ] && bash "$PC" contract "$SPEC_F" 2>/dev/null | tr -d '\r' | grep -qx 'Plan format: 2'; } ||
     { echo "fase $phase: solo per un piano in formato 2 (Plan format: 2) nella spec accanto alla run dir ($SPEC_F): non lanciata" | tee -a "$err" >&2; finish 2; }
 fi
 
-# --- impronta del harness: registrata al primo lancio, controllata a ogni fase successiva ---
+# --- harness fingerprint: recorded at the first launch, checked at every later phase ---
 hfp_file="$dir/harness.fp"
 if [ -f "$hfp_file" ]; then
   hfp_c=$(hfp_confronta "$hfp_file" "$FIC_REPO")
@@ -827,28 +827,28 @@ elif [ $fresh -eq 1 ]; then
   else echo "AVVISO: impronta del harness non calcolata: questo ciclo non sara' controllato" >> "$err"; fi
 fi
 
-# La fase uccisa era di un'ALTRA feature: il suo .pre-tree si chiude ora, prima che questa fase
-# cambi il tree, altrimenti il lavoro di questa finirebbe nel touched.txt di quella.
+# The killed phase belonged to ANOTHER feature: its .pre-tree is closed now, before this phase
+# changes the tree, otherwise this phase's work would end up in that one's touched.txt.
 if [ -n "$orphan_run" ] && [ "$orphan_run" != "$dir" ] && [ -d "$orphan_run/log" ]; then
   for f in "$orphan_run"/log/*.pre-tree; do
     [ -f "$f" ] && [ ! -f "${f%.pre-tree}.post-tree" ] && close_pre "$f" "$orphan_run"
   done
 fi
 
-# --- guardia: un solo comando, per l'autotest e per l'hook ---
+# --- guard: a single command, for the self-test and for the hook ---
 . "$HERE/python.sh" || { echo "guardia non attiva: nessun interprete Python utilizzabile (imposta FIC_PYTHON)" | tee -a "$err" >&2; finish 5; }
 GUARD="$MAAT_SCRIPTS/guard.py"
 HOOK_CMD="\"$FIC_PY\" \"$GUARD\""
-# maat.json del progetto per le due guardie (questa e quella del plugin) e per l'autotest: MAAT_CONFIG a percorso
-# assoluto. Senza file non si esporta: la guardia cade comunque nel ripiego «maat.json non trovato».
+# the project's maat.json for the two guards (this one and the plugin's) and for the self-test: MAAT_CONFIG as an absolute
+# path. Without the file it is not exported: the guard falls back anyway to «maat.json non trovato».
 if [ -z "${MAAT_CONFIG:-}" ] && [ -n "${PROJECT_ROOT:-}" ] && [ -f "$PROJECT_ROOT/.claude/maat.json" ]; then
   MAAT_CONFIG=$PROJECT_ROOT/.claude/maat.json
 fi
 if [ -n "${MAAT_CONFIG:-}" ]; then
-  # Relativo reso assoluto in bash, come plan-check.sh: fuori da Windows maat_cygm -a non c'e' e il relativo restava tale.
+  # Relative made absolute in bash, like plan-check.sh: outside Windows maat_cygm -a is missing and the relative path stayed relative.
   case $MAAT_CONFIG in
     /*|[A-Za-z]:[/\\]*) ;;
-    *) # forma Windows anche senza cygpath (pwd -W); cartella non raggiungibile -> relativo alla cartella corrente
+    *) # Windows form even without cygpath (pwd -W); unreachable folder -> relative to the current folder
        if _d=$(cd "$(dirname "$MAAT_CONFIG")" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); then
          MAAT_CONFIG=$_d/$(basename "$MAAT_CONFIG")
        else MAAT_CONFIG=$PWD/$MAAT_CONFIG; fi; unset _d ;;
@@ -856,8 +856,8 @@ if [ -n "${MAAT_CONFIG:-}" ]; then
   MAAT_CONFIG=$(maat_cygm "$MAAT_CONFIG" 2>/dev/null || printf '%s' "$MAAT_CONFIG")
   export MAAT_CONFIG
 fi
-# sonda: l'uscita di `maat-config.py sonda-produzione` (anche con exit 3, il ripiego del nucleo); senza maat.json
-# leggibile il comando del nucleo. Deve uscire 2, altrimenti exit 5.
+# probe: the output of `maat-config.py sonda-produzione` (also with exit 3, the core fallback); without a readable
+# maat.json, the core command. It must exit 2, otherwise exit 5.
 probe_cmd=$(PROJECT_ROOT=${PROJECT_ROOT:-} "$FIC_PY" "$MAAT_SCRIPTS/maat-config.py" sonda-produzione 2>/dev/null | tr -d '\r' | head -1)
 [ -n "$probe_cmd" ] || probe_cmd="git push --force origin x"
 probe_esc=${probe_cmd//\\/\\\\}; probe_esc=${probe_esc//\"/\\\"}
@@ -872,8 +872,8 @@ if [ ${#DENY[@]} -eq 0 ]; then
   echo "guardia non attiva: lista DENY vuota ($HOOK_CMD --deny-list)" | tee -a "$err" >&2
   finish 5
 fi
-# Hook Stop (harness-pt04, 1g): nega la fine turno senza `ESITO FASE` o con job in background non
-# raccolti; stop_hook_active contro il loop. Fallisce aperto (lascia chiudere): e' la direzione sicura.
+# Stop hook (harness-pt04, 1g): denies the end of turn without `ESITO FASE` or with background jobs not
+# collected; stop_hook_active against the loop. Fails open (lets it close): that is the safe direction.
 STOP_PY="$MAAT_SCRIPTS/stop-hook.py"
 STOP_CMD=""
 if [ -f "$STOP_PY" ]; then STOP_CMD="\"$FIC_PY\" \"$(cd "$(dirname "$STOP_PY")" && { pwd -W 2>/dev/null || pwd; })/stop-hook.py\""
@@ -884,19 +884,19 @@ if sys.argv[2]:
     h["Stop"] = [{"hooks": [{"type": "command", "command": sys.argv[2]}]}]
 print(json.dumps({"hooks": h}))' "$HOOK_CMD" "$STOP_CMD")
 
-# --- gate eseguiti dal driver (harness-pt04, 1d): fuori dalla sotto-sessione, evidenza in evidence/ ---
-# Dopo ogni implement/fix finita OK e prima di ogni review: script/fic/gates.sh col livello in vigore e i
-# file di touched.txt; l'esito in log/<label>.gates. La review riceve nel prompt la cartella dell'evidenza.
+# --- gates run by the driver (harness-pt04, 1d): outside the subsession, evidence in evidence/ ---
+# After every implement/fix finished OK and before every review: script/fic/gates.sh with the level in force and the
+# touched.txt files; the outcome in log/<label>.gates. The review receives the evidence folder in the prompt.
 GATES=${FIC_GATES:-$MAAT_SCRIPTS/gates.sh}
-gates_level() { # --tests=<l> nel prompt, poi la riga Test level: del piano (plan-check.sh contract), poi legacy
+gates_level() { # --tests=<l> in the prompt, then the plan's Test level: line (plan-check.sh contract), then legacy
   local l
-  [ "$phase" = chiusura ] && { echo full; return; }   # chiusura di una catena: sempre full
+  [ "$phase" = chiusura ] && { echo full; return; }   # closing of a chain: always full
   l=$(tr -d '\r' < "$prompt" | grep -o -- '--tests=[a-z]*' | head -1 | cut -d= -f2)
   [ -z "$l" ] && [ -f "${dir%.run}.md" ] &&
     l=$(bash "$MAAT_SCRIPTS/plan-check.sh" contract "${dir%.run}.md" 2>/dev/null | tr -d '\r' | sed -n 's/^Test level: \([a-z]*\).*/\1/p' | head -1)
   case $l in min|std|full) echo "$l" ;; *) echo legacy ;; esac
 }
-run_gates() { # stampa la cartella dell'evidenza (niente se i gate non sono partiti)
+run_gates() { # prints the evidence folder (nothing if the gates did not start)
   local g="$dir/log/$label.gates" lvl rc files=()
   if [ ! -f "$dir/touched.txt" ]; then echo "gates: non eseguiti (nessun touched.txt): i gate restano alla fase" > "$g"; return 0; fi
   if [ ! -f "$GATES" ]; then echo "gates: non eseguiti (gates.sh assente: $GATES)" > "$g"; return 0; fi
@@ -907,18 +907,18 @@ run_gates() { # stampa la cartella dell'evidenza (niente se i gate non sono part
   sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$g" | tail -1
 }
 
-# --- review ∥ VERIFY (harness-pt09): vedi REVIEW IN PARALLELO CON LA VERIFICA in testa ---
+# --- review ∥ VERIFY (harness-pt09): see REVIEW IN PARALLEL WITH VERIFICATION at the top ---
 MUT="$dir/counterproof/mutations.json"
 CP_SH=${FIC_COUNTERPROOF:-$MAAT_SCRIPTS/counterproof.sh}
 cp_driver=0
 wslp() { local w; w=$(maat_cygm "$1" 2>/dev/null || printf '%s' "$1")
   case $w in [A-Za-z]:/*) printf '/mnt/%s%s' "$(printf '%s' "${w:0:1}" | tr 'A-Z' 'a-z')" "${w:2}" ;; *) printf '%s' "$w" ;; esac; }
 sq() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
-review_status() { # Review status: registrato nella sezione di review della spec (vuoto se non c'e')
+review_status() { # Review status: recorded in the spec's review section (empty if missing)
   [ -f "${dir%.run}.md" ] || return 0
   tr -d '\r' < "${dir%.run}.md" | sed -n '/^## Review implementazione/,$ s/^Review status: *//p' | head -1
 }
-verify_key() { # chiave del tree: review-surface.sh tree + (controprove del driver) sha256 di mutations.json
+verify_key() { # tree key: review-surface.sh tree + (driver counterproofs) sha256 of mutations.json
   local t; t=$(tree_now) && [ -n "$t" ] || return 1
   if [ $cp_driver -eq 1 ]; then printf '%s mutations=%s\n' "$t" "$([ -f "$MUT" ] && sha256sum < "$MUT" | cut -c1-64)"
   else printf '%s\n' "$t"; fi
@@ -934,9 +934,9 @@ for e in l if isinstance(l, list) else []:
         print(i)' "$MUT" 2>/dev/null | tr -d '\r'; }
 cp_clear() { local i; while IFS= read -r i; do [ -n "$i" ] && rm -f "$dir/counterproof/$i.json"; done < <(cp_ids); }
 PC_SH=${FIC_PLAN_CHECK:-$MAAT_SCRIPTS/plan-check.sh}
-cp_from_gen() { # 0 = mutations.json e' quello che `plan-check.sh gen` (pt10) genera ORA dal piano approvato:
-  # <run>/gen/procedura.txt con l'"Impronta piano:" attuale e la lista identica a una rigenerata qui, in una
-  # cartella a parte (gen non scrive un marcatore). Formato 1, lista scritta da un worker, piano cambiato: 1.
+cp_from_gen() { # 0 = mutations.json is what `plan-check.sh gen` (pt10) generates NOW from the approved plan:
+  # <run>/gen/procedura.txt with the current "Impronta piano:" and the list identical to one regenerated here, in a
+  # separate folder (gen does not write a marker). Format 1, list written by a worker, plan changed: 1.
   local spec="${dir%.run}.md" t="$dir/log/.gen-verifica.$$" fr fn rc=1
   [ -s "$MUT" ] && [ -f "$dir/gen/procedura.txt" ] && [ -f "$spec" ] && [ -f "$PC_SH" ] || return 1
   rm -rf "$t"; mkdir -p "$t" || return 1
@@ -947,12 +947,12 @@ cp_from_gen() { # 0 = mutations.json e' quello che `plan-check.sh gen` (pt10) ge
   fi
   rm -rf "$t"; return $rc
 }
-# Le controprove girano dentro WSL SOLO su Windows (uname/OSTYPE, mai la presenza di wsl.exe) e con un modulo delle
-# mutazioni `ambiente: wsl` in maat.json (il modulo di file e test, come lo instrada il lettore importato); altrimenti
-# counterproof.sh gira diretto: su Linux, o su Windows senza moduli wsl, wsl.exe non serve (e puo' mancare).
+# Counterproofs run inside WSL ONLY on Windows (uname/OSTYPE, never the presence of wsl.exe) and with a mutations
+# module `ambiente: wsl` in maat.json (the module of files and tests, as routed by the imported reader); otherwise
+# counterproof.sh runs directly: on Linux, or on Windows without wsl modules, wsl.exe is not needed (and may be missing).
 CP_WSL_PY='
 import importlib.util, json, os, sys
-import sys; sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+import sys; sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
 spec = importlib.util.spec_from_file_location("maat_config", os.environ["MAAT_CONFIG_PY"])
 mc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mc)
@@ -971,27 +971,27 @@ for e in json.load(open(sys.argv[1], encoding="utf-8")):
             print("wsl")
             sys.exit(0)
 '
-cp_in_wsl() { # 0 = counterproof.sh va lanciato dentro WSL
+cp_in_wsl() { # 0 = counterproof.sh must be launched inside WSL
   case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) ;; *) return 1 ;; esac
   PROJECT_ROOT=$FIC_REPO MAAT_CONFIG_PY="$MAAT_SCRIPTS/maat-config.py" "$FIC_PY" -c "$CP_WSL_PY" "$MUT" 2>/dev/null |
     tr -d '\r' | grep -qx wsl
 }
-run_cp() { # controprove del driver: counterproof.sh (pt05) su mutations.json; esito in log/<label>.counterproof
+run_cp() { # driver counterproofs: counterproof.sh (pt05) on mutations.json; outcome in log/<label>.counterproof
   local c="$dir/log/$label.counterproof" rc env_w
-  cp_clear   # nessun risultato di un giro precedente sopravvive a questo
+  cp_clear   # no result of a previous round survives this one
   if [ -n "${FIC_CP_CMD:-}" ]; then "$FIC_CP_CMD" "$MUT" > "$c" 2>&1; rc=$?
   elif [ ! -f "$CP_SH" ]; then echo "counterproof.sh assente: $CP_SH" > "$c"; rc=127
   elif cp_in_wsl; then
-    # radice del progetto e maat.json tradotti per WSL: counterproof.sh non li ricava dalla propria posizione
+    # project root and maat.json translated for WSL: counterproof.sh does not derive them from its own location
     env_w="PROJECT_ROOT=$(sq "$(wslp "$FIC_REPO")")"
     [ -n "${MAAT_CONFIG:-}" ] && env_w+=" MAAT_CONFIG=$(sq "$(wslp "$MAAT_CONFIG")")"
     MSYS_NO_PATHCONV=1 wsl -- bash -lc "$env_w bash $(sq "$(wslp "$CP_SH")") $(sq "$(wslp "$MUT")")" > "$c" 2>&1; rc=$?
   else PROJECT_ROOT=$FIC_REPO bash "$CP_SH" "$MUT" > "$c" 2>&1; rc=$?; fi
   echo "exit=$rc" >> "$c"
-  # 3 = BLOCKED d'ambiente: i risultati di quel run non valgono anche se esistono (e cosi' ogni uscita fuori da 0/1/2)
+  # 3 = environment BLOCKED: the results of that run do not count even if they exist (and so does every exit outside 0/1/2)
   case $rc in 0|1|2) ;; *) cp_clear ;; esac
 }
-launch() { # $1 = file di stdin, $2 = ">" o ">>" sul log; imposta code
+launch() { # $1 = stdin file, $2 = ">" or ">>" on the log; sets code
   if [ "$2" = ">>" ]; then
     CLAUDE_PLUGIN_ROOT=$MAAT_ROOT "$CL" -p --permission-mode bypassPermissions --disallowedTools "${DENY[@]}" --settings "$SETTINGS" --strict-mcp-config \
       ${SCHEMA_ARGS[@]+"${SCHEMA_ARGS[@]}"} ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} --append-system-prompt "$CHILD_RULES_TXT" \
@@ -1007,15 +1007,15 @@ launch() { # $1 = file di stdin, $2 = ">" o ">>" sul log; imposta code
   code=$?
 }
 
-# --- catena (harness-pt12, vedi CATENE): all'avvio di un anello, prima di misurare il suo .pre-tree ---
-is_ring() { # la spec di questa run dir e' elencata nella riga Figlie: di una madre della stessa cartella?
+# --- chain (harness-pt12, see CHAINS): at the start of a ring, before measuring its .pre-tree ---
+is_ring() { # is the spec of this run dir listed in the Figlie: line of a mother in the same folder?
   [ -f "${dir%.run}.md" ] && grep -ls '^Figlie:' "$(dirname "$dir")"/spec-*.md 2>/dev/null | xargs -r grep -lF -- "$(basename "${dir%.run}")" >/dev/null 2>&1
 }
 if [ "$phase" = implement ] && ! ls "$dir/log" 2>/dev/null | grep -q '\.pre-tree$' && is_ring; then
   cn=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r' | sed -n 's/^Next: //p')
   case "$cn" in "STOP — catena"*|"WAIT — catena"*) echo "$cn — fase non lanciata" | tee -a "$err" >&2; finish 7 ;; esac
 fi
-# chiusura di una catena: prepara la run dir della MADRE (touched.txt, base.txt) e trova gli e2e delle figlie
+# closing of a chain: prepares the MOTHER's run dir (touched.txt, base.txt) and finds the children's e2e
 chz_fail="" chz_e2e=""
 chiusura_prep() {
   local m="${dir%.run}.md" d c first="" b kids
@@ -1038,19 +1038,19 @@ chiusura_prep() {
   chz_e2e=$(printf '%s\n' $chz_e2e | grep . | sort -u | tr '\n' ' ' | sed 's/ $//')
 }
 
-# --- verifica del driver per test-red (harness-pt11, vedi FASE TEST-RED): stampa l'esito finale della fase ---
-verify_red() { # $1 = esito della sotto-sessione (riga ESITO, ev. originale=)
+# --- driver verification for test-red (harness-pt11, see TEST-RED PHASE): prints the final outcome of the phase ---
+verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
   local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why=""
   e1=$(printf '%s\n' "$1" | sed -n 1p)
   printf '%s\n' "$e1" | grep -q '^ESITO FASE [^:]*: OK' || { printf '%s\n' "$1"; return 0; }
-  # scritture della fase fuori dal suo scope (anche via Bash, che la guardia non vede): tree prima e dopo
+  # writes of the phase outside its scope (also via Bash, which the guard does not see): tree before and after
   local t0 t1 fuori c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi" nm="" nrc=0 p
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
   if [ -z "$t0" ] || [ -z "$t1" ]; then why="attribuzione non misurata (.pre-tree/.post-tree): scope della fase non verificabile"
   else
     (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1") 2>/dev/null | tr -d '\r' |
       grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' > "$c"   # SCOPE-DOPO-LA-FASE
-    # ALTRI FLUSSI: un path fuori scope che la sotto-sessione non ha mai nominato e' di un altro flusso
+    # OTHER FLOWS: an out-of-scope path that the subsession never named belongs to another flow
     : > "$a"
     if [ -s "$c" ]; then
       nm=$(nominati "$c"); nrc=$?
@@ -1062,15 +1062,15 @@ verify_red() { # $1 = esito della sotto-sessione (riga ESITO, ev. originale=)
       [ $nrc -ne 0 ] && why="$why (attribuzione per nome non verificabile: log della fase illeggibile, senza eventi o senza result)"
     fi
     if [ -s "$a" ]; then
-      # gia' in touched.txt prima della fase (lavoro della feature): non puo' stare anche in do-not-touch -> STOP,
-      # resta in touched.txt. touched-pre assente: tutti trattati cosi' (fail-closed)
+      # already in touched.txt before the phase (feature work): it cannot also be in do-not-touch -> STOP,
+      # it stays in touched.txt. touched-pre missing: all treated this way (fail-closed)
       local tp="$dir/log/$label.touched-pre" feat nuovi
       if [ -f "$tp" ]; then feat=$(grep -xF -f "$tp" "$a"); nuovi=$(grep -vxF -f "$tp" "$a")
       else feat=$(cat "$a"); nuovi=""; fi
       if [ -n "$feat" ]; then
         why="${why:+$why; }file della feature (gia' in touched.txt prima di test-red) cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): $(printf '%s\n' "$feat" | head -5 | paste -sd, -) — resta in touched.txt, non va in do-not-touch: decidi tu (lavoro tuo da tenere o da riportare com'era)"
       fi
-      if [ -n "$nuovi" ]; then   # in do-not-touch.txt (forma del preflight), fuori da touched.txt (ci e' entrato ora)
+      if [ -n "$nuovi" ]; then   # into do-not-touch.txt (preflight form), out of touched.txt (it entered it now)
         { [ -f "$dir/do-not-touch.txt" ] && tr -d '\r' < "$dir/do-not-touch.txt"; printf '%s\n' "$nuovi"; } | sed '/^[[:space:]]*$/d' | sort -u > "$dir/do-not-touch.txt.nuovo" &&
           mv -f "$dir/do-not-touch.txt.nuovo" "$dir/do-not-touch.txt"
         if [ -f "$dir/touched.txt" ]; then
@@ -1102,8 +1102,8 @@ verify_red() { # $1 = esito della sotto-sessione (riga ESITO, ev. originale=)
       esac
     fi
   fi
-  if [ -z "$why" ]; then   # chiusura OK: stub, impronta dei test (anche nella basis), controprove assorbite (L2)
-    mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base delle modifiche prescritte (tests_guard): quella di QUESTA test-red
+  if [ -z "$why" ]; then   # closing OK: stubs, test fingerprint (also in the basis), absorbed counterproofs (L2)
+    mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base of the prescribed changes (tests_guard): that of THIS test-red
     { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
       bash "$PC" basis "$SPEC_F" --write-tests && bash "$PC" gen "$SPEC_F" --run-dir "$dir"; } >> "$ro" 2>&1 ||
       why="chiusura di test-red non registrata (stub, impronta dei test o gen: log/$label.rossi)"
@@ -1111,21 +1111,21 @@ verify_red() { # $1 = esito della sotto-sessione (riga ESITO, ev. originale=)
   if [ -z "$why" ]; then printf '%s\n' "$1"
   else printf 'ESITO FASE test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
 }
-# --- dopo implement/fix: i test di accettazione sono quelli di test-red (harness-pt11) ---
-# MODIFICA PRESCRITTA (caso tipico: un passo del piano cambia un aiutante in un file che contiene anche un test di
-# accettazione). Un file dei test di accettazione cambiato e' una manomissione SOLO se nessun
-# blocco del piano lo ha in scrive: (procedura rigenerata ORA da `plan-check.sh gen` in una cartella a parte, come
-# lanes_decide). Se e' prescritto, le funzioni dei test di accettazione (file+nome di test-red/rossi.json, scritto
-# da `plan-check.sh rossi`) devono restare identiche a test-red: base = il blob del file nel .post-tree di una fase
-# test-red, accettato solo se il suo sha256 (senza CR) e' quello registrato a test-red (test-red/tests.red.txt se
-# l'impronta e' gia' stata riregistrata, altrimenti tests.txt). Confronto: Python, ast.dump del nodo (Classe::metodo,
-# parametri [..] tolti; decoratori e docstring compresi, commenti e formattazione no). Funzione cambiata o sparita
-# -> STOP come prima. Non verificabile (non Python, nessun nome, base non trovata o diversa, rossi.json assente)
-# -> nessuno STOP ma un AVVISO in .esito, che la review vede. Limite: un aiutante (fixture, _make_*) cambiato
-# cambia il comportamento del test anche a funzione identica: l'AVVISO lo nomina sempre, decide la review.
-# Modifica prescritta accettata -> l'impronta si riregistra coi comandi di test-red (`plan-check.sh tests` in
-# tests.txt, `basis --write-tests`), cosi' cycle-state.sh (STALE (tests)) e finalize.sh (l2: Tests status FRESH)
-# vedono la stessa impronta; non registrabile (approvazione STALE) -> STOP.
+# --- after implement/fix: the acceptance tests are those of test-red (harness-pt11) ---
+# PRESCRIBED CHANGE (typical case: a plan step changes a helper in a file that also contains an acceptance
+# test). A changed acceptance test file is tampering ONLY if no
+# block of the plan has it in scrive: (procedure regenerated NOW by `plan-check.sh gen` in a separate folder, like
+# lanes_decide). If it is prescribed, the acceptance test functions (file+name from test-red/rossi.json, written
+# by `plan-check.sh rossi`) must stay identical to test-red: base = the file blob in the .post-tree of a
+# test-red phase, accepted only if its sha256 (without CR) is the one recorded at test-red (test-red/tests.red.txt if
+# the fingerprint has already been re-recorded, otherwise tests.txt). Comparison: Python, ast.dump of the node (Class::method,
+# parameters [..] removed; decorators and docstrings included, comments and formatting not). Function changed or gone
+# -> STOP as before. Not verifiable (not Python, no name, base not found or different, rossi.json missing)
+# -> no STOP but an AVVISO in .esito, which the review sees. Limit: a helper (fixture, _make_*) that changed
+# changes the test behaviour even with an identical function: the AVVISO always names it, the review decides.
+# Prescribed change accepted -> the fingerprint is re-recorded with the test-red commands (`plan-check.sh tests` into
+# tests.txt, `basis --write-tests`), so cycle-state.sh (STALE (tests)) and finalize.sh (l2: Tests status FRESH)
+# see the same fingerprint; not recordable (STALE approval) -> STOP.
 TG_PY='import ast, hashlib, json, os, re, subprocess, sys
 sys.stdout.reconfigure(encoding="utf-8")
 root, procedura, base_txt, rossi, cambiati = sys.argv[1:6]
@@ -1160,7 +1160,7 @@ def nodo(albero, nome):
         trovato = None
         for n in corpo:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name == seg:
-                trovato = n   # come Python: l ultima definizione vince
+                trovato = n   # as in Python: the last definition wins
         if trovato is None:
             return None
         corpo = getattr(trovato, "body", [])
@@ -1203,14 +1203,14 @@ for p in [x.strip() for x in open(cambiati, encoding="utf-8") if x.strip()]:
         nv("funzioni non trovate nel file di test-red: " + ", ".join(nonvisti))
     else:
         print("ok\t%s\t%s\t%s" % (p, bl, ", ".join(ns)))'
-tests_guard() { # $1 = esito; stampa l'esito, STOP se un file dei test di accettazione e' cambiato (MODIFICA PRESCRITTA sopra)
+tests_guard() { # $1 = outcome; prints the outcome, STOP if an acceptance test file changed (PRESCRIBED CHANGE above)
   local e1 now ch t="$dir/log/.gen-tests.$$" out fuori camb trees=() f bt
   [ -f "$TR/tests.txt" ] && [ -f "$SPEC_F" ] || { printf '%s\n' "$1"; return 0; }
   now=$(bash "$PC" tests "$SPEC_F" 2>/dev/null | tr -d '\r')
   [ "$now" = "$(tr -d '\r' < "$TR/tests.txt")" ] && { printf '%s\n' "$1"; return 0; }   # CONFRONTO-TEST-ACCETTAZIONE
   e1=$(printf '%s\n' "$1" | sed -n 1p)
   ch=$(diff <(tr -d '\r' < "$TR/tests.txt") <(printf '%s\n' "$now") | sed -n 's/^[<>] [0-9A-Za-z]*  //p' | LC_ALL=C sort -u)
-  # solo per un esito OK: uno STOP resta tale, e nessuna impronta si riregistra
+  # only for an OK outcome: a STOP stays such, and no fingerprint is re-recorded
   if printf '%s\n' "$e1" | grep -q '^ESITO FASE [^:]*: OK' && [ -n "$ch" ]; then
     bt="$TR/tests.red.txt"; [ -f "$bt" ] || bt="$TR/tests.txt"
     while IFS= read -r f; do [ -n "$f" ] && trees+=("$(tr -d '\r' < "$f")"); done < <(ls "$dir"/log/*test-red.post-tree 2>/dev/null | LC_ALL=C sort -r)
@@ -1221,10 +1221,10 @@ tests_guard() { # $1 = esito; stampa l'esito, STOP se un file dei test di accett
     rm -rf "$t"
     fuori=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "fuori" { print $2 }' | paste -sd, -)
     camb=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "cambiato" { print $2 " (" $3 ")" }' | paste -sd, -)
-    # ogni file cambiato ha una riga ok/nonverificabile (nessun fuori, nessun cambiato, nessuno mancante)
+    # every changed file has an ok/nonverificabile line (no fuori, no cambiato, no mancante)
     if [ -n "$out" ] && [ -z "$fuori" ] && [ -z "$camb" ] &&
        [ "$(printf '%s\n' "$out" | awk -F'\t' '$1 == "ok" || $1 == "nonverificabile" { print $2 }' | LC_ALL=C sort -u)" = "$ch" ]; then
-      [ -f "$TR/tests.red.txt" ] || cp "$TR/tests.txt" "$TR/tests.red.txt"   # la base di test-red resta quella
+      [ -f "$TR/tests.red.txt" ] || cp "$TR/tests.txt" "$TR/tests.red.txt"   # the test-red base stays that one
       if bash "$PC" tests "$SPEC_F" 2>>"$err" | tr -d '\r' > "$TR/tests.txt.nuovo" && mv -f "$TR/tests.txt.nuovo" "$TR/tests.txt" &&
          bash "$PC" basis "$SPEC_F" --write-tests >> "$err" 2>&1; then
         printf '%s\n' "$out" | while IFS=$'\t' read -r k p b x; do
@@ -1246,13 +1246,13 @@ tests_guard() { # $1 = esito; stampa l'esito, STOP se un file dei test di accett
   printf "ESITO FASE %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, - | sed 's/^$/?/')" "$e1"
 }
 
-# --- corsie (harness-pt13): vedi CORSIE in testa ---
+# --- lanes (harness-pt13): see LANES at the top ---
 BI=${FIC_BLOCKS_INDEPENDENT:-$MAAT_SCRIPTS/blocks-independent.py}
-lanes_decide() { # scrive log/<label>.corsie · 0 = due corsie, altrimenti serie (col motivo nel file)
+lanes_decide() { # writes log/<label>.corsie · 0 = two lanes, otherwise series (with the reason in the file)
   local spec="${dir%.run}.md" t="$dir/log/.gen-corsie.$$" c="$dir/log/$label.corsie" rc=1
   if [ "${FIC_LANES:-1}" = 0 ]; then echo "blocks-independent: esito=serie motivo=FIC_LANES=0" > "$c"; return 1; fi
   if [ -z "$pre_file" ]; then echo "blocks-independent: esito=serie motivo=tree iniziale non calcolato (niente controllo a posteriori)" > "$c"; return 1; fi
-  if [ -n "${FIC_CORSIE:-}" ] && [ -f "$FIC_CORSIE" ]; then   # harness-pt14: decisa dal driver (stessi comandi)
+  if [ -n "${FIC_CORSIE:-}" ] && [ -f "$FIC_CORSIE" ]; then   # harness-pt14: decided by the driver (same commands)
     tr -d '\r' < "$FIC_CORSIE" > "$c"
     grep -qx 'blocks-independent: esito=parallelo corsie=2' "$c"; return
   fi
@@ -1267,9 +1267,9 @@ lanes_decide() { # scrive log/<label>.corsie · 0 = due corsie, altrimenti serie
   rm -rf "$t"
   [ $rc -eq 0 ] && grep -qx 'blocks-independent: esito=parallelo corsie=2' "$c"
 }
-# Esito delle corsie: `estrai <log> <out>` scrive i file dichiarati (campo "file" del JSON) della corsia;
-# `unisci <log1> <log2> <posteriori> <exit1> <exit2>` (un'uscita != 0 e' STOP «corsia k: uscita N») stampa UN evento result con l'ESITO e il JSON uniti (la validazione con lo
-# schema resta quella di sempre, sull'ultimo evento result di <label>.jsonl). Il piu' conservativo vince.
+# Lane outcome: `estrai <log> <out>` writes the declared files (JSON "file" field) of the lane;
+# `unisci <log1> <log2> <posteriori> <exit1> <exit2>` (an exit != 0 is STOP «corsia k: uscita N») prints ONE result event with the ESITO and the JSON merged (validation against the
+# schema stays the usual one, on the last result event of <label>.jsonl). The most conservative wins.
 LANE_PY='import json, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
 def ultimo(log):
@@ -1299,9 +1299,9 @@ def forma(o):
     return (isinstance(o, dict) and all(isinstance(o.get(f), list) for f in LISTE)
             and all(isinstance(o.get(f), str) for f in ("esito", "motivo", "bloccato_su")))
 def riga(res, o):
-    # Con --json-schema il campo result porta spesso il SOLO JSON, senza la riga di testo: allora la riga si ricava
-    # dall oggetto strutturato (gia passato da forma), come VALIDA_PY in serie. Riga di testo presente: vale lei,
-    # e se contraddice l oggetto vince lo STOP (testo STOP qui sotto; oggetto STOP via m["esito"] e VALIDA_PY).
+    # With --json-schema the result field often carries ONLY the JSON, without the text line: then the line is derived
+    # from the structured object (already shape-checked), like VALIDA_PY in series. Text line present: it wins,
+    # and if it contradicts the object STOP wins (text STOP below; object STOP via m["esito"] and VALIDA_PY).
     l = next((l.strip() for l in reversed((res.get("result") or "").splitlines()) if l.strip().startswith("ESITO FASE")), "")
     if l or not forma(o):
         return l
@@ -1330,7 +1330,7 @@ for k, log in enumerate(logs, 1):
 if prob:
     print(json.dumps({"type": "result", "result": "ESITO FASE implement: STOP — " + "; ".join(prob + ([stop] if stop else []))}))
     sys.exit(0)
-def dev_corsia(k, d):   # "difensiva: " resta in testa (DEVIAZIONI DIFENSIVE): "difensiva: corsia k: …"
+def dev_corsia(k, d):   # "difensiva: " stays at the start (DEFENSIVE DEVIATIONS): "difensiva: corsia k: …"
     s = " ".join(str(d).split())
     return "difensiva: corsia %d: %s" % (k, s[len("difensiva: "):]) if s.startswith("difensiva: ") else "corsia %d: %s" % (k, d)
 m = {"fase": "implement", "esito": "OK", "motivo": " · ".join("corsia %d: %s" % (k, o["motivo"]) for k, o in objs),
@@ -1343,7 +1343,7 @@ for k, o in objs:
     if " ".join(o["bloccato_su"].split()).lower() != "nessuno" and m["bloccato_su"] == "nessuno":
         m["bloccato_su"] = "corsia %d: %s" % (k, o["bloccato_su"])
     if isinstance(o.get("fase"), str) and o["fase"] != "implement":
-        m["fase"] = o["fase"]   # la validazione di sempre lo rifiuta: fase diversa da quella dell etichetta
+        m["fase"] = o["fase"]   # the usual validation rejects it: phase different from the one of the label
     if isinstance(o.get("copertura"), list):
         m.setdefault("copertura", []).extend(o["copertura"])
 if stop:
@@ -1357,10 +1357,10 @@ elif ko:
 else:
     testo = "ESITO FASE implement: OK — corsie parallele: " + m["motivo"]
 print(json.dumps({"type": "result", "subtype": "fic_corsie", "result": testo, "structured_output": m}, ensure_ascii=False))'
-launch_lanes() { # due sotto-sessioni insieme (una per corsia), poi controllo a posteriori ed evento result unito
+launch_lanes() { # two subsessions together (one per lane), then after-the-fact check and merged result event
   local k b s o p c="$dir/log/$label.corsie" c1 c2 pids=() pre post lf=()
   echo '{"type":"system","subtype":"fic_corsie"}' > "$log"
-  rm -f "$dir"/{do-not-touch,mixed}.[12].txt   # una corsia morta prima del preflight non unisce le liste di un giro precedente
+  rm -f "$dir"/{do-not-touch,mixed}.[12].txt   # a lane dead before the preflight does not merge the lists of a previous round
   for k in 1 2; do
     b=$(sed -n "s/^corsia $k: //p" "$c"); s=$(sed -n "s/^scope $k: //p" "$c"); o=$(sed -n "s/^corsia $((3 - k)): //p" "$c")
     p="$dir/log/$label.corsia-$k.prompt"; lf+=("$dir/log/$label.corsia-$k.jsonl")
@@ -1376,13 +1376,13 @@ launch_lanes() { # due sotto-sessioni insieme (una per corsia), poi controllo a 
   wait "$cpid"; c1=$?
   wait "$cpid2"; c2=$?
   code=$c1; [ "$code" -eq 0 ] && code=$c2
-  # liste del preflight delle corsie (do-not-touch.<k>.txt, mixed.<k>.txt) -> le liste lette dalle fasi successive
+  # preflight lists of the lanes (do-not-touch.<k>.txt, mixed.<k>.txt) -> the lists read by later phases
   for k in do-not-touch mixed; do
     if [ -f "$dir/$k.1.txt" ] || [ -f "$dir/$k.2.txt" ]; then
       cat "$dir/$k.1.txt" "$dir/$k.2.txt" 2>/dev/null | tr -d '\r' | sed '/^[[:space:]]*$/d' | sort -u > "$dir/$k.txt"
     fi
   done
-  # controllo a posteriori: il diff del tree durante le corsie, diviso per scope
+  # after-the-fact check: the tree diff during the lanes, split by scope
   pre=$(cat "$pre_file" 2>/dev/null); post=$(tree_now)
   if [ -n "$pre" ] && [ -n "$post" ] && (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$pre" "$post") > "$dir/log/$label.cambiati" 2>>"$err"; then
     for k in 1 2; do "$FIC_PY" -c "$LANE_PY" estrai "${lf[$((k - 1))]}" "$dir/log/$label.corsia-$k.file" 2>>"$err"; done
@@ -1393,7 +1393,7 @@ launch_lanes() { # due sotto-sessioni insieme (una per corsia), poi controllo a 
   "$FIC_PY" -c "$LANE_PY" unisci "${lf[0]}" "${lf[1]}" "$dir/log/$label.posteriori" "$c1" "$c2" 2>>"$err" | tr -d '\r' >> "$log"
 }
 
-# --- attribuzione: path cambiati dalle fasi implement/fix, chiusura delle fasi uccise ---
+# --- attribution: paths changed by implement/fix phases, closing of killed phases ---
 if [ $code_phase -eq 1 ]; then
   for f in "$dir"/log/*.pre-tree; do
     [ -f "$f" ] && [ ! -f "${f%.pre-tree}.post-tree" ] && close_pre "$f" "$dir"
@@ -1406,14 +1406,14 @@ if [ "$phase" = implement ] || [ "$phase" = fix ] || [ "$phase" = test-red ]; th
   t=$(tree_now) && [ -n "$t" ] && echo "$t" > "$pre_file" || { echo "AVVISO: tree iniziale non calcolato per $label (niente .post-tree: cycle-state.sh fermera' il ciclo)" >> "$err"; pre_file=""; }
 fi
 
-# --- fasi test-red / test-stage (harness-pt11): scope di scrittura della guardia, test in sosta (S3) ---
+# --- test-red / test-stage phases (harness-pt11): guard write scope, parked tests (S3) ---
 staged=0
 if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
   scope="$dir/log/$label.scope"
   plan_fp=$(bash "$PC" basis "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^Basis: .*plan \([0-9a-f]*\).*/\1/p')
   if [ "$phase" = test-red ]; then
     bash "$PC" accept "$SPEC_F" 2>>"$err" | tr -d '\r' | sed -n 's/^\(test\|nuovo\) //p' > "$scope"
-  else   # test-stage: la sola <run-dir>/staging/, legata all'impronta del piano candidato
+  else   # test-stage: only <run-dir>/staging/, tied to the fingerprint of the candidate plan
     mkdir -p "$dir/staging"
     sa=$(cd "$dir" && pwd); sa=$(maat_cygm "$sa" 2>/dev/null || printf '%s' "$sa")
     sr=$(maat_cygm "$FIC_REPO" 2>/dev/null || printf '%s' "$FIC_REPO")
@@ -1444,13 +1444,13 @@ fi
 date -u +%Y-%m-%dT%H:%M:%SZ > "$dir/log/$label.running"
 
 stdin_file=$prompt
-# Review di un anello k>1 (harness-pt12, M1): la superficie la costruisce il driver, non il revisore. Diff dalla
-# "Base anello" (.post-tree di k-1, da cycle-state.sh) al tree attuale, sui soli file del touched.txt di QUESTO
-# anello: un file toccato anche da k-1 mostra solo gli hunk di k. File e indice in coda al prompt (che diventa
-# log/<label>.prompt-anello: review ∥ VERIFY e sequenza lo usano come prompt di partenza). Base assente o diff non
-# riuscito → exit 7, la review non parte (mai una review dell'anello sul diff da HEAD). Ricostruito prima di un
-# rilancio in sequenza dopo uno scarto (harness-pt09), cosi' il diff e' sempre dell'albero rivisto.
-# DEVIAZIONI DIFENSIVE: la review riceve l'elenco da giudicare in coda al prompt di partenza (anche dell'anello).
+# Review of a ring k>1 (harness-pt12, M1): the surface is built by the driver, not by the reviewer. Diff from the
+# "Base anello" (.post-tree of k-1, from cycle-state.sh) to the current tree, on the files of THIS ring's touched.txt
+# only: a file also touched by k-1 shows only k's hunks. File and index appended to the prompt (which becomes
+# log/<label>.prompt-anello: review ∥ VERIFY and sequence use it as the starting prompt). Base missing or diff
+# failed → exit 7, the review does not start (never a ring review on the diff from HEAD). Rebuilt before a
+# relaunch in sequence after a discard (harness-pt09), so the diff is always that of the reviewed tree.
+# DEFENSIVE DEVIATIONS: the review receives the list to judge appended to the starting prompt (the ring's too).
 if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-difensive.txt" ]; then
   { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — deviazioni dal piano dichiarate «difensiva: » da implement/fix, che non hanno fermato il ciclo (etichetta, testo). Passale a implementation-review-cycle da giudicare: se una di queste deviazioni non e' puramente difensiva (cambia un comportamento osservabile, un contratto API, una stringa visibile prevista, i permessi o i dati scritti nei casi previsti dal piano), e' un finding major."; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
   prompt="$dir/log/$label.prompt-difensive" stdin_file="$dir/log/$label.prompt-difensive"
@@ -1472,14 +1472,14 @@ if [ "$phase" = review ] && is_ring; then
   cso=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r')
   rk=$(printf '%s\n' "$cso" | sed -n 's/^Catena: anello \([0-9][0-9]*\)\/.*/\1/p' | head -1)
   rb=$(printf '%s\n' "$cso" | sed -n 's/^Base anello: \([0-9a-f]\{40\}\)$/\1/p')
-  if [ "${rk:-1}" -le 1 ]; then :   # anello 1: la sua base e' quella di sempre
+  if [ "${rk:-1}" -le 1 ]; then :   # ring 1: its base is the usual one
   elif [ -n "$rb" ]; then ring=1; ring_prompt
   else
     ring_stop "STOP — catena: nessuna Base anello da cycle-state.sh (l'anello precedente non ha un .post-tree?): la review dell'anello $rk non parte"
   fi
 fi
 code=0 skip_cl=0 chz_ev="" esito=""
-if [ "$phase" = chiusura ]; then   # gate full sull'albero finale; la sotto-sessione solo per gli e2e delle figlie
+if [ "$phase" = chiusura ]; then   # full gates on the final tree; the subsession only for the children's e2e
   chiusura_prep
   [ -z "$chz_fail" ] && chz_ev=$(run_gates)
   if [ -z "$chz_fail" ] && [ -n "$chz_e2e" ] && grep -q '^exit=0 ' "$dir/log/$label.gates" 2>/dev/null; then
@@ -1490,27 +1490,27 @@ if [ "$phase" = chiusura ]; then   # gate full sull'albero finale; la sotto-sess
   fi
 fi
 
-# --- esito strutturato (harness-pt08): lo schema passa per contenuto, compatto ---
+# --- structured outcome (harness-pt08): the schema is passed by content, compact ---
 SCHEMA=${FIC_SCHEMA:-$MAAT_SCHEMAS/phase-result.schema.json}
 SCHEMA_ARGS=()
-if [ "$phase" = chiusura ]; then :   # la chiusura non e' nello schema dell'esito: conta la sua riga ESITO
+if [ "$phase" = chiusura ]; then :   # closing is not in the outcome schema: its ESITO line counts
 elif [ -f "$SCHEMA" ] && sc=$("$FIC_PY" -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",", ":")))' "$SCHEMA" 2>>"$err" | tr -d '\r') && [ -n "$sc" ]; then
   SCHEMA_ARGS=(--json-schema "$sc")
 else
   echo "AVVISO: schema dell'esito assente o illeggibile ($SCHEMA): la fase chiudera' con STOP «uscita non valida»" >> "$err"
 fi
-# --plugin-dir solo come override esplicito (MAAT_PLUGIN_DIR; il rigioco la imposta sempre): di norma la sotto-sessione
-# trova il plugin perche' e' abilitato nel progetto (pk01 D1; D8: con il plugin anche abilitato non duplica nulla)
+# --plugin-dir only as an explicit override (MAAT_PLUGIN_DIR; the replay always sets it): normally the subsession
+# finds the plugin because it is enabled in the project (pk01 D1; D8: with the plugin also enabled nothing is duplicated)
 PLUGIN_ARGS=()
 [ -n "${MAAT_PLUGIN_DIR:-}" ] && PLUGIN_ARGS=(--plugin-dir "$MAAT_PLUGIN_DIR")
 CHILD_RULES="$MAAT_SKILLS/full-implementation-cycle/child-rules.md"
-# Claude Code sostituisce ${CLAUDE_PLUGIN_ROOT} solo nei testi di SKILL.md e degli agenti: nel testo passato con
-# --append-system-prompt la sostituzione la fa qui, deterministica, con MAAT_ROOT (e la sotto-sessione riceve
-# CLAUDE_PLUGIN_ROOT=$MAAT_ROOT nell'ambiente, vedi launch)
+# Claude Code replaces ${CLAUDE_PLUGIN_ROOT} only in the texts of SKILL.md and of the agents: in the text passed with
+# --append-system-prompt the replacement is done here, deterministically, with MAAT_ROOT (and the subsession receives
+# CLAUDE_PLUGIN_ROOT=$MAAT_ROOT in the environment, see launch)
 CHILD_RULES_TXT=$(cat "$CHILD_RULES" 2>>"$err")
 CHILD_RULES_TXT=${CHILD_RULES_TXT//'${CLAUDE_PLUGIN_ROOT}'/$MAAT_ROOT}
 
-lanes=0   # corsie (harness-pt13): solo implement, solo con blocchi indipendenti calcolati
+lanes=0   # lanes (harness-pt13): implement only, only with computed independent blocks
 [ "$phase" = implement ] && lanes_decide && lanes=1
 mode="" why="" par="$dir/log/$label.parallelo"
 if [ "$phase" = review ]; then
@@ -1519,15 +1519,15 @@ if [ "$phase" = review ]; then
   if [ "${FIC_REVIEW_PARALLEL:-1}" = 0 ]; then why="FIC_REVIEW_PARALLEL=0"
   elif [ "${rs_now%% *}" = APPROVED ]; then why="review registrata APPROVED: promozione o gate-only (il reviewer puo' non partire) o giro post-approvazione"
   else
-    # controprove del driver SOLO su una lista di plan-check.sh gen coerente col piano (decisione dell'orchestratore):
-    # una lista scritta dal worker a un giro precedente resta del worker, che la riscrive a ogni giro
+    # driver counterproofs ONLY on a plan-check.sh gen list consistent with the plan (orchestrator decision):
+    # a list written by the worker in a previous round stays the worker's, which rewrites it every round
     ! ls "$dir"/counterproof/*.meta >/dev/null 2>&1 && cp_from_gen && cp_driver=1
     if k0=$(verify_key) && [ -n "$k0" ]; then mode=parallelo; else why="chiave del tree non calcolabile"; cp_driver=0; fi
   fi
 fi
 if [ "$mode" = parallelo ]; then
-  # VERIFY (gates.sh, poi counterproof.sh solo se la lista e' quella di plan-check.sh gen, coerente col piano:
-  # cp_from_gen) e la review partono INSIEME, sulla stessa chiave.
+  # VERIFY (gates.sh, then counterproof.sh only if the list is the plan-check.sh gen one, consistent with the plan:
+  # cp_from_gen) and the review start TOGETHER, on the same key.
   cpw=worker; [ $cp_driver -eq 1 ] && cpw=driver
   printf 'modo=parallelo controprove=%s chiave=%s\n' "$cpw" "$(printf '%s' "$k0" | sha256sum | cut -c1-12)" > "$par"
   [ -f "${dir%.run}.md" ] && cp "${dir%.run}.md" "$dir/log/$label.spec-pre"
@@ -1536,60 +1536,60 @@ if [ "$mode" = parallelo ]; then
   else cpn="le controprove restano tue, come sempre (Worker review, passo 2: scrivi o rigenera counterproof/mutations.json e lancia counterproof.sh)"; fi
   { cat "$prompt"; printf '\n%s\n' "VERIFY IN PARALLELO (driver, run-phase.sh): gates.sh gira ORA, fuori da questa sessione, sui file di touched.txt; $cpn. Non aspettare e non eseguire le suite del livello, non citarne i risultati: per ogni requisito scrivi nel campo copertura del JSON gli ID dei test che lo coprono. Il verdetto e' provvisorio (Verification: VERIFIED (provvisorio: …)): finalize.sh fa l'AND con i risultati e compone la tabella Evidence."; } > "$stdin_file"
   ( run_gates >/dev/null; [ $cp_driver -eq 1 ] && run_cp ) & vpid=$!
-  [ $owned -eq 1 ] && echo "vpid=$vpid" >> "$held/owner"   # lock_alive: VERIFY vivo tiene il lock
+  [ $owned -eq 1 ] && echo "vpid=$vpid" >> "$held/owner"   # lock_alive: a live VERIFY holds the lock
   launch "$stdin_file" ">"
   wait $vpid
   k1=$(verify_key) || k1=""   # ricalcolo finale della chiave (harness-pt09)
   if [ "$k1" != "$k0" ]; then
-    # tree (o mutations.json) cambiato mentre review e VERIFY giravano: nessuno dei due risultati e' di un albero solo
+    # tree (or mutations.json) changed while review and VERIFY were running: neither result belongs to a single tree
     msg="scartato: chiave cambiata durante la fase ($(printf '%s' "$k0" | sha256sum | cut -c1-12) -> $(printf '%s' "$k1" | sha256sum | cut -c1-12)): review e VERIFY rilanciate in sequenza"
     echo "$msg" >> "$par"; echo "AVVISO: $msg" >> "$err"
     [ -f "$dir/log/$label.spec-pre" ] && cp "$dir/log/$label.spec-pre" "${dir%.run}.md"
-    # l'evidenza della finestra parallela non deve restare riusabile (gates.sh a chiave identica) ne' FRESH per
-    # finalize.sh: la sua cartella diventa <chiave>.scartato (--verify la vede STALE, gates.sh non la trova)
+    # the evidence of the parallel window must not stay reusable (gates.sh with an identical key) nor FRESH for
+    # finalize.sh: its folder becomes <key>.scartato (--verify sees it STALE, gates.sh does not find it)
     evd=$(sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$dir/log/$label.gates" 2>/dev/null | tail -1)
     if [ -n "$evd" ] && [ "$evd" != - ] && [ -d "$evd" ]; then rm -rf "$evd.scartato"; mv -f "$evd" "$evd.scartato"; fi
     [ -f "$dir/log/$label.gates" ] && mv -f "$dir/log/$label.gates" "$dir/log/$label.gates.scartato"
     [ -f "$dir/log/$label.counterproof" ] && mv -f "$dir/log/$label.counterproof" "$dir/log/$label.counterproof.scartato"
-    cp_clear   # anche in modo worker: i <id>.json del giro scartato non valgono
+    cp_clear   # in worker mode too: the <id>.json of the discarded round do not count
     [ $owned -eq 1 ] && sed -i '/^vpid=/d' "$held/owner" 2>/dev/null
-    # il log resta uno (il Monitor lo segue): un evento marca lo scarto, l'esito si legge solo dopo di esso
+    # the log stays one (the Monitor follows it): an event marks the discard, the outcome is read only after it
     echo '{"type":"system","subtype":"fic_scartato"}' >> "$log"
     mode=sequenza why="chiave cambiata durante la fase parallela" relaunch=1
   fi
 fi
-if [ "$mode" = sequenza ]; then   # la sequenza di prima: gate, poi la review con l'evidenza nel prompt
+if [ "$mode" = sequenza ]; then   # the previous sequence: gates, then the review with the evidence in the prompt
   echo "modo=sequenza — ${why:-sequenza}" >> "$par"
-  [ "${relaunch:-0}" = 1 ] && [ $ring -eq 1 ] && ring_prompt   # diff dell'anello sull'albero del rilancio
+  [ "${relaunch:-0}" = 1 ] && [ $ring -eq 1 ] && ring_prompt   # ring diff on the relaunch tree
   stdin_file=$prompt
-  ev=$(run_gates)   # a chiave identica e' un riuso, non un rilancio
+  ev=$(run_gates)   # with an identical key it is a reuse, not a relaunch
   if [ -n "$ev" ] && [ "$ev" != - ]; then
     stdin_file="$dir/log/$label.prompt"
     { cat "$prompt"; printf '\n%s\n' "EVIDENZE DEI GATE (driver, run-phase.sh): $ev — $(grep '^gates: esito=' "$dir/log/$label.gates" | tail -1 | sed 's/ chiave=.*//'). Passale a implementation-review-cycle come contesto (Step 2.5, evidenza del driver)."; } > "$stdin_file"
   fi
   launch "$stdin_file" "$([ "${relaunch:-0}" = 1 ] && echo '>>' || echo '>')"
-elif [ $staged -eq 1 ]; then   # S3 (harness-pt11): i test in sosta sono nel tree, niente sotto-sessione; la verifica e' sotto
+elif [ $staged -eq 1 ]; then   # S3 (harness-pt11): the parked tests are in the tree, no subsession; the verification is below
   printf '%s\n' '{"type":"result","result":"ESITO FASE test-red: OK — test in sosta (S3) copiati dallo staging","structured_output":{"fase":"test-red","esito":"OK","motivo":"test in sosta (S3) copiati dallo staging","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$log"
   code=0
-elif [ $lanes -eq 1 ]; then   # corsie (harness-pt13): solo implement, dopo S3 e prima del lancio singolo
+elif [ $lanes -eq 1 ]; then   # lanes (harness-pt13): implement only, after S3 and before the single launch
   launch_lanes
-elif [ "$phase" != review ] && [ $skip_cl -eq 0 ]; then   # la chiusura senza e2e (o coi gate rossi) non lancia la sotto-sessione
+elif [ "$phase" != review ] && [ $skip_cl -eq 0 ]; then   # closing without e2e (or with red gates) does not launch the subsession
   launch "$stdin_file" ">"
 fi
 
 if [ -n "$pre_file" ]; then
-  # test-red (ALTRI FLUSSI): touched.txt prima di questa fase, per togliere solo cio' che ci entra ora
-  # (pk09: touched.txt assente alla prima fase di codice — controllato prima: il redirect di input `<` si valuta
-  # prima di `2>/dev/null`, e l'errore «No such file» usciva comunque nello stderr della fase)
+  # test-red (OTHER FLOWS): touched.txt before this phase, to remove only what enters it now
+  # (pk09: touched.txt missing at the first code phase — checked beforehand: the input redirect `<` is evaluated
+  # before `2>/dev/null`, and the «No such file» error still came out in the phase stderr)
   [ "$phase" = test-red ] && { [ -f "$dir/touched.txt" ] && tr -d '\r' < "$dir/touched.txt"; true; } > "$dir/log/$label.touched-pre"
   close_pre "$pre_file" "$dir"
   case "$phase" in implement|fix) altri_flussi ;; esac
 fi
-# DEVIAZIONI DIFENSIVE (vedi in testa). DIFENSIVE_PY estrai <result.json>: le deviazioni, una per riga, solo se
-# TUTTE cominciano con "difensiva: " (altrimenti niente: la fase e' gia' STOP). DIFENSIVE_PY nota <spec> <label>
-# <file>: "- nota (deviazione difensiva, <label>): <testo>" dopo l'ultima riga del "### Changelog revisione piano"
-# (stesse zone di plan-check.sh annotate, fuori recinti; righe gia' presenti saltate, fine riga conservato); exit 3
-# se il piano non ha un changelog.
+# DEFENSIVE DEVIATIONS (see the top). DIFENSIVE_PY estrai <result.json>: the deviations, one per line, only if
+# ALL start with "difensiva: " (otherwise nothing: the phase is already STOP). DIFENSIVE_PY nota <spec> <label>
+# <file>: "- nota (deviazione difensiva, <label>): <testo>" after the last line of the "### Changelog revisione piano"
+# (same zones as plan-check.sh annotate, outside fences; lines already present skipped, line ending kept); exit 3
+# if the plan has no changelog.
 DIFENSIVE_PY='
 import json, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
@@ -1625,12 +1625,12 @@ if note:
         fh.write(nl.join(righe).encode("utf-8"))
     import os; os.replace(spec + ".tmp", spec)
 '
-difensive() { # implement/fix finito OK: registra le deviazioni "difensiva: " (file, AVVISO, nota nel changelog)
+difensive() { # implement/fix finished OK: records the "difensiva: " deviations (file, AVVISO, note in the changelog)
   local rj="$dir/log/$label.result.json" f="$dir/log/deviazioni-difensive.txt" dl="$dir/log/$label.difensive"
   local sp="${dir%.run}.md" b0 b1 rc
   rm -f "$dl"
   [ -f "$rj" ] && "$FIC_PY" -c "$DIFENSIVE_PY" estrai "$rj" 2>>"$err" | tr -d '\r' > "$dl" && [ -s "$dl" ] || { rm -f "$dl"; return 0; }
-  # una riga per deviazione, "<label><TAB><testo>"; un rilancio della stessa etichetta sostituisce le sue
+  # one line per deviation, "<label><TAB><text>"; a relaunch of the same label replaces its own
   { [ -f "$f" ] && tr -d '\r' < "$f" | grep -v "^$label	"; awk -v l="$label" '{ print l "\t" $0 }' "$dl"; } > "$f.tmp" && mv -f "$f.tmp" "$f"
   avviso "AVVISO: $(grep -c . "$dl") deviazioni difensive dichiarate (non fermano il ciclo, la review le giudica): log/deviazioni-difensive.txt"
   [ -f "$sp" ] || return 0
@@ -1639,20 +1639,20 @@ difensive() { # implement/fix finito OK: registra le deviazioni "difensiva: " (f
   "$FIC_PY" -c "$DIFENSIVE_PY" nota "$sp" "$label" "$dl" 2>>"$err"; rc=$?
   b1=$(bash "$PC_SH" basis "$sp" 2>/dev/null | tr -d '\r' | grep '^Basis: ')
   if [ $rc -eq 3 ]; then avviso "AVVISO: deviazioni difensive: il piano non ha un changelog, nessuna nota nella spec"
-  elif [ $rc -ne 0 ] || [ -z "$b0" ] || [ "$b0" != "$b1" ]; then   # mai una spec STALE per una nota
+  elif [ $rc -ne 0 ] || [ -z "$b0" ] || [ "$b0" != "$b1" ]; then   # never a STALE spec for a note
     cp "$dl.spec-pre" "$sp"
     avviso "AVVISO: deviazioni difensive: nota nel changelog non scritta (exit $rc, impronta ${b0:-non calcolata} -> ${b1:-non calcolata}): spec rimessa com'era"
   fi
   rm -f "$dl.spec-pre"
 }
-# Esito: solo dall'evento "result" (il log contiene anche i testi letti dalla fase, con esempi di ESITO).
-# Stampa la riga ESITO (o lo STOP «uscita non valida» e, sotto, originale=<riga>) e scrive result.json se valido.
+# Outcome: only from the "result" event (the log also contains the texts read by the phase, with ESITO examples).
+# Prints the ESITO line (or the «uscita non valida» STOP and, below it, originale=<line>) and writes result.json if valid.
 if [ $code -eq 0 ] && [ "$phase" != chiusura ]; then
   esito=$(valida "$log" "$SCHEMA" "$phase" "$dir/log/$label.result.json" 2>>"$err" | tr -d '\r')
 fi
-# Finalize (harness-pt08): dopo una review finita, lo stato finale lo firma lo script, prima che .esito
-# registri lo State di fine fase; DOPO result.json, perche' ne unisce la copertura (harness-pt09).
-# Fail-closed: finalize assente, o uscito con un codice diverso da 0/1/3/4 -> .esito = STOP (sotto).
+# Finalize (harness-pt08): after a finished review, the final state is signed by the script, before .esito
+# records the end-of-phase State; AFTER result.json, because it merges its coverage (harness-pt09).
+# Fail-closed: finalize missing, or exited with a code other than 0/1/3/4 -> .esito = STOP (below).
 FINALIZE=${FIC_FINALIZE:-$MAAT_SCRIPTS/finalize.sh}
 fin_fail=""
 if [ "$phase" = review ] && [ $code -eq 0 ] && [ -f "${dir%.run}.md" ]; then
@@ -1666,7 +1666,7 @@ if [ "$phase" = review ] && [ $code -eq 0 ] && [ -f "${dir%.run}.md" ]; then
     case $frc in 0|1|3|4) ;; *) fin_fail="finalize fallito (exit $frc, vedi log/$label.finalize)" ;; esac
   fi
 fi
-# controprove del driver con il mirror non ripristinato (counterproof.sh exit 5): ci si ferma, come nel worker
+# driver counterproofs with the mirror not restored (counterproof.sh exit 5): we stop, as in the worker
 if [ "$phase" = review ] && [ "$(sed -n 's/^exit=//p' "$dir/log/$label.counterproof" 2>/dev/null | tail -1)" = 5 ]; then
   fin_fail="counterproof.sh exit 5: mirror non ripristinato (vedi log/$label.counterproof)${fin_fail:+; $fin_fail}"
 fi
@@ -1676,23 +1676,23 @@ if [ $code -eq 0 ]; then
     esito="ESITO FASE review: STOP — $fin_fail${orig:+
 originale=$orig}"
   fi
-  if [ -n "$esito" ]; then   # harness-pt11: verifica dei rossi (test-red), test di accettazione invariati (implement/fix)
+  if [ -n "$esito" ]; then   # harness-pt11: red-test verification (test-red), acceptance tests unchanged (implement/fix)
     case "$phase" in
       test-red) esito=$(verify_red "$esito") ;;
       implement|fix) esito=$(tests_guard "$esito") ;;
     esac
   fi
-  case "$phase" in implement|fix)   # DEVIAZIONI DIFENSIVE: registrate solo su un esito OK (prima dello state)
+  case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)
     printf '%s\n' "$esito" | sed -n 1p | grep -q '^ESITO FASE [^:]*: OK' && difensive ;;
   esac
   if [ -n "$esito" ]; then
     st=""
     [ -f "${dir%.run}.md" ] && st=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | sed -n 's/^State: //p')
     printf '%s\nstate=%s\n' "$esito" "$st" > "$dir/log/$label.esito"
-    cat "$dir/log/$label.avvisi" >> "$dir/log/$label.esito" 2>/dev/null   # ALTRI FLUSSI: dopo state=, la riga 1 resta l'esito
+    cat "$dir/log/$label.avvisi" >> "$dir/log/$label.esito" 2>/dev/null   # OTHER FLOWS: after state=, line 1 stays the outcome
   fi
 fi
-# chiusura di una catena (vedi CATENE): IMPLEMENTED solo con i gate full verdi e, se richiesti, gli e2e OK
+# closing of a chain (see CHAINS): IMPLEMENTED only with green full gates and, if required, OK e2e
 if [ "$phase" = chiusura ]; then
   chz_why="$chz_fail"
   if [ -z "$chz_why" ]; then
@@ -1718,12 +1718,12 @@ if [ "$phase" = chiusura ]; then
   st=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | sed -n 's/^State: //p')
   printf '%s\nstate=%s\n' "$chz_esito" "$st" > "$dir/log/$label.esito"
 fi
-# gate dopo un implement/fix finito OK, ancora sotto il lock (la review che segue li riusa a chiave identica)
+# gates after an implement/fix finished OK, still under the lock (the following review reuses them with an identical key)
 case "$phase" in implement|fix)
   [ $code -eq 0 ] && grep -q '^ESITO FASE [^:]*: OK' "$dir/log/$label.esito" 2>/dev/null && run_gates >/dev/null ;;
 esac
 
-release   # prima di .exit: chi vede la fase finita trova il lock gia' libero
+release   # before .exit: whoever sees the phase finished finds the lock already free
 echo "$code" > "$ex"
 rm -f "$dir/log/$label.running"
 exit $code

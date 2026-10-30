@@ -1,54 +1,54 @@
 #!/usr/bin/env bash
-# maat-doctor.sh — cosa manca a Maat in questo progetto, SENZA MODIFICARE NIENTE (pk06, R5).
+# maat-doctor.sh — what Maat is missing in this project, WITHOUT CHANGING ANYTHING (pk06, R5).
 #
-# Uso (dalla cartella del progetto):
-#   bash <maat>/scripts/maat-doctor.sh                 tutti i controlli, in sola lettura
-#   bash <maat>/scripts/maat-doctor.sh --prova-test    in piu' lancia il comando di test di ogni modulo su UN file di
-#                                                      test scelto dalla regola del modulo. ATTENZIONE: con questa
-#                                                      opzione il doctor esce dalla sola lettura, perche' il comando
-#                                                      di test puo' scrivere cache e coverage nel progetto.
-#   bash <maat>/scripts/maat-doctor.sh --piattaforma   una riga: windows-wsl | windows-senza-wsl | altro (la usa
-#                                                      /maat:setup per proporre ambiente nativo); sola lettura
+# Usage (from the project folder):
+#   bash <maat>/scripts/maat-doctor.sh                 all checks, read-only
+#   bash <maat>/scripts/maat-doctor.sh --prova-test    also runs the test command of each module on ONE test file
+#                                                      chosen by the module's rule. WARNING: with this option
+#                                                      the doctor is no longer read-only, because the test command
+#                                                      can write cache and coverage files (`cache e coverage`) to the project.
+#   bash <maat>/scripts/maat-doctor.sh --piattaforma   one line: windows-wsl | windows-senza-wsl | altro (used by
+#                                                      /maat:setup to propose the nativo environment); read-only
 #
-# Una riga per controllo: «OK|ATTENZIONE|MANCA <cosa> — <come si risolve>», poi «maat-doctor: <n> OK, <n> ATTENZIONE,
-# <n> MANCA». Uscita: 0 nessun MANCA · 1 almeno un MANCA · 64 uso sbagliato.
+# One line per check: «OK|ATTENZIONE|MANCA <cosa> — <come si risolve>», then «maat-doctor: <n> OK, <n> ATTENZIONE,
+# <n> MANCA». Exit: 0 no MANCA · 1 at least one MANCA · 64 wrong usage.
 #
-# Controlli:
-#   versioni       bash >= 4, Python >= 3.10 (python.sh), git >= 2.35, Claude Code (CLAUDE_BIN, poi l'estensione di
-#                  VS Code, poi il PATH: l'ordine di run-phase.sh): sotto la versione provata in pk01 ATTENZIONE; non
-#                  trovato ATTENZIONE «versione non verificata»
-#   configurazione maat.json presente e valido (maat-config.py valida), versione del plugin compatibile con `harness`
-#   WSL            solo su Windows (uname/OSTYPE, come run_cp di run-phase.sh: mai la presenza di wsl.exe). WSL assente
-#                  = wsl.exe fuori dal PATH oppure `wsl -- true` fallito o oltre MAAT_DOCTOR_WSL_TIMEOUT secondi (30).
-#                  copia_wsl auto senza moduli wsl -> OK «WSL assente»; copia_wsl sì -> MANCA; ogni modulo
-#                  `ambiente: wsl` -> MANCA. Con WSL: bash e Node in WSL, la copia dei moduli wsl con `copia`
-#                  (node_modules e .fic-deps, come test-fast.sh; worktree senza la sua copia ma con quella del tree
-#                  principale pronta -> ATTENZIONE «si seminerà al primo uso»; altrimenti MANCA: test-fast.sh --setup)
-#   moduli         primo eseguibile di comandi, controlli (con se_presente: ATTENZIONE «controllo saltato») e
-#                  controprova (runner comando): dopo assegnazioni e opzioni di env, e dopo un comando interno
-#                  (`cd x && ./run.sh`) quello che segue && o ;, relativo alla cartella dei cd; cercato dove il modulo
-#                  gira (nativo: qui; wsl: dentro WSL, anche un percorso assoluto fuori da /mnt/ con [ -x ]); cartella
-#                  dei comandi; {python} come gates.sh (nativo: la precedenza di maat-config.py; wsl: i candidati
-#                  dentro WSL; assente: MANCA e il comando che lo usa non ha la riga OK); preparati (file guida), copia_anche (MANCA), collega_nel_worktree e file_dipendenze
-#                  (ATTENZIONE); dove girano le controprove sha256sum, timeout, rsync o tar (ATTENZIONE: BLOCKED),
-#                  rsync/flock assenti -> OK «di ripiego, più lenti» (pk08); primo eseguibile di
-#                  contesto.schema_db_comando e verifica_remota (MANCA), script di guardia.suite (ATTENZIONE)
-#   guardia        solo dopo una `valida` riuscita: `git push --force origin prova` e la sonda di produzione
-#                  (maat-config.py sonda-produzione) negati in fase (exit 2) e chiesti in sessione (ask); ogni sonda
-#                  coperta da una regex di guardia.produzione (MANCA), ogni regex provata da una sonda (ATTENZIONE);
-#                  guardia agganciata (plugin abilitato in enabledPlugins, o hook PreToolUse di progetto con guard.py),
-#                  hook doppio e marketplace da cartella (ATTENZIONE)
-#   lavoro         cartelle.lavoro esiste ed e' scrivibile; se e' ignorata da git
+# Checks:
+#   versions       bash >= 4, Python >= 3.10 (python.sh), git >= 2.35, Claude Code (CLAUDE_BIN, then the VS Code
+#                  extension, then PATH: the order of run-phase.sh): below the version tested in pk01 ATTENZIONE; not
+#                  found ATTENZIONE «versione non verificata»
+#   configuration  maat.json present and valid (maat-config.py valida), plugin version compatible with `harness`
+#   WSL            Windows only (uname/OSTYPE, like run_cp of run-phase.sh: never the presence of wsl.exe). WSL missing
+#                  = wsl.exe not on PATH, or `wsl -- true` failed or took longer than MAAT_DOCTOR_WSL_TIMEOUT seconds (30).
+#                  copia_wsl auto without wsl modules -> OK «WSL assente»; copia_wsl sì -> MANCA; every module with
+#                  `ambiente: wsl` -> MANCA. With WSL: bash and Node in WSL, the copy of the wsl modules with `copia`
+#                  (node_modules and .fic-deps, like test-fast.sh; a worktree without its own copy but with the main
+#                  tree's copy ready -> ATTENZIONE «si seminerà al primo uso»; otherwise MANCA: test-fast.sh --setup)
+#   modules        first executable of comandi, controlli (with se_presente: ATTENZIONE «controllo saltato») and
+#                  controprova (runner comando): after env assignments and options, and after a builtin command
+#                  (`cd x && ./run.sh`) the one following && or ;, relative to the folder of the cds; looked up where the module
+#                  runs (nativo: here; wsl: inside WSL, also an absolute path outside /mnt/ with [ -x ]); folder
+#                  of the commands; {python} like gates.sh (nativo: the precedence of maat-config.py; wsl: the candidates
+#                  inside WSL; missing: MANCA and the command using it gets no OK line); preparati (guide file), copia_anche (MANCA), collega_nel_worktree and file_dipendenze
+#                  (ATTENZIONE); where the counterproofs run sha256sum, timeout, rsync or tar (ATTENZIONE: BLOCKED),
+#                  rsync/flock missing -> OK «di ripiego, più lenti» (pk08); first executable of
+#                  contesto.schema_db_comando and verifica_remota (MANCA), guardia.suite scripts (ATTENZIONE)
+#   guard          only after a successful `valida`: `git push --force origin prova` and the production probe
+#                  (maat-config.py sonda-produzione) denied in a phase (exit 2) and asked in the session (ask); every probe
+#                  covered by a guardia.produzione regex (MANCA), every regex exercised by a probe (ATTENZIONE);
+#                  guard hooked up (plugin enabled in enabledPlugins, or project PreToolUse hook with guard.py),
+#                  duplicate hook and marketplace from a folder (ATTENZIONE)
+#   work folder    cartelle.lavoro exists and is writable; whether it is ignored by git
 #
-# Sola lettura: niente file temporanei, PYTHONDONTWRITEBYTECODE=1 (gli import di maat-config.py non scrivono
-# __pycache__ nel plugin). Il codice Python e' in fondo a questo file e arriva all'interprete da una pipe.
-# Variabili: MAAT_CONFIG (il maat.json, come maat-config.py) · FIC_REPO (radice del progetto) · FIC_PYTHON (python.sh)
+# Read-only: no temporary files, PYTHONDONTWRITEBYTECODE=1 (the imports of maat-config.py do not write
+# __pycache__ into the plugin). The Python code is at the end of this file and reaches the interpreter through a pipe.
+# Variables: MAAT_CONFIG (the maat.json, like maat-config.py) · FIC_REPO (project root) · FIC_PYTHON (python.sh)
 # · CLAUDE_BIN · MAAT_DOCTOR_WSL_TIMEOUT. Test: maat-doctor.test.sh.
 set -uo pipefail
 export PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 SELF=${BASH_SOURCE[0]}
 HERE=$(cd "$(dirname "$SELF")" && pwd)
-CLAUDE_MIN=2.1.285   # la versione provata in pk01
+CLAUDE_MIN=2.1.285   # the version tested in pk01
 usage() { sed -n '2,/^set -uo/p' "$SELF" | sed '$d; s/^# \{0,1\}//'; }
 
 prova=0 piattaforma=0
@@ -63,7 +63,7 @@ done
 
 winp() { local o; o=$(cygpath -m "$1" 2>/dev/null) && [ -n "$o" ] && { printf '%s' "${o#//\?/}"; return; }; printf '%s' "$1"; }
 is_windows() { case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) return 0 ;; esac; return 1; }
-ver_ge() { # <versione> <minima>: 0 se versione >= minima (componenti numeriche, fino a tre)
+ver_ge() { # <version> <minimum>: 0 if version >= minimum (numeric components, up to three)
   local IFS=. i x y
   local -a a b
   read -ra a <<< "$1"; read -ra b <<< "$2"
@@ -82,8 +82,8 @@ DR_BASH=$(winp "$BASH")
 export DR_WIN DR_BASH DR_PROVA=$prova
 py_ok=""
 if . "$HERE/python.sh" >/dev/null 2>&1 && [ -n "${FIC_PY:-}" ]; then py_ok=1; fi
-# -I: la cartella corrente (il progetto) non entra in sys.path, cosi' un suo json.py o glob.py non sostituisce la
-# libreria standard; -I ignora anche le PYTHON* dell'ambiente, quindi -B e -X utf8 le rimettono.
+# -I: the current folder (the project) does not enter sys.path, so a json.py or glob.py of its own cannot replace the
+# standard library; -I also ignores the PYTHON* environment variables, so -B and -X utf8 restore them.
 py() { sed '1,/^#__PYTHON__$/d' "$SELF" | "$FIC_PY" -I -B -X utf8 - "$@"; }
 
 if [ "$piattaforma" = 1 ]; then
@@ -94,12 +94,12 @@ fi
 
 [ "$prova" = 1 ] && echo "--prova-test: il comando di test può scrivere cache e coverage (questa esecuzione non è in sola lettura)"
 nok=0 natt=0 nman=0
-riga() { # <OK|ATTENZIONE|MANCA> <testo>
+riga() { # <OK|ATTENZIONE|MANCA> <text>
   case $1 in OK) nok=$((nok + 1)) ;; ATTENZIONE) natt=$((natt + 1)) ;; *) nman=$((nman + 1)) ;; esac
   printf '%s %s\n' "$1" "$2"
 }
 LAVORO=.claude/.ai-workflow VALIDA=""
-emetti() { # righe del Python: «OK|ATTENZIONE|MANCA …» oppure meta «#chiave<TAB>valore»
+emetti() { # lines from the Python part: «OK|ATTENZIONE|MANCA …» or meta «#chiave<TAB>valore»
   local l
   while IFS= read -r l; do
     l=${l%$'\r'}
@@ -113,7 +113,7 @@ emetti() { # righe del Python: «OK|ATTENZIONE|MANCA …» oppure meta «#chiave
   done
 }
 
-# --- versioni ---------------------------------------------------------------------------------------------------------
+# --- versions ---------------------------------------------------------------------------------------------------------
 if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then riga OK "bash $BASH_VERSION"
 else riga MANCA "bash $BASH_VERSION sotto la 4 — installa bash 4 o superiore (Git Bash recente su Windows)"; fi
 
@@ -130,8 +130,8 @@ if [ -z "$gv" ]; then riga MANCA "git non trovato — installa git 2.35 o superi
 elif ver_ge "$gv" 2.35; then riga OK "git $gv"
 else riga MANCA "git $gv sotto la 2.35 — aggiorna git"; fi
 
-# Lo stesso ordine di run-phase.sh («Binario:»), cosi' si verifica il binario che il ciclo usera': CLAUDE_BIN, poi la
-# versione piu' recente dentro l'estensione di VS Code (il percorso cambia a ogni aggiornamento), poi claude nel PATH.
+# The same order as run-phase.sh (`Binario:`), so the binary checked is the one the cycle will use: CLAUDE_BIN, then the
+# most recent version inside the VS Code extension (the path changes at every update), then claude on PATH.
 CL=${CLAUDE_BIN:-}
 if [ -z "$CL" ]; then
   ext=$(ls -d "${USERPROFILE:-$HOME}"/.vscode/extensions/anthropic.claude-code-*-win32-x64 2>/dev/null | sort -V | tail -1)
@@ -149,7 +149,7 @@ else
   else riga ATTENZIONE "Claude Code $cv sotto la $CLAUDE_MIN provata — aggiorna Claude Code"; fi
 fi
 
-# --- progetto, configurazione, WSL, moduli ----------------------------------------------------------------------------
+# --- project, configuration, WSL, modules -----------------------------------------------------------------------------
 ROOT=${FIC_REPO:-}
 [ -n "$ROOT" ] || ROOT=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
 if [ -z "$ROOT" ]; then
@@ -170,10 +170,10 @@ else
   emetti < <(py config)
 fi
 
-# --- guardia -----------------------------------------------------------------------------------------------------------
+# --- guard -------------------------------------------------------------------------------------------------------------
 gjson() { "$FIC_PY" -I -c 'import json, sys; print(json.dumps({"tool_name": "Bash", "tool_input": {"command": sys.argv[1]}, "cwd": sys.argv[2]}))' "$1" "$ROOT"; }
 GMOT=""
-prova_guardia() { # <comando>: 0 se negato in fase (exit 2) e chiesto in sessione (ask); altrimenti il motivo in GMOT
+prova_guardia() { # <command>: 0 if denied in a phase (exit 2) and asked in the session (ask); otherwise the reason in GMOT
   local j rc out
   j=$(gjson "$1")
   printf '%s' "$j" | FIC_PHASE=implement FIC_REPO=$ROOT MAAT_CONFIG=$CFG "$FIC_PY" "$HERE/guard.py" >/dev/null 2>&1; rc=$?
@@ -198,7 +198,7 @@ if [ -n "$py_ok" ]; then
   emetti < <(py aggancio)
 fi
 
-# --- cartella di lavoro ------------------------------------------------------------------------------------------------
+# --- working folder ---------------------------------------------------------------------------------------------------
 LAVORO=${LAVORO%/}
 W="$ROOT/$LAVORO"
 if [ ! -d "$W" ]; then riga MANCA "cartella di lavoro $LAVORO assente — creala (mkdir -p $LAVORO) o correggi cartelle.lavoro"
@@ -258,7 +258,7 @@ def sq(s):
 
 
 def wsl_stato():
-    """(presente, motivo, eseguibile). Assente = wsl.exe fuori dal PATH oppure `wsl -- true` fallito o oltre il limite."""
+    """(present, reason, executable). Missing = wsl.exe not on PATH, or `wsl -- true` failed or exceeded the limit."""
     w = shutil.which("wsl") or shutil.which("wsl.exe")
     if not w:
         return False, "wsl.exe fuori dal PATH", None
@@ -275,7 +275,7 @@ def wsl_stato():
 
 
 class Sonde:
-    """Prove di shell eseguite in un solo processo (bash qui, o bash dentro WSL), alla prima lettura di un esito."""
+    """Shell probes run in a single process (bash here, or bash inside WSL), on the first read of a result."""
     def __init__(self, argv):
         self.argv, self.prove, self.esito = argv, [], None
 
@@ -308,9 +308,9 @@ def esiste_cmd(sonde, exe):
 
 
 def prove_copia(fm, root, pac):
-    """Le due prove di shell (dentro WSL) della copia di <pac>, con le regole di test-fast.sh: (copia pronta =
-    node_modules e .fic-deps nella copia di questa radice; si seminera' = copia di un worktree assente ma quella del
-    tree principale pronta, da cui fic_seed_node_modules la semina al primo uso)."""
+    """The two shell probes (inside WSL) of the copy of <pac>, with the rules of test-fast.sh: (copy ready =
+    node_modules and .fic-deps in the copy of this root; will be seeded = a worktree's copy missing but the main
+    tree's copy ready, from which fic_seed_node_modules seeds it on first use)."""
     p = pac.replace('"', '\\"')
 
     def pronta(d):
@@ -342,7 +342,7 @@ def tupla(v):
     return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
 
 
-# --------------------------------------------------------------------------- piattaforma
+# --------------------------------------------------------------------------- platform
 def cmd_piattaforma():
     if not WIN:
         print("altro")
@@ -351,19 +351,19 @@ def cmd_piattaforma():
     return 0
 
 
-# --------------------------------------------------------------------------- primo eseguibile di un comando
+# --------------------------------------------------------------------------- first executable of a command
 ASSEGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 BUILTIN = {"cd", "export", "if", "[", "[[", "test", "true", "false", ":", "set", "source", ".", "eval", "exec",
            "for", "while", "until", "case", "{", "(", "!", "echo", "printf", "unset", "local"}
 
 
-SEPARA = {"&&", ";"}                      # dopo un comando interno si segue la catena fino al primo eseguibile vero
+SEPARA = {"&&", ";"}                      # after a builtin command the chain is followed up to the first real executable
 ENV_CON_ARG = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
 
 
 def senza_parentesi(tok):
-    """Il segmento senza le parentesi di sottoshell ai bordi: «(» in testa (da solo o attaccato al primo token) e «)»
-    in coda (da solo o attaccato all'ultimo token, se non chiude un $(…) dello stesso token)."""
+    """The segment without the subshell parentheses at its edges: «(» at the start (alone or attached to the first token) and «)»
+    at the end (alone or attached to the last token, if it does not close a $(…) of the same token)."""
     tok = list(tok)
     while tok and tok[0] == "(":
         tok.pop(0)
@@ -377,15 +377,15 @@ def senza_parentesi(tok):
 
 
 def primo(mc, txt, maat):
-    """(eseguibile, script, cartella) del comando: il primo eseguibile vero ("{python}" per l'interprete del modulo;
-    None se ci sono solo comandi interni della shell), cercato dopo le assegnazioni e le opzioni di env e, dopo un
-    comando interno (`cd x && ./run.sh`), nel comando che segue && o ;. script: quello che bash/sh/{python}
-    lanciano (.sh o .py). cartella: dove portano i `cd` saltati ("" = nessun cd), per i percorsi relativi."""
+    """(executable, script, folder) of the command: the first real executable ("{python}" for the module's interpreter;
+    None if there are only shell builtins), looked up after the assignments and the env options and, after a
+    builtin command (`cd x && ./run.sh`), in the command following && or ;. script: what bash/sh/{python}
+    launch (.sh or .py). folder: where the skipped `cd`s lead ("" = no cd), for relative paths."""
     t = txt.replace("{maat}", maat).replace("{python}", "\x00PY\x00")
     t = mc.SEGNAPOSTO.sub("", t).replace("\x00PY\x00", "{python}")
     try:
-        # ( e ) non sono punteggiatura: FOO=$(pwd) resta un token solo; le parentesi di una sottoshell si tolgono
-        # ai bordi del segmento (senza_parentesi), cosi' `( cd x && ./run.sh )` segue il cd come senza parentesi
+        # ( and ) are not punctuation: FOO=$(pwd) stays a single token; the parentheses of a subshell are removed
+        # at the edges of the segment (senza_parentesi), so `( cd x && ./run.sh )` follows the cd as without parentheses
         lx = shlex.shlex(t, posix=True, punctuation_chars=";&|<>")
         lx.whitespace_split = True
         tutti = list(lx)
@@ -470,7 +470,7 @@ def cmd_config():
     else:
         riga("OK", "versione del plugin %s (harness non dichiarato)" % (vp or "ignota"))
 
-    piano = []          # funzioni che stampano, chiamate dopo aver registrato tutte le prove
+    piano = []          # functions that print, called after all probes have been registered
     locale = Sonde([BASH, "-s"])
     mods = r.get("moduli", [])
     wsl_mod = [m["nome"] for m in mods if m.get("ambiente") == "wsl"]
@@ -524,9 +524,9 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
     amb = m.get("ambiente", "nativo")
     rad = mc.norm(m["radice"])
     rad_abs = posixpath.join(ROOT, rad) if rad else ROOT
-    usabile = amb != "wsl" or wsl          # i comandi del modulo si possono cercare dove girano
+    usabile = amb != "wsl" or wsl          # the module's commands can be looked up where they run
     sonde = inwsl if amb == "wsl" else locale
-    maat = PLUGIN   # gli script di {maat} si cercano qui: sono gli stessi file anche visti da WSL (/mnt/…)
+    maat = PLUGIN   # the {maat} scripts are looked up here: they are the same files even as seen from WSL (/mnt/…)
     if amb == "wsl" and not WIN:
         out.append(lambda: riga("MANCA", "modulo %s ambiente: wsl fuori da Windows: i suoi gate saranno BLOCKED" % nome,
                                 "metti ambiente: nativo"))
@@ -597,8 +597,8 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
         i = None
         if exe and exe != "{python}" and "/" not in exe and usabile:
             i = esiste_cmd(sonde, exe)
-        # modulo wsl: un percorso assoluto fuori da /mnt/ esiste solo dentro WSL -> [ -x ] (script: [ -f ]) nella
-        # stessa shell WSL delle altre prove (con il suo timeout); /mnt/<u>/… si guarda qui come <U>:/…
+        # wsl module: an absolute path outside /mnt/ exists only inside WSL -> [ -x ] (script: [ -f ]) in the
+        # same WSL shell as the other probes (with its timeout); /mnt/<u>/… is checked here as <U>:/…
         dentro = {}
         if amb == "wsl" and usabile:
             for p, t in ((exe, "-x"), (script, "-f")):
@@ -630,7 +630,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                 if not ok:
                     mancanti.append(script)
             if exe == "{python}" and not py["ok"] and not mancanti:
-                return   # l'interprete mancante ha gia' la sua riga MANCA: il comando non e' verificabile, niente OK
+                return   # the missing interpreter already has its MANCA line: the command cannot be checked, no OK
             if not mancanti:
                 riga("OK", "%s: %s" % (etichetta, exe or "comando della shell"))
             elif se_presente:
@@ -641,7 +641,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                      rimedio or "installalo o correggi il comando in maat.json")
         return stampa
 
-    # --- comandi
+    # --- comandi (commands)
     for tipo, c in m.get("comandi", {}).items():
         c = {"comando": c} if isinstance(c, str) else c
         quale = c.get("cartella", "radice")
@@ -657,12 +657,12 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             continue
         out.append(eseguibile(et, c["comando"], cart_abs))
 
-    # --- controlli
+    # --- controlli (checks)
     for j, v in enumerate(m.get("controlli", [])):
         out.append(eseguibile("controllo %s del modulo %s (%s)" % (j, nome, v["glob"]), v["comando"], rad_abs,
                               se_presente=v.get("se_presente")))
 
-    # --- controprova
+    # --- controprova (counterproof)
     cp = m.get("controprova")
     if not cp or not cp.get("comando"):
         out.append(lambda: riga("OK", "controprove del modulo %s: NOT RUN (dichiarato)" % nome))
@@ -672,7 +672,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
         elif "{python}" in cp["comando"]:
             out.append(eseguibile("controprova del modulo %s" % nome, "{python}", rad_abs))
         if usabile:
-            # gli strumenti di counterproof.sh (pk08): rsync e flock hanno un ripiego (tar, mkdir), gli altri no
+            # the tools of counterproof.sh (pk08): rsync and flock have a fallback (tar, mkdir), the others do not
             st = [(s, esiste_cmd(sonde, s)) for s in ("rsync", "flock", "tar", "sha256sum", "timeout")]
 
             def strumenti(st=st):
@@ -693,7 +693,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                     riga("OK", "controprove del modulo %s: rsync e flock %s" % (nome, "in WSL" if amb == "wsl" else "presenti"))
             out.append(strumenti)
 
-    # --- copia WSL del modulo
+    # --- WSL copy of the module
     if amb == "wsl" and wsl and m.get("copia"):
         pac = mc.norm(m["radice_pacchetti"])
         fm = wslp(posixpath.join(PLUGIN, "scripts", "fic-mirror.sh"))
@@ -713,7 +713,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                 riga("MANCA", "copia WSL del modulo %s assente" % nome, "creala una volta: %s" % setup)
         out.append(copia)
 
-    # --- preparati: il file guida (il primo glob senza caratteri jolly)
+    # --- preparati: the guide file (the first glob without wildcards)
     guida = next((g for g in m.get("preparati", []) if not any(ch in g for ch in "*?[")), None)
     if guida:
         ok = os.path.exists(posixpath.join(rad_abs, guida))
@@ -722,14 +722,14 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             "ATTENZIONE", "preparato assente nel modulo %s (%s)" % (nome, guida),
             "lancia `%s` nella radice del modulo" % m.get("preparazione", "la preparazione")))
 
-    # --- copia_anche: cartelle del repo che le controprove copiano
+    # --- copia_anche: repo folders that the counterproofs copy
     for d in m.get("copia_anche", []):
         ok = os.path.isdir(posixpath.join(ROOT, mc.norm(d)))
         out.append(lambda ok=ok, d=d: riga("OK", "copia_anche del modulo %s: %s" % (nome, d)) if ok else riga(
             "MANCA", "copia_anche del modulo %s: %s non esiste (le controprove del modulo fallirebbero)" % (nome, d),
             "correggi moduli[].copia_anche"))
 
-    # --- collega_nel_worktree: le cartelle presenti nel tree principale
+    # --- collega_nel_worktree: the folders present in the main tree
     for v in m.get("collega_nel_worktree", []):
         v = {"percorso": v} if isinstance(v, str) else v
         cart = mc.cartella_di(m, v.get("cartella", "radice"))
@@ -740,7 +740,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                    if ok else riga("ATTENZIONE", "dipendenze non installate: i worktree del modulo %s non avranno %s"
                                    % (nome, dov), "installa le dipendenze nel tree principale"))
 
-    # --- file_dipendenze: ogni glob trova almeno un file tracciato
+    # --- file_dipendenze: every glob finds at least one tracked file
     for v in m.get("file_dipendenze", []):
         v = {"glob": v} if isinstance(v, str) else v
         cart = mc.cartella_di(m, v.get("cartella", "radice"))
@@ -871,7 +871,7 @@ def controlli_progetto(mc, cfg, r, locale):
             out.append(lambda ok=ok, nome=nome: riga("OK", "guardia.suite: %s" % nome) if ok else riga(
                 "ATTENZIONE", "guardia.suite: script %s non trovato nel repo" % nome, "correggi guardia.suite"))
 
-    # sonde e regex di produzione
+    # production probes and regexes
     prod, sonde = g.get("produzione", []), g.get("sonde", [])
     rx = []
     for p in prod:
@@ -893,7 +893,7 @@ def controlli_progetto(mc, cfg, r, locale):
     return out
 
 
-# --------------------------------------------------------------------------- aggancio della guardia
+# --------------------------------------------------------------------------- guard hookup
 def leggi_json(p):
     try:
         with open(p, encoding="utf-8") as f:
@@ -909,7 +909,7 @@ def cmd_aggancio():
     locale = posixpath.join(ROOT, ".claude", "settings.local.json")
     utente = posixpath.join(home, ".claude", "settings.json")
     abilitato, mk, dove = None, "", ""
-    for f in (locale, progetto, utente):          # precedenza: locale > progetto > utente
+    for f in (locale, progetto, utente):          # precedence: local > project > user
         ep = leggi_json(f).get("enabledPlugins", {})
         if not isinstance(ep, dict):
             continue
@@ -945,7 +945,7 @@ def cmd_aggancio():
 
 
 MODI = {"piattaforma": cmd_piattaforma, "config": cmd_config, "aggancio": cmd_aggancio}
-if __name__ == "__main__":   # altrimenti caricato dai test (maat-doctor.test.sh, sezione «unità»), senza eseguire niente
+if __name__ == "__main__":   # otherwise loaded by the tests (maat-doctor.test.sh, «unità» section), without running anything
     if len(sys.argv) < 2 or sys.argv[1] not in MODI:
         sys.stderr.write("maat-doctor (python): modo sconosciuto\n")
         sys.exit(64)

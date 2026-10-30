@@ -1,6 +1,6 @@
 {
   "profilo": "fastapi-pytest",
-  "descrizione": "Backend Python con pytest: test a specchio (app/…/x.py -> tests/…/test_x*.py), report JUnit, interprete del venv del modulo.",
+  "descrizione": "Python backend with pytest: mirrored tests (app/…/x.py -> tests/…/test_x*.py), JUnit report, the module's venv interpreter.",
   "modulo": {
     "regola_test": "specchio",
     "specchio": { "da": "app/**/{m}.py", "a": "tests/**/test_{m}*.py" },

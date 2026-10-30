@@ -13,7 +13,8 @@
    `DEVIAZIONI DIFENSIVE (driver, run-phase.sh): <file>` with the lines under it, and, for
    ring k>1 of a chain, `DIFF DELL'ANELLO (driver, run-phase.sh): <file> …` with its index (the ring's review
    surface, built by the driver: the reviewer reads it, never a diff against HEAD), plus the `Anelli
-   precedenti:` files as exclusion candidates «stessa catena, anello precedente (<spec>)» — a path also in this
+   precedenti:` files as exclusion candidates, written in `Excluded:` as `<path> — stessa catena, anello
+   precedente (<spec>)` (only the path counts) — a path also in this
    ring's `touched.txt` is never excluded.
    With `VERIFY IN PARALLELO` do not run nor wait for the level's suites and do not cite their results; with
    gates run by the model (you, the declared remote verification (`verifica_remota` in `.claude/maat.json`), a sub-agent) a static review in parallel is **forbidden**.

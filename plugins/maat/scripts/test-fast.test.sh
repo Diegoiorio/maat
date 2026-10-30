@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Test deterministici di test-fast.sh (e del suo involucro deprecato vitest-fast.sh), in un workspace finto
-# (nessun vitest vero, nessun /mnt/c). Il modulo e i comandi vengono da .claude/maat.json del finto repo, che e'
-# examples/nuxt-fastapi.maat.json: la copia di modules/app, la radice modules/app/apps/admin, i comandi di `copia`.
-# Da eseguire in WSL:  wsl -- bash -lc 'bash /mnt/c/<maat>/plugins/maat/scripts/test-fast.test.sh'
-# Variante da provare: TF=/percorso/variante.sh (viene copiata al posto dello script nella copia del plugin).
+# Deterministic tests of test-fast.sh (and of its deprecated wrapper vitest-fast.sh), in a fake workspace
+# (no real vitest, no /mnt/c). The module and the commands come from the .claude/maat.json of the fake repo, which is
+# examples/nuxt-fastapi.maat.json: the copy of modules/app, the root modules/app/apps/admin, the `copia` commands.
+# To run in WSL:  wsl -- bash -lc 'bash /mnt/c/<maat>/plugins/maat/scripts/test-fast.test.sh'
+# Variant to try: TF=/path/variant.sh (it is copied in place of the script in the plugin copy).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 TF=${TF:-$HERE/test-fast.sh}
-FM=${FM:-$HERE/fic-mirror.sh}   # helper condiviso (anch'esso sostituibile da una variante)
+FM=${FM:-$HERE/fic-mirror.sh}   # shared helper (also replaceable by a variant)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 n=0; fail=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
 unset MAAT_CONFIG MAAT_MODULO MAAT_ROOT PROJECT_ROOT FIC_REPO FIC_LANE FIC_ALLOW_MNT_C
 
-# copia del plugin: test-fast.sh + i file che usa (fic-mirror.sh, il lettore, python.sh, lo schema)
+# plugin copy: test-fast.sh + the files it uses (fic-mirror.sh, the reader, python.sh, the schema)
 HP=$T/maat; mkdir -p "$HP/scripts" "$HP/schemas"
 cp "$TF" "$HP/scripts/test-fast.sh"; cp "$FM" "$HP/scripts/fic-mirror.sh"; cp "$HERE/vitest-fast.sh" "$HP/scripts/vitest-fast.sh"
 cp "$HERE/maat-config.py" "$HERE/python.sh" "$HP/scripts/"; cp "$PLUGIN/schemas/maat-config.schema.json" "$HP/schemas/"
 
-# finto repo: .claude/maat.json (l'esempio nuxt-fastapi) + modules/app con due pacchetti
+# fake repo: .claude/maat.json (the nuxt-fastapi example) + modules/app with two packages
 R=$T/repo; A=$R/modules/app
 mkdir -p "$R/.claude" "$A/apps/admin/tests" "$A/packages/ui" "$A/node_modules/dep" "$A/apps/admin/.nuxt"
 cp "$PLUGIN/examples/nuxt-fastapi.maat.json" "$R/.claude/maat.json"
@@ -32,23 +32,23 @@ echo 'dep' > "$A/node_modules/dep/index.js"
 printf 'node_modules\n.nuxt\n.env\n' > "$R/.gitignore"
 (cd "$R" && git init -q . && git config user.email t@t && git config user.name t && git add -A && git commit -qm init)
 
-# npx finto: registra cwd, argomenti e CI; opzionalmente scrive (FAKE_WRITE) ed esce con FAKE_RC
+# fake npx: records cwd, arguments and CI; optionally writes (FAKE_WRITE) and exits with FAKE_RC
 BIN=$T/bin; mkdir -p "$BIN"
 cat > "$BIN/npx" <<'EOF'
 #!/usr/bin/env bash
 { echo "cwd=$PWD"; echo "args=$*"; echo "CI=${CI:-}"; echo "src=$(cat ../../apps/admin/src.ts 2>/dev/null)"; } > "$FAKE_LOG"
 echo "cwd=$PWD args=$*" >> "$FAKE_LOG.all"
-# eslint finto, formato compact: un errore per ogni file che contiene un marcatore BAD<QUALCOSA>.
-# Cosi' la classificazione vede messaggi DIVERSI fra contenuto attuale e contenuto della base.
+# fake eslint, compact format: one error for each file that contains a BAD<SOMETHING> marker.
+# This way the classification sees DIFFERENT messages between the current content and the base content.
 rc=0
 if [ "${1:-}" = eslint ]; then
   for f in "$@"; do
     [ -f "$f" ] || continue
-    # CFGERR: eslint non eseguibile su questo gruppo (uscita 2). KILLME: muore durante la passata,
-    # per provare che il trap ripristina comunque la copia.
+    # CFGERR: eslint cannot run on this group (exit 2). KILLME: dies during the pass,
+    # to prove that the trap restores the copy anyway.
     grep -q CFGERR "$f" && exit 2
-    # exec 9>&-: il figlio eredita il descrittore del flock sulla copia, e tenendolo aperto mentre
-    # dorme lascerebbe la copia 'occupata' anche dopo la morte dello script.
+    # exec 9>&-: the child inherits the flock descriptor on the copy, and by keeping it open while
+    # sleeping it would leave the copy 'busy' even after the script dies.
     if grep -q KILLME "$f"; then exec 9>&- 2>/dev/null; pkill -TERM -f 'scripts/test-fast.sh --lint'; sleep 3; exit 0; fi
     m=$(grep -o 'BAD[A-Z]*' "$f" | head -1)
     [ -n "$m" ] || continue
@@ -57,14 +57,14 @@ if [ "${1:-}" = eslint ]; then
   done
 fi
 [ -n "${FAKE_WRITE:-}" ] && { mkdir -p "$(dirname "$FAKE_WRITE")"; echo scritto >> "$FAKE_WRITE"; }
-# vitest finto il cui esito dipende dal CONTENUTO caricato: rosso se src.ts contiene ROSSO (guardia di
-# equivalenza: un file non allineato cambia l'esito)
+# fake vitest whose result depends on the loaded CONTENT: red if src.ts contains ROSSO (equivalence
+# guard: a file that is out of sync changes the result)
 [ "${1:-}" = vitest ] && grep -q ROSSO ../../apps/admin/src.ts 2>/dev/null && rc=1
 exit "${FAKE_RC:-$rc}"
 EOF
-# rsync finto solo se FAKE_RSYNC_NOOP: simula un sync che non ha allineato nulla
-# FAKE_RSYNC_NOOP_ONCE=<file>: un solo sync a vuoto (finche' il file esiste), poi rsync vero
-# FAKE_RSYNC_FAIL: ogni rsync fallisce (uscita 23), come un rsync interrotto
+# fake rsync only if FAKE_RSYNC_NOOP: simulates a sync that aligned nothing
+# FAKE_RSYNC_NOOP_ONCE=<file>: a single empty sync (while the file exists), then the real rsync
+# FAKE_RSYNC_FAIL: every rsync fails (exit 23), like an interrupted rsync
 cat > "$BIN/rsync" <<'EOF'
 #!/usr/bin/env bash
 [ -n "${FAKE_RSYNC_FAIL:-}" ] && exit 23
@@ -72,14 +72,14 @@ cat > "$BIN/rsync" <<'EOF'
 [ -n "${FAKE_RSYNC_NOOP_ONCE:-}" ] && [ -e "$FAKE_RSYNC_NOOP_ONCE" ] && { rm -f "$FAKE_RSYNC_NOOP_ONCE"; exit 0; }
 exec /usr/bin/rsync "$@"
 EOF
-# cp finto solo se FAKE_CP_NOOP: la copia del sync INCREMENTALE (l'unica con --remove-destination) non
-# scrive nulla, cioe' un sync incrementale che non ha allineato
+# fake cp only if FAKE_CP_NOOP: the copy of the INCREMENTAL sync (the only one with --remove-destination)
+# writes nothing, i.e. an incremental sync that did not align
 cat > "$BIN/cp" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${FAKE_CP_NOOP:-}" ]; then for a in "$@"; do [ "$a" = --remove-destination ] && exit 0; done; fi
 exec /bin/cp "$@"
 EOF
-# npm finto (prima alternativa di copia.lint, con lint-baseline.mjs): registra come npx
+# fake npm (first alternative of copia.lint, with lint-baseline.mjs): records like npx
 cat > "$BIN/npm" <<'EOF'
 #!/usr/bin/env bash
 { echo "cwd=$PWD"; echo "args=npm $*"; echo "CI=${CI:-}"; } > "$FAKE_LOG"
@@ -90,16 +90,16 @@ chmod +x "$BIN/npx" "$BIN/npm" "$BIN/rsync" "$BIN/cp"
 export PATH="$BIN:$PATH" HOME=$T/home FAKE_LOG=$T/npx.log
 mkdir -p "$HOME"
 M=$HOME/fic-mirror/modules/app
-# Come lo lancia gates.sh: i test dalla radice del modulo, lint e --setup dal repo (cartelle di comandi.test e
-# comandi.lint nell'esempio). tfin <cartella> lancia da una cartella qualunque; tfin_mut la variante mutata.
+# As gates.sh launches it: tests from the module root, lint and --setup from the repo (directories of comandi.test and
+# comandi.lint in the example). tfin <dir> launches from any directory; tfin_mut the mutated variant.
 tfin() { local d=$1; shift; (cd "$d" && bash "$HP/scripts/test-fast.sh" "$@"); }
 tfr() { case "${1:-}" in --lint|--setup) tfin "$R" "$@" ;; *) tfin "$A/apps/admin" "$@" ;; esac; }
 tfin_mut() { (cd "$A/apps/admin" && bash "$HP/scripts/vf-mut.sh" "$@"); }
 vf() { rm -f "$FAKE_LOG" "$FAKE_LOG.all"; tfr "$@" > "$T/out" 2>&1; echo $? > "$T/rc"; }
 rc() { cat "$T/rc"; }
 
-# 1. senza copia: BLOCKED exit 3, nessun ripiego silenzioso; con FIC_ALLOW_MNT_C=1 ripiego su /mnt/c
-#    (qui: l'origine) dichiarato, con CI=true
+# 1. without a copy: BLOCKED exit 3, no silent fallback; with FIC_ALLOW_MNT_C=1 fallback to /mnt/c
+#    (here: the source) declared, with CI=true
 vf tests/a.test.ts
 check "senza copia -> BLOCKED exit 3, nessun ripiego" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (copia non utilizzabile: copia assente" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 FIC_ALLOW_MNT_C=1 vf tests/a.test.ts
@@ -108,7 +108,7 @@ check "  anche il ripiego gira con CI=true" 'grep -qx "CI=true" "$FAKE_LOG" && [
 check "  la riga d esito dichiara il ripiego" '[ "$(tail -1 "$T/out")" = "vitest-fast: esito=PASS luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)" ]'
 check "uso errato senza argomenti -> 64" 'tfr >/dev/null 2>&1; [ $? -eq 64 ]'
 
-# 2. setup, poi percorso normale: vitest nella copia, stessi argomenti, CI=true
+# 2. setup, then normal path: vitest in the copy, same arguments, CI=true
 tfr --setup > /dev/null 2>&1
 check "setup: copia con node_modules e impronta" '[ -f "$M/node_modules/dep/index.js" ] && [ -s "$M/.fic-deps" ]'
 vf tests/a.test.ts
@@ -117,14 +117,14 @@ check "  argomenti invariati, CI=true" 'grep -qx "args=vitest run tests/a.test.t
 check "  esito PASS, exit 0" '[ "$(rc)" = 0 ] && grep -q "esito=PASS luogo=copia" "$T/out"'
 check "  .nuxt della copia ripulito" '[ ! -d "$M/apps/admin/.nuxt" ]'
 
-# 3. file importato modificato: sincronizzato prima del run
+# 3. imported file modified: synced before the run
 echo 'export const x = 2' > "$A/apps/admin/src.ts"
 vf tests/a.test.ts
 check "file modificato: la copia lo vede" 'grep -qx "src=export const x = 2" "$FAKE_LOG" && grep -q "luogo=copia" "$T/out"'
 
-# 4. sync che non allinea (file modificato non sincronizzato) -> risincronizzazione, poi BLOCKED
-#    (dal secondo run il sync e' incrementale: a "non allineare" e' la sua copia, FAKE_CP_NOOP; la
-#    risincronizzazione e' il sync completo, FAKE_RSYNC_NOOP)
+# 4. sync that does not align (modified file not synced) -> resync, then BLOCKED
+#    (from the second run the sync is incremental: what "does not align" is its copy, FAKE_CP_NOOP; the
+#    resync is the full sync, FAKE_RSYNC_NOOP)
 echo 'export const x = 3' > "$A/apps/admin/src.ts"
 FAKE_CP_NOOP=1 vf tests/a.test.ts
 check "copia disallineata una volta -> risincronizzata, gira nella copia" 'grep -q "risincronizzazione" "$T/out" && grep -qx "cwd=$M/apps/admin" "$FAKE_LOG" && grep -qx "src=export const x = 3" "$FAKE_LOG" && grep -q "esito=PASS luogo=copia" "$T/out"'
@@ -134,13 +134,13 @@ check "copia non allineata anche dopo la risincronizzazione -> BLOCKED exit 3, n
 FIC_ALLOW_MNT_C=1 FAKE_CP_NOOP=1 FAKE_RSYNC_NOOP=1 vf tests/a.test.ts
 check "  con FIC_ALLOW_MNT_C=1 -> ripiego dichiarato" 'grep -q "ripiego: copia non allineata" "$T/out" && grep -qx "cwd=$A/apps/admin" "$FAKE_LOG" && grep -q "luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)" "$T/out"'
 
-# 5. .env diverso e non sincronizzato -> non allineata (i .env* ignorati sono nel manifest)
+# 5. .env different and not synced -> not aligned (the ignored .env* files are in the manifest)
 vf tests/a.test.ts > /dev/null
 echo 'VAR=2' > "$A/apps/admin/.env"
 FAKE_CP_NOOP=1 FAKE_RSYNC_NOOP=1 vf tests/a.test.ts
 check ".env diverso -> copia non allineata" 'grep -q "copia non allineata" "$T/out" && grep -q "apps/admin/.env" "$T/out" && [ "$(rc)" = 3 ]'
 
-# 6. file cancellato nell'origine: sparisce dalla copia
+# 6. file deleted in the source: it disappears from the copy
 echo 'y' > "$A/apps/admin/tests/b.test.ts"
 vf tests/a.test.ts
 check "file nuovo non tracciato: copiato" '[ -f "$M/apps/admin/tests/b.test.ts" ]'
@@ -149,9 +149,9 @@ vf tests/a.test.ts
 check "file cancellato: sparisce dalla copia" '[ ! -e "$M/apps/admin/tests/b.test.ts" ] && grep -q "luogo=copia" "$T/out"'
 check "  node_modules della copia non cancellato" '[ -f "$M/node_modules/dep/index.js" ]'
 
-# 7. dipendenze stantie: lockfile o un package.json qualunque cambiati -> la copia si riallinea da sola dall'origine
-#    (che ha node_modules), dentro il lock, e il run gira nella copia. Controprova per mutazione: riallineamento
-#    disattivato -> questo caso diventa rosso.
+# 7. stale dependencies: lockfile or any package.json changed -> the copy realigns itself from the source
+#    (which has node_modules), inside the lock, and the run happens in the copy. Mutation counterproof: realignment
+#    switched off -> this case turns red.
 fp() { ( . "$HP/scripts/fic-mirror.sh"; fic_deps_fp "$1" ); }
 old12=$(cut -c1-12 "$M/.fic-deps")
 mkdir -p "$M/apps/admin/.nuxt"; echo g > "$M/apps/admin/.nuxt/marker"
@@ -164,21 +164,21 @@ check "  .nuxt e cache ripuliti dopo il riallineamento (.fic-sync-gen)" '[ ! -e 
 vf tests/a.test.ts
 check "  il run dopo non riallinea di nuovo" '[ "$(rc)" = 0 ] && ! grep -q "dipendenze cambiate" "$T/out"'
 rm -f "$A/node_modules/dep/nuovo.js"
-# 7a. riallineamento con rsync che fallisce -> BLOCKED col motivo, nessun ripiego; il run dopo riprova
+# 7a. realignment with an rsync that fails -> BLOCKED with the reason, no fallback; the next run retries
 echo '{"lock":3}' > "$A/package-lock.json"
 FAKE_RSYNC_FAIL=1 vf tests/a.test.ts
 check "riallineamento con rsync fallito -> BLOCKED exit 3, nessun ripiego" '[ "$(rc)" = 3 ] && grep -q "copia non utilizzabile: dipendenze stantie, riallineamento automatico non riuscito: rsync dall'"'"'origine fallito (uscita 23)" "$T/out" && [ ! -f "$FAKE_LOG" ] && ! grep -q "luogo=mnt-c" "$T/out"'
 check "  .fic-deps non resta l'impronta vecchia (interrotto)" '[ "$(cat "$M/.fic-deps")" = interrotto ]'
 vf tests/a.test.ts
 check "  il run dopo riprova e riallinea" '[ "$(rc)" = 0 ] && grep -q "dipendenze cambiate (impronta interrotto -> " "$T/out" && [ "$(cat "$M/.fic-deps")" = "$(fp "$A")" ] && [ ! -e "$M/node_modules/dep/nuovo.js" ]'
-# 7b. origine senza node_modules e nessuna fonte (tree principale) -> BLOCKED come prima, col motivo
+# 7b. source without node_modules and no seed source (main tree) -> BLOCKED as before, with the reason
 mv "$A/node_modules" "$T/nm.via"
 echo '{"lock":4}' > "$A/package-lock.json"
 vf tests/a.test.ts
 check "origine senza node_modules, nessuna fonte -> BLOCKED exit 3 col motivo" '[ "$(rc)" = 3 ] && grep -q "copia non utilizzabile: dipendenze stantie, riallineamento automatico non riuscito: l'"'"'origine non ha node_modules" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 mv "$T/nm.via" "$A/node_modules"
-# 7c. riallineamento che esce 0 ma registra un'impronta sbagliata (fic_deps_fp finto al momento della scrittura, in
-#     una variante di fic-mirror.sh nel finto repo) -> lo coglie il secondo deps_ok: BLOCKED, niente run
+# 7c. realignment that exits 0 but records a wrong fingerprint (fic_deps_fp faked at write time, in
+#     a variant of fic-mirror.sh in the fake repo) -> the second deps_ok catches it: BLOCKED, no run
 cp "$HP/scripts/fic-mirror.sh" "$T/fm.vero"
 sed '0,/^  fic_deps_fp "\$src" > "\$dst\/.fic-deps"/s//  echo sbagliata > "$dst\/.fic-deps"/' "$T/fm.vero" > "$HP/scripts/fic-mirror.sh"
 check "premessa: impronta finta nel riallineamento" 'grep -q "^  echo sbagliata" "$HP/scripts/fic-mirror.sh"'
@@ -187,14 +187,14 @@ vf tests/a.test.ts
 check "riallineamento con impronta sbagliata -> BLOCKED exit 3 dal secondo controllo" '[ "$(rc)" = 3 ] && grep -q "copia non utilizzabile: dipendenze stantie anche dopo il riallineamento automatico" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 cp "$T/fm.vero" "$HP/scripts/fic-mirror.sh"
 echo '{"lock":1}' > "$A/package-lock.json"
-# 136: con FIC_ALLOW_MNT_C=1 e un package.json diverso non si ripiega piu': le dipendenze stantie si riallineano
-# (prima era "ripiego: dipendenze stantie"; il ripiego resta per cio' che non si riallinea, vedi 7b e i casi 1, 4, 8, 13)
+# 136: with FIC_ALLOW_MNT_C=1 and a different package.json there is no fallback any more: stale dependencies are realigned
+# (it used to be "ripiego: dipendenze stantie"; the fallback stays for what cannot be realigned, see 7b and cases 1, 4, 8, 13)
 echo '{"name":"ui","v":2}' > "$A/packages/ui/package.json"
 FIC_ALLOW_MNT_C=1 vf tests/a.test.ts
 check "package.json di un pacchetto diverso + FIC_ALLOW_MNT_C=1 -> riallineata, gira nella copia" '[ "$(rc)" = 0 ] && grep -q "dipendenze cambiate" "$T/out" && grep -qx "cwd=$M/apps/admin" "$FAKE_LOG" && ! grep -q ripiego "$T/out"'
 echo '{"name":"ui"}' > "$A/packages/ui/package.json"
 
-# 8. copia occupata -> ATTENDE il lock e gira nella copia, non ripiega (controprova: flock -n -> rosso)
+# 8. copy busy -> it WAITS for the lock and runs in the copy, it does not fall back (counterproof: flock -n -> red)
 ( flock 9; sleep 3 ) 9>"$M/.fic-lock" & holder=$!
 sleep 1
 t0=$SECONDS
@@ -210,26 +210,26 @@ FIC_ALLOW_MNT_C=1 FIC_LOCK_WAIT=1 vf tests/a.test.ts
 check "  con FIC_ALLOW_MNT_C=1 -> ripiego dichiarato" 'grep -q "luogo=mnt-c (ripiego: copia occupata" "$T/out" && grep -qx "cwd=$A/apps/admin" "$FAKE_LOG" && grep -q "esito=PASS luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)" "$T/out"'
 wait $holder
 
-# 9. snapshot scritta durante il run -> BLOCKED, exit 4
+# 9. snapshot written during the run -> BLOCKED, exit 4
 FAKE_WRITE=$M/apps/admin/tests/__snapshots__/a.test.ts.snap vf tests/a.test.ts
 check "snapshot nuova scritta -> BLOCKED exit 4" '[ "$(rc)" = 4 ] && grep -q "esito=BLOCKED (snapshot da generare su /mnt/c" "$T/out"'
 check "  la snapshot non arriva nell'origine" '[ ! -e "$A/apps/admin/tests/__snapshots__" ]'
 vf tests/a.test.ts
 check "  il run dopo la ripulisce (--delete)" '[ ! -e "$M/apps/admin/tests/__snapshots__/a.test.ts.snap" ] && [ "$(rc)" = 0 ]'
 
-# 10. snapshot inline (file di test del manifest riscritto) -> BLOCKED
+# 10. inline snapshot (test file of the manifest rewritten) -> BLOCKED
 FAKE_WRITE=$M/apps/admin/tests/a.test.ts vf tests/a.test.ts
 check "snapshot inline in un .test.ts -> BLOCKED" '[ "$(rc)" = 4 ] && grep -q "apps/admin/tests/a.test.ts" "$T/out"'
 
-# 11. fallimento di vitest: exit propagato, esito FAIL
+# 11. vitest failure: exit code propagated, esito FAIL
 FAKE_RC=1 vf tests/a.test.ts
 check "test rosso -> FAIL, exit 1" '[ "$(rc)" = 1 ] && grep -q "esito=FAIL luogo=copia" "$T/out"'
 
-# 12. la destinazione non si sposta con gli argomenti (ora l'opzione e' rifiutata prima di eseguire)
+# 12. the destination does not move with the arguments (now the option is rejected before running)
 vf --dest /tmp/altro tests/a.test.ts
 check "nessun argomento cambia la destinazione" '[ "$(rc)" = 64 ] && [ ! -e /tmp/altro ] && [ ! -f "$FAKE_LOG" ]'
 
-# 13. git inutilizzabile (manifest non calcolabile) -> ripiego, non una verifica ridotta
+# 13. git unusable (manifest not computable) -> fallback, not a reduced check
 mv "$R/.git" "$R/.git.via"
 vf tests/a.test.ts
 check "senza git -> BLOCKED exit 3, non una verifica ridotta" '[ "$(rc)" = 3 ] && grep -q "copia non utilizzabile: manifest non calcolabile" "$T/out" && [ ! -f "$FAKE_LOG" ]'
@@ -237,9 +237,9 @@ FIC_ALLOW_MNT_C=1 vf tests/a.test.ts
 check "  con FIC_ALLOW_MNT_C=1 -> ripiego dichiarato" 'grep -q "ripiego: manifest non calcolabile" "$T/out" && grep -qx "cwd=$A/apps/admin" "$FAKE_LOG"'
 mv "$R/.git.via" "$R/.git"
 
-# 14. lint: perimetro della CI (apps/admin), estensioni, cwd, cache opt-in, mappa dei codici
+# 14. lint: CI perimeter (apps/admin), extensions, cwd, opt-in cache, map of exit codes
 mkdir -p "$A/packages/ui" "$A/packages/stores" "$A/apps/admin/utils" "$A/apps/admin/.nuxt"
-echo '{"compilerOptions":{}}' > "$A/apps/admin/.nuxt/tsconfig.json"   # generato da nuxi: serve al lint
+echo '{"compilerOptions":{}}' > "$A/apps/admin/.nuxt/tsconfig.json"   # generated by nuxi: needed by lint
 echo 'export const y = 1' > "$A/apps/admin/utils/x.ts"
 echo 'export const z = 1' > "$A/packages/ui/i.ts"; echo 'export const w = 1' > "$A/packages/stores/s.ts"
 echo '# doc' > "$A/apps/admin/docs.md"
@@ -272,16 +272,16 @@ vf --lint modules/app/apps/admin/utils/x.ts
 check "senza il file guida dei preparati (tsconfig generato) -> BLOCKED col rimedio, non un ripiego (su /mnt/c mancherebbe uguale)" '[ "$(rc)" = 2 ] && grep -q "esito=BLOCKED (preparato assente: modules/app/apps/admin/.nuxt/tsconfig.json; eseguire .npx nuxi prepare. in modules/app/apps/admin" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 mv "$A/apps/admin/.nuxt/tsconfig.via" "$A/apps/admin/.nuxt/tsconfig.json"
 
-# 15. robustezza degli argomenti e cache nel ripiego
+# 15. robustness of the arguments and cache in the fallback
 check "--lint senza path -> 64" 'tfr --lint >/dev/null 2>&1; [ $? -eq 64 ]'
 check "--lint --cache senza path -> 64" 'tfr --lint --cache >/dev/null 2>&1; [ $? -eq 64 ]'
 check "path non relativo al repository -> 64, non SKIPPED" 'tfr --lint /mnt/c/x/apps/admin/utils/x.ts >/dev/null 2>&1; [ $? -eq 64 ]'
-echo 'export const y = 2' > "$A/apps/admin/utils/x.ts"   # divergenza vera: il sync finto non la porta
+echo 'export const y = 2' > "$A/apps/admin/utils/x.ts"   # real divergence: the fake sync does not bring it over
 FIC_ALLOW_MNT_C=1 FAKE_CP_NOOP=1 FAKE_RSYNC_NOOP=1 vf --lint --cache modules/app/apps/admin/utils/x.ts
 check "ripiego con --cache: nessuna cache scritta nel repository" 'grep -q "ripiego: copia non allineata" "$T/out" && ! ls "$A"/.fic-eslintcache-* >/dev/null 2>&1 && ! grep -q -- "--cache" "$FAKE_LOG"'
 check "  e il ripiego linta i path relativi al gruppo" 'grep -qx "args=eslint --quiet utils/x.ts" "$FAKE_LOG" && grep -qx "cwd=$A/apps/admin" "$FAKE_LOG"'
 
-# 16. solo path, mai opzioni: finirebbero testualmente nella riga di comando del runner
+# 16. paths only, never options: they would end up verbatim in the runner's command line
 vf --passWithNoTests tests/a.test.ts
 check "opzione di vitest come argomento -> 64" '[ "$(rc)" = 64 ] && grep -q "solo path, niente opzioni" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 vf --lint --fix modules/app/apps/admin/utils/x.ts
@@ -293,8 +293,8 @@ check "segmento .. nel path -> 64" '[ "$(rc)" = 64 ] && grep -q "non ammesso nel
 vf --lint --base modules/app/apps/admin/utils/x.ts
 check "--base senza riferimento -> 64" '[ "$(rc)" = 64 ]'
 
-# 17. lint fuori da apps/admin: PREEXISTING / INTRODUCED / UNRESOLVED
-echo 'module.exports = {}' > "$A/packages/ui/.eslintrc.js"     # ui e' lintabile, stores no
+# 17. lint outside apps/admin: PREEXISTING / INTRODUCED / UNRESOLVED
+echo 'module.exports = {}' > "$A/packages/ui/.eslintrc.js"     # ui is lintable, stores is not
 echo 'export const nuovo = 1' > "$A/packages/ui/i.ts"
 echo 'export const vecchio = 1 // BADOLD' > "$A/packages/ui/old.ts"
 (cd "$R" && git add -A && git commit -qm base-extra)
@@ -326,40 +326,40 @@ vf --lint --base deadbeef99deadbeef99 modules/app/packages/ui/old.ts
 check "base non risolvibile -> UNRESOLVED exit 3, mai PASS" '[ "$(rc)" = 3 ] && grep -q "esito=UNRESOLVED" "$T/out"'
 FAKE_RC=2 vf --lint --base "$B0" modules/app/packages/ui/old.ts
 check "eslint uscita 2 fuori perimetro -> UNRESOLVED exit 3" '[ "$(rc)" = 3 ] && grep -q "UNRESOLVED" "$T/out"'
-echo 'export const nuovo = 3 // BADNEW' > "$A/packages/ui/i.ts"   # divergenza vera dal sync finto
+echo 'export const nuovo = 3 // BADNEW' > "$A/packages/ui/i.ts"   # real divergence from the fake sync
 FIC_ALLOW_MNT_C=1 FAKE_CP_NOOP=1 FAKE_RSYNC_NOOP=1 vf --lint --base "$B0" modules/app/packages/ui/i.ts
 check "ripiego -> UNRESOLVED exit 3, nessuna classificazione" '[ "$(rc)" = 3 ] && grep -q "NON classificati (ripiego" "$T/out"'
 check "  nel ripiego non si scrive nel repository" 'grep -q "nuovo = 3" "$A/packages/ui/i.ts"'
 
-# 18. il NOME DEL FILE conta: stesso identico messaggio, ma in un altro file del gruppo
+# 18. the FILE NAME counts: the very same message, but in another file of the group
 echo 'export const a = 1 // BADDUP' > "$A/packages/ui/dup_a.ts"
 echo 'export const b = 1' > "$A/packages/ui/dup_b.ts"
 (cd "$R" && git add -A && git commit -qm dup-base)
 B1=$(cd "$R" && git rev-parse HEAD)
-echo 'export const a = 1' > "$A/packages/ui/dup_a.ts"            # risolto qui
-echo 'export const b = 1 // BADDUP' > "$A/packages/ui/dup_b.ts"  # e introdotto la'
+echo 'export const a = 1' > "$A/packages/ui/dup_a.ts"            # resolved here
+echo 'export const b = 1 // BADDUP' > "$A/packages/ui/dup_b.ts"  # and introduced there
 vf --lint --base "$B1" modules/app/packages/ui/dup_a.ts modules/app/packages/ui/dup_b.ts
 check "stesso messaggio in un ALTRO file -> INTRODUCED, non PREEXISTING" '[ "$(rc)" = 1 ] && grep -q "INTRODUCED" "$T/out" && ! grep -q "PREEXISTING" "$T/out"'
 check "  e la riga dice in quale file" 'grep -q "dup_b.ts" "$T/out"'
 
-# 19. ripiego SENZA --base: resta SKIPPED come sul percorso della copia, non BLOCKED
+# 19. fallback WITHOUT --base: stays SKIPPED as on the copy path, not BLOCKED
 echo 'export const b = 2 // BADDUP' > "$A/packages/ui/dup_b.ts"
 FIC_ALLOW_MNT_C=1 FAKE_CP_NOOP=1 FAKE_RSYNC_NOOP=1 vf --lint modules/app/packages/ui/dup_b.ts
 check "ripiego senza --base -> SKIPPED, non UNRESOLVED" '[ "$(rc)" = 0 ] && grep -q "manca --base" "$T/out" && ! grep -q UNRESOLVED "$T/out"'
 
-# 20. due gruppi in una sola invocazione: reset fra gruppi e precedenza INTRODUCED > UNRESOLVED
+# 20. two groups in a single invocation: reset between groups and precedence INTRODUCED > UNRESOLVED
 mkdir -p "$A/packages/comp"
 echo '{"name":"comp"}' > "$A/packages/comp/package.json"
 echo 'module.exports = {}' > "$A/packages/comp/.eslintrc.js"
 echo 'export const c = 1 // CFGERR' > "$A/packages/comp/c.ts"
 (cd "$R" && git add -A && git commit -qm due-gruppi)
 B2=$(cd "$R" && git rev-parse HEAD)
-tfr --setup > /dev/null 2>&1   # nuovo package.json = nuova impronta
+tfr --setup > /dev/null 2>&1   # new package.json = new fingerprint
 echo 'export const b = 1 // BADDUE' > "$A/packages/ui/dup_b.ts"
 vf --lint --base "$B2" modules/app/packages/ui/dup_b.ts modules/app/packages/comp/c.ts
 check "due gruppi: INTRODUCED (exit 1) batte UNRESOLVED dell'altro gruppo" '[ "$(rc)" = 1 ] && grep -q INTRODUCED "$T/out" && grep -q UNRESOLVED "$T/out"'
 
-# 21. eslint rotto SOLO sulla passata della base (il ramo dopo lo scambio)
+# 21. eslint broken ONLY on the base pass (the branch after the swap)
 echo 'export const d = 1 // CFGERR' > "$A/packages/ui/onlybase.ts"
 (cd "$R" && git add -A && git commit -qm base-rotta)
 B3=$(cd "$R" && git rev-parse HEAD)
@@ -367,7 +367,7 @@ echo 'export const d = 1' > "$A/packages/ui/onlybase.ts"
 vf --lint --base "$B3" modules/app/packages/ui/onlybase.ts
 check "eslint rotto solo sulla base -> UNRESOLVED exit 3" '[ "$(rc)" = 3 ] && grep -q "sulla base non eseguibile" "$T/out"'
 
-# 22. morte durante lo scambio: il trap deve ripristinare la copia
+# 22. death during the swap: the trap must restore the copy
 echo 'export const k = 1 // KILLME' > "$A/packages/ui/killer.ts"
 (cd "$R" && git add -A && git commit -qm killer)
 B4=$(cd "$R" && git rev-parse HEAD)
@@ -377,24 +377,24 @@ check "morte durante lo scambio: il trap rimette il contenuto attuale" '! grep -
 vf --lint --base "$B4" modules/app/packages/ui/onlybase.ts
 check "  e il run successivo non ripiega" 'grep -q "luogo=copia" "$T/out"'
 
-# 23. --setup e --base non si fanno mangiare un path
+# 23. --setup and --base do not swallow a path
 check "--setup insieme ad altri argomenti -> 64" 'tfr --lint --setup modules/app/apps/admin/utils/x.ts >/dev/null 2>&1; [ $? -eq 64 ]'
 check "--base con un path al posto del riferimento -> 64" '(cd "$R" && tfr --lint --base modules/app/apps/admin/utils/x.ts modules/app/apps/admin/utils/x.ts) >/dev/null 2>&1; [ $? -eq 64 ]'
 
-# 24. il conteggio distingue classificati e saltati
+# 24. the count tells classified and skipped apart
 vf --lint --base "$B4" modules/app/packages/ui/onlybase.ts modules/app/packages/stores/s.ts
 check "conteggio: classificati su totale" 'grep -q "1 classificati su 2" "$T/out"'
 
-# 25. destinazione derivata dalla radice (pt03): tree principale -> ~/fic-mirror, worktree collegato ->
-#     ~/fic-mirror-<12 hex dello sha256 della radice>, che non tocca la copia del tree principale.
-#     Controprova: destinazione fissa -> i casi del worktree diventano rossi.
+# 25. destination derived from the root (pt03): main tree -> ~/fic-mirror, linked worktree ->
+#     ~/fic-mirror-<12 hex of the sha256 of the root>, which does not touch the copy of the main tree.
+#     Counterproof: fixed destination -> the worktree cases turn red.
 vf tests/a.test.ts
 check "tree principale -> ~/fic-mirror" '[ "$(rc)" = 0 ] && grep -qx "cwd=$HOME/fic-mirror/modules/app/apps/admin" "$FAKE_LOG"'
-printf '*.sh text eol=lf\n' > "$R/.gitattributes"   # come nel repository vero: lo script resta LF nel worktree
+printf '*.sh text eol=lf\n' > "$R/.gitattributes"   # as in the real repository: the script stays LF in the worktree
 (cd "$R" && git add -A && git commit -qm pre-worktree)
 W=$T/wt
-# autocrlf=true: il worktree nasce con fine riga CRLF, il tree principale le ha LF (il caso misurato).
-# Niente node_modules nel worktree, come in un worktree appena creato.
+# autocrlf=true: the worktree is born with CRLF line endings, the main tree has LF (the measured case).
+# No node_modules in the worktree, as in a freshly created worktree.
 (cd "$R" && git -c core.autocrlf=true worktree add -q -b wt "$W") > /dev/null 2>&1
 mhash() { printf '%s' "$1" | sha256sum | cut -c1-12; }
 WM=$HOME/fic-mirror-$(mhash "$(git -C "$W" rev-parse --show-toplevel)")/modules/app
@@ -414,7 +414,7 @@ vfw --dest /tmp/altro tests/a.test.ts
 check "  dal worktree nessun argomento la cambia (--dest -> 64)" '[ "$(rc)" = 64 ] && [ ! -e /tmp/altro ] && [ ! -f "$FAKE_LOG" ]'
 mainsum > "$T/main-after"
 check "  la copia del tree principale non e' stata toccata" 'cmp -s "$T/main-before" "$T/main-after"'
-# .fic-deps di prima della regola (impronta dei byte): resta valido finche' i byte non cambiano
+# .fic-deps from before the rule (fingerprint of the bytes): stays valid as long as the bytes do not change
 rawfp=$(cd "$W/modules/app" && find . \( -name node_modules -o -name .nuxt -o -name .output \) -prune -o \
   \( -name package.json -o -name package-lock.json \) -type f -print | LC_ALL=C sort |
   while IFS= read -r f; do printf '%s  %s\n' "$(sha256sum < "$f" | cut -c1-64)" "$f"; done | sha256sum | cut -c1-64)
@@ -423,13 +423,13 @@ echo "$rawfp" > "$WM/.fic-deps"
 vfw tests/a.test.ts
 check ".fic-deps legacy (byte) ancora accettato" '[ "$(rc)" = 0 ] && grep -q "esito=PASS luogo=copia" "$T/out"'
 
-# 26. cancellazione della copia di un worktree (replay.sh a fine rigioco): mai quella del tree principale
+# 26. deletion of a worktree's copy (replay.sh at the end of a replay): never the one of the main tree
 fo=$( . "$HP/scripts/fic-mirror.sh"; fic_mirror_forget "$W" )
 check "fic_mirror_forget: copia del worktree cancellata" '[ ! -e "${WM%/modules/app}" ] && printf "%s" "$fo" | grep -q "copia cancellata"'
 check "  la copia del tree principale (node_modules in hardlink compresi) e' intatta" 'mainsum > "$T/main-after2"; cmp -s "$T/main-before" "$T/main-after2"'
 fo=$( . "$HP/scripts/fic-mirror.sh"; fic_mirror_forget "$R"; echo "rc=$?" )
 check "  sul tree principale: rifiuto, niente cancellato" 'printf "%s" "$fo" | grep -q "rifiuto" && printf "%s" "$fo" | grep -q "rc=1" && [ -d "$HOME/fic-mirror/modules/app/node_modules" ]'
-# 26b. copie di corsia (harness-pt13): fic_lane_forget cancella solo <copia della radice>-<k>
+# 26b. lane copies (harness-pt13): fic_lane_forget deletes only <copy of the root>-<k>
 WL=${WM%/modules/app}-1; mkdir -p "$WL/modules/app/node_modules" "$HOME/fic-mirror-2/modules/app"
 fo=$( . "$HP/scripts/fic-mirror.sh"; fic_lane_forget "$W" 1; echo "rc=$?" )
 check "fic_lane_forget: copia della corsia 1 del worktree cancellata" '[ ! -e "$WL" ] && printf "%s" "$fo" | grep -q "copia della corsia cancellata" && printf "%s" "$fo" | grep -q "rc=0"'
@@ -438,13 +438,13 @@ check "  corsia 2 del tree principale (~/fic-mirror-2) cancellata, ~/fic-mirror 
 fo=$( . "$HP/scripts/fic-mirror.sh"; fic_lane_forget "$R" x; echo "rc=$?" )
 check "  corsia non valida: rifiuto, niente cancellato" 'printf "%s" "$fo" | grep -q "rc=1" && [ -d "$HOME/fic-mirror/modules/app/node_modules" ]'
 
-# 27. --setup di un worktree senza node_modules: seminati (niente installazioni)
+# 27. --setup of a worktree without node_modules: seeded (no installs)
 tfin "$W/modules/app/apps/admin" --setup > "$T/out" 2>&1; echo $? > "$T/rc"
 check "--setup dal worktree senza node_modules -> semina da ~/fic-mirror, exit 0" '[ "$(rc)" = 0 ] && [ -f "$WM/node_modules/dep/index.js" ] && [ -s "$WM/.fic-deps" ] && grep -q "hardlink" "$T/out"'
 vfw tests/a.test.ts
 check "  e poi gira nella copia del worktree" '[ "$(rc)" = 0 ] && grep -qx "cwd=$WM/apps/admin" "$FAKE_LOG"'
 
-# 28. dipendenze del worktree diverse da quelle del tree principale: nessuna semina, BLOCKED col motivo
+# 28. worktree dependencies different from those of the main tree: no seeding, BLOCKED with the reason
 W2=$T/wt2
 (cd "$R" && git worktree add -q -b wt2 "$W2") > /dev/null 2>&1
 echo '{"lock":"altro"}' > "$W2/modules/app/package-lock.json"
@@ -452,8 +452,8 @@ WM2=$HOME/fic-mirror-$(mhash "$(git -C "$W2" rev-parse --show-toplevel)")/module
 rm -f "$FAKE_LOG"; tfin "$W2/modules/app/apps/admin" tests/a.test.ts > "$T/out" 2>&1; echo $? > "$T/rc"
 check "dipendenze diverse -> nessuna semina, BLOCKED copia assente con il motivo" '[ "$(rc)" = 3 ] && grep -q "copia assente: eseguire --setup; semina da ~/fic-mirror non possibile: dipendenze del worktree diverse" "$T/out" && [ ! -e "$WM2/node_modules" ] && [ ! -f "$FAKE_LOG" ]'
 
-# 29. worktree creato da Git per Windows: il .git dice "gitdir: C:/…", che git di WSL non risolve. Simulato:
-#     FIC_WSL_MNT=<radice delle unita'> con <radice>/c -> /, e il .git riscritto con il percorso "C:/…".
+# 29. worktree created by Git for Windows: the .git says "gitdir: C:/…", which the WSL git does not resolve. Simulated:
+#     FIC_WSL_MNT=<drives root> with <root>/c -> /, and the .git rewritten with the path "C:/…".
 W3=$T/wt3
 (cd "$R" && git worktree add -q -b wt3 "$W3") > /dev/null 2>&1
 g3=$(sed -n 's/^gitdir: //p' "$W3/.git")
@@ -465,8 +465,8 @@ rm -f "$FAKE_LOG"; FIC_WSL_MNT=$T/mnt tfin "$W3/modules/app/apps/admin" tests/a.
 check "gitdir C:/… tradotto: copia ~/fic-mirror-<hash> del worktree, manifest calcolato, PASS" '[ "$(rc)" = 0 ] && grep -qx "cwd=$WM3/apps/admin" "$FAKE_LOG" && grep -q "esito=PASS luogo=copia" "$T/out"'
 check "  e la copia del tree principale resta intatta" 'mainsum > "$T/main-after3"; cmp -s "$T/main-before" "$T/main-after3"'
 
-# 29b. worktree SENZA node_modules, dipendenze cambiate nei due tree allo stesso modo: la copia del tree principale
-#      si riallinea dal tree principale (sotto il SUO lock), poi la copia del worktree si semina di nuovo in hardlink
+# 29b. worktree WITHOUT node_modules, dependencies changed the same way in both trees: the copy of the main tree
+#      realigns from the main tree (under ITS lock), then the worktree copy is seeded again as hardlinks
 cp "$A/package-lock.json" "$T/lock.main"; cp "$W/modules/app/package-lock.json" "$T/lock.wt"
 echo '{"lock":"c"}' > "$A/package-lock.json"; echo '{"lock":"c"}' > "$W/modules/app/package-lock.json"
 echo 'c' > "$A/node_modules/dep/c.js"
@@ -474,29 +474,29 @@ vfw tests/a.test.ts
 check "worktree senza node_modules: dipendenze cambiate -> riseminata, gira nella copia del worktree" '[ "$(rc)" = 0 ] && grep -q "^vitest-fast: dipendenze cambiate (impronta [0-9a-f]* -> [0-9a-f]*): copia riseminata da ~/fic-mirror (node_modules in hardlink)$" "$T/out" && grep -qx "cwd=$WM/apps/admin" "$FAKE_LOG" && grep -q "esito=PASS luogo=copia" "$T/out"'
 check "  copia del tree principale riallineata prima, con avviso" 'grep -q "^fic-mirror: copia del tree principale ($M) stantia: copia riallineata dall" "$T/out" && [ "$(cat "$M/.fic-deps")" = "$(fp "$A")" ]'
 check "  impronta del worktree registrata, node_modules nuovi in hardlink" '[ "$(cat "$WM/.fic-deps")" = "$(fp "$W/modules/app")" ] && [ -n "$(ino "$WM/node_modules/dep/c.js")" ] && [ "$(ino "$WM/node_modules/dep/c.js")" = "$(ino "$M/node_modules/dep/c.js")" ]'
-# worktree con dipendenze DIVERSE da quelle del tree principale e senza node_modules: nessuna fonte -> BLOCKED
+# worktree with dependencies DIFFERENT from those of the main tree and without node_modules: no seed source -> BLOCKED
 echo '{"lock":"solo-wt"}' > "$W/modules/app/package-lock.json"
 vfw tests/a.test.ts
 check "  dipendenze del worktree diverse, nessuna fonte -> BLOCKED exit 3 col motivo" '[ "$(rc)" = 3 ] && grep -q "dipendenze stantie, riallineamento automatico non riuscito: l'"'"'origine non ha node_modules e le sue dipendenze sono diverse" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 cp "$T/lock.main" "$A/package-lock.json"; cp "$T/lock.wt" "$W/modules/app/package-lock.json"; rm -f "$A/node_modules/dep/c.js"
 
-# 29c. copia di CORSIA (FIC_LANE): dipendenze cambiate -> copia della radice riallineata (sotto il suo lock), poi
-#      la corsia si semina di nuovo da quella, in hardlink
+# 29c. LANE copy (FIC_LANE): dependencies changed -> copy of the root realigned (under its lock), then
+#      the lane is seeded again from it, as hardlinks
 LM=$HOME/fic-mirror-1/modules/app
 FIC_LANE=1 vf tests/a.test.ts
 check "premessa: corsia 1 seminata al primo uso" '[ "$(rc)" = 0 ] && grep -qx "cwd=$LM/apps/admin" "$FAKE_LOG" && [ -s "$LM/.fic-deps" ]'
 echo '{"lock":"corsia"}' > "$A/package-lock.json"; echo 'l' > "$A/node_modules/dep/l.js"
-mkdir -p "$LM/packages/ui/node_modules/vecchio"; echo v > "$LM/packages/ui/node_modules/vecchio/i.js"   # orfano: non e' nella fonte
+mkdir -p "$LM/packages/ui/node_modules/vecchio"; echo v > "$LM/packages/ui/node_modules/vecchio/i.js"   # orphan: it is not in the seed source
 FIC_LANE=1 vf tests/a.test.ts
 check "corsia: node_modules annidati assenti nella fonte cancellati, gli altri restano" '[ ! -e "$LM/packages/ui/node_modules" ] && [ -f "$LM/node_modules/dep/index.js" ]'
 check "corsia: dipendenze cambiate -> radice riallineata, corsia riseminata, gira nella corsia" '[ "$(rc)" = 0 ] && grep -q "^vitest-fast: dipendenze cambiate (impronta [0-9a-f]* -> [0-9a-f]*): copia della corsia riseminata da $HOME/fic-mirror (node_modules in hardlink)$" "$T/out" && grep -qx "cwd=$LM/apps/admin" "$FAKE_LOG"'
 check "  impronte aggiornate, node_modules nuovi in hardlink dalla copia della radice" '[ "$(cat "$M/.fic-deps")" = "$(fp "$A")" ] && [ "$(cat "$LM/.fic-deps")" = "$(fp "$A")" ] && [ -n "$(ino "$LM/node_modules/dep/l.js")" ] && [ "$(ino "$LM/node_modules/dep/l.js")" = "$(ino "$M/node_modules/dep/l.js")" ]'
 cp "$T/lock.main" "$A/package-lock.json"; rm -f "$A/node_modules/dep/l.js"
 
-# 30. sync INCREMENTALE (harness-pt06): stato per copia, allineamento sul diff del manifest, generati ripuliti
-#     solo quando serve, guardia di equivalenza. Due controprove per mutazione, eseguite qui su una copia
-#     dello script accanto all'originale (stessa radice): cache che ignora la stat -> la guardia diventa
-#     rossa; ctime tolto dalla chiave -> un file riscritto con dimensione e mtime uguali non si riallinea.
+# 30. INCREMENTAL sync (harness-pt06): state per copy, alignment on the manifest diff, generated files cleaned
+#     only when needed, equivalence guard. Two mutation counterproofs, run here on a copy
+#     of the script next to the original (same root): cache that ignores the stat -> the guard turns
+#     red; ctime removed from the key -> a file rewritten with the same size and mtime is not realigned.
 vf tests/a.test.ts
 check "stato del sync nella copia, non nell'origine" '[ -s "$M/.fic-sync-src" ] && [ -s "$M/.fic-sync-gen" ] && [ ! -e "$A/.fic-sync-src" ]'
 vf tests/a.test.ts
@@ -534,17 +534,17 @@ check "  e quando cambia l'impronta delle dipendenze (--setup)" '[ "$(rc)" = 0 ]
 echo 'export const x = "ROSSO"' > "$A/apps/admin/src.ts"
 FIC_SYNC_EQUIV=1 vf tests/a.test.ts
 check "guardia di equivalenza: incrementale e completo, stesso manifest e stessa uscita" 'grep -q "equivalenza=OK" "$T/out" && [ "$(rc)" = 1 ] && grep -q "esito=FAIL luogo=copia" "$T/out"'
-# Le controprove 1 e 2 isolano la cache: l'audit (sezione 31) le coglierebbe prima, quindi qui e' spento.
+# Counterproofs 1 and 2 isolate the cache: the audit (section 31) would catch them first, so here it is off.
 vfm() { rm -f "$FAKE_LOG"; FIC_SYNC_AUDIT_RUNS=${FIC_SYNC_AUDIT_RUNS:-100000} FIC_SYNC_AUDIT_SECS=${FIC_SYNC_AUDIT_SECS:-999999} \
   tfin_mut "$@" > "$T/out" 2>&1; echo $? > "$T/rc"; }
-# controprova 1: la cache riusa lo sha registrato senza guardare la stat
+# counterproof 1: the cache reuses the recorded sha without looking at the stat
 sed 's/(\$0 in ck) \&\& ck\[\$0\] == s\[\$0\]/($0 in ck)/' "$HP/scripts/test-fast.sh" > "$HP/scripts/vf-mut.sh"
 check "premessa: mutazione 1 applicata" '! cmp -s "$HP/scripts/test-fast.sh" "$HP/scripts/vf-mut.sh"'
 echo 'export const x = "verde"' > "$A/apps/admin/src.ts"; vf tests/a.test.ts
 echo 'export const x = "ROSSO!"' > "$A/apps/admin/src.ts"
 FIC_SYNC_EQUIV=1 vfm tests/a.test.ts
 check "controprova 1: file cambiato non riallineato -> equivalenza=DIFF, BLOCKED exit 3" '[ "$(rc)" = 3 ] && grep -q "equivalenza=DIFF" "$T/out" && grep -q "esito=BLOCKED (equivalenza violata" "$T/out"'
-# controprova 2: senza ctime nella chiave la riscrittura con dimensione e mtime uguali passa inosservata
+# counterproof 2: without ctime in the key, the rewrite with the same size and mtime goes unnoticed
 sed 's/%\.9Y %\.9Z %i/%.9Y %i/' "$HP/scripts/test-fast.sh" > "$HP/scripts/vf-mut.sh"
 check "premessa: mutazione 2 applicata" '! cmp -s "$HP/scripts/test-fast.sh" "$HP/scripts/vf-mut.sh"'
 echo 'export const x = 40' > "$A/apps/admin/src.ts"; vfm tests/a.test.ts
@@ -556,14 +556,14 @@ rm -f "$HP/scripts/vf-mut.sh"
 vf tests/a.test.ts
 check "  e lo script vero lo riallinea" 'grep -qx "src=export const x = 41" "$FAKE_LOG"'
 
-# 31. rete di sicurezza della cache (audit completo ogni FIC_SYNC_AUDIT_RUNS run o FIC_SYNC_AUDIT_SECS secondi):
-#     cache AVVELENATA — la stat attuale del file cambiato con lo sha vecchio, cioe' la premessa che non tiene.
-#     Senza audit il run gira sul contenuto vecchio (la falla); con l'audit la scopre, avvisa e risincronizza.
-#     Controprova per mutazione (qui): audit mai dovuto -> anche con le soglie a zero il contenuto resta vecchio.
+# 31. safety net of the cache (full audit every FIC_SYNC_AUDIT_RUNS runs or FIC_SYNC_AUDIT_SECS seconds):
+#     POISONED cache — the current stat of the changed file with the old sha, i.e. the premise that does not hold.
+#     Without the audit the run uses the old content (the hole); with the audit it finds it, warns and resyncs.
+#     Mutation counterproof (here): audit never due -> even with the thresholds at zero the content stays old.
 export FIC_SYNC_AUDIT_RUNS=1000 FIC_SYNC_AUDIT_SECS=999999
 echo 'export const x = 50' > "$A/apps/admin/src.ts"; vf tests/a.test.ts
 check "premessa: stato dell'audit nella copia" '[ -s "$M/.fic-sync-audit" ] && grep -qx "src=export const x = 50" "$FAKE_LOG"'
-avvelena() {  # <contenuto nuovo>: scrive l'origine, poi mette in cache la stat NUOVA con lo sha VECCHIO
+avvelena() {  # <new content>: writes the source, then caches the NEW stat with the OLD sha
   local old; old=$(awk -F'\t' '$3 == "apps/admin/src.ts" { print $2 }' "$M/.fic-sync-src")
   echo "$1" > "$A/apps/admin/src.ts"
   local k; k=$(cd "$A" && stat -L --printf '%s %.9Y %.9Z %i' apps/admin/src.ts)
@@ -590,10 +590,10 @@ avvelena 'export const x = 54'
 FIC_SYNC_AUDIT_RUNS=1 FIC_SYNC_AUDIT_SECS=0 vfm tests/a.test.ts
 check "controprova 3: senza audit la cache avvelenata passa inosservata" 'grep -qx "src=export const x = 53" "$FAKE_LOG" && ! grep -q "cache stat incompleta" "$T/out"'
 rm -f "$HP/scripts/vf-mut.sh"
-# stato dell'audit CORROTTO (soglie ancora lontane): vale "audit dovuto", mai una morte senza esito
+# CORRUPTED audit state (thresholds still far): it counts as "audit due", never a death without outcome
 statovalido() { grep -Eqx '[0-9]+ [0-9]+' "$M/.fic-sync-audit"; }
 for bad in 'abc def' '1.5 2'; do
-  vf tests/a.test.ts                                  # parte da uno stato valido e dal contenuto allineato
+  vf tests/a.test.ts                                  # start from a valid state and from aligned content
   printf '%s\n' "$bad" > "$M/.fic-sync-audit"; avvelena "export const x = 6${#bad}"
   vf tests/a.test.ts
   check "stato audit '$bad' + cache avvelenata -> audit: avviso, contenuto nuovo, riga esito=, stato riscritto valido" \
@@ -604,7 +604,7 @@ vf tests/a.test.ts
 check "stato audit cancellato con la cache presente -> audit" 'grep -q "cache stat incompleta" "$T/out" && grep -qx "src=export const x = 70" "$FAKE_LOG" && statovalido'
 FIC_SYNC_AUDIT_RUNS=venti FIC_SYNC_AUDIT_SECS=x vf tests/a.test.ts
 check "soglie non numeriche -> default, nessuna morte" '[ "$(rc)" = 0 ] && grep -q "^vitest-fast: esito=PASS" "$T/out" && statovalido'
-# controprova 4: senza la validazione lo stato 'abc def' fa morire lo script senza riga d'esito
+# counterproof 4: without the validation the state 'abc def' kills the script without an outcome line
 sed 's/^  if \[\[ \$ep =~ .*$/  AUD_EP=${ep:-0}; AUD_NR=${nr:-0}/' "$HP/scripts/test-fast.sh" > "$HP/scripts/vf-mut.sh"
 check "premessa: mutazione 4 applicata" '! cmp -s "$HP/scripts/test-fast.sh" "$HP/scripts/vf-mut.sh"'
 printf 'abc def\n' > "$M/.fic-sync-audit"; avvelena 'export const x = 71'
@@ -613,8 +613,8 @@ check "controprova 4: senza validazione 'abc def' -> nessuna riga esito=, conten
 rm -f "$HP/scripts/vf-mut.sh" "$M/.fic-sync-audit"
 unset FIC_SYNC_AUDIT_RUNS FIC_SYNC_AUDIT_SECS
 
-# 33. maat.json (pk04b-1): involucro deprecato, niente autorichiamo, alternative di copia.lint, scelta del modulo,
-#     lint_base, cartella dei pacchetti di fic-mirror.sh dal chiamante.
+# 33. maat.json (pk04b-1): deprecated wrapper, no self-invocation, alternatives of copia.lint, module choice,
+#     lint_base, packages directory of fic-mirror.sh from the caller.
 vf tests/a.test.ts; cp "$T/out" "$T/out.tf"
 rm -f "$FAKE_LOG" "$FAKE_LOG.all"; (cd "$A/apps/admin" && bash "$HP/scripts/vitest-fast.sh" tests/a.test.ts) > "$T/out" 2>&1; echo $? > "$T/rc"
 check "involucro vitest-fast.sh -> test-fast.sh: stesso comando nella copia, stesso esito" '[ "$(rc)" = 0 ] && grep -qx "args=vitest run tests/a.test.ts" "$FAKE_LOG" && grep -qx "cwd=$M/apps/admin" "$FAKE_LOG" && [ "$(tail -1 "$T/out")" = "$(tail -1 "$T/out.tf")" ]'
@@ -644,8 +644,8 @@ check "  MAAT_MODULO di un modulo senza copia -> exit 64" '[ "$(rc)" = 64 ] && [
 varia 'm = c["moduli"][0]; m["lint_base"] = False; m["comandi"]["lint"]["comando"] = "bash {maat}/scripts/test-fast.sh --lint {file}"' "$T/nobase.json"
 MAAT_CONFIG=$T/nobase.json vf --lint --base "$B4" modules/app/packages/ui/onlybase.ts
 check "lint_base false: fuori dalla radice SKIPPED anche con --base, nessuna classificazione" '[ "$(rc)" = 0 ] && grep -q "esito=SKIPPED" "$T/out" && ! grep -q "PREEXISTING\|INTRODUCED\|classificati" "$T/out" && [ ! -f "$FAKE_LOG" ]'
-# il requisito del file guida viene dai `preparati` del modulo (pk04b-2), non da un .nuxt/tsconfig.json cablato: un
-# modulo che non li dichiara linta anche senza quel file. Controprova: il controllo cablato di prima => BLOCKED.
+# the guide file requirement comes from the module's `preparati` (pk04b-2), not from a hard-coded .nuxt/tsconfig.json: a
+# module that does not declare them lints even without that file. Counterproof: the old hard-coded check => BLOCKED.
 varia 'm = c["moduli"][0]; m.pop("preparati", None)' "$T/noprep.json"
 mv "$A/apps/admin/.nuxt/tsconfig.json" "$A/apps/admin/.nuxt/tsconfig.via"
 MAAT_CONFIG=$T/noprep.json vf --lint modules/app/apps/admin/utils/x.ts
@@ -660,23 +660,23 @@ rm -f "$HP/scripts/vf-mut-prep.sh"; mv "$A/apps/admin/.nuxt/tsconfig.via" "$A/ap
 fo=$( . "$HP/scripts/fic-mirror.sh"; fic_mirror_init "$W" && fic_seed_node_modules "$W/modules/app" "$T/altrove/modules/app"; echo "rc=$?" )
 check "fic-mirror: copia fuori da \$FIC_MIRROR -> rifiuto col motivo, nessuna cartella indovinata" 'printf "%s" "$fo" | grep -q "rc=1" && printf "%s" "$fo" | grep -q "copia fuori da" && [ ! -e "$T/altrove" ]'
 
-# 32. SONDA DRVFS: la premessa della cache sul filesystem vero di /mnt/c (non sul temporaneo ext4 dei casi
-#     sopra). File di scratch nella radice del repository VERO (non nella copia, fuori da modules/app, quindi
-#     fuori dal manifest), cancellato alla fine. (1) riscrittura da WSL con stessa dimensione e mtime rimesso;
-#     (2) scrittura da WINDOWS (powershell.exe) con stessa dimensione e mtime rimesso da Windows stesso. In
-#     entrambi i casi la stat letta da WSL deve cambiare, altrimenti la cache puo' mentire: rosso.
-#     COSA PROVA: nello scenario "riscrivo con la stessa dimensione e rimetto l'mtime" la chiave della cache
-#     (dimensione, mtime, ctime, inode) cambia, su questa macchina. COSA NON PROVA: che la sola scrittura dei dati
-#     aggiorni la ctime — qui anche il ripristino dell'mtime la tocca, e i due effetti non si separano. La difesa
-#     contro una scrittura che non cambi la chiave resta l'audit completo (sezione 31), non questa sonda.
+# 32. DRVFS PROBE: the cache premise on the real /mnt/c filesystem (not on the temporary ext4 of the cases
+#     above). Scratch file in the root of the REAL repository (not in the copy, outside modules/app, hence
+#     outside the manifest), deleted at the end. (1) rewrite from WSL with the same size and the mtime restored;
+#     (2) write from WINDOWS (powershell.exe) with the same size and the mtime restored by Windows itself. In
+#     both cases the stat read from WSL must change, otherwise the cache can lie: red.
+#     WHAT IT PROVES: in the scenario "rewrite with the same size and restore the mtime" the cache key
+#     (size, mtime, ctime, inode) changes, on this machine. WHAT IT DOES NOT PROVE: that writing the data alone
+#     updates the ctime — here restoring the mtime touches it too, and the two effects cannot be separated. The defence
+#     against a write that does not change the key stays the full audit (section 31), not this probe.
 REPO=$(cd "$HERE/../.." && pwd)
 case "$REPO" in
   /mnt/?/*)
     P=$REPO/.fic-drvfs-probe.$$; trap 'rm -rf "$T"; rm -f "$P"' EXIT
     key() { stat -L --printf '%s %.9Y %.9Z %i' "$P"; }
     sm() { stat -L --printf '%s %.9Y' "$P"; }
-    # mtime su un secondo intero: su drvfs `touch` non conserva i nanosecondi (misurato: .610972600 -> .000000000),
-    # e la premessa "stesso mtime" deve essere vera, non approssimata
+    # mtime on a whole second: on drvfs `touch` does not keep the nanoseconds (measured: .610972600 -> .000000000),
+    # and the "same mtime" premise must be true, not approximate
     printf 'aaaa' > "$P"; touch -d "@$(date +%s)" "$P"; touch -r "$P" "$T/ref"; k0=$(key); s0=$(sm)
     sleep 1.1; printf 'bbbb' > "$P"; touch -r "$T/ref" "$P"
     check "drvfs (1): riscrittura da WSL, stessa dimensione e mtime -> premessa rispettata" '[ "$(sm)" = "$s0" ]'

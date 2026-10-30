@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""phase-events.py — trasforma il log stream-json di una sottosessione in righe di avanzamento.
+"""phase-events.py — turns the stream-json log of a subsession into progress lines.
 
     python3 -u phase-events.py <log.jsonl> <file.exit>
 
-Ogni riga stampata su stdout diventa un aggiornamento nella chat principale (strumento Monitor).
-Emette SOLO: le righe "▶ " scritte dalla sottosessione, gli agenti e le skill lanciati, il verdetto
-(`Decision:`) di ogni agente, e la fine della fase. Tutto il resto del log (letture, ricerche,
-ragionamenti) resta nel file e non entra nel contesto della chat.
+Each line printed on stdout becomes an update in the main chat (Monitor tool).
+It emits ONLY: the "▶ " lines written by the subsession, the agents and skills launched, the verdict
+(`Decision:`) of each agent, and the end of the phase. Everything else in the log (reads, searches,
+reasoning) stays in the file and does not enter the chat context.
 
-La FINE della fase (`■`/`✖`) si emette solo quando esiste <file.exit>, cioe' quando la sottosessione
-e' davvero uscita: in `-p` ogni turno intermedio produce un evento `result`, che qui diventa solo una
-riga di avanzamento ("· turno concluso"). L'ultimo `result` visto resta in <log>.pending e diventa la
-riga di fine quando compare <file.exit>.
+The END of the phase (`■`/`✖`) is emitted only when <file.exit> exists, i.e. when the subsession
+has really exited: in `-p` every intermediate turn produces a `result` event, which here becomes just a
+progress line ("· turno concluso"). The last `result` seen stays in <log>.pending and becomes the
+end line when <file.exit> appears.
 
-Riprende da dove era arrivato (<log>.pos): il Monitor scade dopo 30 minuti e va riarmato, e un
-riarmo non deve ripetere gli eventi gia' mostrati. Esce 0 alla fine della fase, 1 se la sottosessione
-e' terminata senza un risultato (crash, interruzione) o con .exit diverso da 0 anche dopo un `result`
-(riga `✖`): il silenzio non deve sembrare "sta lavorando".
-Lo lancia watch-phase.sh con l'interprete di python.sh (FIC_PY), senza WSL.
+It resumes from where it stopped (<log>.pos): the Monitor expires after 30 minutes and must be re-armed, and a
+re-arm must not repeat events already shown. Exits 0 at the end of the phase, 1 if the subsession
+ended without a result (crash, interruption) or with a non-zero .exit even after a `result`
+(`✖` line): silence must not look like "still working".
+Launched by watch-phase.sh with the python.sh interpreter (FIC_PY), without WSL.
 """
 import json
 import os
@@ -51,8 +51,8 @@ def main():
     log, exitf = sys.argv[1], sys.argv[2]
     posf = log + ".pos"
     resf = log + ".result"
-    pendf = log + ".pending"  # ultima riga di fine candidata: sopravvive al riarmo
-    # riarmo dopo la fine della fase: ripete l'esito invece di dire "senza risultato"
+    pendf = log + ".pending"  # last candidate end line: survives a re-arm
+    # re-arm after the end of the phase: repeats the outcome instead of saying "no result"
     if os.path.exists(resf):
         emit(open(resf, encoding="utf-8").read().strip())
         sys.exit(0)
@@ -68,7 +68,7 @@ def main():
             last = f.read().strip() or None
     except OSError:
         pass
-    agents = {}  # tool_use_id -> descrizione
+    agents = {}  # tool_use_id -> description
     buf = ""
     idle = 0
     while True:
@@ -88,7 +88,7 @@ def main():
             except ValueError:
                 continue
             done = handle(ev, agents)
-            # un `result` non e' la fine: si ricorda (anche su file, per il riarmo) e si continua
+            # a `result` is not the end: remember it (also on file, for the re-arm) and continue
             if done is not None:
                 last = done
                 with open(pendf, "w", encoding="utf-8") as f:
@@ -99,11 +99,11 @@ def main():
             idle = 0
         else:
             idle += 1
-            # la sottosessione ha finito (file .exit) e non c'e' piu' niente da leggere: e' la fine vera
+            # the subsession has finished (.exit file) and there is nothing left to read: this is the real end
             if os.path.exists(exitf) and idle >= 3:
                 code = open(exitf).read().strip()
                 if last is not None:
-                    # un `result` (anche intermedio) seguito da un'uscita non zero e' un fallimento: ✖
+                    # a `result` (even an intermediate one) followed by a non-zero exit is a failure: ✖
                     if code != "0":
                         last = f"✖ sottosessione uscita con exit {code} — ultimo turno: {last.lstrip('■✖ ')}"
                     emit(last)
@@ -148,7 +148,7 @@ def handle(ev, agents):
         cost = ev.get("total_cost_usd")
         extra = f" · {mins} min · {ev.get('num_turns', '?')} turni" + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")
         mark = "✖" if ev.get("is_error") else "■"
-        # riga di avanzamento, non di fine: la fine la decide il file .exit (vedi main)
+        # progress line, not an end line: the end is decided by the .exit file (see main)
         emit(short(f"  · turno concluso: {esito or 'nessuna riga ESITO FASE'}{extra}", 400))
         return short(f"{mark} {esito or 'fase finita (nessuna riga ESITO FASE)'}{extra}", 400)
     return None

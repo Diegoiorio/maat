@@ -1,16 +1,16 @@
-# maat-conf.sh — interfaccia bash del lettore unico (scripts/maat-config.py). Da includere con `.`.
+# maat-conf.sh — bash interface of the single reader (scripts/maat-config.py). To be sourced with `.`.
 #
-#   maat_conf <chiave.puntata> [--default x]   valore con i default dello schema; chiave assente: return 3
-#   maat_modulo_di <file relativo al repo>      «<nome> radice» | «<nome> pacchetti» | return 2
-#   maat_comando <modulo> <tipo> [opzioni]      due righe: cartella d'esecuzione e comando espanso
-#   maat_gate_richiesti <livello> [file…]       i gate del livello: «etichetta<TAB>modulo<TAB>tipo»
-#   maat_conf_carica                            legge il file una volta sola (cache per processo)
+#   maat_conf <dotted.key> [--default x]       value with the schema defaults; missing key: return 3
+#   maat_modulo_di <file relative to the repo>  «<nome> radice» | «<nome> pacchetti» | return 2
+#   maat_comando <module> <type> [options]      two lines: execution folder and expanded command
+#   maat_gate_richiesti <level> [file…]         the gates of the level: «etichetta<TAB>modulo<TAB>tipo»
+#   maat_conf_carica                            reads the file only once (per-process cache)
 #
-# Cache: maat_conf carica tutte le chiavi alla prima chiamata (`maat-config.py leggi --tutto`) nella variabile
-# _MAAT_CACHE e poi non rilegge più il file. Una chiamata dentro $(…) gira in una subshell e la sua cache si perde:
-# chi chiama più volte lancia maat_conf_carica una volta nella shell principale, e le subshell la ereditano.
-# Il file: MAAT_CONFIG, altrimenti <PROJECT_ROOT>/.claude/maat.json (regole di maat-config.py).
-# L'interprete: quello di python.sh (FIC_PY), lo stesso del resto del harness.
+# Cache: maat_conf loads all keys on the first call (`maat-config.py leggi --tutto`) into the variable
+# _MAAT_CACHE and then never rereads the file. A call inside $(…) runs in a subshell and its cache is lost:
+# a caller that calls several times runs maat_conf_carica once in the main shell, and the subshells inherit it.
+# The file: MAAT_CONFIG, otherwise <PROJECT_ROOT>/.claude/maat.json (rules of maat-config.py).
+# The interpreter: the one from python.sh (FIC_PY), the same as the rest of the harness.
 
 _MAAT_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _MAAT_PY="$(dirname "$_MAAT_LIB")/maat-config.py"
@@ -47,10 +47,10 @@ maat_modulo_di() { "$FIC_PY" "$_MAAT_PY" modulo-di "$@"; }
 
 maat_comando() { "$FIC_PY" "$_MAAT_PY" comando "$@"; }
 
-# I gate di un livello, una riga «etichetta<TAB>modulo<TAB>tipo» (maat-config.py gate-richiesti): la stessa lista
-# per gates.sh (cosa eseguire) e finalize.sh (cosa richiedere; build resta facoltativo). I file toccati decidono
-# solo il gate tests-<modulo> di un modulo senza comando di test (NOT RUN dichiarato).
-maat_gate_richiesti() { # <livello> [file…]
+# The gates of a level, one line «etichetta<TAB>modulo<TAB>tipo» each (maat-config.py gate-richiesti): the same list
+# for gates.sh (what to run) and finalize.sh (what to require; build stays optional). The touched files decide
+# only the tests-<modulo> gate of a module without a test command (declared NOT RUN).
+maat_gate_richiesti() { # <level> [file…]
   local l=${1:-} a=() f
   [ -n "$l" ] || { echo "uso: maat_gate_richiesti <livello> [file…]" >&2; return 64; }
   shift

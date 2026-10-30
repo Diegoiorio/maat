@@ -17,7 +17,7 @@ The spec file has this shape (spec sections authored by `spec-author` or by you 
 file does not yet exist; the plan section is owned by this skill):
 
 ```text
-# <Titolo>
+# <Title>
 ## Contesto ...
 ## Requisiti funzionali ...
 ...spec sections...
@@ -26,7 +26,7 @@ file does not yet exist; the plan section is owned by this skill):
 Plan format: 2                                    ← new plans only (see "Plan format 2")
 Plan status: DRAFT | APPROVED | NEEDS HUMAN DECISION
 Test level: min | std | full
-Superfici a rischio: <voci del vocabolario («Risk surfaces»), oppure: nessuna>
+Superfici a rischio: <vocabulary tokens («Risk surfaces»), or: nessuna>
 Approved basis: spec <fp12> · plan <fp12>        ← written at approval only (Step 3); format 2: the
                                                     driver appends " · tests <fp12>" when test-red closes OK
 <plan content, incl. ### Tracciabilità requisiti and ### Piano di test>
@@ -101,7 +101,8 @@ Write the resolved level into the plan as `Test level: <lvl>`, immediately under
 unambiguous.
 
 **Section name.** The canonical heading is `### Piano di test` (numbering optional, e.g.
-`### 9. Piano di test`). Existing specs use both forms; the length rule targets this heading.
+`### 9. Piano di test`). Existing specs use both forms; the length rule targets this heading. All plan headings
+and keywords stay in Italian as written here (`### Tracciabilità requisiti`, `rosso se:`…), whatever the language.
 
 **The length is measured, not enforced.** `plan-check.sh lint` prints an `AVVISO` above it; a
 reviewer never raises a blocker/major on the line count alone — what blocks is what the lines
@@ -204,7 +205,7 @@ Superfici a rischio: permessi, contratto-api
 <one short paragraph per decision, then its examples>
 | input | output |
 |---|---|
-| obiettivo 1.000.000 €, assegnato 950.000 € | `near` (confine: residuo = soglia) |
+| target €1,000,000, assigned €950,000 | `near` (boundary: remainder = threshold) |
 
 ### File toccati
 - `backend/app/routers/goals.py`
@@ -217,7 +218,7 @@ dopo: nessuno
 
 | id | file | modifica | test |
 |---|---|---|---|
-| P1 | `backend/app/routers/goals.py` | `update_goal()`: 403 a chi non può modificare | T1 |
+| P1 | `backend/app/routers/goals.py` | `update_goal()`: 403 for whoever cannot edit | T1 |
 
 #### Blocco B2 — frontend
 scrive: `frontend/components/goals/PlanTable.vue`
@@ -227,7 +228,7 @@ dopo: B1
 | Req | Passi del piano | Verifica |
 |---|---|---|
 | RF1 | P1 | T1 |
-| RF2 | P2 | non verificabile a test: <motivo> |
+| RF2 | P2 | non verificabile a test: <reason> |
 
 ### Stringhe e data-test
 | azione | tipo | valore |
@@ -238,7 +239,7 @@ dopo: B1
 ### Piano di test
 | ID | requisito | file | asserzione | mutazione |
 |---|---|---|---|---|
-| T1 | RF1 | `backend/tests/test_goals.py::test_update_denied` (nuovo) | rosso se: un venditore aggiorna l'obiettivo | `backend/app/routers/goals.py` · `update_goal` · `if not can_edit:` → `if False:` · rosso se: `assert 200 == 403` |
+| T1 | RF1 | `backend/tests/test_goals.py::test_update_denied` (nuovo) | rosso se: a salesperson updates the target | `backend/app/routers/goals.py` · `update_goal` · `if not can_edit:` → `if False:` · rosso se: `assert 200 == 403` |
 - [pavimento: permessi] T1
 ```
 
@@ -282,7 +283,7 @@ dopo: B1
   `lint2` searches the existing tests for them and decides, by the literal's position, whether a match asserts
   presence (a `VIOLAZIONE` unless the file is one the plan touches — an e2e spec: its `[e2e-locator:` line) or
   absence (an `AVVISO`). An optional fourth column `verificato` — `` `<file>` — <motivo> `` — waives that row's
-  match in that file: `| toglie | stringa | `Attivo` | `frontend/tests/x.test.ts` — riscritto dal flusso X |`.
+  match in that file: `| toglie | stringa | `Attivo` | `frontend/tests/x.test.ts` — rewritten by flow X |`.
 - **A product defect found late** (round 3 or 4) does not reopen the design: it becomes one test row, with its
   step, and one list item `⚠️ Rischio aperto: <claim> — <test ID>` under the table.
 
@@ -317,7 +318,7 @@ Analyze the local codebase and write the `## Piano di implementazione` section i
 
 ```text
 | Req | Passi del piano | Verifica |
-| RF1 | 2, 3 | test_x.py::test_y · oppure: non verificabile a test, motivo |
+| RF1 | 2, 3 | test_x.py::test_y · or: non verificabile a test, <reason> |
 ```
 
 One row each, no prose: a small feature gets a three-row table. L1 checks it (not a script: real
@@ -397,7 +398,7 @@ head-on: nine specs record that their late-round blockers were introduced by the
 round's own revision. If a finding genuinely requires restructuring, do it — and flag that block
 so the next round reviews it in full.
 
-**Measure every list you write.** Any list or count of `file:riga`, occurrences or consumers that a
+**Measure every list you write.** Any list or count of `file:line`, occurrences or consumers that a
 revision writes comes from a search run **just before** writing it — never from memory or from
 the finding's text. Measured on `spec-restyling-ui-soft`: 3 of the 4 blockers raised against
 revisions were lists of points written by inference, and "the total still adds up" hid the error

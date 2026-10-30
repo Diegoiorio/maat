@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# maat-doctor.test.sh — test di maat-doctor.sh (pk06) su un progetto sintetico in una cartella temporanea.
-#   bash plugins/maat/scripts/maat-doctor.test.sh          (Git Bash o WSL)
-# Il progetto sintetico: piattaforma.copia_wsl no (niente controlli WSL sulla macchina del test), un modulo nativo con
-# test e controlli, guardia con una regex di produzione e la sua sonda, il plugin abilitato in enabledPlugins, la
-# cartella di lavoro; HOME e USERPROFILE temporanee (su Windows l'estensione vera di VS Code non batte lo stub) e uno
-# stub `claude` nel PATH che stampa la versione di pk01. Revisione del codice (giro 1): ricerca di claude come
-# run-phase.sh; {python} assente; se_presente; schema_db_comando, verifica_remota, guardia.suite assenti; cd … && e
-# env -u; python -I contro i file del progetto; e, caricando la parte Python come modulo («unità»), le prove della
-# copia WSL e del percorso assoluto di un modulo wsl.
-# Casi del piano: completo => exit 0 · senza maat.json => MANCA «lancia /maat:setup» · comando di test inesistente =>
-# MANCA · Python finto 3.8 => MANCA · hook doppio => ATTENZIONE · guardia manomessa => MANCA · ne' plugin ne' hook =>
-# MANCA «guardia non agganciata». Note della revisione mirata: copia_anche inesistente => MANCA; copia_wsl auto, moduli
-# nativi, PATH senza wsl => exit 0 «WSL assente» (solo Windows); modulo wsl senza WSL => MANCA; sonda non coperta =>
-# MANCA; configurazione non valida => la guardia e' MANCA «configurazione non valida»; sola lettura (hash del progetto
-# e del plugin prima e dopo, senza --prova-test). pk08: strumenti delle controprove (rsync/flock assenti => OK di
-# ripiego; sha256sum, timeout, rsync e tar insieme => ATTENZIONE BLOCKED). Controprove per mutazione in fondo: il doctor si copia con il plugin
-# in una cartella temporanea, una sed lo muta, e il caso che la mutazione deve rompere diventa rosso.
+# maat-doctor.test.sh — tests of maat-doctor.sh (pk06) on a synthetic project in a temporary folder.
+#   bash plugins/maat/scripts/maat-doctor.test.sh          (Git Bash or WSL)
+# The synthetic project: piattaforma.copia_wsl no (no WSL checks on the test machine), a nativo module with
+# tests and checks, a guard with a production regex and its probe, the plugin enabled in enabledPlugins, the
+# working folder; temporary HOME and USERPROFILE (on Windows the real VS Code extension does not beat the stub) and a
+# `claude` stub on PATH that prints the pk01 version. Code review (round 1): claude lookup like
+# run-phase.sh; {python} missing; se_presente; schema_db_comando, verifica_remota, guardia.suite missing; cd … && and
+# env -u; python -I against the project files; and, loading the Python part as a module («unità»), the probes of the
+# WSL copy and of the absolute path of a wsl module.
+# Plan cases: complete => exit 0 · no maat.json => MANCA «lancia /maat:setup» · nonexistent test command =>
+# MANCA · fake Python 3.8 => MANCA · duplicate hook => ATTENZIONE · tampered guard => MANCA · neither plugin nor hook =>
+# MANCA «guardia non agganciata». Notes from the targeted review: nonexistent copia_anche => MANCA; copia_wsl auto, nativo
+# modules, PATH without wsl => exit 0 «WSL assente» (Windows only); wsl module without WSL => MANCA; uncovered probe =>
+# MANCA; invalid configuration => the guard is MANCA «configurazione non valida»; read-only (hash of the project
+# and of the plugin before and after, without --prova-test). pk08: counterproof tools (rsync/flock missing => OK
+# «di ripiego»; sha256sum, timeout, rsync and tar together => ATTENZIONE BLOCKED). Mutation counterproofs at the end: the doctor is copied with the plugin
+# into a temporary folder, a sed mutates it, and the case the mutation must break turns red.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
@@ -24,7 +24,7 @@ DOC=$HERE/maat-doctor.sh
 [ -n "${FIC_PY:-}" ] || { echo "maat-doctor.test.sh: nessun Python utilizzabile" >&2; exit 2; }
 export PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8
 unset MAAT_CONFIG FIC_REPO PROJECT_ROOT MAAT_ROOT CLAUDE_BIN FIC_PHASE FIC_GATES_VENV_PY FIC_SESSION_GUARD CLAUDE_PROJECT_DIR
-export FIC_PYTHON=$FIC_PY   # lo stesso interprete anche con il PATH ridotto
+export FIC_PYTHON=$FIC_PY   # the same interpreter even with the reduced PATH
 pass=0 fail=0
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
@@ -38,7 +38,7 @@ printf '#!/bin/sh\necho "2.1.285 (Claude Code)"\n' > "$T/bin/claude"
 printf '#!/bin/sh\necho 3.8.10\n' > "$T/py38/python"
 chmod +x "$T/bin/claude" "$T/py38/python"
 
-# --- progetto sintetico ------------------------------------------------------------------------------------------------
+# --- synthetic project ------------------------------------------------------------------------------------------------
 P=$T/p
 mkdir -p "$P/.claude/.ai-workflow" "$P/dati"
 cat > "$P/.claude/maat.json" <<'EOF'
@@ -55,14 +55,14 @@ printf '#!/bin/sh\nexit 0\n' > "$P/run-test.sh"
 (cd "$P" && git init -q && git -c core.autocrlf=false add -A && git -c user.email=t@t -c user.name=t commit -qm init) || { echo "repo sintetico non creato" >&2; exit 2; }
 CFG=$P/.claude/maat.json
 
-variante() { # <nome> <codice Python su c> -> file maat.json variato (fuori dal progetto)
+variante() { # <name> <Python code on c> -> varied maat.json file (outside the project)
   "$FIC_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))
 exec(sys.argv[3])
 json.dump(c, open(sys.argv[2], "w", encoding="utf-8"))' "$(cygm "$CFG")" "$(cygm "$T/$1.json")" "$2"
   printf '%s' "$(cygm "$T/$1.json")"
 }
-doc() { # [VAR=valore…] -- [argomenti]: il doctor dal progetto $DP (default $P), uscita in $T/out, codice in rc
+doc() { # [VAR=value…] -- [arguments]: the doctor from project $DP (default $P), output in $T/out, exit code in rc
   local envs=()
   while [ $# -gt 0 ] && [ "$1" != -- ]; do envs+=("$1"); shift; done
   [ "${1:-}" = -- ] && shift
@@ -71,25 +71,25 @@ doc() { # [VAR=valore…] -- [argomenti]: il doctor dal progetto $DP (default $P
 }
 ha() { grep -qE -- "$1" "$T/out"; }
 
-# --- 1. completo ---------------------------------------------------------------------------------------------------------
+# --- 1. complete ---------------------------------------------------------------------------------------------------------
 caso_completo() { DOCX=${1:-} doc; [ "$rc" = 0 ] && ! ha '^MANCA' && ha '^OK Claude Code 2\.1\.285' && ha '^OK guardia: «git push --force origin prova» negato in fase e chiesto in sessione' && ha '^OK guardia: sonda di produzione «curl -s https://prod\.esempio\.it/»'; }
 check "progetto sintetico completo -> exit 0, nessun MANCA, guardia provata" 'caso_completo'
 
-# --- 2. senza maat.json --------------------------------------------------------------------------------------------------
+# --- 2. without maat.json ------------------------------------------------------------------------------------------------
 cp -r "$P" "$T/p0"; rm "$T/p0/.claude/maat.json"
 DP=$T/p0 doc
 check "senza maat.json -> MANCA «lancia /maat:setup», exit 1" '[ "$rc" = 1 ] && ha "^MANCA maat\.json assente .* — lancia /maat:setup"'
 
-# --- 3. comando di test inesistente ----------------------------------------------------------------------------------------
+# --- 3. nonexistent test command -------------------------------------------------------------------------------------------
 V=$(variante test-assente 'c["moduli"][0]["comandi"]["test"] = "comando-inesistente-maat {test}"')
 doc MAAT_CONFIG="$V"
 check "comando di test inesistente -> MANCA, exit 1" '[ "$rc" = 1 ] && ha "^MANCA comando test del modulo m: comando-inesistente-maat non trovato"'
 
-# --- 4. Python finto 3.8 -------------------------------------------------------------------------------------------------
+# --- 4. fake Python 3.8 --------------------------------------------------------------------------------------------------
 doc FIC_PYTHON="$(cygm "$T/py38/python")"
 check "Python finto 3.8 -> MANCA, exit 1" '[ "$rc" = 1 ] && ha "^MANCA Python 3\.8\.10 sotto la 3\.10"'
 
-# --- 5. hook doppio ------------------------------------------------------------------------------------------------------
+# --- 5. duplicate hook ---------------------------------------------------------------------------------------------------
 cp -r "$P" "$T/p5"
 cat > "$T/p5/.claude/settings.json" <<'EOF'
 {"enabledPlugins": {"maat@prova": true},
@@ -98,13 +98,13 @@ EOF
 DP=$T/p5 doc
 check "plugin abilitato e hook di progetto -> ATTENZIONE hook doppio" 'ha "^ATTENZIONE hook di guardia doppio"'
 
-# --- 6. guardia manomessa ------------------------------------------------------------------------------------------------
+# --- 6. tampered guard ---------------------------------------------------------------------------------------------------
 cp -r "$PLUGIN" "$T/plug6"
 printf 'import sys\nsys.exit(0)\n' > "$T/plug6/scripts/guard.py"
 DOCX=$T/plug6/scripts/maat-doctor.sh doc
 check "guardia che non nega il comando di prova -> MANCA, exit 1" '[ "$rc" = 1 ] && ha "^MANCA guardia: «git push --force origin prova» in fase non negato"'
 
-# --- 7. ne' plugin ne' hook ----------------------------------------------------------------------------------------------
+# --- 7. neither plugin nor hook ------------------------------------------------------------------------------------------
 cp -r "$P" "$T/p7"; echo '{}' > "$T/p7/.claude/settings.json"
 DP=$T/p7 doc
 check "né plugin abilitato né hook di progetto -> MANCA «guardia non agganciata»" '[ "$rc" = 1 ] && ha "^MANCA guardia non agganciata"'
@@ -114,7 +114,7 @@ V8=$(variante copia-anche 'c["moduli"][0]["copia_anche"] = ["dati", "non-esiste"
 caso_copia_anche() { DOCX=${1:-} doc MAAT_CONFIG="$V8"; [ "$rc" = 1 ] && ha "^MANCA copia_anche del modulo m: non-esiste non esiste" && ha "^OK copia_anche del modulo m: dati"; }
 check "copia_anche verso una cartella inesistente -> MANCA (e la cartella vera OK)" 'caso_copia_anche'
 
-# --- 9. Windows senza WSL: copia_wsl auto, moduli nativi -----------------------------------------------------------------
+# --- 9. Windows without WSL: copia_wsl auto, nativo modules --------------------------------------------------------------
 V9=$(variante wsl-auto 'c["piattaforma"]["copia_wsl"] = "auto"')
 caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
 caso_piattaforma() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
@@ -127,7 +127,7 @@ else
   check "--piattaforma fuori da Windows -> altro" '[ "$rc" = 0 ] && [ "$(tr -d "\r" < "$T/out")" = altro ]'
 fi
 
-# --- 10. modulo wsl senza WSL (o fuori da Windows) -------------------------------------------------------------------------
+# --- 10. wsl module without WSL (or outside Windows) -----------------------------------------------------------------------
 V10=$(variante modulo-wsl 'c["moduli"][0]["ambiente"] = "wsl"')
 caso_modulo_wsl() {
   DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V10"
@@ -137,25 +137,25 @@ caso_modulo_wsl() {
 }
 check "modulo ambiente: wsl senza WSL -> MANCA, exit 1" 'caso_modulo_wsl'
 
-# --- 11. sonda non coperta -----------------------------------------------------------------------------------------------
+# --- 11. uncovered probe -------------------------------------------------------------------------------------------------
 V11=$(variante sonda 'c["guardia"]["sonde"] = ["altro.esempio.org"]')
 caso_sonda() { DOCX=${1:-} doc MAAT_CONFIG="$V11"; [ "$rc" = 1 ] && ha "^MANCA sonda non coperta dalla guardia: altro\.esempio\.org" && ha "^ATTENZIONE regola di produzione non provata: prod"; }
 check "sonda che nessuna regex di produzione copre -> MANCA" 'caso_sonda'
 
-# --- 12. configurazione non valida: la guardia non si prova -----------------------------------------------------------------
+# --- 12. invalid configuration: the guard is not probed ---------------------------------------------------------------------
 V12=$(variante non-valida 'c["versione_schema"] = 99')
 doc MAAT_CONFIG="$V12"
 check "configurazione non valida -> MANCA maat.json e MANCA guardia «configurazione non valida»" \
   '[ "$rc" = 1 ] && ha "^MANCA maat\.json non valido" && ha "^MANCA guardia non provata: configurazione non valida"'
 
-# --- 13. marketplace da cartella -------------------------------------------------------------------------------------------
+# --- 13. marketplace from a folder -----------------------------------------------------------------------------------------
 mkdir -p "$T/home/.claude/plugins"
 echo '{"prova": {"source": {"source": "directory", "path": "x"}}}' > "$T/home/.claude/plugins/known_marketplaces.json"
 doc
 check "plugin da un marketplace da cartella -> ATTENZIONE «installa da git con un ref»" 'ha "^ATTENZIONE plugin installato da un marketplace da cartella .* — installa da git con un ref"'
 rm "$T/home/.claude/plugins/known_marketplaces.json"
 
-# --- 14. --prova-test e --help ---------------------------------------------------------------------------------------------
+# --- 14. --prova-test and --help -------------------------------------------------------------------------------------------
 doc -- --prova-test
 check "--prova-test: riga dichiarata e test di un file scelto dalla regola" \
   '[ "$rc" = 0 ] && ha "^--prova-test: il comando di test può scrivere cache e coverage" && ha "^OK prova test del modulo m: a\.test\.js, uscita 0"'
@@ -164,9 +164,9 @@ check "--help dichiara che --prova-test esce dalla sola lettura" '[ "$rc" = 0 ] 
 doc -- --boh
 check "opzione sconosciuta -> exit 64" '[ "$rc" = 64 ]'
 
-# --- 15. sola lettura ------------------------------------------------------------------------------------------------------
+# --- 15. read-only ---------------------------------------------------------------------------------------------------------
 albero() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) | sha256sum | cut -c1-64; }
-sola_lettura() { # [doctor]: hash del progetto e del plugin uguali prima e dopo, niente __pycache__ nel plugin
+sola_lettura() { # [doctor]: project and plugin hashes equal before and after, no __pycache__ in the plugin
   local pp pl dir
   dir=$(dirname "$(dirname "${1:-$DOC}")")
   pp=$(albero "$P") pl=$(albero "$dir")
@@ -175,7 +175,7 @@ sola_lettura() { # [doctor]: hash del progetto e del plugin uguali prima e dopo,
 }
 check "il doctor senza --prova-test non modifica né il progetto né il plugin" 'sola_lettura'
 
-# --- 16. Claude Code: l'ordine di run-phase.sh (CLAUDE_BIN, estensione di VS Code, PATH) ---------------------------------
+# --- 16. Claude Code: the order of run-phase.sh (CLAUDE_BIN, VS Code extension, PATH) ------------------------------------
 EXT=$T/home-ext/.vscode/extensions/anthropic.claude-code-9.9.9-win32-x64/resources/native-binary
 mkdir -p "$EXT"; printf '#!/bin/sh\necho "2.1.100 (Claude Code)"\n' > "$EXT/claude.exe"; chmod +x "$EXT/claude.exe"
 caso_claude_ext() { DOCX=${1:-} doc USERPROFILE="$T/home-ext"; ha '^ATTENZIONE Claude Code 2\.1\.100 sotto la 2\.1\.285' && ! ha '^OK Claude Code'; }
@@ -184,17 +184,17 @@ blocco_claude() { sed -n '/^CL=\${CLAUDE_BIN:-}$/,/^\[ -n "\$CL" \] || CL=\$(com
 check "la ricerca di claude del doctor è la stessa di run-phase.sh, riga per riga" \
   '[ -n "$(blocco_claude "$DOC")" ] && [ "$(blocco_claude "$DOC")" = "$(blocco_claude "$HERE/run-phase.sh")" ]'
 
-# --- 17. {python} assente, script presente: MANCA dell'interprete, nessuna riga OK del comando -------------------------------
+# --- 17. {python} missing, script present: MANCA for the interpreter, no OK line for the command -----------------------------
 V17=$(variante python-assente 'c["moduli"][0]["comandi"]["test"] = "{python} run-test.py {test}"; c["moduli"][0]["python"] = "venv-maat-assente/bin/python"')
 caso_python_assente() { DOCX=${1:-} doc MAAT_CONFIG="$V17"; [ "$rc" = 1 ] && ha '^MANCA python assente per il modulo m \(' && ! ha '^OK comando test del modulo m'; }
 check "{python} assente -> MANCA python, e il comando non risulta OK" 'caso_python_assente'
 
-# --- 18. controllo con se_presente e l'eseguibile assente -> «controllo saltato» ------------------------------------------
+# --- 18. check with se_presente and the executable missing -> «controllo saltato» -----------------------------------------
 V18=$(variante se-presente 'c["moduli"][0]["controlli"] = [{"glob": "**/*.sh", "comando": "shellcheck-maat-assente {file}", "se_presente": "shellcheck-maat-assente"}]')
 caso_se_presente() { DOCX=${1:-} doc MAAT_CONFIG="$V18"; [ "$rc" = 0 ] && ha '^ATTENZIONE controllo 0 del modulo m \(\*\*/\*\.sh\): controllo saltato, shellcheck-maat-assente assente'; }
 check "controllo con se_presente assente -> ATTENZIONE «controllo saltato», exit 0" 'caso_se_presente'
 
-# --- 19-21. comandi del progetto assenti --------------------------------------------------------------------------------------
+# --- 19-21. project commands missing ------------------------------------------------------------------------------------------
 V19=$(variante schema-db 'c["contesto"] = {"schema_db_comando": "comando-db-maat-assente --schema"}')
 caso_schema_db() { DOCX=${1:-} doc MAAT_CONFIG="$V19"; [ "$rc" = 1 ] && ha '^MANCA contesto\.schema_db_comando: comando-db-maat-assente non trovato'; }
 check "contesto.schema_db_comando assente -> MANCA" 'caso_schema_db'
@@ -205,7 +205,7 @@ V21=$(variante suite 'c["guardia"]["suite"] = [{"script": "suite-maat-assente.sh
 caso_suite() { DOCX=${1:-} doc MAAT_CONFIG="$V21"; ha '^ATTENZIONE guardia\.suite: script suite-maat-assente\.sh non trovato nel repo'; }
 check "guardia.suite con lo script assente -> ATTENZIONE" 'caso_suite'
 
-# --- 22. primo eseguibile dopo un comando interno (cd … &&) e dopo le opzioni di env -------------------------------------------
+# --- 22. first executable after a builtin command (cd … &&) and after the env options -----------------------------------------
 V22=$(variante catena 'c["moduli"][0]["comandi"]["test"] = "cd dati && FOO=1 env -u BAR ./manca-maat.sh {test}"')
 caso_catena() { DOCX=${1:-} doc MAAT_CONFIG="$V22"; [ "$rc" = 1 ] && ha '^MANCA comando test del modulo m: \./manca-maat\.sh non trovato'; }
 check "cd dati && env -u BAR ./manca-maat.sh -> MANCA ./manca-maat.sh" 'caso_catena'
@@ -219,15 +219,15 @@ V22d=$(variante sottoshell 'c["moduli"][0]["comandi"]["test"] = "( cd dati && ..
 caso_sottoshell() { DOCX=${1:-} doc MAAT_CONFIG="$V22d"; [ "$rc" = 0 ] && ha '^OK comando test del modulo m: \.\./run-test\.sh'; }
 check "( cd dati && ../run-test.sh ) -> il cd della sottoshell si segue, OK" 'caso_sottoshell'
 
-# --- 23. file del progetto che hanno il nome di un modulo della libreria standard ---------------------------------------------
+# --- 23. project files named like a standard library module -------------------------------------------------------------------
 cp -r "$P" "$T/p23"
 printf 'raise SystemExit("glob.py del progetto")\n' > "$T/p23/glob.py"
 printf 'raise SystemExit("contextlib.py del progetto")\n' > "$T/p23/contextlib.py"
 caso_stdlib() { DOCX=${1:-} DP=$T/p23 doc; [ "$rc" = 0 ] && ha '^OK maat\.json valido' && ! ha 'del progetto'; }
 check "glob.py e contextlib.py nel progetto non sostituiscono la libreria standard (python -I)" 'caso_stdlib'
 
-# --- unità: la parte Python del doctor caricata come modulo (senza eseguire i modi) -------------------------------------------
-unita() { # <doctor> <codice Python con ns = i nomi del doctor> [argomenti]
+# --- unità (units): the Python part of the doctor loaded as a module (without running the modes) ------------------------------
+unita() { # <doctor> <Python code with ns = the doctor's names> [arguments]
   local d=$1 code=$2; shift 2
   MAAT_ROOT=$(cygm "$(dirname "$(dirname "$d")")") DR_ROOT=$(cygm "$P") DR_WIN=1 MAAT_CONFIG_PY=$(cygm "$PLUGIN/scripts/maat-config.py") \
     "$FIC_PY" -I -B -c 'import re, sys
@@ -237,12 +237,12 @@ exec(compile(src, "maat-doctor.sh", "exec"), ns)
 exec(sys.argv[2])' "$(cygm "$d")" "$code" "$@"
 }
 
-# 24. copia WSL (le prove girano qui in bash, con una HOME finta: sono le stesse che il doctor manda dentro WSL)
+# 24. WSL copy (the probes run here in bash, with a fake HOME: they are the same ones the doctor sends into WSL)
 WH=$T/wh R=$T/wr
 mkdir -p "$R" && (cd "$R" && git init -q && : > x && git -c core.autocrlf=false add -A && git -c user.email=t@t -c user.name=t commit -qm init && git worktree add -q "$T/wr-wt" -b wt) >/dev/null 2>&1
-# gitdir relativo: lo legge sia git di Windows sia git di Linux (fic_git_env traduce solo i "C:/…")
+# relative gitdir: both Windows git and Linux git can read it (fic_git_env translates only the "C:/…" ones)
 g=$(sed -n 's/^gitdir: //p' "$T/wr-wt/.git" | tr -d '\r'); printf 'gitdir: ../wr/.git/worktrees/%s\n' "${g##*/}" > "$T/wr-wt/.git"
-stato_copia() { # <doctor> <radice>: «<pronta> <si-seminera'>» (si|no)
+stato_copia() { # <doctor> <root>: «<ready> <will-be-seeded>» (si|no)
   local ok sem a b
   { read -r ok; read -r sem; } < <(unita "$1" 'print(ns["prove_copia"](sys.argv[3], sys.argv[4], "pkg")[0]); print(ns["prove_copia"](sys.argv[3], sys.argv[4], "pkg")[1])' "$(cygm "$HERE/fic-mirror.sh")" "$(cygm "$2")" | tr -d '\r')
   a=$(HOME=$WH bash -c "if $ok; then echo si; else echo no; fi" 2>/dev/null)
@@ -252,19 +252,19 @@ stato_copia() { # <doctor> <radice>: «<pronta> <si-seminera'>» (si|no)
 caso_copia() { # [doctor]
   local d=${1:-$DOC} s1 s2 s3 s4
   rm -rf "$WH"; mkdir -p "$WH/fic-mirror/pkg"; : > "$WH/fic-mirror/pkg/.fic-deps"
-  s1=$(stato_copia "$d" "$R")                       # solo .fic-deps: non pronta (test-fast.sh vuole anche node_modules)
+  s1=$(stato_copia "$d" "$R")                       # only .fic-deps: not ready (test-fast.sh also wants node_modules)
   mkdir -p "$WH/fic-mirror/pkg/node_modules"
-  s2=$(stato_copia "$d" "$R")                       # pronta
-  s3=$(stato_copia "$d" "$T/wr-wt")                 # worktree senza la sua copia, principale pronta: si seminera'
+  s2=$(stato_copia "$d" "$R")                       # ready
+  s3=$(stato_copia "$d" "$T/wr-wt")                 # worktree without its own copy, main one ready: will be seeded
   rm -rf "$WH/fic-mirror"
-  s4=$(stato_copia "$d" "$T/wr-wt")                 # niente da cui seminare
+  s4=$(stato_copia "$d" "$T/wr-wt")                 # nothing to seed from
   [ "$s1 | $s2 | $s3 | $s4" = "no no | si no | no si | no no" ] || { echo "stati: $s1 | $s2 | $s3 | $s4" > "$T/out"; return 1; }
 }
 check "copia WSL: pronta solo con node_modules e .fic-deps; worktree senza copia e principale pronta -> si seminerà" 'caso_copia'
 
-# 25. modulo wsl: un percorso assoluto fuori da /mnt/ si prova con [ -x ] dentro WSL, non lato Windows
+# 25. wsl module: an absolute path outside /mnt/ is probed with [ -x ] inside WSL, not on the Windows side
 V25=$(variante wsl-assoluto 'c["moduli"][0]["ambiente"] = "wsl"; c["moduli"][0]["comandi"]["test"] = "/opt/maat-prova/run {test}"')
-caso_wsl_assoluto() { # [doctor]: con la prova WSL vera -> OK, falsa -> MANCA, e la prova e' [ -x '/opt/maat-prova/run' ]
+caso_wsl_assoluto() { # [doctor]: with the WSL probe true -> OK, false -> MANCA, and the probe is [ -x '/opt/maat-prova/run' ]
   unita "${1:-$DOC}" '
 import io, contextlib
 os = ns["os"]; os.environ["MAAT_CONFIG"] = sys.argv[3]; os.environ["PROJECT_ROOT"] = ns["ROOT"]
@@ -286,8 +286,8 @@ for si, atteso in ((True, "OK comando test del modulo m: /opt/maat-prova/run"),
 }
 check "modulo wsl con /opt/…: [ -x ] dentro WSL decide OK o MANCA" 'caso_wsl_assoluto'
 
-# 26. strumenti delle controprove (pk08): rsync/flock assenti -> OK «di ripiego, più lenti»; sha256sum, timeout, rsync e
-#     tar insieme -> ATTENZIONE BLOCKED. Con sonde finte (assenti per nome), poi un giro vero con il PATH di questa macchina.
+# 26. counterproof tools (pk08): rsync/flock missing -> OK «di ripiego, più lenti»; sha256sum, timeout, rsync and
+#     tar together -> ATTENZIONE BLOCKED. With fake probes (missing by name), then a real run with this machine's PATH.
 V26=$(variante controprova 'c["moduli"][0]["controprova"] = {"runner": "comando", "comando": "bash run-test.sh {test}"}')
 caso_strumenti() { # [doctor]
   unita "${1:-$DOC}" '
@@ -322,8 +322,8 @@ else ATT26='^OK controprove del modulo m: (rsync|flock) assente: (copia|lock) di
 doc MAAT_CONFIG="$V26"
 check "  giro vero su questa macchina: $ATT26" '[ "$rc" = 0 ] && ha "$ATT26" && ! ha "^ATTENZIONE controprove"'
 
-# --- controprove per mutazione ----------------------------------------------------------------------------------------------
-mutante() { # <nome> <espressione sed> -> percorso del doctor mutato (con il plugin accanto); vuoto se la sed non cambia niente
+# --- mutation counterproofs -------------------------------------------------------------------------------------------------
+mutante() { # <name> <sed expression> -> path of the mutated doctor (with the plugin next to it); empty if the sed changes nothing
   local d="$T/mut/$1"
   mkdir -p "$T/mut"; cp -r "$PLUGIN" "$d"
   sed -e "$2" "$DOC" > "$d/scripts/maat-doctor.sh"
@@ -380,7 +380,7 @@ if [ "$WIN" = 1 ]; then
   m=$(mutante wsl-livello 's/riga("OK", "WSL assente: copia veloce/riga("MANCA", "WSL assente: copia veloce/')
   check "controprova: WSL assente come MANCA -> exit 1, rosso" '[ -n "$m" ] && ! caso_wsl_assente "$m"'
   if [ -e /c/Windows/System32/wsl.exe ] || [ -e "${SYSTEMROOT:-C:/Windows}/System32/wsl.exe" ]; then
-    # wsl.exe esiste in System32: un doctor che non guarda il PATH lo trova lo stesso (CreateProcess cerca anche li')
+    # wsl.exe exists in System32: a doctor that ignores PATH finds it anyway (CreateProcess also searches there)
     m=$(mutante wsl-path 's/    w = shutil.which("wsl") or shutil.which("wsl.exe")/    w = "wsl"/')
     check "controprova: WSL cercato senza il PATH -> «WSL assente» sparisce, rosso" '[ -n "$m" ] && ! caso_wsl_assente "$m"'
     check "controprova: --piattaforma senza il PATH -> non windows-senza-wsl, rosso" '[ -n "$m" ] && ! caso_piattaforma "$m"'

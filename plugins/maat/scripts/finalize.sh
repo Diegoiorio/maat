@@ -1,66 +1,66 @@
 #!/usr/bin/env bash
-# finalize.sh — firma lo stato finale di una feature (harness-pt08): la review scrive il verdetto, lo script
-# conferma `Feature status: IMPLEMENTED` solo con l'evidenza, altrimenti lo porta a NEEDS_VERIFICATION.
+# finalize.sh — signs the final state of a feature (harness-pt08): the review writes the verdict, the script
+# confirms `Feature status: IMPLEMENTED` only with the evidence, otherwise it moves it to NEEDS_VERIFICATION.
 #
 #   bash script/fic/finalize.sh [--level min|std|full|legacy] [--copertura <result.json>] <run-dir>
 #
-# <run-dir> = .claude/.ai-workflow/spec-<name>.run; la spec e' <run-dir senza .run>.md. run-phase.sh lo lancia
-# dopo ogni review uscita 0 (esito in log/<label>.finalize), col livello in vigore.
+# <run-dir> = .claude/.ai-workflow/spec-<name>.run; the spec is <run-dir without .run>.md. run-phase.sh runs it
+# after every review that exits 0 (outcome in log/<label>.finalize), with the level in force.
 #
-# AGISCE solo se la sezione "## Review implementazione" (fuori dai recinti) ha `Review status: APPROVED` e
-# `Feature status: IMPLEMENTED`: non promuove mai oltre il verdetto della review (obblighi, e2e e snapshot li
-# conosce solo lei). Altrimenti non tocca nulla (uscita 4).
-# CONFERMA IMPLEMENTED solo se:
-#   1. ogni gate RICHIESTO — la lista di gates.sh, `maat_gate_richiesti <livello> <file di touched.txt>` da
-#      .claude/maat.json: tests-<modulo> per ogni modulo con comando di test o con file toccati, controlli-<modulo>
-#      per ogni modulo con controlli, lint se il livello lo prevede (build e' facoltativo, come nella review) — ha
-#      evidence/<chiave ATTUALE>/<gate>.json con esito PASS e il report accanto, oppure SKIPPED (niente da
-#      eseguire, col motivo: soddisfatto come nella review). NOT RUN (dichiarato: modulo senza test, voci saltate)
-#      non soddisfa e non e' un errore: la firma e' al massimo NEEDS_VERIFICATION, col motivo «nessun test nel
-#      modulo X, controlli verdi» (o «controlli saltati: …»). La cartella e' quella il cui argomenti.txt e'
-#      <livello> + i file di touched.txt, e che `gates.sh --verify` dichiara FRESH; il campo "chiave" del JSON
-#      deve essere il nome della cartella;
-#   2. ogni controprova e' rossa su asserzione: se c'e' <run-dir>/counterproof/mutations.json, ogni suo id ha
-#      <id>.json con esito rosso_asserzione (counterproof.sh, harness-pt05) — o rosso_generico (runner comando:
-#      rosso senza report), che soddisfa ma e' una prova DEBOLE, dichiarata («prove deboli: …» nel dettaglio e una
-#      riga «prova debole: …» su stdout); non_eseguita (modulo senza controprova) e' NOT RUN (dichiarato): come un
-#      gate NOT RUN non soddisfa e non e' un errore (al massimo NEEDS_VERIFICATION); altrimenti ogni riga richiesta della
-#      tabella delle evidenze della review che nomina una controprova (counterproof) ha Result PASS. Una voce con
-#      "assorbita": true (L2, harness-pt11: file nuovo, rosso alla base con stub, verde dopo) vale solo se
-#      `plan-check.sh l2` la conferma sul codice attuale (righe in <run-dir>/counterproof/l2.txt: impronta tests
-#      FRESH, stub = simboli esportati, ogni simbolo in un test di accettazione) o se e' comunque rossa su asserzione;
-#      altrimenti manca evidenza (NEEDS_VERIFICATION, non FAIL).
-# VERDETTO = AND (harness-pt09): un gate richiesto FAIL (controlli-<modulo> compreso), o una controprova non rossa (rosso_import, rosso_raccolta,
-# rosso_diverso, verde; o una riga di controprova della tabella con Result FAIL), e' FAIL anche con la review
-# APPROVED: scrive `Review status: NEEDS_CHANGES`, `Feature status: PLANNED`, `Verification: PARTIAL (finalize.sh:
-# <cosa>)` (la riga «APPROVED + any FAIL» della tabella di decisione della review; cycle-state.sh manda a FIX).
-# ALTRIMENTI, se manca evidenza (assente, BLOCKED, chiave vecchia, controprova bloccata o senza risultato) scrive
-# `Feature status: NEEDS_VERIFICATION` e `Verification: PARTIAL (finalize.sh: <cosa manca>)`. Confermando
-# IMPLEMENTED, una `Verification:` provvisoria (review in parallelo con VERIFY) diventa `VERIFIED (finalize.sh: …)`.
-# In tutti i casi scrive (o sostituisce) la riga `Finalize: <IMPLEMENTED|NEEDS_VERIFICATION|FAIL> — snapshot <x12> —
-# <dettaglio> · <ora UTC>` sotto `Feature status:`, dove <x12> e' l'impronta (sha256, 12 cifre, spazi compressi) del
-# `Reviewed snapshot:` verificato: cycle-state.sh (riga 13f) da' DONE solo se coincide con lo snapshot attuale.
-# Le fine riga della spec restano quelle che erano (CRLF compreso).
-# UNIONE (harness-pt09, --copertura <log/<label>.result.json della review>): il campo "copertura" (requisito -> ID
-# di test, scritti dal reviewer senza risultati) si unisce MECCANICAMENTE ai risultati di VERIFY e diventa la
-# tabella "Requirement evidence (finalize.sh: …)" sotto la riga Finalize: (sostituita a ogni firma). Risultati per
-# FORMATO del report del modulo (campo `report`), mai per nome del gate: junit -> dal JUnit di tests-<modulo> nella
-# cartella FRESH (node id pytest -> classname/name); vitest -> dal report del wrapper (test-fast.sh), che non ha un
-# esito per test: FAIL dalle righe "FAIL <id>", PASS solo per un ID che e' un file di test con la riga "✓ <file>";
-# nessuno -> nessun risultato per test. La radice del modulo davanti a un ID si toglie; il suffisso della tabella
-# e' l'etichetta del gate. Controprove da counterproof/<id>.json. Un ID senza risultato -> requisito «non
-# coperto»: e' un dato della tabella, non cambia il verdetto (che resta l'AND sopra). Senza --copertura nessuna
-# tabella.
+# IT ACTS only if the "## Review implementazione" section (outside the fences) has `Review status: APPROVED` and
+# `Feature status: IMPLEMENTED`: it never promotes beyond the review verdict (obligations, e2e and snapshot are
+# known only to the review). Otherwise it touches nothing (exit 4).
+# IT CONFIRMS IMPLEMENTED only if:
+#   1. every REQUIRED gate — the gates.sh list, `maat_gate_richiesti <level> <files of touched.txt>` from
+#      .claude/maat.json: tests-<module> for every module with a test command or with touched files, controlli-<module>
+#      for every module with checks, lint if the level requires it (build is optional, as in the review) — has
+#      evidence/<CURRENT key>/<gate>.json with esito PASS and the report next to it, or SKIPPED (nothing to
+#      run, with the reason: satisfied as in the review). NOT RUN (declared: module without tests, skipped entries)
+#      does not satisfy and is not an error: the signature is at most NEEDS_VERIFICATION, with the reason «nessun test nel
+#      modulo X, controlli verdi» (or «controlli saltati: …»). The directory is the one whose argomenti.txt is
+#      <level> + the files of touched.txt, and that `gates.sh --verify` declares FRESH; the "chiave" field of the JSON
+#      must be the directory name;
+#   2. every counterproof is red on assertion: if <run-dir>/counterproof/mutations.json exists, each of its ids has
+#      <id>.json with esito rosso_asserzione (counterproof.sh, harness-pt05) — or rosso_generico (command runner:
+#      red without report), which satisfies but is a WEAK proof, declared («prove deboli: …» in the detail and a
+#      «prova debole: …» line on stdout); non_eseguita (module without counterproof) is NOT RUN (declared): like a
+#      NOT RUN gate it does not satisfy and is not an error (at most NEEDS_VERIFICATION); otherwise every required row of the
+#      review evidence table that names a counterproof has Result PASS. An entry with
+#      "assorbita": true (L2, harness-pt11: new file, red at the base with a stub, green after) counts only if
+#      `plan-check.sh l2` confirms it on the current code (lines in <run-dir>/counterproof/l2.txt: tests fingerprint
+#      FRESH, stub = exported symbols, every symbol in an acceptance test) or if it is red on assertion anyway;
+#      otherwise evidence is missing (NEEDS_VERIFICATION, not FAIL).
+# VERDICT = AND (harness-pt09): a required gate FAIL (controlli-<module> included), or a counterproof that is not red (rosso_import, rosso_raccolta,
+# rosso_diverso, verde; or a counterproof row of the table with Result FAIL), is FAIL even with the review
+# APPROVED: it writes `Review status: NEEDS_CHANGES`, `Feature status: PLANNED`, `Verification: PARTIAL (finalize.sh:
+# <what>)` (the «APPROVED + any FAIL» row of the review decision table; cycle-state.sh sends it to FIX).
+# OTHERWISE, if evidence is missing (absent, BLOCKED, old key, counterproof blocked or without result) it writes
+# `Feature status: NEEDS_VERIFICATION` and `Verification: PARTIAL (finalize.sh: <what is missing>)`. When confirming
+# IMPLEMENTED, a provisional `Verification:` (review in parallel with VERIFY) becomes `VERIFIED (finalize.sh: …)`.
+# In all cases it writes (or replaces) the line `Finalize: <IMPLEMENTED|NEEDS_VERIFICATION|FAIL> — snapshot <x12> —
+# <detail> · <UTC time>` under `Feature status:`, where <x12> is the fingerprint (sha256, 12 digits, spaces squeezed) of the
+# verified `Reviewed snapshot:`: cycle-state.sh (line 13f) gives DONE only if it matches the current snapshot.
+# The spec line endings stay as they were (CRLF included).
+# MERGE (harness-pt09, --copertura <log/<label>.result.json of the review>): the "copertura" field (requirement -> test
+# IDs, written by the reviewer without results) is merged MECHANICALLY with the VERIFY results and becomes the
+# "Requirement evidence (finalize.sh: …)" table under the Finalize: line (replaced at every signature). Results by
+# FORMAT of the module report (field `report`), never by gate name: junit -> from the JUnit of tests-<module> in the
+# FRESH directory (pytest node id -> classname/name); vitest -> from the wrapper report (test-fast.sh), which has no
+# per-test outcome: FAIL from the "FAIL <id>" lines, PASS only for an ID that is a test file with the line "✓ <file>";
+# nessuno -> no per-test result. The module root in front of an ID is removed; the table suffix
+# is the gate label. Counterproofs from counterproof/<id>.json. An ID without result -> requirement «non
+# coperto»: it is a table datum, it does not change the verdict (which stays the AND above). Without --copertura no
+# table.
 #
-# Livello: --level, altrimenti la riga Test level: del piano (plan-check.sh contract), altrimenti legacy.
-# Uscita: 0 IMPLEMENTED confermato · 1 NEEDS_VERIFICATION scritto · 3 FAIL scritto · 4 niente da firmare (spec
-# intatta) · 2 uso.
-# Stdout: una riga per ciò che manca, poi "finalize: esito=<IMPLEMENTED|NEEDS_VERIFICATION|FAIL|INVARIATO> — <…>".
-# Variabili: FIC_GATES gates.sh da usare per --verify (default: accanto a questo) · FIC_GATES_ROOT e le altre
-# di gates.sh passano per l'ambiente (FIC_GATES_ROOT e' anche il progetto di maat.json; MAAT_CONFIG lo sostituisce) ·
-# FIC_GATES_HARNESS radice del plugin (default MAAT_ROOT; scripts/plan-check.sh, scripts/python.sh,
+# Level: --level, otherwise the plan's Test level: line (plan-check.sh contract), otherwise legacy.
+# Exit: 0 IMPLEMENTED confirmed · 1 NEEDS_VERIFICATION written · 3 FAIL written · 4 nothing to sign (spec
+# untouched) · 2 usage.
+# Stdout: one line for each missing item, then "finalize: esito=<IMPLEMENTED|NEEDS_VERIFICATION|FAIL|INVARIATO> — <…>".
+# Variables: FIC_GATES gates.sh to use for --verify (default: the one next to this script) · FIC_GATES_ROOT and the other
+# gates.sh variables pass through the environment (FIC_GATES_ROOT is also the project of maat.json; MAAT_CONFIG replaces it) ·
+# FIC_GATES_HARNESS plugin root (default MAAT_ROOT; scripts/plan-check.sh, scripts/python.sh,
 # scripts/lib/maat-conf.sh).
-# Test: scripts/finalize.test.sh (accanto a questo).
+# Tests: scripts/finalize.test.sh (next to this script).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin)
@@ -87,10 +87,10 @@ SPEC="${run%.run}.md"
 [ -f "$SPEC" ] || { echo "finalize: spec assente: $SPEC" >&2; exit 2; }
 . "$HROOT/scripts/python.sh" || { echo "finalize: interprete Python non trovato" >&2; exit 2; }
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
-py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # il codice arriva da una pipe: nessun file temporaneo
+py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # the code comes from a pipe: no temporary file
 WSPEC=$(win "$SPEC")
 
-# --- c'e' qualcosa da firmare? ---
+# --- is there anything to sign? ---
 st=$(py stato "$WSPEC" | tr -d '\r')
 rs=${st%%|*} fs=${st#*|}
 case "$rs/$fs" in
@@ -98,7 +98,7 @@ case "$rs/$fs" in
   *) echo "finalize: esito=INVARIATO — niente da firmare (Review status '${rs}' · Feature status '${fs}')"; exit 4 ;;
 esac
 
-# --- livello in vigore e gate richiesti ---
+# --- level in force and required gates ---
 if [ -z "$level" ]; then
   level=$(bash "$PC" contract "$SPEC" 2>/dev/null | tr -d '\r' | sed -n 's/^Test level: \([a-z]*\).*/\1/p' | head -1)
   case $level in min|std|full) ;; *) level=legacy ;; esac
@@ -107,9 +107,9 @@ case $level in min|std|full|legacy) ;; *) echo "finalize: livello sconosciuto: $
 FILES=()
 [ -f "$run/touched.txt" ] && mapfile -t FILES < <(tr -d '\r' < "$run/touched.txt" | sed 's|^\./||' | grep -v '^$' | LC_ALL=C sort -u)
 
-# --- gate richiesti: la lista di gates.sh (maat_gate_richiesti, stessi livello e file), build escluso (facoltativo,
-# come nella review). Per ogni gate il modulo; per ogni modulo il formato del report e la radice (unione). ---
-export PROJECT_ROOT=${FIC_GATES_ROOT:-$PROJECT_ROOT}   # il progetto di gates.sh: <repo>/.claude/maat.json
+# --- required gates: the gates.sh list (maat_gate_richiesti, same level and files), build excluded (optional,
+# as in the review). For each gate its module; for each module the report format and the root (merge). ---
+export PROJECT_ROOT=${FIC_GATES_ROOT:-$PROJECT_ROOT}   # the gates.sh project: <repo>/.claude/maat.json
 REQ=() GM=() MODINFO=() conf_err=""
 if . "$HROOT/scripts/lib/maat-conf.sh" 2>/dev/null && maat_conf_carica 2>/dev/null &&
    gl=$(maat_gate_richiesti "$level" ${FILES[@]+"${FILES[@]}"} 2>/dev/null | tr -d '\r'); then
@@ -126,7 +126,7 @@ else
   conf_err=${conf_err:-lettore non utilizzabile}
 fi
 
-# --- evidenza alla chiave attuale: stessi argomenti di gates.sh (livello + touched.txt), poi --verify ---
+# --- evidence at the current key: same arguments as gates.sh (level + touched.txt), then --verify ---
 want=$(printf '%s\n' "$level" ${FILES[@]+"${FILES[@]}"})
 ev="" stale=""
 while IFS= read -r d; do
@@ -136,10 +136,10 @@ while IFS= read -r d; do
   stale="$stale $(basename "$d" | cut -c1-12)"
 done < <(ls -dt "$run"/evidence/*/ 2>/dev/null | sed 's|/$||')
 
-# Verdetto = AND (harness-pt09): ogni riga mancante e' "F|…" (gate FAIL, controprova non rossa: il codice e'
-# sbagliato) o "N|…" (assente, BLOCKED, chiave vecchia: l'evidenza manca). Un F -> FAIL anche con la review APPROVED.
+# Verdict = AND (harness-pt09): every missing line is "F|…" (gate FAIL, counterproof not red: the code is
+# wrong) or "N|…" (absent, BLOCKED, old key: evidence is missing). One F -> FAIL even with the review APPROVED.
 miss=() nfail=0 weak=()
-# "W|…" = controprova rosso_generico: soddisfa (PASS) ma e' una prova DEBOLE, dichiarata nel dettaglio e su stdout
+# "W|…" = counterproof rosso_generico: satisfies (PASS) but is a WEAK proof, declared in the detail and on stdout
 add() { [ -n "$1" ] || return 0; case $1 in F\|*) nfail=$((nfail + 1)) ;; W\|*) weak+=("${1#W|}"); return 0 ;; esac; miss+=("${1#[FN]|}"); }
 if [ -n "$conf_err" ]; then
   add "N|gate richiesti non determinabili (maat.json: ${conf_err% })"
@@ -148,8 +148,8 @@ elif [ -z "$ev" ]; then
 else
   while IFS= read -r m; do add "$m"; done < <(py gate "$(win "$ev")" ${GM[@]+"${GM[@]}"} | tr -d '\r')
 fi
-# L2 (harness-pt11): le mutazioni marcate "assorbita" (file nuovi) valgono solo se plan-check.sh l2 le conferma sul
-# codice attuale (impronta tests FRESH, stub = simboli esportati, ogni simbolo in un test di accettazione).
+# L2 (harness-pt11): mutations marked "assorbita" (new files) count only if plan-check.sh l2 confirms them on the
+# current code (tests fingerprint FRESH, stub = exported symbols, every symbol in an acceptance test).
 l2f=""
 if [ -f "$run/counterproof/mutations.json" ] && grep -q '"assorbita": *true' "$run/counterproof/mutations.json"; then
   l2f="$run/counterproof/l2.txt"
@@ -157,7 +157,7 @@ if [ -f "$run/counterproof/mutations.json" ] && grep -q '"assorbita": *true' "$r
 fi
 while IFS= read -r m; do add "$m"; done < <(py controprove "$(win "$run")" "$WSPEC" "${l2f:+$(win "$l2f")}" | tr -d '\r')
 
-# Unione requisito -> ID di test -> risultati (harness-pt09): la tabella Evidence della sezione, dopo la firma.
+# Merge requirement -> test ID -> results (harness-pt09): the section's Evidence table, after the signature.
 unisci() {
   [ -n "$cop" ] || return 0
   if [ ! -f "$cop" ]; then echo "finalize: copertura assente ($cop): nessuna tabella Evidence"; return 0; fi
@@ -296,10 +296,10 @@ def cmd_gate(ev, *coppie):
                                       d.get("motivo") or d.get("riepilogo") or "senza motivo"))
 
 
-# esiti di counterproof.sh (harness-pt05) che dicono "codice sbagliato": FAIL; bloccato e assente: evidenza mancante
+# counterproof.sh outcomes (harness-pt05) that mean "wrong code": FAIL; blocked and absent: missing evidence
 CP_FAIL = ("rosso_import", "rosso_raccolta", "rosso_diverso", "verde")
-# rosso_generico (runner comando): rosso senza report, PASS ma prova DEBOLE -> soddisfa, e si dichiara (riga W|);
-# non_eseguita (modulo senza controprova): NOT RUN dichiarato -> non soddisfa e non e' un errore (riga N|)
+# rosso_generico (command runner): red without report, PASS but WEAK proof -> satisfies, and is declared (W| line);
+# non_eseguita (module without counterproof): declared NOT RUN -> does not satisfy and is not an error (N| line)
 CP_DEBOLE = "rosso_generico"
 CP_NON_ESEGUITA = "non_eseguita"
 
@@ -329,7 +329,7 @@ def cmd_controprove(run, spec, l2file=""):
                 print("N|controprove: voce senza id in mutations.json")
                 continue
             r = load(os.path.join(run, "counterproof", str(mid) + ".json"))
-            if e.get("assorbita") is True:  # L2: vale solo se plan-check.sh l2 la conferma sul codice attuale
+            if e.get("assorbita") is True:  # L2: counts only if plan-check.sh l2 confirms it on the current code
                 st = l2.get(str(mid))
                 if (st and st[0] == "OK") or (isinstance(r, dict) and r.get("esito") == "rosso_asserzione"):
                     continue
@@ -371,7 +371,7 @@ def cmd_scrivi(spec, stato, det):
     det = " ".join(det.split())
     ver = None
     if stato in ("NEEDS_VERIFICATION", "FAIL"):
-        # FAIL (harness-pt09, verdetto = AND): la riga di decisione "APPROVED + un gate FAIL" della review
+        # FAIL (harness-pt09, verdict = AND): the review decision row "APPROVED + un gate FAIL"
         lines[fsi] = "Feature status: %s" % ("PLANNED" if stato == "FAIL" else stato) + eol
         if stato == "FAIL":
             ri = primo(lines, idx, "Review status:")
@@ -379,7 +379,7 @@ def cmd_scrivi(spec, stato, det):
                 lines[ri] = "Review status: NEEDS_CHANGES" + lines[ri][len(corpo(lines[ri])):]
         ver = "Verification: PARTIAL (finalize.sh: %s)" % det
     elif "provvisori" in valore(lines, idx, "Verification:").lower():
-        # verdetto provvisorio della review in parallelo con VERIFY (harness-pt09): confermato dall'unione
+        # provisional verdict of the review in parallel with VERIFY (harness-pt09): confirmed by the merge
         ver = "Verification: VERIFIED (finalize.sh: %s)" % det
     if ver is not None:
         vi = primo(lines, idx, "Verification:")
@@ -388,7 +388,7 @@ def cmd_scrivi(spec, stato, det):
             idx = review(lines)
         else:
             lines[vi] = ver + lines[vi][len(corpo(lines[vi])):]
-    # impronta del Reviewed snapshot verificato: la stessa di snap_fp in cycle-state.sh (riga 13f)
+    # fingerprint of the verified Reviewed snapshot: the same as snap_fp in cycle-state.sh (line 13f)
     snap = re.sub(r"[ \t]+", " ", valore(lines, idx, "Reviewed snapshot:")).strip(" ")
     sfp = hashlib.sha256(snap.encode("utf-8")).hexdigest()[:12]
     fin = "Finalize: %s — snapshot %s — %s · %s" % (stato, sfp, det, ora) + eol
@@ -407,7 +407,7 @@ def salva(spec, lines):
     os.replace(tmp, spec)
 
 
-# --- unione requisito -> ID di test -> risultati di VERIFY (harness-pt09) ---
+# --- merge requirement -> test ID -> VERIFY results (harness-pt09) ---
 EV_HEAD = "Requirement evidence (finalize.sh"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
@@ -534,7 +534,7 @@ def cmd_unisci(spec, cop, ev, run, *moduli):
         return
     eol = lines[fi][len(corpo(lines[fi])):] or "\n"
     old = primo(lines, idx, EV_HEAD)
-    if old is not None:   # la tabella di un finalize precedente: intestazione e righe "|" che la seguono
+    if old is not None:   # the table of a previous finalize: header and the "|" lines that follow it
         j = old + 1
         while j < len(lines) and corpo(lines[j]).lstrip().startswith("|"):
             j += 1

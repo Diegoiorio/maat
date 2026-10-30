@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# maat-config.test.sh — schema, lettore unico (maat-config.py), interfaccia bash (lib/maat-conf.sh) e profili (pk03).
-#   bash plugins/maat/scripts/maat-config.test.sh          (Git Bash o WSL)
-#   MC=/percorso/variante.py bash .../maat-config.test.sh   # la suite su un altro lettore
-# Le controprove per mutazione girano dentro la suite: il lettore si copia in una cartella temporanea, una sed lo
-# muta, e il caso che la mutazione deve rompere viene rilanciato sulla copia: deve diventare rosso.
+# maat-config.test.sh — schema, single reader (maat-config.py), bash interface (lib/maat-conf.sh) and profiles (pk03).
+#   bash plugins/maat/scripts/maat-config.test.sh          (Git Bash or WSL)
+#   MC=/path/variant.py bash .../maat-config.test.sh   # the suite against another reader
+# The mutation counterproofs run inside the suite: the reader is copied to a temporary folder, a sed mutates it,
+# and the case the mutation must break is rerun on the copy: it must turn red.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
@@ -15,13 +15,13 @@ unset MAAT_CONFIG FIC_GATES_VENV_PY PROJECT_ROOT MAAT_ROOT
 pass=0 fail=0
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
-T=$(cd "$T" && { pwd -W 2>/dev/null || pwd; })   # forma C:/… su Windows: la capisce sia bash sia Python
+T=$(cd "$T" && { pwd -W 2>/dev/null || pwd; })   # C:/… form on Windows: understood by both bash and Python
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; sed 's/^/    /' "$T/out" 2>/dev/null; fi; }
 mc() { "$FIC_PY" "$MC" "$@"; }
 SS=$PLUGIN/examples/nuxt-fastapi.maat.json
 DO=$PLUGIN/examples/bash-node.maat.json
 
-# --- 0. il validatore copre tutti i costrutti usati dallo schema ------------------------------------------------
+# --- 0. the validator covers every construct used by the schema -------------------------------------------------
 "$FIC_PY" -c '
 import json, sys
 NOTI = {"$schema", "$id", "title", "description", "default", "type", "required", "enum", "properties", "items",
@@ -37,11 +37,11 @@ giro(json.load(open(sys.argv[1], encoding="utf-8")), "")
 ' "$PLUGIN/schemas/maat-config.schema.json" > "$T/out" 2>&1
 check "schema: solo costrutti che il validatore interno conosce" '[ $? = 0 ]'
 
-# --- 1. esempi validi ----------------------------------------------------------------------------------------------
+# --- 1. valid examples ---------------------------------------------------------------------------------------------
 mc valida "$SS" > "$T/out" 2>&1; check "esempio nuxt-fastapi valido" '[ $? = 0 ]'
 mc valida "$DO" > "$T/out" 2>&1; check "esempio bash-node valido" '[ $? = 0 ]'
 
-# --- 2. maat.json minimo (R2: «5 righe») e default ------------------------------------------------------------------
+# --- 2. minimal maat.json (R2: "5 lines") and defaults ---------------------------------------------------------------
 mkdir -p "$T/min/.claude"
 cat > "$T/min/.claude/maat.json" <<'EOF'
 {"versione_schema": 1,
@@ -54,26 +54,26 @@ leggi() { MAAT_CONFIG=$MIN mc leggi "$1" 2>"$T/out"; }
 check "default moduli.0.regola_test = accanto" '[ "$(leggi moduli.0.regola_test)" = accanto ]'
 check "default moduli.0.ambiente = nativo" '[ "$(leggi moduli.0.ambiente)" = nativo ]'
 check "default moduli.0.radice_pacchetti = radice (.)" '[ "$(leggi moduli.0.radice_pacchetti)" = . ]'
-# nota di allineamento da pk04b: i controlli girano a tutti i livelli
+# alignment note from pk04b: the checks run at every level
 check "default gate.full = test controlli lint build" '[ "$(leggi gate.full)" = "test controlli lint build" ]'
 check "default gate.min = test controlli" '[ "$(leggi gate.min)" = "test controlli" ]'
 check "default cartelle.lavoro" '[ "$(leggi cartelle.lavoro)" = .claude/.ai-workflow ]'
 check "default piattaforma.copia_wsl = auto" '[ "$(leggi piattaforma.copia_wsl)" = auto ]'
-check "default lingua = it" '[ "$(leggi lingua)" = it ]'
+check "default lingua = en" '[ "$(leggi lingua)" = en ]'
 check "default moduli.0.report = nessuno" '[ "$(leggi moduli.0.report)" = nessuno ]'
 MAAT_CONFIG=$MIN mc leggi guardia.produzione > "$T/out" 2>&1; rc=$?
 check "leggi: chiave assente -> exit 3" '[ $rc = 3 ] && grep -q "chiave assente" "$T/out"'
 check "leggi --default" '[ "$(MAAT_CONFIG=$MIN mc leggi guardia.produzione --default nessuna)" = nessuna ]'
-# senza MAAT_CONFIG: <PROJECT_ROOT>/.claude/maat.json
+# without MAAT_CONFIG: <PROJECT_ROOT>/.claude/maat.json
 check "senza MAAT_CONFIG: <PROJECT_ROOT>/.claude/maat.json" '[ "$(PROJECT_ROOT=$T/min mc leggi moduli.0.nome 2>&1)" = app ]'
 MAAT_CONFIG=$MIN mc modulo-di README.md > "$T/out" 2>&1; rc=$?
 check "radice \".\": modulo-di README.md -> app radice" '[ $rc = 0 ] && [ "$(cat "$T/out")" = "app radice" ]'
 MAAT_CONFIG=$T/nessuno.json mc valida > "$T/out" 2>&1; rc=$?
 check "file mancante -> exit 4 e /maat:setup" '[ $rc = 4 ] && grep -q "progetto non configurato: lancia /maat:setup" "$T/out"'
 
-# --- 3. casi non validi: exit 1 e la chiave nel messaggio -------------------------------------------------------------
+# --- 3. invalid cases: exit 1 and the key in the message --------------------------------------------------------------
 M='{"nome":"app","radice":".","comandi":{"test":"npm test -- {test}"}}'
-ko() { # <descrizione> <json> <chiave attesa> [testo atteso]
+ko() { # <description> <json> <expected key> [expected text]
   printf '%s\n' "$2" > "$T/ko.json"
   mc valida "$T/ko.json" > "$T/out" 2>&1; local rc=$?
   KO_CHIAVE=$3 KO_TESTO=${4:-}
@@ -116,21 +116,21 @@ caso_annidate() { [ "$(MAAT_CONFIG=$T/annidate.json "$FIC_PY" "$1" modulo-di a/b
                   [ "$(MAAT_CONFIG=$T/annidate.json "$FIC_PY" "$1" modulo-di a/y 2>&1)" = "a radice" ]; }
 check "radici annidate: a/b/x -> ab, a/y -> a (vince la più lunga)" 'caso_annidate "$MC"'
 
-# --- 5. comando: le stringhe di gates.sh 137-146 e 216 --------------------------------------------------------------
-# Normalizzazioni dichiarate: radice del repo -> <repo>; percorso del report -> <report>; lo script della copia
-# (in gates.sh:58,130 `$(sq "$VF")` = '<repo>/script/test/vitest-fast.sh', quotato; nel plugin {maat} quotato più
-# /scripts/test-fast.sh = '<radice del plugin>'/scripts/test-fast.sh) -> '<VF>'. Le attese sotto sono la forma
-# letterale che gates.sh produce, con il riferimento di riga.
+# --- 5. comando: the strings of gates.sh 137-146 and 216 ------------------------------------------------------------
+# Declared normalizations: repo root -> <repo>; report path -> <report>; the mirror-copy script
+# (in gates.sh:58,130 `$(sq "$VF")` = '<repo>/script/test/vitest-fast.sh', quoted; in the plugin {maat} quoted plus
+# /scripts/test-fast.sh = '<plugin root>'/scripts/test-fast.sh) -> '<VF>'. The expectations below are the literal
+# form gates.sh produces, with the line reference.
 R=$T/ss MR=$T/maatroot
 cmd() { MAAT_CONFIG=$SS PROJECT_ROOT=$R MAAT_ROOT=$MR "$FIC_PY" "${MCX:-$MC}" comando "$@" 2>&1 |
         sed -e "s#$R/ev/tests-be.junit.xml#<report>#g" -e "s#'$MR'/scripts/test-fast.sh#'<VF>'#g" -e "s#$R#<repo>#g"; }
 riga() { printf '%s\n%s' "$1" "$2"; }
-# gates.sh:216  (cd "$ROOT/$API" && "$VPY" -m pytest -q --junitxml="$WEV/tests-be.junit.xml" "${BE_SEL[@]}"), VPY da 128
-# (Dal progetto guida l'esempio ha python [.venv312/bin/python, .venv/bin/python]: nessuno esiste -> l'ultimo)
+# gates.sh:216  (cd "$ROOT/$API" && "$VPY" -m pytest -q --junitxml="$WEV/tests-be.junit.xml" "${BE_SEL[@]}"), VPY from 128
+# (From the reference project the example has python [.venv312/bin/python, .venv/bin/python]: neither exists -> the last)
 E_BE="<repo>/modules/api/.venv/bin/python -m pytest -q --junitxml=<report> 'tests/test_a.py' 'tests/routers/test_a_b.py'"
 check "tests-be = comando eseguito di gates.sh:216, da modules/api" \
   '[ "$(cmd be test --test modules/api/tests/test_a.py --test modules/api/tests/routers/test_a_b.py --report "$R/ev/tests-be.junit.xml")" = "$(riga modules/api "$E_BE")" ]'
-# gates.sh:141  CMD[tests-fe]="bash $(sq "$VF")$(join_q "${FE_SEL[@]}")", FE_SEL relativi ad ADM (110)
+# gates.sh:141  CMD[tests-fe]="bash $(sq "$VF")$(join_q "${FE_SEL[@]}")", FE_SEL relative to ADM (110)
 E_FE="bash '<VF>' 'components/x.test.ts'"
 check "tests-fe = gates.sh:141, dalla radice del modulo" \
   '[ "$(cmd fe test --test modules/app/apps/admin/components/x.test.ts)" = "$(riga modules/app/apps/admin "$E_FE")" ]'
@@ -161,25 +161,25 @@ check "controprova vitest: {test} relativo alla radice, {nome} quotato" \
   '[ "$(cmd fe controprova --test modules/app/apps/admin/a.test.ts --nome "il caso" --report r.json | tail -1)" = "CI=true npx vitest run '"'"'a.test.ts'"'"' -t '"'"'il caso'"'"' --reporter=default --reporter=json --outputFile.json=r.json" ]'
 check "elenco-moduli" '[ "$(MAAT_CONFIG=$SS mc elenco-moduli | tr "\n" " ")" = "fe be " ]'
 
-# --- 6. esempio nuxt-fastapi: guardia uguale a guard.py e run-phase.sh (righe ricopiate) -----------------------------
+# --- 6. nuxt-fastapi example: guardia equal to guard.py and run-phase.sh (lines copied over) -------------------------
 "$FIC_PY" -c '
 import json, re, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))["guardia"]
-# PROD_RE di guard.py prima della divisione (5f0d933:80-86), deploy-production compreso: resta anche in rilascio (review pk05)
+# PROD_RE of guard.py before the split (5f0d933:80-86), deploy-production included: it stays in rilascio too (review pk05)
 attesi = [r"prod\.example\.internal", r"(?<![0-9.])10\.20\.30\.40(?![0-9])",
           r"(?<![-a-z0-9])(app|api|auth)\.example\.com",
           r"(?<![-a-z0-9.@])((www|api|app|auth)\.)?example\.org(?![-a-z0-9])",
           "script/prod/", "deploy-production", r"docker-compose\.prod", "run-and-clean-prod"]
 assert c["produzione"] == attesi, c["produzione"]
 assert c["rilascio"] == ["script/deploy-production.sh"]
-# guard.py:129-130 (WRAPPER_SCRIPTS) e 310-311 (dev-sql.sh --apply negato)
+# guard.py:129-130 (WRAPPER_SCRIPTS) and 310-311 (dev-sql.sh --apply denied)
 inv = [x if isinstance(x, str) else x["script"] for x in c["involucri"]]
 assert inv == ["script/dev/dev-exec.sh", "script/dev/dev-sql.sh", "script/rsync-once.sh",
                "script/test/vitest-fast.sh", "script/test/counterproof.sh"], inv
 assert c["involucri"][1]["opzioni_negate"] == ["--apply"]
-# run-phase.sh:537-538: gli rsync, che non sono di rilascio, e `bash script/prod` (pk05: il DENY di oggi senza perdite)
+# run-phase.sh:537-538: the rsyncs, which are not release scripts, and `bash script/prod` (pk05: the current DENY, nothing lost)
 assert c["vietati_extra"] == ["bash script/rsync-once.sh", "bash script/rsync.sh", "script/rsync-once.sh", "bash script/prod"]
-# ogni sonda corrisponde ad almeno una regex di produzione
+# every probe matches at least one produzione regex
 for s in c["sonde"]:
     assert any(re.search(r, "curl -s https://%s/" % s, re.I) for r in c["produzione"]), s
 ' "$SS" > "$T/out" 2>&1
@@ -192,28 +192,28 @@ printf '%s\n' "{\"versione_schema\":1,\"guardia\":{\"produzione\":[],\"sonde\":[
 o=$(MAAT_CONFIG=$T/vuota.json mc sonda-produzione); rc=$?
 check "sonda-produzione con produzione vuota -> ripiego, exit 3" '[ $rc = 3 ] && [ "$o" = "git push --force origin x" ]'
 
-# --- 7. profili: componi ---------------------------------------------------------------------------------------------
+# --- 7. profiles: componi --------------------------------------------------------------------------------------------
 mc componi nuxt-vitest fastapi-pytest --radice fe=modules/app/apps/admin --radice be=modules/api > "$T/comp.json" 2>"$T/out"
 check "componi nuxt-vitest + fastapi-pytest esce 0" '[ $? = 0 ]'
 mc valida "$T/comp.json" > "$T/out" 2>&1; check "  e il risultato è valido" '[ $? = 0 ]'
 "$FIC_PY" -c '
 import json, sys
 def pulisci(c):
-    # solo le parti del progetto: sezioni di progetto, build, python, radice_pacchetti
-    for k in ("guardia", "verifica_remota", "contesto", "piano", "da_non_toccare", "generati"):
+    # only the project-specific parts: project sections, language, build, python, radice_pacchetti
+    for k in ("guardia", "lingua", "verifica_remota", "contesto", "piano", "da_non_toccare", "generati"):
         c.pop(k, None)
     for m in c["moduli"]:
-        # dove gira l interprete (python e il suo ambiente) e una scelta del progetto: Dal progetto guida il
-        # modulo be dell esempio gira in WSL, il profilo fastapi-pytest resta nativo
+        # where the interpreter runs (python and its ambiente) is a project choice: in the reference project the
+        # example be module runs in WSL, the fastapi-pytest profile stays nativo
         if "{python}" in json.dumps(m):
             m.pop("ambiente", None)
         m.pop("python", None); m.pop("radice_pacchetti", None); m.get("comandi", {}).pop("build", None)
-        # pk04b-2: le cartelle di sola lettura delle controprove (copia_anche) sono del progetto, non del profilo
+        # pk04b-2: the read-only counterproof folders (copia_anche) belong to the project, not the profile
         m.pop("copia_anche", None)
     return c
 def dipendenze(a, b):
-    # pk04b-2: collegamenti e file delle dipendenze del profilo sono un sottoinsieme di quelli dell esempio (il
-    # progetto aggiunge le cartelle del monorepo, il node_modules del repo e .venv312); poi si tolgono
+    # pk04b-2: the links and dependency files of the profile are a subset of those of the example (the project
+    # adds the monorepo folders, the repo node_modules and .venv312); then they are removed
     for ma, mb in zip(a["moduli"], b["moduli"]):
         for k in ("collega_nel_worktree", "file_dipendenze"):
             pa, pb = ma.pop(k, []), mb.pop(k, [])
@@ -221,8 +221,8 @@ def dipendenze(a, b):
                 print("%s del modulo %s: il profilo %s non sta nell esempio %s" % (k, ma["nome"], pa, pb)); sys.exit(1)
 def pulisci_chiave(c):
     for m in c["moduli"]:
-        # pk04b-1: le voci chiave delle righe di gates.sh di prima (vitest, eslint, deps, node_modules, pip) sono
-        # dell esempio; il profilo nuxt-vitest porta solo tsconfig
+        # pk04b-1: the chiave entries from the former gates.sh lines (vitest, eslint, deps, node_modules, pip) belong
+        # to the example; the nuxt-vitest profile brings only tsconfig
         k = [v for v in m.get("chiave", []) if v.get("etichetta") == "tsconfig"]
         if k:
             m["chiave"] = k
@@ -230,6 +230,7 @@ def pulisci_chiave(c):
             m.pop("chiave", None)
     return c
 a = json.load(open(sys.argv[1], encoding="utf-8")); b = json.load(open(sys.argv[2], encoding="utf-8"))
+assert a["lingua"] == "en", a.get("lingua")   # componi (used by /maat:setup) writes the default language
 assert a["moduli"][0]["comandi"]["build"]["comando"] == "npm run build"
 assert b["moduli"][0]["comandi"]["build"]["comando"] == "npm run build:admin"
 assert a["moduli"][0]["radice_pacchetti"] == "modules/app/apps/admin" and b["moduli"][0]["radice_pacchetti"] == "modules/app"
@@ -246,9 +247,9 @@ for p in nuxt-vitest fastapi-pytest node-semplice generico-senza-test; do
 done
 mc componi nuxt-vitest > "$T/out" 2>&1; check "componi senza --radice -> exit 64" '[ $? = 64 ]'
 
-# pk06, nota C: senza WSL (o fuori da Windows) /maat:setup propone ambiente nativo: componi --nativo
+# pk06, note C: without WSL (or outside Windows) /maat:setup proposes ambiente nativo: componi --nativo
 mkdir -p "$T/nat-vuoto" "$T/nat-lb/web"; : > "$T/nat-lb/web/lint-baseline.mjs"
-caso_nativo() { # [lettore]: nuxt-vitest + fastapi-pytest --nativo -> valido, nativo, senza copia, copia_wsl no, niente test-fast.sh
+caso_nativo() { # [reader]: nuxt-vitest + fastapi-pytest --nativo -> valid, nativo, no mirror copy, copia_wsl no, no test-fast.sh
   PROJECT_ROOT=$T/nat-vuoto "$FIC_PY" "${1:-$MC}" componi nuxt-vitest fastapi-pytest --radice fe=web --radice be=api --nativo > "$T/nat.json" 2>"$T/out" &&
     "$FIC_PY" "${1:-$MC}" valida "$T/nat.json" >> "$T/out" 2>&1 &&
     "$FIC_PY" -c 'import json, sys
@@ -265,7 +266,7 @@ assert fe["lint_base"] is False
 ' "$T/nat.json" >> "$T/out" 2>&1
 }
 check "componi --nativo: ambiente nativo, niente copia, copia_wsl no, comandi della copia eseguiti nel repo" 'caso_nativo'
-caso_nativo_lb() { # [lettore]: con web/lint-baseline.mjs nel progetto --nativo sceglie l'alternativa del suo se_esiste
+caso_nativo_lb() { # [reader]: with web/lint-baseline.mjs in the project --nativo picks the alternative of its se_esiste
   PROJECT_ROOT=$T/nat-lb "$FIC_PY" "${1:-$MC}" componi nuxt-vitest --radice fe=web --nativo > "$T/nat-lb.json" 2>"$T/out" &&
     "$FIC_PY" "${1:-$MC}" valida "$T/nat-lb.json" >> "$T/out" 2>&1 &&
     "$FIC_PY" -c 'import json, sys
@@ -278,7 +279,7 @@ mc componi nuxt-vitest --radice fe=web > "$T/wsl.json" 2>"$T/out"
 check "componi senza --nativo: nuxt-vitest resta ambiente wsl con copia" \
   '"$FIC_PY" -c "import json,sys; m=json.load(open(sys.argv[1]))[\"moduli\"][0]; sys.exit(0 if m[\"ambiente\"] == \"wsl\" and \"copia\" in m else 1)" "$T/wsl.json"'
 
-# node-semplice: test solo se ci sono *.test.js (se_presente)
+# node-semplice: tests only if there are *.test.js files (se_presente)
 mkdir -p "$T/ns/.claude" "$T/ns/pkg"
 mc componi node-semplice --radice n=pkg > "$T/ns/.claude/maat.json"
 MAAT_CONFIG=$T/ns/.claude/maat.json PROJECT_ROOT=$T/ns mc comando n test --test pkg/a.test.js > "$T/out" 2>&1; rc=$?
@@ -289,7 +290,7 @@ check "node-semplice con *.test.js: node --test" '[ $rc = 0 ] && [ "$o" = "$(rig
 o=$(MAAT_CONFIG=$T/ns/.claude/maat.json PROJECT_ROOT=$T/ns mc comando n controlli --file pkg/x.js --file README.md 2>&1); rc=$?
 check "node-semplice: controlli node --check sul solo .js del modulo" '[ $rc = 0 ] && [ "$o" = "$(riga pkg "node --check '"'"'x.js'"'"'")" ]'
 
-# generico-senza-test: {python} ripiega su python3 dal PATH; senza, il controllo JSON è NOT RUN (dichiarato)
+# generico-senza-test: {python} falls back to python3 from PATH; without it, the JSON check is NOT RUN (declared)
 mkdir -p "$T/gen/.claude" "$T/vuoto"
 mc componi generico-senza-test --radice g=. > "$T/gen/.claude/maat.json"
 gen() { (cd "$T/vuoto" && PATH=$T/vuoto MAAT_CONFIG=$T/gen/.claude/maat.json PROJECT_ROOT=$T/gen "$FIC_PY" "$MC" comando g controlli "$@"); }
@@ -301,10 +302,10 @@ gen --file d/c.json > "$T/out" 2>&1; rc=$?
 check "generico: solo un JSON e niente python -> exit 3 (tutto saltato)" '[ $rc = 3 ]'
 o=$(FIC_GATES_VENV_PY=$T/py.exe gen --file d/c.json 2>/dev/null)
 check "generico: con un interprete, json.tool su un file per invocazione" '[ "$o" = "$(riga . "$T/py.exe -m json.tool '"'"'d/c.json'"'"'")" ]'
-# pk09 (pilota su un secondo progetto): il ripiego python3 dal PATH non da' lo stub dello Store. Sotto …/WindowsApps/ si sonda con
-# argomenti e timeout: esce 9009 (lo stub) -> scartato; risponde a -c "import sys" (Python Install Manager) -> tenuto.
-WA="$T/wa/Microsoft/WindowsApps"; mkdir -p "$WA"; WAU=$(cd "$WA" && pwd)   # forma /… per il PATH di bash
-stub_wa() { # $1 codice d'uscita dello stub chiamato con argomenti
+# pk09 (pilot on a second project): the python3-from-PATH fallback does not yield the Store stub. Under …/WindowsApps/ it is probed with
+# arguments and a timeout: exits 9009 (the stub) -> discarded; answers -c "import sys" (Python Install Manager) -> kept.
+WA="$T/wa/Microsoft/WindowsApps"; mkdir -p "$WA"; WAU=$(cd "$WA" && pwd)   # /… form for the bash PATH
+stub_wa() { # $1 exit code of the stub when called with arguments
   rm -f "$WA"/python3*
   case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) printf '@exit /b %s\r\n' "$1" > "$WA/python3.bat" ;;
@@ -316,7 +317,7 @@ caso_stub() { stub_wa 9009; pyg > "$T/out" 2>&1; [ $? = 3 ] && ! grep -q Windows
 check "python dal PATH: stub sotto WindowsApps che esce 9009 -> scartato (exit 3)" 'caso_stub'
 stub_wa 0; o=$(pyg 2> "$T/out"); rc=$?
 check "python dal PATH: sotto WindowsApps ma risponde a -c \"import sys\" -> tenuto" '[ $rc = 0 ] && case "$o" in */WindowsApps/python3*) true ;; *) false ;; esac'
-# lo stub e' il PRIMO python3 del PATH, un python3 vero viene dopo (fuori da WindowsApps: nessuna sonda) -> il secondo
+# the stub is the FIRST python3 on PATH, a real python3 comes after (outside WindowsApps: no probe) -> the second
 AL="$T/wa/altro"; mkdir -p "$AL"; ALU=$(cd "$AL" && pwd)
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) printf '@exit /b 0\r\n' > "$AL/python3.bat" ;;
@@ -326,13 +327,13 @@ caso_dopo() { local o rc; stub_wa 9009; o=$(PYG_PATH="$WAU:$ALU" pyg 2> "$T/out"
   [ $rc = 0 ] && case "$o" in */wa/altro/python3*) true ;; *) false ;; esac; }
 check "python dal PATH: stub sotto WindowsApps per primo, python3 vero dopo -> preso il secondo" 'caso_dopo'
 
-# --- 8. interfaccia bash: lib/maat-conf.sh ----------------------------------------------------------------------------
+# --- 8. bash interface: lib/maat-conf.sh ------------------------------------------------------------------------------
 cp "$MIN" "$T/conf.json"
 (
   export MAAT_CONFIG=$T/conf.json
   . "$HERE/lib/maat-conf.sh"
   maat_conf_carica || exit 11
-  mv "$T/conf.json" "$T/conf.via"                     # dopo il caricamento il file non si rilegge
+  mv "$T/conf.json" "$T/conf.via"                     # after loading, the file is not reread
   [ "$(maat_conf moduli.0.regola_test)" = accanto ] || exit 12
   [ "$(maat_conf gate.full)" = "test controlli lint build" ] || exit 13
   maat_conf guardia.sonde 2>/dev/null; [ $? = 3 ] || exit 14
@@ -343,9 +344,9 @@ cp "$MIN" "$T/conf.json"
 ) > "$T/out" 2>&1
 check "maat-conf.sh: maat_conf con cache per processo, maat_modulo_di, maat_comando" '[ $? = 0 ]'
 
-# --- 8b. copia (pk04b-1): il comando che test-fast.sh esegue DENTRO la copia --------------------------------------------
-# Attese: vitest-fast.sh:219-234 e 293 di prima di pk04b-1 (cwd <copia>/apps/admin, CI=true, cache alla radice della
-# copia, lint-baseline.mjs -> npm run -s lint; messaggi dalla radice del pacchetto del file).
+# --- 8b. copia (pk04b-1): the command test-fast.sh runs INSIDE the mirror copy -----------------------------------------
+# Expected: vitest-fast.sh:219-234 and 293 from before pk04b-1 (cwd <copy>/apps/admin, CI=true, cache at the root of the
+# copy, lint-baseline.mjs -> npm run -s lint; messages from the root of the file's package).
 CP="$T/copia"; mkdir -p "$CP/apps/admin" "$CP/packages/ui"
 cc() { MAAT_CONFIG=$SS "$FIC_PY" "${MCX:-$MC}" comando-copia fe "$@" --copia "$CP" 2>&1; }
 check "copia-modulo: l'unico modulo con copia, una riga per campo" \
@@ -373,7 +374,7 @@ MAAT_CONFIG=$T/due.json mc copia-modulo > "$T/out" 2>&1; rc=$?
 check "copia-modulo: due moduli con copia senza MAAT_MODULO -> exit 64" '[ $rc = 64 ] && grep -q "moduli con copia: imposta MAAT_MODULO" "$T/out"'
 check "  con MAAT_MODULO=fe2 -> fe2" '[ "$(MAAT_CONFIG=$T/due.json MAAT_MODULO=fe2 mc copia-modulo | head -2 | tr "\n" "|")" = "fe2|modules/app/packages/ui|" ]'
 
-# --- 8c. gate richiesti, test selezionati, voci della chiave, python (pk04b-1: gates.sh e finalize.sh) ----------------
+# --- 8c. required gates, selected tests, chiave entries, python (pk04b-1: gates.sh and finalize.sh) -------------------
 gr() { MAAT_CONFIG=${GRC:-$SS} "$FIC_PY" "${MCX:-$MC}" gate-richiesti "$@" 2>&1 | tr '\t' ' ' | paste -sd '|' -; }
 caso_ordine() { [ "$(MCX=$1 gr std)" = "tests-be be test|tests-fe fe test" ]; }
 check "gate-richiesti std (nuxt-fastapi): tests-be, tests-fe, per etichetta" 'caso_ordine "$MC"'
@@ -412,7 +413,7 @@ rm -rf "$APIT/.venv312"
 check "python lista: poi la successiva" '[ "$(MAAT_CONFIG=$SS PROJECT_ROOT=$TD mc python be)" = "$TD/modules/api/.venv/bin/python" ]'
 rm -rf "$APIT/.venv"
 
-# --- 8b. generati (Dal progetto guida): file generati rigenerabili da implement/fix ---------------------------
+# --- 8b. generati (from the reference project): generated files that implement/fix may regenerate -------------
 GR='modules/api/docs/operation-log.md | modules/api | PYTHONPATH=. .venv/bin/python tests/test_operation_log_docs.py | modules/api/tests/test_operation_log_docs.py'
 check "generati: la voce dell'esempio, con l'ambiente del modulo della cartella" '[ "$(MAAT_CONFIG=$SS mc generati 2>"$T/out")" = "$GR | wsl" ]'
 TG=$T/gen; mkdir -p "$TG/modules/api/docs" "$TG/modules/api/tests"
@@ -424,9 +425,9 @@ MAAT_CONFIG=$MIN mc generati > "$T/out" 2>&1; rc=$?
 check "generati: nessuna voce -> nessuna riga, exit 0" '[ $rc = 0 ] && [ ! -s "$T/out" ]'
 check "generati: cartella fuori da ogni modulo -> ambiente nativo" \
   '[ "$(MAAT_CONFIG=$SS mc generati | cut -d"|" -f5)" = " wsl" ] && printf "%s\n" "{\"versione_schema\":1,\"moduli\":[{\"nome\":\"a\",\"radice\":\"src\",\"ambiente\":\"wsl\"}],\"generati\":[{\"percorso\":\"d/x.md\",\"cartella\":\"d\",\"comando\":\"gen.sh\",\"test\":\"t/x.test\"}]}" > "$T/gn.json" && [ "$(MAAT_CONFIG=$T/gn.json mc generati)" = "d/x.md | d | gen.sh | t/x.test | nativo" ]'
-# controprove su una voce guasta: ogni controllo di --verifica diventa rosso
+# counterproofs on a broken entry: every --verifica check turns red
 GJ='{"percorso":"modules/api/docs/operation-log.md","cartella":"modules/api","comando":"PYTHONPATH=. .venv/bin/python tests/test_operation_log_docs.py","test":"modules/api/tests/test_operation_log_docs.py"}'
-gv() { # <descrizione> <voce json> <testo atteso>
+gv() { # <description> <json entry> <expected text>
   printf '%s\n' "{\"versione_schema\":1,\"moduli\":[{\"nome\":\"be\",\"radice\":\"modules/api\",\"ambiente\":\"wsl\"}],\"generati\":[$2]}" > "$T/gv.json"
   MAAT_CONFIG=$T/gv.json PROJECT_ROOT=$TG mc generati --verifica > "$T/out" 2>&1; local rc=$?
   GV_TESTO=$3; check "generati --verifica: $1" '[ $rc = 1 ] && grep -qF -- "$GV_TESTO" "$T/out"'
@@ -445,19 +446,19 @@ caso_s9() { printf '%s\n' "{\"versione_schema\":1,\"moduli\":[$M],\"generati\":[
 check "non valido: un golden fra i generati (S9)" 'caso_s9 "$MC"'
 ko "uno snapshot fra i generati (S9)" "{\"versione_schema\":1,\"moduli\":[$M],\"generati\":[{\"percorso\":\"a.md\",\"cartella\":\".\",\"comando\":\"g.sh\",\"test\":\"__snapshots__/a.snap\"}]}" generati.0.test "(S9)"
 ko "la base del lint fra i generati (S9)" "{\"versione_schema\":1,\"moduli\":[$M],\"generati\":[{\"percorso\":\"web/eslint-baseline.tsv\",\"cartella\":\"web\",\"comando\":\"lint-baseline.mjs\",\"test\":\"t.py\"}]}" generati.0.percorso "(S9)"
-# i worker che lanciano plan-implementer (implement, fix) gli passano l'elenco: senza, il fix si ferma su
-# «file non nominato dal piano»
+# the workers that launch plan-implementer (implement, fix) pass it the list: without it, the fix stops on
+# `file non nominato dal piano`
 for w in implement fix; do
   check "workers/$w.md passa maat-config.py generati all'implementer" 'grep -q "maat-config.py\" generati" "$PLUGIN/skills/full-implementation-cycle/workers/$w.md"'
 done
 
-# --- 8d. pk04b-2: preparati => preparazione (S10); funzioni importabili uguali ai comandi -------------------------------
+# --- 8d. pk04b-2: preparati => preparazione (S10); importable functions equal to the commands ---------------------------
 caso_s10() { printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","preparati":[".nuxt/tsconfig.json"]}]}' > "$T/ks10.json"
   "$FIC_PY" "$1" valida "$T/ks10.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ": moduli.0.preparati: preparati chiede preparazione, il comando che li scrive (S10)" "$T/out"; }
 check "non valido: preparati senza preparazione (S10)" 'caso_s10 "$MC"'
 printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","preparati":[".nuxt/tsconfig.json"],"preparazione":"npx nuxi prepare"}]}' > "$T/s10ok.json"
 mc valida "$T/s10ok.json" > "$T/out" 2>&1; check "preparati con preparazione: valido" '[ $? = 0 ]'
-imp() { # <lettore> -> le uscite delle funzioni importate (MAAT_CONFIG_PY come plan-check.sh), una per riga
+imp() { # <reader> -> the outputs of the imported functions (MAAT_CONFIG_PY like plan-check.sh), one per line
   MAAT_CONFIG=$SS PROJECT_ROOT=$TD "$FIC_PY" -c '
 import importlib.util, sys
 s = importlib.util.spec_from_file_location("maat_config", sys.argv[1]); mc = importlib.util.module_from_spec(s); s.loader.exec_module(mc)
@@ -475,8 +476,8 @@ IMP=$(printf '%s\n' "('fe', 'radice')" "('fe', 'pacchetti')" "('be', 'radice')" 
 IMP=$IMP$'\n'$(MAAT_CONFIG=$SS PROJECT_ROOT=$TD MAAT_ROOT=$PLUGIN mc comando fe test --test modules/app/apps/admin/tests/a.test.ts)$'\n'"uscita 2"
 check "importato: modulo_di e comando danno quello che danno modulo-di e comando (CLI)" '[ "$(MAAT_ROOT=$PLUGIN imp "$MC")" = "$IMP" ]'
 
-# --- 9. controprove per mutazione (la mutazione deve far diventare rosso il caso) -------------------------------------
-mutante() { # <nome> <espressione sed> -> percorso del lettore mutato; vuoto se la sed non cambia niente
+# --- 9. mutation counterproofs (the mutation must turn the case red) ----------------------------------------------------
+mutante() { # <name> <sed expression> -> path of the mutated reader; empty if the sed changes nothing
   local d="$T/mut/$1"
   mkdir -p "$d/scripts"; cp -r "$PLUGIN/schemas" "$PLUGIN/profiles" "$d/"
   sed -e "$2" "$MC" > "$d/scripts/maat-config.py"

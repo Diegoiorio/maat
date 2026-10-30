@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# test-review-surface.sh — asserzioni su review-surface.sh, in un repo git usa-e-getta.
+# test-review-surface.sh — assertions on review-surface.sh, in a throwaway git repo.
 #
 #   bash .claude/skills/implementation-review-cycle/test-review-surface.sh
-#   SCRIPT=/percorso/variante.sh bash .../test-review-surface.sh   # controprova su una mutazione
+#   SCRIPT=/path/variant.sh bash .../test-review-surface.sh   # counterproof on a mutation
 #
-# Ogni caso ha una controprova incorporata (lo stesso controllo, nella condizione opposta, deve
-# dare l'esito opposto): un'asserzione che non puo' fallire non conta come copertura.
+# Every case has a built-in counterproof (the same check, under the opposite condition, must
+# give the opposite result): an assertion that cannot fail does not count as coverage.
 
 set -uo pipefail
 set -f
@@ -33,12 +33,12 @@ printf 'a\n' > src/a.py
 printf 'b\n' > src/b.py
 printf 'out\n' > src/other.py
 printf 'def test_a():\n    assert f() == 1\n    assert g() == 2\n' > tests/test_a.py
-printf 'line1\r\nline2\r\n' > src/crlf.txt          # CRLF committato
+printf 'line1\r\nline2\r\n' > src/crlf.txt          # committed CRLF
 printf '#!/bin/sh\necho x\n' > run.sh
-chmod +x run.sh   # pk08: dove core.filemode vale (Linux) il file sul disco deve avere il modo dell'indice
+chmod +x run.sh   # pk08: where core.filemode applies (Linux) the file on disk must have the index mode
 git add -A; git update-index --chmod=+x run.sh
 git commit -qm init
-git config core.autocrlf true                      # come sulla macchina Windows del progetto
+git config core.autocrlf true                      # as on the project's Windows machine
 HEAD_TREE=$(git rev-parse 'HEAD^{tree}')
 
 echo "1. snapshot pulito, autocrlf=true, CRLF committato + 100755"
@@ -56,7 +56,7 @@ for pat in $'^  M\tsrc/a.py$' $'^  M\tsrc/b.py$' $'^  A\tsrc/new.py$' $'^  D\tsr
   if has "$out" "$pat"; then ok "presente: $pat"; else ko "manca: $pat" "$out"; fi
 done
 if has "$out" 'crlf.txt|run.sh'; then ko "file non toccati riportati come cambiati" "$out"; else ok "controprova: i file non toccati non compaiono"; fi
-# L'indice reale NON deve essere toccato: new.py resta untracked.
+# The real index must NOT be touched: new.py stays untracked.
 if git status --porcelain | grep -q '^?? src/new.py$'; then ok "indice reale intatto"; else ko "l'indice reale e' stato modificato"; fi
 
 BASE=$(field "$out" Base); TREE=$(field "$out" Tree)
@@ -77,7 +77,7 @@ echo "5. file NUOVO comparso dopo l'approvazione (anche fuori dal manifest) = ST
 printf 'unrelated\n' > src/unrelated_flow.py
 git -c core.autocrlf=false add src/unrelated_flow.py
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
-# Un file NUOVO rispetto alla base e' superficie nuova: deve dare STALE (non sappiamo se e' della feature).
+# A file NEW relative to the base is new surface: it must give STALE (we cannot tell whether it belongs to the feature).
 if has "$out" '^Status: STALE$' && has "$out" $'NEW-SURFACE\tsrc/unrelated_flow.py'; then ok "file nuovo dopo l'approvazione = NEW-SURFACE"; else ko "file nuovo non rilevato" "$out"; fi
 git rm -q --cached src/unrelated_flow.py; rm -f src/unrelated_flow.py
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
@@ -125,7 +125,7 @@ printf 'altro\n' > src/other_flow.py
 printf 'src/other_flow.py\n' > "$XFILE"
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP" --exclude-file "$XFILE")
 if has "$out" '^Status: FRESH$'; then ok "escluso: fresh"; else ko "un file escluso ha invalidato la review" "$out"; fi
-# ...ma se il file escluso esisteva gia' nel tree approvato e cambia, va SEGNALATO (file misto).
+# ...but if the excluded file already existed in the approved tree and changes, it must be REPORTED (mixed file).
 printf 'src/other_flow.py\nsrc/crlf.txt\n' > "$XFILE"
 printf 'changed\r\n' > src/crlf.txt
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP" --exclude-file "$XFILE")
@@ -134,16 +134,21 @@ git checkout -q -- src/crlf.txt
 printf 'src/other_flow.py\n' > "$XFILE"
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
 if has "$out" '^Status: STALE$' && has "$out" $'NEW-SURFACE\tsrc/other_flow.py'; then ok "controprova: senza esclusione e' superficie nuova"; else ko "controprova fallita" "$out"; fi
+# report 2026-10-30: an exclusion line carrying the note « — …» (rings k>1 of a chain) counts as the bare path
+printf 'src/other_flow.py — stessa catena, anello precedente (spec-x-1)\n' > "$XFILE"
+out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP" --exclude-file "$XFILE")
+if has "$out" '^Status: FRESH$' && ! has "$out" 'NEW-SURFACE'; then ok "escluso con la nota « — …»: fresh, conta solo il path"; else ko "la nota dopo il path ha reso il file superficie nuova" "$out"; fi
+printf 'src/other_flow.py\n' > "$XFILE"
 rm -f src/other_flow.py
 
 echo "12. test RINOMINATO e svuotato nello stesso passo: il segnale non si perde"
 git mv tests/test_renamed.py tests/test_moved.py
 printf 'def test_a():\n    pass\n' > tests/test_moved.py
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
-# Riscritto molto: git non lo vede come rinomina → DELETED-TEST. Poco: rinomina → REMOVED-ASSERTIONS.
+# Heavily rewritten: git does not see it as a rename → DELETED-TEST. Lightly: rename → REMOVED-ASSERTIONS.
 if has "$out" 'REMOVED-ASSERTIONS tests/test_moved.py|DELETED-TEST tests/test_renamed.py' && has "$out" '^Gate-only eligible: no'; then ok "rinomina+svuotamento rilevati"; else ko "indebolimento nascosto dalla rinomina" "$out"; fi
 git mv tests/test_moved.py tests/test_renamed.py; git checkout -q -- tests/test_renamed.py
-# Variante "rinomina vera" (simile >50%): un'asserzione su tre tolta, riconosciuta come R.
+# "True rename" variant (>50% similar): one assertion out of three removed, recognized as R.
 printf 'def test_a():\n    assert f() == 1\n    assert g() == 2\n\ndef test_c():\n    x = 1\n    y = 2\n    return x + y\n' > tests/test_renamed.py
 git add tests/test_renamed.py; git commit -qm more
 B3=$(git rev-parse HEAD)
@@ -152,14 +157,14 @@ printf 'def test_a():\n    assert f() == 1\n\ndef test_c():\n    x = 1\n    y = 
 git add tests/test_moved.py
 out=$(rs test-signals --from "$B3" --to "$(git write-tree)")
 if has "$out" 'REMOVED-ASSERTIONS tests/test_moved.py: -1'; then ok "rinomina riconosciuta: asserzione tolta vista"; else ko "rinomina: asserzione tolta persa" "$out"; fi
-git reset -q --hard HEAD   # repo usa-e-getta: nessun residuo nell'indice per i casi dopo
+git reset -q --hard HEAD   # throwaway repo: nothing left in the index for the following cases
 
 echo "13. solo conftest/fixture cambiati: MAI gate-only"
 printf 'import pytest\n@pytest.fixture\ndef f():\n    return lambda: 1\n' > tests/conftest.py
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
 if has "$out" '^Gate-only eligible: no' && has "$out" $'NEW-SURFACE\ttests/conftest.py'; then ok "conftest escluso dal gate-only"; else ko "conftest ammesso al gate-only" "$out"; fi
 rm -f tests/conftest.py
-printf 'def fake():\n    return True\n' > tests/goals_fakes.py      # helper python, non un test
+printf 'def fake():\n    return True\n' > tests/goals_fakes.py      # python helper, not a test
 out=$(rs check --base "$BASE" --tree "$TREE" --paths-file "$PF" --fingerprint "$FP")
 if has "$out" '^Gate-only eligible: no'; then ok "helper in tests/ escluso dal gate-only"; else ko "helper in tests/ ammesso al gate-only" "$out"; fi
 rm -f tests/goals_fakes.py
@@ -179,7 +184,7 @@ rm -f "src/città.py"
 echo "15. gate-only: nei test GIA' esistenti solo aggiunte pure (niente setup condiviso ne' controllo)"
 git reset -q --hard HEAD
 mkdir -p web
-# Valore atteso su una riga di continuazione (come la scrive prettier): nessun token di asserzione.
+# Expected value on a continuation line (as prettier writes it): no assertion token.
 printf "it('nega', async () => {\n  const r = await call('viewer')\n  expect(r.status).toBe(\n    403,\n  )\n  expect(\n    r.body,\n  ).toStrictEqual(\n    {},\n  )\n})\n" > web/deny.test.ts
 printf "it('altro', () => {\n  expect(1).toBe(1)\n})\n" > web/other.test.ts
 printf 'def test_ok():\n    r = call()\n    assert r == 1\n    mock.assert_called_once_with(1)\n' > tests/test_ok.py
@@ -188,41 +193,41 @@ out=$(rs snapshot); B4=$(field "$out" Base); T4=$(field "$out" Tree)
 PF4="$WORK/../paths4.$$"; trap 'rm -rf "$WORK" "$PF" "$XFILE" "$PF2" "$PF4"' EXIT
 printf 'web/deny.test.ts\ntests/test_ok.py\n' > "$PF4"
 chk() { rs check --base "$B4" --tree "$T4" --paths-file "$PF4"; }
-# checkout senza CRLF: il sed di Linux (a differenza di quello di MSYS) non riconosce ^…$ su una riga che finisce in \r
+# checkout without CRLF: Linux sed (unlike MSYS sed) does not match ^…$ on a line ending in \r
 back() { git -c core.autocrlf=false checkout -q -- web tests; git clean -qfd web tests >/dev/null; }
-gate_no() { # $1 descrizione, $2 motivo atteso (regex)
+gate_no() { # $1 description, $2 expected reason (regex)
   if has "$out" "^Gate-only eligible: no — ($2)"; then ok "$1"; else ko "$1" "$out"; fi; }
 gate_yes() { if has "$out" '^Gate-only eligible: yes$'; then ok "$1"; else ko "$1" "$out"; fi; }
 
-sed -i 's/^    assert r == 1$/    assert r == 2/' tests/test_ok.py                 # 1 -> 2 sulla stessa riga
+sed -i 's/^    assert r == 1$/    assert r == 2/' tests/test_ok.py                 # 1 -> 2 on the same line
 out=$(chk)
 if has "$out" 'REMOVED-ASSERTIONS tests/test_ok.py: -1 \+1'; then ok "asserzione cambiata sulla stessa riga: gia' presa"; else ko "asserzione cambiata non vista" "$out"; fi
 gate_no "stessa riga: gate-only chiuso" "segnali"; back
 
-sed -i 's/^    403,$/    200,/' web/deny.test.ts                                # 403 -> 200 a capo
+sed -i 's/^    403,$/    200,/' web/deny.test.ts                                # 403 -> 200 on a wrapped line
 out=$(chk)
 if has "$out" '^Test signals: none$'; then ok "controprova: i segnali NON vedono il valore a capo"; else ko "atteso nessun segnale" "$out"; fi
 gate_no "valore atteso a capo cambiato: gate-only chiuso" "righe tolte o modificate.*web/deny.test.ts"; back
 
-sed -i '/^  ).toStrictEqual($/d; /^    {},$/d' web/deny.test.ts                        # matcher tolto, expect( resta
+sed -i '/^  ).toStrictEqual($/d; /^    {},$/d' web/deny.test.ts                        # matcher removed, expect( stays
 out=$(rs test-signals --from "$T4" --to "$(rs snapshot | sed -n 's/^Tree: //p')")
 if has "$out" 'REMOVED-ASSERTIONS web/deny.test.ts: -1'; then ok "matcher a capo senza expect( riconosciuto"; else ko "toStrictEqual a capo non visto" "$out"; fi; back
 sed -i '/assert_called_once_with/d' tests/test_ok.py
 out=$(chk)
 if has "$out" 'REMOVED-ASSERTIONS tests/test_ok.py: -1'; then ok "mock.assert_called_once_with riconosciuto"; else ko "assert_called_* non visto" "$out"; fi; back
 
-sed -i 's/^def test_ok():$/def test_ok():\n    return/' tests/test_ok.py          # return in testa
+sed -i 's/^def test_ok():$/def test_ok():\n    return/' tests/test_ok.py          # return at the top
 out=$(chk)
 if has "$out" '^Test signals: none$'; then ok "controprova: return in testa invisibile ai segnali"; else ko "atteso nessun segnale" "$out"; fi
 gate_no "return in testa a un test esistente: gate-only chiuso" "flusso di controllo"; back
 
-sed -i 's/^    assert r == 1$/    if False:\n        assert r == 1/' tests/test_ok.py  # if attorno, re-indent
+sed -i 's/^    assert r == 1$/    if False:\n        assert r == 1/' tests/test_ok.py  # if around it, re-indent
 out=$(chk); gate_no "if attorno a un'asserzione esistente: gate-only chiuso" "segnali|righe tolte|flusso"; back
 
-sed -i '1i vi.mock("../auth")' web/deny.test.ts                                    # setup condiviso, in manifest
+sed -i '1i vi.mock("../auth")' web/deny.test.ts                                    # shared setup, in manifest
 out=$(chk); gate_no "vi.mock aggiunto a un test esistente: gate-only chiuso" "setup condiviso.*web/deny.test.ts"; back
 
-printf 'beforeEach(() => {})\n' >> web/other.test.ts                              # FUORI manifest
+printf 'beforeEach(() => {})\n' >> web/other.test.ts                              # OUTSIDE manifest
 out=$(chk)
 if has "$out" $'NEW-SURFACE\tweb/other.test.ts'; then ok "test esistente fuori manifest = NEW-SURFACE"; else ko "fuori manifest non visto" "$out"; fi
 gate_no "beforeEach aggiunto a un test esistente fuori manifest: gate-only chiuso" "setup condiviso.*web/other.test.ts"; back
@@ -230,13 +235,13 @@ gate_no "beforeEach aggiunto a un test esistente fuori manifest: gate-only chius
 printf "vi.mock('../auth')\nbeforeEach(() => {})\nit('n', () => {\n  if (x) {\n    return\n  }\n  expect(1).toBe(1)\n})\n" > web/nuovo.test.ts
 out=$(chk); gate_yes "controprova: file di test NUOVO con vi.mock/beforeEach/if = gate-only"; back
 
-printf '\ndef test_two():\n    assert call() == 2\n' >> tests/test_ok.py            # funzione nuova pura
+printf '\ndef test_two():\n    assert call() == 2\n' >> tests/test_ok.py            # new pure function
 out=$(chk); gate_yes "controprova: funzione nuova pura in un test esistente = gate-only"; back
 
-printf "\n\n" >> web/deny.test.ts                                                   # solo righe vuote
+printf "\n\n" >> web/deny.test.ts                                                   # blank lines only
 out=$(chk); gate_yes "controprova: righe vuote aggiunte = gate-only"; back
 
-git mv web/deny.test.ts web/deny2.test.ts                                           # rinomina pura
+git mv web/deny.test.ts web/deny2.test.ts                                           # pure rename
 out=$(chk); gate_no "rinomina pura: gate-only chiuso (falso positivo accettato)" "righe tolte"
 git mv web/deny2.test.ts web/deny.test.ts; back
 
@@ -258,7 +263,7 @@ for pat in $'^a.py\toffset=1 limit=' $'^new.py\toffset=' $'^old.py → renamed.p
 done
 if has "$idx" 'other.py'; then ko "path fuori scope nell'indice" "$idx"; else ok "controprova: path fuori scope assente"; fi
 if grep -q '^+nuovo$' "$WORK/d.diff"; then ok "file nuovo NON tracciato presente nel diff"; else ko "file nuovo assente dal diff"; fi
-# offset/limit: il pezzo indicato per new.py contiene la sua intestazione e il suo contenuto, e nient'altro
+# offset/limit: the chunk given for new.py contains its header and its content, and nothing else
 o=$(printf '%s\n' "$idx" | sed -n 's/^new.py\toffset=\([0-9]*\) limit=\([0-9]*\)$/\1 \2/p')
 piece=$(sed -n "${o% *},$(( ${o% *} + ${o#* } - 1 ))p" "$WORK/d.diff")
 if has "$piece" '^diff --git a/new.py b/new.py$' && has "$piece" '^\+nuovo$' && ! has "$piece" 'a.py|renamed'; then ok "offset/limit delimitano il file"; else ko "offset/limit sbagliati" "$piece"; fi

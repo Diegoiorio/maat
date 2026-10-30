@@ -1,40 +1,40 @@
 #!/usr/bin/env python3
-"""cycle-report.py — misura di un ciclo del full cycle, dai log stream-json delle fasi. SOLA LETTURA
-(tranne `--append`, che scrive solo il file delle metriche).
+"""cycle-report.py — measurement of a full-cycle run, from the phases' stream-json logs. READ-ONLY
+(except `--append`, which writes only the metrics file).
 
-Uso:  python cycle-report.py <spec-<name>.run | file .jsonl> [...] [--json]
+Usage: python cycle-report.py <spec-<name>.run | .jsonl file> [...] [--json]
       python cycle-report.py --append [--metrics <file.csv>] <spec-<name>.run> [...]
-      opzioni comuni: --projects <dir>  (radice dei transcript; default ~/.claude/projects)
+      common options: --projects <dir>  (root of the transcripts; default ~/.claude/projects)
 
-Ogni argomento e' un ciclo (una run directory: le fasi sono `log/NN-<fase>.jsonl`; oppure un solo `.jsonl`).
-Parte da `scripts/phase-usage.py` del plugin, che resta com'e'. Per ciclo:
+Each argument is a cycle (a run directory: the phases are `log/NN-<phase>.jsonl`; or a single `.jsonl`).
+It builds on the plugin's `scripts/phase-usage.py`, which stays as it is. Per cycle:
 
-- **A · lavoro** = somma dei `result.duration_ms` di tutte le fasi, piu' i secondi dei passi del driver:
-  campo `durata` dei JSON in `<run>/evidence/**` e `<run>/counterproof/**` (numero = secondi; stringa con
-  unita' `ms`/`s`/`min`); se non ci sono, 0.
-- **B · attesa** = dal primo all'ultimo evento delle fasi, dai timestamp dei transcript
-  `<projects>/*/<session_id>.jsonl` (piu' `<session_id>/subagents/*.jsonl`), MENO le pause fra una fase in
-  STOP e la fase successiva. Se manca il transcript di una fase: B = «non misurabile», mai stimato.
-- **bucket** per filo (orchestratore e ogni sub-agente), dai timestamp dello stream: ogni intervallo fra due
-  eventi consecutivi dello stesso filo e' «modello» se finisce su un messaggio dell'assistente, tempo del tool
-  se finisce su un tool_result (diviso fra i tool_result dello stesso evento), fuori turno se scavalca un
-  `result` o un `system/init` dell'orchestratore (fine turno in attesa di task in background). Il tool e'
-  classificato: vitest, eslint, pytest, build, controprove, polling, git/harness, file, agenti, bash, altro.
-  «agenti» e' l'attesa dell'orchestratore su un sub-agente: si sovrappone al tempo dei fili del sub-agente
-  e non entra negli aggregati. Tempo di parete: dove piu' fili lavorano insieme il tratto si ripartisce fra
-  loro (mai contato due volte); il fuori turno in cui nessuno lavora e' «attesa passiva», quello in cui
-  lavora un sub-agente in background e' lavoro («fuori turno», fuori da A come le fasi senza `result`).
-  Un polling che nomina l'id o il file di output di un task in background va al task atteso.
-- **riesecuzioni**: un comando di gate (vitest, eslint, pytest, build) uguale a uno gia' lanciato nel ciclo
-  (confronto a meno di `2>&1` e dei filtri `| tail/head/grep/sed/cut/tee`) senza, in mezzo, un Edit/Write/
-  MultiEdit/NotebookEdit o un `sed -i` su sorgenti (fuori da `.ai-workflow` e dalle cartelle temporanee).
-  Le controprove non contano come scrittura (ripristinano l'albero); uno STOP azzera lo stato (fra una fase
-  in STOP e la successiva l'albero puo' cambiare a mano).
-- aggregati: (a) eliminabile = riesecuzioni · (b) gate e controprove al primo run = vitest+eslint+pytest+
-  build+controprove+polling meno le riesecuzioni · (c) modello · resto = file+git/harness+bash+altro.
-- `total_cost_usd` (massimo per fase: e' cumulativo), token da `modelUsage` (massimo per sessione e modello:
-  cumulativo, comprende i sub-agenti), quota 5h prima/dopo (`rate_limit_event`), STOP per causa (righe
-  `ESITO FASE <fase>: STOP — <causa>` da `.esito`, altrimenti dal testo del `result` o da `.jsonl.result`).
+- **A · work** = sum of the `result.duration_ms` of all phases, plus the seconds of the driver's steps:
+  the `durata` field of the JSON files in `<run>/evidence/**` and `<run>/counterproof/**` (number = seconds;
+  string with unit `ms`/`s`/`min`); if there are none, 0.
+- **B · wait** = from the first to the last event of the phases, from the timestamps of the transcripts
+  `<projects>/*/<session_id>.jsonl` (plus `<session_id>/subagents/*.jsonl`), MINUS the pauses between a phase in
+  STOP and the next phase. If a phase's transcript is missing: B = «non misurabile», never estimated.
+- **buckets** per thread (orchestrator and each sub-agent), from the stream timestamps: each interval between two
+  consecutive events of the same thread is «modello» if it ends on an assistant message, tool time
+  if it ends on a tool_result (split among the tool_results of the same event), off-turn if it spans a
+  `result` or a `system/init` of the orchestrator (end of turn waiting for background tasks). The tool is
+  classified: vitest, eslint, pytest, build, controprove, polling, git/harness, file, agenti, bash, altro.
+  «agenti» is the orchestrator's wait on a sub-agent: it overlaps the time of the sub-agent's threads
+  and does not enter the aggregates. Wall-clock time: where several threads work together the stretch is split
+  among them (never counted twice); off-turn time where nobody works is «attesa passiva», off-turn time where
+  a background sub-agent works is work («fuori turno», outside A like the phases without `result`).
+  A polling call that names the id or the output file of a background task goes to the awaited task.
+- **reruns**: a gate command (vitest, eslint, pytest, build) equal to one already launched in the cycle
+  (compared ignoring `2>&1` and the filters `| tail/head/grep/sed/cut/tee`) without, in between, an Edit/Write/
+  MultiEdit/NotebookEdit or a `sed -i` on sources (outside `.ai-workflow` and the temporary folders).
+  Counterproofs do not count as writes (they restore the tree); a STOP resets the state (between a phase
+  in STOP and the next one the tree may be changed by hand).
+- aggregates: (a) removable = reruns · (b) gates and counterproofs on first run = vitest+eslint+pytest+
+  build+controprove+polling minus the reruns · (c) model · rest = file+git/harness+bash+altro.
+- `total_cost_usd` (maximum per phase: it is cumulative), tokens from `modelUsage` (maximum per session and model:
+  cumulative, includes the sub-agents), 5h quota before/after (`rate_limit_event`), STOPs by cause (lines
+  `ESITO FASE <fase>: STOP — <causa>` from `.esito`, otherwise from the `result` text or from `.jsonl.result`).
 """
 import argparse
 import csv
@@ -57,24 +57,24 @@ BUCKETS = GATES + ("controprove", "polling", "git/harness", "file", "agenti", "b
 BASH_OPT = r"bash\s+(?:-\S+\s+)*\S*"
 RUN_ESLINT = r"npx eslint|npm run lint|" + BASH_OPT + r"vitest-fast\.sh\s+--lint"
 RUN_VITEST = r"npx vitest(?:\s+run)?|vitest run|" + BASH_OPT + r"vitest-fast\.sh(?!\s+--lint)"
-# pytest anche dall'eseguibile del venv (`./.venv/Scripts/pytest.exe -q`): e' lo stesso gate
+# pytest also from the venv executable (`./.venv/Scripts/pytest.exe -q`): it is the same gate
 RUN_PYTEST = r"-m pytest|(?:^|[;&|(]\s*)(?:\S*[/\\])?pytest(?:\.exe)?\b|(?:\./|bash\s+\S*)run_tests\.sh"
-CMD_CLASSES = [  # ordine: la prima che corrisponde vince
-    # `ping -n N 127.0.0.1` e' lo sleep dei prompt di Windows
+CMD_CLASSES = [  # order: the first match wins
+    # `ping -n N 127.0.0.1` is the sleep of Windows prompts
     ("polling", r"\bsleep\b|\buntil\b|kill -0|\bping\s+-n\s+\d+\s+127\.0\.0\.1"),
     ("controprove", r"(?<![A-Za-z0-9])_?cp(?:[-_][\w-]*)?\.sh\b|counterproof|controprov|cp-tools|cp-results|\bmutat"),
     ("eslint", RUN_ESLINT),
     ("vitest", RUN_VITEST),
     ("pytest", RUN_PYTEST),
     ("build", r"npm run build|nuxi (?:build|generate)|vue-tsc|tsc --noEmit"),
-    # ciclo con uscita anticipata (`for i in $(seq 1 110); do grep -q exit= f && break; ...`): un'attesa anche
-    # senza sleep; dopo i gate, cosi' un gate rilanciato in un ciclo di ritentativi resta un gate
+    # loop with early exit (`for i in $(seq 1 110); do grep -q exit= f && break; ...`): a wait even
+    # without sleep; after the gates, so that a gate relaunched in a retry loop stays a gate
     ("polling", r"\b(?:for|while)\b[^;\n]*;\s*do\b[\s\S]*?\bbreak\b"),
     ("git/harness", r"(?:^|[;&|(]\s*)git\b|\.claude/skills/|run-phase|cycle-state|plan-check|review-surface"),
     ("file", r"^\s*(?:cd [^;&|]*(?:&&|;)\s*)?(?:sed -n|cat|head|tail|grep|rg|ls|wc|find|file|diff|cmp|cp|mv|"
              r"mkdir|rm|touch|stat|echo|printf)\b"),
 ]
-STOP_CLASSES = [  # causa di uno STOP, dal testo della riga ESITO
+STOP_CLASSES = [  # cause of a STOP, from the text of the ESITO line
     ("deviazione", r"deviazion"),
     ("quota", r"quota|rate.?limit"),
     ("timeout", r"timeout|scadut"),
@@ -83,9 +83,9 @@ STOP_CLASSES = [  # causa di uno STOP, dal testo della riga ESITO
     ("decisione", r"decid|decision|domand|scelt"),
 ]
 NOT_SOURCE = re.compile(r"\.ai-workflow/|AppData/Local/Temp/|(^|/)tmp/|scratchpad", re.I)
-PASSIVE = ("passive", None)  # destinazione di wall_share: attesa dell'orchestratore fuori turno
-OFF_TURN = ("off_turn", None)  # lavoro (gia' nei bucket) svolto mentre l'orchestratore e' fuori turno: fuori da A
-# id nel tool_result: comando lanciato in background · comando spostato in background dal timeout · sub-agente asincrono
+PASSIVE = ("passive", None)  # wall_share destination: the orchestrator waiting off-turn
+OFF_TURN = ("off_turn", None)  # work (already in the buckets) done while the orchestrator is off-turn: outside A
+# id in the tool_result: command launched in background · command moved to background by the timeout · async sub-agent
 BG_ID = re.compile(r"(?:with ID:|\(ID:|agentId:)\s*(\w+)")
 OUT_FILE = re.compile(r"(?:>>?|\btee(?:\s+-a)?)\s*[\"']?[^\s\"'|;&<>]*?([\w.-]+\.(?:txt|log|out|output|json))\b")
 ESITO = re.compile(r"ESITO FASE ([\w-]+):\s*(OK|STOP)\s*(?:[—–-]+\s*)?(.*)")
@@ -116,7 +116,7 @@ def ts_of(ev):
 
 
 def strip_heredoc(cmd):
-    """Toglie il corpo degli heredoc: e' testo scritto su file, non un comando."""
+    """Strips heredoc bodies: they are text written to a file, not a command."""
     return re.sub(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?=\n|$)", "<<HEREDOC", cmd, flags=re.S)
 
 
@@ -146,9 +146,9 @@ NOISE = {"run", "-q", "-v", "-vv", "--quiet", "--no-header", "2>&1"}
 
 
 def gate_key(cat, cmd):
-    """Chiave di un comando di gate: il runner e i suoi argomenti, a meno di involucri (wsl, cd, time,
-    redirezioni, filtri di output, `echo exit=$?`) e delle opzioni che cambiano solo l'output."""
-    cmd = re.sub(r"\s\d*>>?(?:&\d|\s*\S+)", " ", strip_heredoc(cmd))  # redirezioni: 2>&1, > file, 2>/dev/null
+    """Key of a gate command: the runner and its arguments, ignoring wrappers (wsl, cd, time,
+    redirections, output filters, `echo exit=$?`) and the options that only change the output."""
+    cmd = re.sub(r"\s\d*>>?(?:&\d|\s*\S+)", " ", strip_heredoc(cmd))  # redirections: 2>&1, > file, 2>/dev/null
     parts = []
     for name, rx in (("eslint", RUN_ESLINT), ("vitest", RUN_VITEST), ("pytest", RUN_PYTEST)):
         for m in re.finditer("(?:%s)([^|;&>\n]*)" % rx, cmd):
@@ -159,7 +159,7 @@ def gate_key(cat, cmd):
                     skip = False
                     continue
                 if t in ("--base", "-p") and name != "vitest":
-                    skip = True  # --base <sha> (lint) e -p no:<plugin> (pytest): non cambiano cosa si verifica
+                    skip = True  # --base <sha> (lint) and -p no:<plugin> (pytest): they do not change what is checked
                     continue
                 if not t or t in NOISE or t.startswith("--tb="):
                     continue
@@ -207,16 +207,16 @@ def esito_of(path, results):
 
 
 def wall_share(work):
-    """Fili paralleli (sub-agente in background o concorrente, orchestratore che lavora mentre un sub-agente
-    gira): lo stesso secondo di orologio non si conta due volte. In ogni tratto fra due estremi consecutivi,
-    ogni intervallo attivo riceve tratto x peso / max(1, somma dei pesi attivi); senza sovrapposizioni ogni
-    intervallo tiene per intero il suo tempo. Cosi' i bucket di una fase sommano al tempo di parete lavorato,
-    come A, che e' tempo di parete (`duration_ms`). Le attese dell'orchestratore fuori turno (PASSIVE, peso 0)
-    prendono solo la parte del tratto in cui nessun altro lavora: un sub-agente in background che lavora
-    mentre l'orchestratore ha chiuso il turno e' lavoro, non attesa passiva."""
+    """Parallel threads (background or concurrent sub-agent, orchestrator working while a sub-agent
+    runs): the same wall-clock second is not counted twice. In each stretch between two consecutive endpoints,
+    each active interval gets stretch x weight / max(1, sum of the active weights); without overlaps each
+    interval keeps its whole time. So a phase's buckets sum to the worked wall-clock time,
+    like A, which is wall-clock time (`duration_ms`). The orchestrator's off-turn waits (PASSIVE, weight 0)
+    take only the part of the stretch where nobody else works: a background sub-agent working
+    while the orchestrator has closed its turn is work, not passive wait."""
     marks = sorted([(w[0], 1, k) for k, w in enumerate(work)] + [(w[1], 0, k) for k, w in enumerate(work)])
     out, active, last = {}, set(), None
-    for x, is_start, k in marks:  # a parita' di istante, le fini prima degli inizi
+    for x, is_start, k in marks:  # at the same instant, ends before starts
         if active and x > last:
             busy = round(sum(work[j][2] for j in active), 9)
             f = (x - last) / max(1.0, busy)
@@ -237,11 +237,11 @@ def wall_share(work):
 def analyse_phase(path):
     label = os.path.basename(path)[:-len(".jsonl")] if path.endswith(".jsonl") else os.path.basename(path)
     m = re.match(r"^\d+-([a-z]+)", label)
-    kind = {}                  # tool_use_id di un Agent/Task -> tipo di sub-agente
-    tool_input = {}            # tool_use_id -> (filo, nome, input, ts di lancio)
-    seq = {}                   # filo -> [(ts, tipo, tool_use_ids)] in ordine di stream; tipo A/U/R
+    kind = {}                  # tool_use_id of an Agent/Task -> sub-agent type
+    tool_input = {}            # tool_use_id -> (thread, name, input, launch ts)
+    seq = {}                   # thread -> [(ts, type, tool_use_ids)] in stream order; type A/U/R
     results, rl, sids, first_ts = [], [], set(), None
-    bg_id = {}                 # tool_use_id di un comando in background -> id del task
+    bg_id = {}                 # tool_use_id of a background command -> task id
 
     for ev in events_of(path):
         t = ev.get("type")
@@ -255,8 +255,8 @@ def analyse_phase(path):
             results.append(ev)
             seq.setdefault(MAIN, []).append((None, "R", ()))
         elif t == "system" and ev.get("subtype") == "init":
-            # ogni turno si apre con un `init`: e' la fine del turno precedente anche quando lo stream mette i
-            # `result` tutti in coda (succede con i sub-agenti in background: tipologia 01-plan, 10 result in coda)
+            # every turn opens with an `init`: it is the end of the previous turn even when the stream puts all the
+            # `result`s at the end (happens with background sub-agents: 01-plan type, 10 results at the end)
             seq.setdefault(MAIN, []).append((None, "R", ()))
         elif t in ("assistant", "user"):
             th = ev.get("parent_tool_use_id") or MAIN
@@ -275,7 +275,7 @@ def analyse_phase(path):
                 if ts is not None:
                     seq.setdefault(th, []).append((ts, "A", ()))
             else:
-                for b in blocks:  # id di un task in background (comando o sub-agente), dal suo tool_result
+                for b in blocks:  # id of a background task (command or sub-agent), from its tool_result
                     lau = tool_input.get(b.get("tool_use_id")) if b.get("type") == "tool_result" else None
                     if lau and (lau[1] in SHELL_TOOLS or lau[1] in AGENT_TOOLS):
                         mid = BG_ID.search(json.dumps(b.get("content"), ensure_ascii=False))
@@ -285,19 +285,19 @@ def analyse_phase(path):
                     ids = tuple(b.get("tool_use_id") for b in blocks if b.get("type") == "tool_result")
                     seq.setdefault(th, []).append((ts, "U", ids))
                     for i in ids:
-                        # il messaggio finale di un sub-agente in primo piano non e' nello stream: arriva come
-                        # tool_result dell'Agent. Se il filo e' fermo su un tool_result, il turno del modello che
-                        # produce quel messaggio finisce qui.
+                        # the final message of a foreground sub-agent is not in the stream: it arrives as the
+                        # Agent's tool_result. If the thread is stopped on a tool_result, the model turn that
+                        # produces that message ends here.
                         lau = tool_input.get(i)
                         if lau and lau[1] in AGENT_TOOLS and not lau[2].get("run_in_background") and \
                                 seq.get(i) and seq[i][-1][1] == "U":
                             seq[i].append((ts, "A", ()))
 
-    # Un comando in background (lanciato cosi' o spostato li' dal timeout) o un sub-agente asincrono tornano
-    # subito: il loro tempo e' l'attesa di chi li aspetta. Un'attesa (polling) che nomina l'id del task o un file
-    # su cui il comando scrive (`>`, `>>`, `tee`) va al task piu' recente dello stesso filo che corrisponde: cosi'
-    # un gate pesa uguale in primo piano o in background, e l'attesa di un sub-agente resta «agenti».
-    owner, bg = {}, []         # owner: tool_use_id del polling -> tool_use_id del task atteso
+    # A background command (launched that way or moved there by the timeout) or an async sub-agent returns
+    # immediately: its time is the wait of whoever awaits it. A wait (polling) that names the task id or a file
+    # the command writes to (`>`, `>>`, `tee`) goes to the most recent matching task of the same thread: so
+    # a gate weighs the same in foreground or background, and the wait on a sub-agent stays «agenti».
+    owner, bg = {}, []         # owner: polling tool_use_id -> tool_use_id of the awaited task
     for tid, (th, name, inp, _ts) in tool_input.items():
         if category(name, inp) == "polling":
             blob = json.dumps(inp, ensure_ascii=False)
@@ -313,9 +313,9 @@ def analyse_phase(path):
             if marks:
                 bg.append((th, tid, marks))
 
-    tool_s = {}                # tool_use_id -> secondi
+    tool_s = {}                # tool_use_id -> seconds
     model_by_thread, passive, off_turn = {}, 0.0, 0.0
-    work = []                  # (inizio, fine, peso, ("tool", id) | ("model", filo)): tempo di parete da ripartire
+    work = []                  # (start, end, weight, ("tool", id) | ("model", thread)): wall-clock time to split
     for th, evs in seq.items():
         name = MAIN if th == MAIN else kind.get(th, "sub-agente?")
         prev, crossed = None, False
@@ -334,11 +334,11 @@ def analyse_phase(path):
                 for i in ids:
                     i = owner.get(i, i)
                     if (tool_input.get(i) or (None, None))[1] in AGENT_TOOLS:
-                        tool_s[i] = tool_s.get(i, 0.0) + d / len(ids)  # attesa su un sub-agente: fuori dalla ripartizione
+                        tool_s[i] = tool_s.get(i, 0.0) + d / len(ids)  # wait on a sub-agent: outside the split
                     elif d:
                         work.append((prev, ts, 1.0 / len(ids), ("tool", i)))
             elif typ == "U":
-                pass  # prompt o messaggio di sistema: il tempo e' della coda, non del modello ne' di un tool
+                pass  # prompt or system message: the time belongs to the queue, not to the model or a tool
             elif d:
                 work.append((prev, ts, 1.0, ("model", name)))
             prev, crossed = ts, False
@@ -353,7 +353,7 @@ def analyse_phase(path):
             passive += s
 
     buckets = {b: 0.0 for b in BUCKETS}
-    actions = []               # (ts, 'gate', chiave, tool_use_id) | (ts, 'write', None, tool_use_id)
+    actions = []               # (ts, 'gate', key, tool_use_id) | (ts, 'write', None, tool_use_id)
     for tid, (th, name, inp, ts) in tool_input.items():
         cat = category(name, inp)
         buckets[cat] += tool_s.get(tid, 0.0)
@@ -405,7 +405,7 @@ def analyse_phase(path):
 
 
 def transcript_window(sids, projects):
-    """(inizio, fine, mancanti) dai transcript delle sessioni; None se ne manca uno."""
+    """(start, end, missing) from the sessions' transcripts; None if one is missing."""
     lo, hi, missing = None, None, []
     for sid in sids:
         mains = glob.glob(os.path.join(glob.escape(projects), "*", glob.escape(sid) + ".jsonl"))
@@ -467,8 +467,8 @@ def spec_name(arg):
 
 
 def harness_of(arg):
-    """Il harness del ciclo, da <run>/harness.fp (pk04a-2): {"versione", "radice"}; None per una run dir di formato
-    precedente (una riga d'impronta, senza versione=), senza harness.fp o per un solo .jsonl: il harness interno."""
+    """The cycle's harness, from <run>/harness.fp (pk04a-2): {"versione", "radice"}; None for a run dir in the
+    older format (one fingerprint line, no versione=), without harness.fp or for a single .jsonl: the internal harness."""
     if not os.path.isdir(arg):
         return None
     try:
@@ -483,7 +483,7 @@ def harness_of(arg):
             kv[k] = v
     if "versione" not in kv:
         return None
-    # versione= vuota (plugin.json senza version): mai «maat » senza numero
+    # empty versione= (plugin.json without version): never «maat » without a number
     return {"versione": kv["versione"].strip() or "versione ignota", "radice": kv.get("radice", "")}
 
 
@@ -491,7 +491,7 @@ def analyse_cycle(arg, projects):
     phases = [analyse_phase(f) for f in files_of(arg)]
     driver = driver_seconds(arg) if os.path.isdir(arg) else 0.0
 
-    # B: finestre dai transcript
+    # B: windows from the transcripts
     missing = []
     for p in phases:
         lo, hi, miss = transcript_window(p["session_ids"], projects)
@@ -506,10 +506,10 @@ def analyse_cycle(arg, projects):
             if cur["esito"] == "STOP":
                 pauses.append(gap)
             elif cur["esito"] is None:
-                unexited.append(gap)  # fase senza ESITO (interrotta): la pausa resta in B, qui solo mostrata
+                unexited.append(gap)  # phase without ESITO (interrupted): the pause stays in B, only shown here
         b_s = span - sum(x["s"] for x in pauses)
 
-    # riesecuzioni: ordine delle fasi, dentro la fase ordine di lancio
+    # reruns: phase order, within a phase launch order
     reruns, seen, prev_stop = [], set(), False
     for p in phases:
         if prev_stop:
@@ -661,10 +661,10 @@ def csv_row(c):
 
 
 def prepara_metriche(path):
-    """Prima di aggiungere a un metrics.csv esistente (pk04a-2): None se il file e' pronto. Intestazione uguale a
-    CSV_COLS: niente da fare. Intestazione di formato precedente (CSV_COLS senza l'ultima colonna): il file si
-    riscrive con l'intestazione nuova e le righe vecchie con l'ultima colonna vuota, su un temporaneo poi rinominato.
-    Altrimenti il motivo (exit 2, file intatto)."""
+    """Before appending to an existing metrics.csv (pk04a-2): None if the file is ready. Header equal to
+    CSV_COLS: nothing to do. Header in the older format (CSV_COLS without the last column): the file is
+    rewritten with the new header and the old rows with an empty last column, via a temporary file then renamed.
+    Otherwise the reason (exit 2, file intact)."""
     with open(path, encoding="utf-8", newline="") as fh:
         rows = list(csv.reader(fh))
     head = rows[0] if rows else []
@@ -695,9 +695,9 @@ def prepara_metriche(path):
 
 
 def default_metrics():
-    """MAAT_WORK/metrics.csv: la cartella di lavoro (cartelle.lavoro) del PROGETTO della cartella corrente, non tre
-    livelli sopra questo file (pk04a-1, schema L)."""
-    sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+    """MAAT_WORK/metrics.csv: the work folder (cartelle.lavoro) of the current folder's PROJECT, not three
+    levels above this file (pk04a-1, schema L)."""
+    sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import maat_paths
     try:

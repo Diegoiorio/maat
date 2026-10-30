@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# context-pack.sh — pacchetto di contesto deterministico di uno spec (harness-pt07). SOLA LETTURA: scrive un
-# solo file, <run-dir>/context-pack.md (via <run-dir>/context-pack.md.tmp, rinominato). Contenuto:
-#   - file nominati dallo spec, verificati (esiste · trovato come · ambiguo · NON ESISTE) e simboli nominati
-#     con la loro definizione;
-#   - per ogni file: firme esportate (funzioni, props/emits dei .vue), rotte FastAPI (@router.*), modelli
-#     Pydantic coinvolti, test che lo citano;
-#   - test che citano le stringhe dello spec e i data-test;
-#   - colonne DB delle tabelle nominate (`tabella` fra backtick = un blocco riconosciuto nel file dello schema),
-#     da information_schema col comando dello schema; comando che fallisce => sezione «assente» con il motivo;
-#   - intestazione con data, commit e impronta dello spec.
-# Schema del DB da `contesto` di maat.json (MAAT_CONFIG, altrimenti <radice>/.claude/maat.json, letta importando
-# maat-config.py): schema_db_file (il file da cui si riconoscono le tabelle, la sua estensione conta fra i file
-# nominati), tabelle {blocco, nome_mappato?} (regex: il blocco con il nome nel gruppo 1 e il corpo nel gruppo 2;
-# dentro il blocco il nome reale nel gruppo 1), schema_db_comando (riceve l'SQL come ultimo argomento, lanciato dalla
-# radice del repository). Senza schema_db_file e schema_db_comando: «schema DB non dichiarato»; senza tabelle nessuna
-# tabella si riconosce e la sezione lo dice. Uscita del comando: 124 => «timeout», altrimenti «comando dello schema
-# uscito N: <prima riga non vuota della sua uscita>».
-# È orientamento, non autorità: il codice vince sul pacchetto. Tetto ~5k token (troncato oltre).
-# Se il pacchetto esiste con la stessa impronta dello spec non viene riscritto ("invariato"): l'orchestratore
-# può lanciarlo prima di ogni fase di piano, costa solo quando lo spec è cambiato.
+# context-pack.sh — deterministic context pack of a spec (harness-pt07). READ ONLY: writes a
+# single file, <run-dir>/context-pack.md (via <run-dir>/context-pack.md.tmp, renamed). Contents:
+#   - files named by the spec, verified (exists · found as · ambiguous · DOES NOT EXIST) and named symbols
+#     with their definition;
+#   - for each file: exported signatures (functions, props/emits of .vue files), FastAPI routes (@router.*), Pydantic
+#     models involved, tests that mention it;
+#   - tests that mention the spec strings and the data-test attributes;
+#   - DB columns of the named tables (`table` in backticks = a block recognised in the schema file),
+#     from information_schema via the schema command; a failing command => section «assente» with the reason;
+#   - header with date, commit and spec fingerprint.
+# DB schema from `contesto` in maat.json (MAAT_CONFIG, otherwise <radice>/.claude/maat.json, read by importing
+# maat-config.py): schema_db_file (the file the tables are recognised from; its extension counts among the named
+# files), tabelle {blocco, nome_mappato?} (regexes: the block with the name in group 1 and the body in group 2;
+# inside the block, the real name in group 1), schema_db_comando (receives the SQL as last argument, run from the
+# repository root). Without schema_db_file and schema_db_comando: «schema DB non dichiarato»; without tabelle no
+# table is recognised and the section says so. Command exit: 124 => «timeout», otherwise «comando dello schema
+# uscito N: <first non-empty line of its output>».
+# It is orientation, not authority: the code wins over the pack. Cap ~5k tokens (truncated beyond).
+# If the pack exists with the same spec fingerprint it is not rewritten ("invariato"): the orchestrator
+# can run it before every plan phase; it costs only when the spec has changed.
 #
 #   bash script/fic/context-pack.sh .claude/.ai-workflow/spec-<name>.md            # -> spec-<name>.run/
 #   bash script/fic/context-pack.sh <spec> --run-dir <dir> [--force]
-# Uscita: 0 scritto o invariato · 1 estrazione fallita · 2 uso (spec assente, opzione sconosciuta, Python).
-# Variabili (per i test): CONTEXT_PACK_ROOT repository da leggere (default: PROJECT_ROOT, il progetto della
-# cartella di lavoro) · CONTEXT_PACK_SQL
-# script al posto di schema_db_comando (chiamato `bash <script> --read "<SQL>"`) · CONTEXT_PACK_SQL_TIMEOUT
-# secondi (default 90) · CONTEXT_PACK_HARNESS radice del plugin (default MAAT_ROOT; scripts/python.sh e
+# Exit: 0 written or unchanged · 1 extraction failed · 2 usage (spec missing, unknown option, Python).
+# Variables (for tests): CONTEXT_PACK_ROOT repository to read (default: PROJECT_ROOT, the project of the
+# working directory) · CONTEXT_PACK_SQL
+# script used instead of schema_db_comando (called as `bash <script> --read "<SQL>"`) · CONTEXT_PACK_SQL_TIMEOUT
+# seconds (default 90) · CONTEXT_PACK_HARNESS plugin root (default MAAT_ROOT; scripts/python.sh and
 # scripts/maat-config.py).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin) e PROJECT_ROOT (cartella di lavoro)
+. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin) and PROJECT_ROOT (working directory)
 HROOT=${CONTEXT_PACK_HARNESS:-$MAAT_ROOT}
 ROOT=${CONTEXT_PACK_ROOT:-$PROJECT_ROOT}
 usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2; }
@@ -56,9 +56,9 @@ fi
 . "$HROOT/scripts/python.sh" || { echo "context-pack: interprete Python non trovato" >&2; exit 2; }
 win() { maat_cygm "$1" 2>/dev/null || printf '%s' "$1"; }
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
-export MAAT_CONFIG_PY=${MAAT_CONFIG_PY:-$HROOT/scripts/maat-config.py}   # il Python legge `contesto` col lettore unico
+export MAAT_CONFIG_PY=${MAAT_CONFIG_PY:-$HROOT/scripts/maat-config.py}   # the Python code reads `contesto` through the single reader
 args=("$(win "$ROOT")" "$(win "$spec")" "$(win "$run_dir")" "$force")
-py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # il codice arriva da una pipe: nessun file temporaneo
+py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # the code comes from a pipe: no temporary file
 
 plan=$(py plan "${args[@]}" | tr -d '\r') || { echo "context-pack: estrazione fallita" >&2; exit 1; }
 fp=$(printf '%s\n' "$plan" | sed -n 's/^FP //p')
@@ -69,13 +69,13 @@ tables=$(printf '%s\n' "$plan" | sed -n 's/^TABLE //p' | tr '\n' ' ')
 dbcmd=$(printf '%s\n' "$plan" | sed -n 's/^DBCMD //p' | head -1)   # contesto.schema_db_comando
 db_state=none db_out=""
 if [ -n "${tables// /}" ]; then
-  list=""; for t in $tables; do list="$list'$t',"; done   # nomi validati dal Python: [a-z_][a-z0-9_]*
+  list=""; for t in $tables; do list="$list'$t',"; done   # names validated by the Python code: [a-z_][a-z0-9_]*
   sql="SELECT '@@' || table_name || '|' || string_agg(column_name || ' ' || udt_name || CASE WHEN is_nullable = 'YES' THEN '?' ELSE '' END, ', ' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN (${list%,}) GROUP BY table_name ORDER BY table_name;"
   to=(); command -v timeout >/dev/null 2>&1 && to=(timeout "${CONTEXT_PACK_SQL_TIMEOUT:-90}")
   if [ -n "${CONTEXT_PACK_SQL:-}" ]; then   # override (test): `bash <script> --read "<SQL>"`
     db_out=$("${to[@]}" bash "$CONTEXT_PACK_SQL" --read "$sql" 2>&1 </dev/null)
     db_state=rc=$?
-  elif [ -n "$dbcmd" ]; then   # il comando dichiarato, dalla radice del repository, con l'SQL come ultimo argomento
+  elif [ -n "$dbcmd" ]; then   # the declared command, from the repository root, with the SQL as last argument
     db_out=$(cd "$ROOT" && "${to[@]}" bash -c "$dbcmd"' "$1"' context-pack "$sql" 2>&1 </dev/null)
     db_state=rc=$?
   else
@@ -91,7 +91,7 @@ import datetime, hashlib, os, posixpath, re, subprocess, sys
 MODE, ROOT, SPEC, RUN_DIR, FORCE = sys.argv[1:6]
 ROOT = ROOT.rstrip("/\\")
 PACK = os.path.join(RUN_DIR, "context-pack.md")
-CAP = 20000   # caratteri: ~5k token (stima caratteri/4)
+CAP = 20000   # characters: ~5k tokens (estimate: characters/4)
 SKIP = {"node_modules", ".git", ".venv", ".nuxt", ".output", "dist", "__pycache__", ".turbo", ".pytest_cache"}
 
 
@@ -123,7 +123,7 @@ SCHEMA_CMD = CTX.get("schema_db_comando") or ""
 TAB = CTX.get("tabelle") or {}
 EXT = "vue|tsx|ts|mjs|cjs|js|py|sh|json|scss|css|sql|md|html|yml|yaml|toml|csv"
 _SEXT = os.path.splitext(SCHEMA_FILE)[1][1:]
-if _SEXT and _SEXT not in EXT.split("|"):   # l estensione del file dello schema conta fra i file nominati
+if _SEXT and _SEXT not in EXT.split("|"):   # the schema file extension counts among the named files
     EXT += "|" + re.escape(_SEXT)
 CODE = (".vue", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".py")
 MAX_FILES, MAX_SYMS, MAX_SIG, MAX_TESTS = 40, 30, 10, 4
@@ -232,7 +232,7 @@ except ValueError:
 if SPEC_REL.startswith("../"):
     SPEC_REL = SPEC.replace("\\", "/")
 
-# --- file nominati ---
+# --- named files ---
 def nome_progetto():
     """La cartella del tree principale (da un worktree collegato: quella che contiene git-common-dir), altrimenti
     quella di ROOT. I percorsi assoluti del progetto e dei suoi worktree (<nome>-…) si tolgono dal testo."""
@@ -282,7 +282,7 @@ def resolve(q):
     return ("ambiguo" if c else "assente"), c
 
 
-# --- firme ---
+# --- signatures ---
 def match_block(s, i):
     d = 0
     for j in range(i, len(s)):
@@ -423,7 +423,7 @@ def fmt_tests(ts):
     return ", ".join(ts[:MAX_TESTS]) + (" … +%d" % (len(ts) - MAX_TESTS) if len(ts) > MAX_TESTS else "")
 
 
-# --- simboli ---
+# --- symbols ---
 def named_symbols():
     out = []
     for tok in TICKS:
@@ -440,7 +440,7 @@ def named_symbols():
 
 
 def nuxt_name(f):
-    # nome di auto-import Nuxt di components/**.vue: segmenti in PascalCase, prefisso ripetuto tolto
+    # Nuxt auto-import name of components/**.vue: PascalCase segments, repeated prefix removed
     segs = f[:-4].split("/components/", 1)[-1].split("/")
     name = ""
     for s in segs:
@@ -468,7 +468,7 @@ def find_defs(sym, first):
     return []
 
 
-# --- assemblaggio ---
+# --- assembly ---
 paths = named_paths()
 L = []
 sel, n_missing, n_listed = [], 0, 0
@@ -476,7 +476,7 @@ L.append("## File nominati dallo spec")
 for q in paths:
     kind, c = resolve(q)
     if kind in ("esiste", "trovato") and all(x in sel for x in c):
-        continue   # stesso file citato in un altro modo
+        continue   # same file mentioned in another way
     n_listed += 1
     if kind == "esiste":
         L.append("- esiste: " + q)
@@ -494,7 +494,7 @@ if not paths:
 sel_code = [f for f in sel if f.endswith(CODE)]
 
 db_state, db_out = os.environ.get("CP_DB", "none"), os.environ.get("CP_DB_OUT", "")
-if not SCHEMA_FILE and not SCHEMA_CMD:   # sezione omessa: il progetto non dichiara uno schema
+if not SCHEMA_FILE and not SCHEMA_CMD:   # section omitted: the project declares no schema
     db_summary = "schema DB non dichiarato"
     L += ["", "Colonne DB: schema DB non dichiarato (contesto.schema_db_file e schema_db_comando in maat.json)."]
 elif db_state == "none" or not TABLES:
@@ -515,11 +515,11 @@ else:
         for t in TABLES:
             L.append("- `%s`: %s" % (t, rows.get(t, "non trovata in information_schema")))
     else:
-        if rc is None:   # tabelle nominate ma nessun comando per interrogarle
+        if rc is None:   # tables named but no command to query them
             why = "comando dello schema non dichiarato (contesto.schema_db_comando)"
         elif rc == 124:
             why = "timeout"
-        else:   # il motivo lo spiega il comando stesso: la prima riga non vuota della sua uscita
+        else:   # the command itself explains the reason: the first non-empty line of its output
             first = next((x.strip() for x in db_out.replace("\r", "").split("\n") if x.strip()), "")
             why = "comando dello schema uscito %d%s" % (rc, (": " + first[:200]) if first else "")
         db_summary = "assente (%s)" % why
@@ -576,7 +576,7 @@ for x in dt_spec[:25]:
 if len(dt_spec) > 25:
     L.append("- … altri %d data-test dello spec" % (len(dt_spec) - 25))
 extra_dt = [x for x in dt_vue if x not in dt_spec]
-if extra_dt:   # quelli dei .vue nominati: solo il conto e i non citati (i citati sono la norma)
+if extra_dt:   # those of the named .vue files: only the count and the unmentioned ones (mentioned ones are the norm)
     orphans = [x for x in extra_dt if not dt_tests(x)]
     L.append("- nei .vue nominati altri %d data-test, %d citati da test; non citati: %s" % (
         len(extra_dt), len(extra_dt) - len(orphans),
@@ -589,7 +589,7 @@ L += ["", "## Test che citano le stringhe dello spec («…» e \"…\")"]
 strs = []
 for a, b in re.findall(r"«([^»\n]{5,60})»|\"([^\"\n]{5,60})\"", TEXT):
     x = (a or b).strip()
-    # un identificatore o un percorso è già coperto da simboli, file e data-test
+    # an identifier or a path is already covered by symbols, files and data-test
     if len(x) >= 5 and x not in strs and not re.fullmatch(r"[\w$.-]+", x):
         strs.append(x)
 strs = strs[:80]
@@ -609,7 +609,7 @@ head = ["# Pacchetto di contesto — %s" % SPEC_REL, "",
         "Data: %s · Commit: %s · Impronta spec: %s" % (now, rev, FP), ""]
 head = "\n".join(head) + "\n"
 body = "\n".join(L) + "\n"
-room = CAP - len(head) - 100   # il tetto vale per il file intero, intestazione e stima comprese
+room = CAP - len(head) - 100   # the cap applies to the whole file, header and estimate included
 if len(body) > room:
     body = body[:body.rfind("\n", 0, room) + 1] + "\n… TRONCATO al tetto di ~5k token: il resto va letto dal codice.\n"
 doc = head + body

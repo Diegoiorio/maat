@@ -1,17 +1,17 @@
-# _lib.sh — incluso (con `.`) dagli script di inject/: controlli sul worktree e utilita'.
-# Ogni inject:  bash inject/<nome>.sh <worktree del corpus> [opzioni]
-# Un worktree del corpus e' uno creato da replay.sh: worktree git COLLEGATO (mai il tree principale), con
-# il marcatore `fic-replay` nella sua git dir che ne riporta il percorso. Qualunque altro percorso e'
-# rifiutato (uscita 3) prima di toccare un file. Uscita 2 = uso o bersaglio non applicabile.
+# _lib.sh — sourced (with `.`) by the inject/ scripts: worktree checks and utilities.
+# Each inject:  bash inject/<name>.sh <corpus worktree> [options]
+# A corpus worktree is one created by replay.sh: a LINKED git worktree (never the main tree), with
+# the `fic-replay` marker in its git dir recording its path. Any other path is
+# refused (exit 3) before touching a file. Exit 2 = invalid usage or target not applicable.
 set -uo pipefail
 unset MSYS_NO_PATHCONV
 INJ_HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-. "${INJ_HERE%/corpus/inject}/lib/maat-paths.sh" || exit 4   # scripts/lib: MAAT_ROOT e MAAT_SCRIPTS (plugin)
+. "${INJ_HERE%/corpus/inject}/lib/maat-paths.sh" || exit 4   # scripts/lib: MAAT_ROOT and MAAT_SCRIPTS (plugin)
 INJ_NAME=$(basename "$0" .sh)
 die() { echo "inject $INJ_NAME: $*" >&2; exit 2; }
 refuse() { echo "inject $INJ_NAME: RIFIUTO — $*" >&2; exit 3; }
 
-# forma canonica (C:/…) di un percorso esistente: con MSYS lo stesso posto ha piu' nomi. Vuoto → vuoto.
+# canonical form (C:/…) of an existing path: under MSYS the same place has several names. Empty → empty.
 canon() { [ -n "${1:-}" ] && (cd "$1" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); }
 
 [ $# -ge 1 ] || die "uso: $0 <worktree del corpus> [opzioni]"
@@ -27,7 +27,7 @@ gd=$(git -C "$WT" rev-parse --absolute-git-dir)
 [ "$(canon "$(sed -n 's/^path=//p' "$gd/fic-replay")")" = "$WT" ] || refuse "il marcatore di replay.sh indica un altro percorso: $WT"
 
 . "$MAAT_SCRIPTS/python.sh" || die "interprete Python non trovato (imposta FIC_PYTHON)"
-LAVORO=.claude/.ai-workflow   # la cartella di lavoro (cartelle.lavoro), relativa alla radice: come replay.sh
+LAVORO=.claude/.ai-workflow   # the work directory (cartelle.lavoro), relative to the root: as in replay.sh
 [ -n "${MAAT_WORK:-}" ] && LAVORO=${MAAT_WORK#"$PROJECT_ROOT"/}
 AIW="$WT/$LAVORO"
 RUN=$(ls -d "$AIW"/spec-*.run 2>/dev/null)
@@ -35,7 +35,7 @@ RUN=$(ls -d "$AIW"/spec-*.run 2>/dev/null)
 SPEC="${RUN%.run}.md"
 winp() { maat_cygm "$1" 2>/dev/null || printf '%s' "$1"; }
 
-# replace_once <path relativo> <da> <a>: sostituzione letterale; esattamente UNA occorrenza, altrimenti errore
+# replace_once <relative path> <from> <to>: literal replacement; exactly ONE occurrence, otherwise error
 replace_once() {
   [ -f "$WT/$1" ] || die "file assente nel worktree: $1"
   "$FIC_PY" -c '
@@ -49,8 +49,8 @@ open(p, "wb").write(s.replace(a, b))
 ' "$(winp "$WT/$1")" "$2" "$3" || die "sostituzione non applicabile in $1"
 }
 
-# insert_line <path> <regex> <before|after> <testo>: inserisce il testo prima/dopo la PRIMA riga che
-# corrisponde alla regex (dalla riga <from> in poi, default 1)
+# insert_line <path> <regex> <before|after> <text>: inserts the text before/after the FIRST line that
+# matches the regex (from line <from> on, default 1)
 insert_line() {
   "$FIC_PY" -c '
 import re, sys
@@ -71,21 +71,21 @@ sys.exit("nessuna riga corrisponde a %r" % sys.argv[2])
 ' "$(winp "$1")" "$2" "$3" "$4" "${5:-1}" || die "inserimento non applicabile in $1"
 }
 
-# append_text <path relativo> <testo>: aggiunge in coda, con a capo prima
+# append_text <relative path> <text>: appends at the end, with a newline before
 append_text() {
   [ -f "$WT/$1" ] || die "file assente nel worktree: $1"
   printf '\n%s\n' "$2" >> "$WT/$1"
 }
 
-# mark_touched <path relativo>: attribuito alla feature SOLO se la run directory ha gia' un touched.txt
-# (una fase di codice precede quella rigiocata); prima di una implement il difetto e' preesistente.
+# mark_touched <relative path>: attributed to the feature ONLY if the run directory already has a touched.txt
+# (a code phase precedes the replayed one); before an implement the defect is pre-existing.
 mark_touched() {
   [ -f "$RUN/touched.txt" ] || return 0
   printf '%s\n' "$1" >> "$RUN/touched.txt"
   sort -u -o "$RUN/touched.txt" "$RUN/touched.txt"
 }
 
-# pick <regex> <ripiego>: il primo path di touched.txt che corrisponde e che esiste, altrimenti il ripiego
+# pick <regex> <fallback>: the first touched.txt path that matches and exists, otherwise the fallback
 pick() {
   local p
   if [ -f "$RUN/touched.txt" ]; then
@@ -97,7 +97,7 @@ pick() {
   printf '%s' "$2"
 }
 
-# last_prompt: il prompt della fase che sara' rigiocata (l'etichetta piu' alta in prompts/)
+# last_prompt: the prompt of the phase that will be replayed (the highest label in prompts/)
 last_prompt() {
   local p
   p=$(ls "$RUN"/prompts/*.md 2>/dev/null | sort | tail -1)

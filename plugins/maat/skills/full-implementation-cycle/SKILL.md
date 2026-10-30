@@ -12,7 +12,7 @@ Radice del plugin: `${CLAUDE_PLUGIN_ROOT}`. Nei file di questa skill che leggi c
 One feature, in order: **plan** (`/plan-review-cycle`, or `-light`) → **test-red** (format-2 plans) →
 **implement** (`plan-implementer`) → **review** (`/implementation-review-cycle`) → **fix → review** while the
 review says `NEEDS_CHANGES` and its budget allows. The **driver** `${CLAUDE_PLUGIN_ROOT}/scripts/driver.py` chooses and launches
-every phase; the rules it applies are code, listed with their tests in `riferimento.md` («Regole in codice»).
+every phase; the rules it applies are code, listed with their tests in `riferimento.md` («Rules in code»).
 
 $ARGUMENTS
 
@@ -45,7 +45,7 @@ refuses `--with-e2e` (DEV checks later, from the main tree) — `orchestratore.m
 
 ## Worker contract
 
-Nobody can answer you: a needed decision is a STOP. Write a `▶ ` line (one line, Italian) at each milestone.
+Nobody can answer you: a needed decision is a STOP. Write a `▶ ` line (one line, in the language of `lingua` in `.claude/maat.json`, default English) at each milestone.
 The last line is `ESITO FASE <fase>: OK — <summary>` or `ESITO FASE <fase>: STOP — <reason>`, then, in the same
 message, one fenced `json` block valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`:
 

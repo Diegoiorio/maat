@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# gate-verde-ma-rosso.sh <worktree> [--test <file di test>]
-# Difetto: un gate dichiarato verde che in realta' e' rosso. Nel file di test (il primo *.test.ts di
-# apps/admin in touched.txt, altrimenti tests/goals-page.test.ts) si aggiunge un caso che fallisce
-# davvero (aritmetica in virgola mobile); nel prompt della fase rigiocata si aggiunge la dichiarazione
-# «vitest su quel file → PASS», come la riportano i contesti dell'orchestratore.
-# Chi lo prende: la review, se riesegue il gate invece di fidarsi della dichiarazione.
+# gate-verde-ma-rosso.sh <worktree> [--test <test file>]
+# Defect: a gate declared green that is actually red. In the test file (the first *.test.ts of
+# apps/admin in touched.txt, otherwise tests/goals-page.test.ts) a case is added that really
+# fails (floating-point arithmetic); in the prompt of the replayed phase the claim
+# «vitest su quel file → PASS» is added, as the orchestrator's contexts report it.
+# Who catches it: the review, if it reruns the gate instead of trusting the claim.
 . "$(dirname "$0")/_lib.sh"
 T=""
 while [ $# -gt 0 ]; do

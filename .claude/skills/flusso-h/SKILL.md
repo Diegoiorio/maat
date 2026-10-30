@@ -1,178 +1,182 @@
 ---
 name: flusso-h
-description: Flusso H — implementa UNO dei piani già approvati di Maat (docs/piani/maat-pkNN-*.md di questo repo) su un branch di lavoro del repo maat, con gli agenti maat:plan-implementer e maat:implementation-reviewer di una versione fissa (plugin installato da un tag), i test del plugin, il collaudo di rilasciabilità, un commit sul branch e la revisione dei piani successivi. NON usa /maat:full-implementation-cycle (le sue sotto-sessioni caricherebbero il plugin in corso di modifica). Accetta uno o più piani in sequenza; il primo STOP ferma la catena.
+description: Flow H — implements ONE of Maat's already approved plans (docs/piani/maat-pkNN-*.md of this repo) on a working branch of the maat repo, with the maat:plan-implementer and maat:implementation-reviewer agents of a fixed version (plugin installed from a tag), the plugin tests, the releasability acceptance check, a commit on the branch and the revision of the following plans. It does NOT use /maat:full-implementation-cycle (its subsessions would load the plugin being modified). Accepts one or more plans in sequence; the first STOP halts the chain.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, BashOutput, Agent, Monitor, TaskStop
 argument-hint: "pkNN [pkMM …]"
 ---
 
-# Flusso H — implementazione dei piani di Maat
+# Flow H — implementing Maat's plans
 
-Input: `$ARGUMENTS` — uno o più identificativi di piano (`pk10`, `maat-pk10`, o il percorso del file). Più piani si
-eseguono **in sequenza, nell'ordine dato**; il primo STOP ferma tutti i successivi.
+Input: `$ARGUMENTS` — one or more plan identifiers (`pk10`, `maat-pk10`, or the file path). Several plans run **in
+sequence, in the given order**; the first STOP halts all the following ones.
 
-**Dove si lancia.** Da dentro la cartella del repo maat: `cd <repo maat>` e poi `claude`, poi `/flusso-h pkNN`. La skill
-è di questo repo (`.claude/skills/flusso-h/`), non del plugin: altrove non esiste. **Non** si lancia con `claude
---plugin-dir <repo maat>/plugins/maat`: `--plugin-dir` serve a provare a mano, non a lanciare i cicli (vedi il passo 1).
+**Where to run it.** From inside the maat repo folder: `cd <maat repo>`, then `claude`, then `/flusso-h pkNN`. The
+skill belongs to this repo (`.claude/skills/flusso-h/`), not to the plugin: it does not exist anywhere else. Do
+**not** launch it with `claude --plugin-dir <maat repo>/plugins/maat`: `--plugin-dir` is for trying things by hand,
+not for running the cycles (see step 1).
 
-**È uno strumento per chi sviluppa Maat**, non per chi lo usa. I piani sono note di lavoro del maintainer e **non
-sono pubblicati**: si scrivono in `docs/piani/` della propria copia del repo (`maat-pkNN-<titolo>.md`; la cartella la
-crea il primo piano). Sono **già approvati**: niente fase di pianificazione, niente riscrittura del piano. La sezione
-«Note da piani precedenti», se c'è, **prevale** sui passi che corregge. Una deviazione dal piano è uno STOP per
-l'utente.
+**It is a tool for those who develop Maat**, not for those who use it. Plans are the maintainer's working notes and
+**are not published**: they are written in `docs/piani/` of your own copy of the repo (`maat-pkNN-<title>.md`; the
+first plan creates the folder). They are **already approved**: no planning phase, no rewriting of the plan. The
+«Note da piani precedenti» (notes from previous plans) section, if present, **overrides** the steps it corrects. A
+deviation from the plan is a STOP for the user.
 
-**Progetto guida** (o banco di prova): un progetto reale che usa Maat, con cicli già chiusi, su cui si collauda ogni
-modifica. Si lavora sempre su una sua copia, mai sul progetto vero.
+**Guide project** (or test bench): a real project that uses Maat, with already closed cycles, on which every change
+is acceptance-tested. Always work on a copy of it, never on the real project.
 
-## Perché non `/maat:full-implementation-cycle`
+## Why not `/maat:full-implementation-cycle`
 
-Le sue sotto-sessioni caricano il plugin abilitato nel progetto. Se quel plugin è proprio il codice in modifica (un
-marketplace da cartella o `--plugin-dir` sul branch), il ciclo cambierebbe sotto i propri piedi: è l'incidente del
-harness cambiato sotto un ciclo (misure di quattro cicli falsate). Nel flusso H il harness in modifica viene **testato**,
-mai **usato** per implementarsi: gli agenti vengono da una versione **fissa** (il plugin installato da un tag), mai
-dalla cartella del branch. Il passo 1 lo controlla.
+Its subsessions load the plugin enabled in the project. If that plugin is the very code being modified (a folder
+marketplace or `--plugin-dir` on the branch), the cycle would change under its own feet: that is the incident of the
+harness changed under a cycle (measurements of four cycles skewed). In flow H the harness being modified is
+**tested**, never **used** to implement itself: the agents come from a **fixed** version (the plugin installed from
+a tag), never from the branch folder. Step 1 checks this.
 
-## Regole ferme
+## Firm rules
 
-- Si lavora **solo su un branch di lavoro** del repo maat (per esempio `wip/pkNN`, meglio in un worktree
-  `../maat-pkNN`), mai su `main`. Un worktree collegato e il tree principale non si mescolano: ognuno fa le sue cose.
-- Commit **solo** sul branch di lavoro, uno per piano chiuso. **Mai** push, **mai** merge su `main`, **mai** tag
-  pubblicati, **mai** `git reset --hard`/`rebase`/`stash`: push, tag e integrazione li fa solo l'utente.
-- Il **banco di prova** è il progetto guida: rigiochi e collaudi si fanno su una sua **copia** (un clone in una
-  cartella temporanea, con le run dir dei cicli chiusi), mai sul suo tree, che resta in sola lettura. Nessun accesso
-  alla produzione, nessun sync verso ambienti remoti, nessuna scrittura su DB, nessuna installazione, salvo quelle che
-  il piano autorizza esplicitamente o che l'utente conferma (il plugin al passo 1).
-- **Mai la modalità fast** (`fastMode`) e nessuna leva che richieda spesa: decisione dell'utente.
-- I rigiochi di collaudo girano con `--no-dev`.
-- Scrivere file con Write/Edit, mai con heredoc Python (byte invisibili). Fine riga LF.
+- Work **only on a working branch** of the maat repo (for example `wip/pkNN`, preferably in a worktree
+  `../maat-pkNN`), never on `main`. A linked worktree and the main tree are not mixed: each does its own things.
+- Commit **only** on the working branch, one per closed plan. **Never** push, **never** merge into `main`, **never**
+  published tags, **never** `git reset --hard`/`rebase`/`stash`: push, tags and integration are done by the user only.
+- The **test bench** is the guide project: replays and acceptance checks run on a **copy** of it (a clone in a
+  temporary folder, with the run dirs of the closed cycles), never on its tree, which stays read-only. No access to
+  production, no sync to remote environments, no DB writes, no installations, except those the plan explicitly
+  authorizes or the user confirms (the plugin in step 1).
+- **Never fast mode** (`fastMode`) and no lever that requires spending: the user's decision.
+- Acceptance replays run with `--no-dev`.
+- Write files with Write/Edit, never with Python heredocs (invisible bytes). LF line endings.
 
-## I 9 passi (per ogni piano)
+## The 9 steps (for each plan)
 
-1. **Preparazione**
-   - Se il worktree non esiste: `git worktree add ../maat-pkNN -b wip/pkNN main` dalla radice del repo maat; se esiste,
-     entrarci e verificare che `git branch --show-current` sia il branch del piano.
-   - Nessun ciclo vivo sulla copia del banco di prova: `cd <copia> && bash <repo maat>/plugins/maat/scripts/run-phase.sh
-     --lock-status` deve dire `libero`, e nessun `.claude/.ai-workflow/spec-*.run/log/*.running` senza il suo `.exit`.
-     Altrimenti: se il piano modifica file che quel ciclo usa, aspettare (Monitor) o STOP con il motivo.
-   - **Il plugin di questa sessione viene da una versione fissa** (regola «il harness in modifica si testa, non si
-     usa»). Controlli, tutti in sola lettura:
-     - `~/.claude/plugins/installed_plugins.json` (fonte verificata in pk01, D6): la voce `maat` valida per questa
-       cartella (scope `user`, oppure `project`/`local` con `projectPath` uguale alla cartella), con `version`,
-       `installPath` e `gitCommitSha`. `claude plugin list --json` può dare lo stesso, ma il suo formato **non è
-       ancora verificato**: in caso di dubbio vale il file. Gli agenti `maat:*` vengono da `installPath`, **tranne** con
-       un marketplace da cartella: lì il codice gira dalla cartella sorgente (D6 f), che va quindi controllata come
-       al punto seguente.
-     - La sorgente del marketplace `maat` (`~/.claude/plugins/known_marketplaces.json` ed `extraKnownMarketplaces`
-       nelle impostazioni del progetto): git o URL con il `ref` di un **tag** ⇒ va bene. **Cartella** ⇒ va bene solo se è
-       una cartella bloccata al tag (`git -C <cartella> describe --exact-match --tags HEAD` riesce e `git -C <cartella>
-       status --porcelain` è vuoto, come una cartella `maat-vX.Y.Z`) e non è né questo worktree né il tree principale del repo maat.
-       `maat-doctor.sh` lo segnala con la riga ATTENZIONE «plugin installato da un marketplace da cartella»: quella riga
-       chiede proprio questa verifica.
-     - La riga di comando del processo `claude` di questa sessione (sola lettura: `ps -o args=` su Linux e Mac,
-       `Get-CimInstance Win32_Process` su Windows) non contiene `--plugin-dir` verso il repo maat o un suo worktree.
-       Se non si riesce a leggerla, chiederlo all'utente.
+1. **Preparation**
+   - If the worktree does not exist: `git worktree add ../maat-pkNN -b wip/pkNN main` from the root of the maat repo;
+     if it exists, enter it and check that `git branch --show-current` is the plan's branch.
+   - No live cycle on the test bench copy: `cd <copy> && bash <maat repo>/plugins/maat/scripts/run-phase.sh
+     --lock-status` must say `libero` (free), and no `.claude/.ai-workflow/spec-*.run/log/*.running` without its
+     `.exit`. Otherwise: if the plan modifies files that cycle uses, wait (Monitor) or STOP with the reason.
+   - **This session's plugin comes from a fixed version** (rule "the harness being modified is tested, not used").
+     Checks, all read-only:
+     - `~/.claude/plugins/installed_plugins.json` (source verified in pk01, D6): the `maat` entry valid for this
+       folder (scope `user`, or `project`/`local` with `projectPath` equal to the folder), with `version`,
+       `installPath` and `gitCommitSha`. `claude plugin list --json` may give the same, but its format **is not yet
+       verified**: when in doubt the file wins. The `maat:*` agents come from `installPath`, **except** with a folder
+       marketplace: there the code runs from the source folder (D6 f), which must therefore be checked as in the
+       next point.
+     - The source of the `maat` marketplace (`~/.claude/plugins/known_marketplaces.json` and `extraKnownMarketplaces`
+       in the project settings): git or URL with the `ref` of a **tag** ⇒ fine. **Folder** ⇒ fine only if it is a
+       folder locked to the tag (`git -C <folder> describe --exact-match --tags HEAD` succeeds and `git -C <folder>
+       status --porcelain` is empty, like a `maat-vX.Y.Z` folder) and is neither this worktree nor the main tree of
+       the maat repo. `maat-doctor.sh` flags it with the ATTENZIONE line «plugin installato da un marketplace da
+       cartella» (plugin installed from a folder marketplace): that line asks precisely for this check.
+     - The command line of this session's `claude` process (read-only: `ps -o args=` on Linux and Mac,
+       `Get-CimInstance Win32_Process` on Windows) does not contain `--plugin-dir` pointing to the maat repo or one of
+       its worktrees. If it cannot be read, ask the user.
 
-     **STOP** se il plugin viene dal branch in modifica (marketplace da cartella che punta al repo o a un suo worktree,
-     `--plugin-dir` sul branch, `ref` che è un branch e non un tag) o se non è installato. Nel messaggio: il comando per
-     installarlo da un tag e lo **scope**. Forma consigliata, **provata** il 2026-10-30 (installazione e passaggio a
-     un tag nuovo): la sorgente GitHub con il tag, `claude plugin marketplace add
-     https://github.com/Diegoiorio/maat.git#vX.Y.Z --scope local` e `claude plugin install maat@maat --scope local`.
-     In alternativa, senza rete: una cartella bloccata al tag (`git -C <repo maat> worktree add --detach
-     ../maat-vX.Y.Z vX.Y.Z`, poi `marketplace add <quella cartella>`). Lo scope consigliato è `local`, lanciato
-     dalla cartella del repo maat: scrive in `.claude/settings.local.json` di questa cartella e in `~/.claude/plugins/` (cache,
-     `installed_plugins.json`, `known_marketplaces.json`). `--scope user` scriverebbe invece in `~/.claude/settings.json`
-     e varrebbe per tutti i progetti; `--scope project` in `.claude/settings.json` del repo, che è tracciato. Installare
-     **si fa solo con la conferma dell'utente**, e l'installazione si dichiara nel rapporto (serve al collaudo, punto c).
-   - **Guardia di sessione.** Se il plugin installato è abilitato in questa sessione, la sua guardia è agganciata
-     (`maat-doctor.sh`: «guardia agganciata»). Se non lo è, dirlo nel rapporto e comportarsi comunque come se lo fosse:
-     nessun comando fra quelli delle regole ferme.
-   - **Annotare lo stato di partenza**, per il collaudo (passo 6, punti b e c): `git status --porcelain` e `git stash list`
-     del tree del progetto guida; gli sha256 di `~/.claude/settings.json` e di `~/.claude/plugins/installed_plugins.json`,
-     e le voci di `~/.claude/plugins/known_marketplaces.json` **senza** i campi di data dell'ultimo aggiornamento. Non
-     tutta `~/.claude/plugins/`: Claude Code ci scrive da solo durante la sessione (cache, aggiornamento dei
-     marketplace), e quelle scritture non sono un cambiamento del flusso.
-2. **Prerequisiti**
-   - Il piano deve avere la riga `**Plan status: APPROVED**`. Se manca (o dice altro) ⇒ STOP: «il piano non è
-     approvato». Il flusso H non approva piani.
-   - Leggere la riga `Prerequisiti:` del piano ed eseguire `git log --oneline --grep "pkXX"` sul branch per ciascuno. Uno
-     mancante ⇒ STOP: «esegui prima pkXX».
-   - Leggere tutta la sezione «Note da piani precedenti».
-3. **Implementazione a blocchi** — dividere i «Passi di implementazione» in 1–3 blocchi coerenti (se il piano indica già
-   i blocchi, si usano quelli) e lanciare un agente `maat:plan-implementer` per blocco, in ordine. A ciascuno passare:
-   - il percorso del piano, precisando: «il piano è la sezione `## Passi di implementazione`; il requisito è tutto ciò
-     che la precede, “Note da piani precedenti” comprese, che prevalgono; ignora i riferimenti a `spec-<name>.md` delle
-     tue istruzioni»;
-   - modalità `full` (o `completion` se il branch ha già modifiche di questo piano da un tentativo interrotto);
-   - «Blocco k/N — sono tuoi solo i passi x–y»;
-   - «i gate sono i test del plugin: le suite dei file che tocchi e quelle nuove del piano (sezione `## Test`), lanciate
-     come dice `docs/TESTING-harness.md`; non le suite di un progetto, salvo che il piano le nomini»;
-   - il report del blocco precedente come orientamento (il codice vince sul report).
+     **STOP** if the plugin comes from the branch being modified (folder marketplace pointing to the repo or one of
+     its worktrees, `--plugin-dir` on the branch, a `ref` that is a branch and not a tag) or if it is not installed.
+     In the message: the command to install it from a tag and the **scope**. Recommended form, **tried** on
+     2026-10-30 (installation and switch to a new tag): the GitHub source with the tag, `claude plugin marketplace add
+     https://github.com/Diegoiorio/maat.git#vX.Y.Z --scope local` and `claude plugin install maat@maat --scope local`.
+     Alternatively, without network: a folder locked to the tag (`git -C <maat repo> worktree add --detach
+     ../maat-vX.Y.Z vX.Y.Z`, then `marketplace add <that folder>`). The recommended scope is `local`, run from the
+     maat repo folder: it writes to `.claude/settings.local.json` of this folder and to `~/.claude/plugins/` (cache,
+     `installed_plugins.json`, `known_marketplaces.json`). `--scope user` would instead write to
+     `~/.claude/settings.json` and apply to all projects; `--scope project` to the repo's `.claude/settings.json`,
+     which is tracked. Installing **is done only with the user's confirmation**, and the installation is declared in
+     the report (the acceptance check needs it, point c).
+   - **Session guard.** If the installed plugin is enabled in this session, its guard is hooked in (`maat-doctor.sh`:
+     «guardia agganciata», guard hooked). If it is not, say so in the report and behave as if it were anyway: no
+     command among those of the firm rules.
+   - **Record the starting state**, for the acceptance check (step 6, points b and c): `git status --porcelain` and
+     `git stash list` of the guide project's tree; the sha256 of `~/.claude/settings.json` and of
+     `~/.claude/plugins/installed_plugins.json`, and the entries of `~/.claude/plugins/known_marketplaces.json`
+     **without** the last-update date fields. Not all of `~/.claude/plugins/`: Claude Code writes there on its own
+     during the session (cache, marketplace updates), and those writes are not a change made by the flow.
+2. **Prerequisites**
+   - The plan must have the line `**Plan status: APPROVED**`. If it is missing (or says something else) ⇒ STOP: "the
+     plan is not approved". Flow H does not approve plans.
+   - Read the plan's `Prerequisiti:` (prerequisites) line and run `git log --oneline --grep "pkXX"` on the branch for
+     each one. One missing ⇒ STOP: "run pkXX first".
+   - Read the whole «Note da piani precedenti» section.
+3. **Implementation in blocks** — split the «Passi di implementazione» (implementation steps) into 1–3 coherent
+   blocks (if the plan already states the blocks, use those) and launch one `maat:plan-implementer` agent per block,
+   in order. Pass each one:
+   - the plan path, specifying: "the plan is the `## Passi di implementazione` section; the requirement is everything
+     before it, “Note da piani precedenti” included, which override; ignore the references to `spec-<name>.md` in
+     your instructions";
+   - mode `full` (or `completion` if the branch already has changes of this plan from an interrupted attempt);
+   - "Block k/N — only steps x–y are yours";
+   - "the gates are the plugin tests: the suites of the files you touch and the plan's new ones (section `## Test`),
+     run as `docs/TESTING-harness.md` says; not a project's suites, unless the plan names them";
+   - the previous block's report as orientation (the code wins over the report).
 
-   Deviazione dal piano, `Bloccato su` diverso da `nessuno`, o secondo `PARZIALE` ⇒ STOP.
-4. **Test del plugin**
-   - Durante l'implementazione e le correzioni si lanciano **solo le suite dei file toccati** (e quelle che ne
-     dipendono), una alla volta: `bash plugins/maat/scripts/<nome>.test.sh`. Sempre anche `genericita.test.sh` e
+   Deviation from the plan, `Bloccato su` (blocked on) other than `nessuno` (none), or a second `PARZIALE` (partial)
+   ⇒ STOP.
+4. **Plugin tests**
+   - During implementation and fixes run **only the suites of the touched files** (and those that depend on them),
+     one at a time: `bash plugins/maat/scripts/<name>.test.sh`. Always also `genericita.test.sh` and
      `maat-paths.test.sh`.
-   - **A fine piano, un giro completo** di tutte le suite del pacchetto (`plugins/maat/scripts/*.test.sh`,
-     `plugins/maat/skills/**/*.test.sh` e `test-review-surface.sh`), su Windows e su Linux, come dice
-     `docs/TESTING-harness.md` («Windows e Linux», «Il giro completo»): le lunghe (`cycle-state`, `run-phase`, `driver`)
-     in parallelo in background, raccolte prima di decidere, oppure una alla volta come fa lo script del giro. La review
-     legge gli esiti di quel giro e rilancia solo ciò che deve verificare.
-   - Più i test nuovi del piano, con le loro **controprove per mutazione**: la mutazione si applica (su una copia), il
-     test diventa rosso, la mutazione si toglie. Nel rapporto vanno il comando e l'esito.
-   - Un rosso ⇒ correggere (un giro di `maat:plan-implementer` in `fix`) e ripetere; al secondo rosso sullo stesso test
-     ⇒ STOP.
-5. **Review indipendente** — agente `maat:implementation-reviewer` con: il piano (come spec + piano), il diff del branch
-   rispetto al commit precedente, gli esiti dei test del passo 4. Blocker/major ⇒ `maat:plan-implementer` in `fix` con
-   solo quei finding, poi nuova review. **Massimo 3 giri**; al terzo senza APPROVED ⇒ STOP con i finding aperti.
-   Minor/nit: annotati nel rapporto, non applicati.
-6. **Collaudo di rilasciabilità** — i punti della sezione `## Collaudo` del piano, più questi **tre punti comuni**,
-   sempre:
-   - a. **prova del revert:** in una copia usa e getta (un worktree del repo maat sullo stato del piano), le modifiche
-     del piano si tolgono (`git revert --no-commit` del commit del piano, oppure il diff applicato al contrario): le
-     suite dei piani precedenti devono tornare verdi; poi la copia si cancella;
-   - b. **progetto guida intatto:** nel suo tree `git status --porcelain` e `git stash list` uguali a quelli annotati al
-     passo 1;
-   - c. **stato utente:** `~/.claude/settings.json`, `installed_plugins.json` e le voci di `known_marketplaces.json`
-     (senza le date) uguali a quelli annotati al passo 1, salvo le
-     installazioni previste dal piano o confermate al passo 1, e dichiarate.
+   - **At the end of the plan, a full run** of all the package's suites (`plugins/maat/scripts/*.test.sh`,
+     `plugins/maat/skills/**/*.test.sh` and `test-review-surface.sh`), on Windows and on Linux, as
+     `docs/TESTING-harness.md` says («Windows and Linux», «The full run»): the long ones (`cycle-state`, `run-phase`,
+     `driver`) in parallel in the background, collected before deciding, or one at a time as the full-run script
+     does. The review reads the outcomes of that run and reruns only what it has to verify.
+   - Plus the plan's new tests, with their **mutation counterproofs**: the mutation is applied (on a copy), the test
+     turns red, the mutation is removed. The command and the outcome go in the report.
+   - A red ⇒ fix (one round of `maat:plan-implementer` in `fix`) and repeat; at the second red on the same test ⇒
+     STOP.
+5. **Independent review** — `maat:implementation-reviewer` agent with: the plan (as spec + plan), the branch diff
+   against the previous commit, the outcomes of the tests of step 4. Blocker/major ⇒ `maat:plan-implementer` in `fix`
+   with only those findings, then a new review. **At most 3 rounds**; at the third without APPROVED ⇒ STOP with the
+   open findings. Minor/nit: noted in the report, not applied.
+6. **Releasability acceptance check** — the points of the plan's `## Collaudo` (acceptance check) section, plus
+   these **three common points**, always:
+   - a. **revert test:** in a throwaway copy (a worktree of the maat repo at the plan's state), the plan's changes are
+     removed (`git revert --no-commit` of the plan's commit, or the diff applied in reverse): the suites of the
+     previous plans must turn green again; then the copy is deleted;
+   - b. **guide project intact:** in its tree `git status --porcelain` and `git stash list` equal to those recorded in
+     step 1;
+   - c. **user state:** `~/.claude/settings.json`, `installed_plugins.json` and the entries of
+     `known_marketplaces.json` (without the dates) equal to those recorded in step 1, except for the installations
+     planned by the plan or confirmed in step 1, and declared.
 
-   Quelli che il piano assegna all'utente (per esempio un'installazione da seguire a mano) si elencano come «da fare
-   con l'utente», non si simulano. Un punto fallito ⇒ nessun commit, il branch torna al commit precedente (`git checkout
-   -- .` nel worktree e rimozione dei soli file nuovi del piano), STOP con rapporto.
-7. **Commit** sul branch di lavoro: `pkNN: <titolo del piano>` + corpo con esito review, collaudo e misura, + le righe
-   di attribuzione richieste dalla sessione. Mai `--no-verify`.
-8. **Revisione dei piani successivi** — per ogni piano elencato in «Dopo l'implementazione, rivedi»: rileggerlo e, se
-   questa parte ha cambiato qualcosa che usa (interfaccia, file, comando, formato, nome), aggiungere in cima al piano
-   successivo, in `docs/piani/` sullo stesso branch, una sezione `## Note da piani precedenti` con: cosa è cambiato, in
-   quale commit, e come si adatta il passo interessato. Non riscrivere i passi approvati: annotare. Se l'adattamento
-   cambia la sostanza del piano ⇒ segnalarlo nel rapporto come decisione per l'utente.
-9. **Rapporto** — aggiungere una sezione a `docs/piani/maat-report.md`: piano, commit, esito review (giri), collaudo
-   (punti del piano e i tre comuni), misura del beneficio, piani annotati, minor/nit aperti, installazioni fatte (con lo
-   scope), tempo e quota consumati, righe proposte per `CHANGELOG.md`.
+   Those the plan assigns to the user (for example an installation to follow by hand) are listed as "to do with the
+   user", not simulated. A failed point ⇒ no commit, the branch goes back to the previous commit (`git checkout
+   -- .` in the worktree and removal of only the plan's new files), STOP with report.
+7. **Commit** on the working branch: `pkNN: <plan title>` + a body with the review outcome, acceptance check and
+   measurement, + the attribution lines required by the session. Never `--no-verify`.
+8. **Revision of the following plans** — for each plan listed in «Dopo l'implementazione, rivedi» (after
+   implementation, review): reread it and, if this part changed something it uses (interface, file, command, format,
+   name), add at the top of the next plan, in `docs/piani/` on the same branch, a `## Note da piani precedenti`
+   section with: what changed, in which commit, and how the affected step adapts. Do not rewrite the approved steps:
+   annotate. If the adaptation changes the substance of the plan ⇒ flag it in the report as a decision for the user.
+9. **Report** — add a section to `docs/piani/maat-report.md`: plan, commit, review outcome (rounds), acceptance check
+   (the plan's points and the three common ones), measured benefit, annotated plans, open minor/nit, installations
+   made (with the scope), time and quota consumed, proposed lines for `CHANGELOG.md`.
 
-## STOP (fermano il piano e tutta la catena di piani richiesti)
+## STOP (halts the plan and the whole chain of requested plans)
 
-Piano non approvato · prerequisito mancante · plugin della sessione non da una versione fissa · ciclo vivo sulla copia
-del banco di prova · deviazione dal piano · test del plugin rosso due volte · 3 giri di review senza APPROVED · collaudo
-fallito · adattamento sostanziale di un piano successivo · quota oltre soglia. Ogni STOP scrive il motivo nel rapporto e
-dice all'utente cosa decidere o eseguire.
+Plan not approved · missing prerequisite · session plugin not from a fixed version · live cycle on the test bench
+copy · deviation from the plan · plugin test red twice · 3 review rounds without APPROVED · failed acceptance check
+· substantial adaptation of a following plan · quota over threshold. Every STOP writes the reason in the report and
+tells the user what to decide or run.
 
-## Quota (abbonamento, nessuna spesa)
+## Quota (subscription, no spending)
 
-Leggere gli eventi di quota disponibili (`rate_limit_event` nei log dei rigiochi, o l'indicazione della sessione):
-- sopra ~75% della finestra da 5 ore ⇒ pausa fino al reset (Monitor su un'attesa, non polling attivo);
-- sopra ~30% della quota settimanale ⇒ STOP con rapporto, per lasciare quota al resto del lavoro.
-I rigiochi di collaudo sono **per fase** e su cicli piccoli del banco di prova, uno per piano.
+Read the available quota events (`rate_limit_event` in the replay logs, or the session's indication):
+- above ~75% of the 5-hour window ⇒ pause until the reset (Monitor on a wait, not active polling);
+- above ~30% of the weekly quota ⇒ STOP with report, to leave quota for the rest of the work.
+Acceptance replays are **per phase** and on small cycles of the test bench, one per plan.
 
-## Risposta finale
+## Final answer
 
 ```text
-Flusso H — <piani richiesti>
-Esito: <per piano: COMMITTATO <sha> | STOP (<passo>: <motivo>) | NON AVVIATO (catena fermata)>
-Review: <giri, finding chiusi>   Collaudo: <punti del piano + 3 comuni: esito | da fare con l'utente: …>
-Misura: <beneficio osservato vs atteso>
-Piani annotati: <pkXX: cosa>   Decisioni per te: <nessuna | elenco>
-Plugin: <versione e sorgente del plugin usato; installazioni fatte, con lo scope>
-Rapporto: docs/piani/maat-report.md
-Branch: <wip/pkNN> (nessun push, nessun merge, nessun tag pubblicato: l'integrazione la decidi tu)
+Flow H — <requested plans>
+Outcome: <per plan: COMMITTED <sha> | STOP (<step>: <reason>) | NOT STARTED (chain halted)>
+Review: <rounds, findings closed>   Acceptance: <plan points + 3 common: outcome | to do with the user: …>
+Measurement: <observed vs expected benefit>
+Annotated plans: <pkXX: what>   Decisions for you: <none | list>
+Plugin: <version and source of the plugin used; installations made, with the scope>
+Report: docs/piani/maat-report.md
+Branch: <wip/pkNN> (no push, no merge, no published tag: integration is your call)
 ```

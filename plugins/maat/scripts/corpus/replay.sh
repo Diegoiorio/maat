@@ -1,84 +1,84 @@
 #!/usr/bin/env bash
-# replay.sh — rigioca UNA fase di un ciclo reale di /full-implementation-cycle in un git worktree
-# usa-e-getta, con --no-dev, e la misura con cycle-report.py.
+# replay.sh — replays ONE phase of a real /full-implementation-cycle run in a throwaway git worktree,
+# with --no-dev, and measures it with cycle-report.py.
 #
-#   replay.sh <ciclo> <fase> [--harness <plugin>] [--source <dir>] [--worktree <path>] [--out <dir>]
-#             [--inject <nome>]... [--dry-run]
-#   replay.sh --check [--source <dir>]          i cicli del corpus: spec, run directory e base presenti?
-#   replay.sh --remove <path> [--dry-run]       rimuove un worktree lasciato da un rigioco interrotto
+#   replay.sh <cycle> <phase> [--harness <plugin>] [--source <dir>] [--worktree <path>] [--out <dir>]
+#             [--inject <name>]... [--dry-run]
+#   replay.sh --check [--source <dir>]          corpus cycles: are spec, run directory and base present?
+#   replay.sh --remove <path> [--dry-run]       removes a worktree left behind by an interrupted replay
 #
-#   Il progetto e' quello della cartella di lavoro (PROJECT_ROOT); il corpus e' il corpus.json indicato da
-#   cartelle.corpus nella sua maat.json (relativo al repository; assente: nessun corpus, solo run directory per nome).
-#   <ciclo>   id del corpus (per esempio `ciclo-1`) oppure il nome di QUALUNQUE run directory, anche fuori
-#             corpus: `export-csv`, `spec-export-csv` o `spec-export-csv.run`
-#             (base da base.txt)
-#   <fase>    etichetta (`06-review`) o nome di fase (plan|implement|review|fix) se nel ciclo e' unica
-#   --harness la RADICE DI UN PLUGIN maat (con .claude-plugin/plugin.json) da cui lanciare la fase: il suo
-#             scripts/run-phase.sh, e lo stesso plugin caricato nella sotto-sessione (MAAT_PLUGIN_DIR, esportata
-#             SEMPRE: il rigioco non dipende dall'abilitazione del plugin nel worktree) (default: MAAT_ROOT, il plugin
-#             di questo script). Il harness NON si copia nel worktree
-#   --source  la cartella con spec-*.md e spec-*.run/ (default: la cartella di lavoro, cartelle.lavoro, del tree
-#             PRINCIPALE, risolto con `git rev-parse --git-common-dir`: le run directory sono gitignorate e stanno li')
-#   --worktree dove creare il worktree (default: accanto al tree principale, fic-replay-<etichetta>-<ora>: corto,
-#             per il limite dei percorsi di Windows);
-#             il nome deve cominciare per fic-replay- e il percorso non deve esistere
-#   --out     dove salvare log e report della fase rigiocata (default <source>/spec-<nome>.replay/<etichetta>-<ora>,
-#             gitignorata dalla regola spec-*)
-#   --inject  script di inject/ (senza .sh) da applicare al worktree prima della fase; ripetibile
-#   --non-confrontabile  procede anche se le dipendenze allo stato della fase sono diverse da quelle del
-#             tree principale (vedi sotto); il rigioco e' marcato NON CONFRONTABILE in report.txt e in
-#             NON-CONFRONTABILE.txt dell'uscita
-#   --dry-run stampa i comandi senza eseguirli: nessun worktree, nessun file, nessuna sessione
+#   The project is the one of the working directory (PROJECT_ROOT); the corpus is the corpus.json named by
+#   cartelle.corpus in its maat.json (relative to the repository; absent: no corpus, run directories by name only).
+#   <cycle>   corpus id (for example `ciclo-1`) or the name of ANY run directory, even outside the
+#             corpus: `export-csv`, `spec-export-csv` or `spec-export-csv.run`
+#             (base from base.txt)
+#   <phase>   label (`06-review`) or phase name (plan|implement|review|fix) if it is unique in the cycle
+#   --harness the ROOT OF A maat PLUGIN (with .claude-plugin/plugin.json) to launch the phase from: its
+#             scripts/run-phase.sh, and the same plugin loaded in the sub-session (MAAT_PLUGIN_DIR, exported
+#             ALWAYS: the replay does not depend on the plugin being enabled in the worktree) (default: MAAT_ROOT,
+#             the plugin of this script). The harness is NOT copied into the worktree
+#   --source  the directory with spec-*.md and spec-*.run/ (default: the work directory, cartelle.lavoro, of the
+#             MAIN tree, resolved with `git rev-parse --git-common-dir`: run directories are gitignored and live there)
+#   --worktree where to create the worktree (default: next to the main tree, fic-replay-<label>-<time>: short,
+#             because of the Windows path length limit);
+#             the name must start with fic-replay- and the path must not exist
+#   --out     where to save log and report of the replayed phase (default <source>/spec-<name>.replay/<label>-<time>,
+#             gitignored by the spec-* rule)
+#   --inject  inject/ script (without .sh) to apply to the worktree before the phase; repeatable
+#   --non-confrontabile  proceeds even if the dependencies at the phase state differ from those of the
+#             main tree (see below); the replay is marked NON CONFRONTABILE in report.txt and in
+#             NON-CONFRONTABILE.txt of the output
+#   --dry-run prints the commands without running them: no worktree, no file, no session
 #
-# Cosa fa, in ordine: `git worktree add --detach` alla base del ciclo; marcatore `fic-replay` nella git
-# dir PROPRIA del worktree (fuori dal working tree, quindi mai superficie di review); il codice allo
-# stato della fase — il .pre-tree dell'etichetta, altrimenti l'ultimo .post-tree precedente, altrimenti la
-# base — applicato come modifiche NON committate (come nel ciclo vero); la spec (nel suo stato ATTUALE: la run
-# directory non ne conserva le versioni) e la run
-# directory fino alla fase esclusa (log e prompt delle etichette precedenti, base/do-not-touch/mixed se
-# una implement o fix precede, touched.txt ricalcolato dalle coppie .pre/.post-tree precedenti); il
-# prompt ORIGINALE della fase con --no-dev inserito dopo il nome e la skill col prefisso del plugin
-# (/maat:full-implementation-cycle: la skill del plugin, non quella che il commit del ciclo avesse in .claude/skills);
-# gli inject; la fase con scripts/run-phase.sh del plugin --harness, cwd nel worktree, MAAT_PLUGIN_DIR=<plugin>,
-# con il lock del tree PRINCIPALE (FIC_LOCK: il mirror di vitest-fast e il DEV sono
-# condivisi, quindi un rigioco non gira mai insieme a una fase di codice vera); copia dei log in --out;
-# cycle-report.py su quella copia; `git worktree remove --force` SOLO dopo aver verificato che il
-# percorso e' un worktree creato da replay.sh (nome fic-replay-*, marcatore col suo percorso, elencato da
-# `git worktree list`, fuori dal tree principale e dal harness).
-# Un rigioco interrotto mentre la fase gira ancora lascia il worktree (rimuoverlo sotto una sessione
-# viva sarebbe peggio): si toglie dopo con --remove.
+# What it does, in order: `git worktree add --detach` at the cycle base; `fic-replay` marker in the worktree's
+# OWN git dir (outside the working tree, hence never review surface); the code at the phase
+# state — the label's .pre-tree, otherwise the last earlier .post-tree, otherwise the
+# base — applied as UNCOMMITTED changes (as in the real cycle); the spec (in its CURRENT state: the run
+# directory does not keep its versions) and the run
+# directory up to the phase, excluded (log and prompts of earlier labels, base/do-not-touch/mixed if
+# an implement or fix precedes, touched.txt recomputed from the earlier .pre/.post-tree pairs); the
+# ORIGINAL prompt of the phase with --no-dev inserted after the name and the skill with the plugin prefix
+# (/maat:full-implementation-cycle: the plugin's skill, not whatever the cycle's commit had in .claude/skills);
+# the injects; the phase with scripts/run-phase.sh of the --harness plugin, cwd in the worktree, MAAT_PLUGIN_DIR=<plugin>,
+# with the lock of the MAIN tree (FIC_LOCK: the vitest-fast mirror and DEV are
+# shared, so a replay never runs alongside a real code phase); copy of the logs to --out;
+# cycle-report.py on that copy; `git worktree remove --force` ONLY after verifying that the
+# path is a worktree created by replay.sh (name fic-replay-*, marker with its path, listed by
+# `git worktree list`, outside the main tree and the harness).
+# A replay interrupted while the phase is still running leaves the worktree (removing it under a live
+# session would be worse): remove it later with --remove.
 #
-# Dipendenze (i gate della fase devono girare come nell'originale, senza installare nulla):
-# - PRIMA di creare il worktree: i file delle dipendenze (package.json e package-lock.json della radice
-#   e di modules/app, modules/api/requirements*.txt) allo stato della fase devono coincidere con quelli
-#   del tree principale (`git diff` fra quel tree e il working tree principale, stessa logica di git
-#   status: CRLF compresi). Se no: uscita 2, niente worktree; --non-confrontabile per procedere comunque;
-# - node_modules (radice, modules/app, apps/*, packages/*) e modules/api/.venv del tree principale sono
-#   COLLEGATI nel worktree (junction su Windows, symlink altrove), mai copiati ne' installati; di
-#   apps/admin/.nuxt si copiano tsconfig.json e *.d.ts (il lint ne ha bisogno: vitest-fast.sh);
-# - il .git del worktree punta alla git dir con un percorso RELATIVO (`git worktree add` scrive "gitdir: C:/…";
-#   vitest-fast.sh e counterproof.sh ora lo traducono da se', via script/test/fic-mirror.sh: il relativo resta
-#   come difesa in piu');
-# - copia WSL del worktree: vitest-fast.sh e counterproof.sh usano ~/fic-mirror-<hash> (una per radice) e,
-#   al primo uso, ne SEMINANO node_modules in hardlink dalla copia del tree principale, se le dipendenze
-#   coincidono (impronta sul contenuto senza CR: le fine riga del checkout nuovo non contano piu', niente
-#   copia dei byte). Impronta diversa: avviso nel log e nel report (la copia non si semina e i gate escono
-#   BLOCKED), senza fermarsi;
-# - rimozione: PRIMA le copie WSL del worktree (fic_lane_forget k=1,2 per le corsie, poi fic_mirror_forget:
-#   mai ~/fic-mirror; se un run la tiene,
-#   resta con un avviso — da cancellare poi con lo stesso comando), POI si tolgono i collegamenti (solo il
-#   collegamento, mai ricorsivo), POI `git worktree remove --force`; se un collegamento resta, il worktree
-#   NON si rimuove (seguirlo cancellerebbe le dipendenze del tree principale). Nessuna copia
-#   ~/fic-mirror-<hash> orfana a fine rigioco.
-# Limite noto: un prompt che cita percorsi assoluti del tree principale li cita ancora.
+# Dependencies (the phase gates must run as in the original, without installing anything):
+# - BEFORE creating the worktree: the dependency files (package.json and package-lock.json of the root
+#   and of modules/app, modules/api/requirements*.txt) at the phase state must match those
+#   of the main tree (`git diff` between that tree and the main working tree, same logic as git
+#   status: CRLF included). Otherwise: exit 2, no worktree; --non-confrontabile to proceed anyway;
+# - node_modules (root, modules/app, apps/*, packages/*) and modules/api/.venv of the main tree are
+#   LINKED into the worktree (junction on Windows, symlink elsewhere), never copied or installed; from
+#   apps/admin/.nuxt tsconfig.json and *.d.ts are copied (lint needs them: vitest-fast.sh);
+# - the worktree's .git points to the git dir with a RELATIVE path (`git worktree add` writes "gitdir: C:/…";
+#   vitest-fast.sh and counterproof.sh now translate it themselves, via script/test/fic-mirror.sh: the relative
+#   path stays as an extra safeguard);
+# - WSL copy of the worktree: vitest-fast.sh and counterproof.sh use ~/fic-mirror-<hash> (one per root) and,
+#   on first use, SEED its node_modules as hardlinks from the main tree's copy, if the dependencies
+#   match (fingerprint on content without CR: line endings of the new checkout no longer matter, no
+#   byte copy). Different fingerprint: warning in log and report (the copy is not seeded and the gates exit
+#   BLOCKED), without stopping;
+# - removal: FIRST the worktree's WSL copies (fic_lane_forget k=1,2 for the lanes, then fic_mirror_forget:
+#   never ~/fic-mirror; if a run holds it,
+#   it stays with a warning — to delete later with the same command), THEN the links are removed (only the
+#   link, never recursive), THEN `git worktree remove --force`; if a link remains, the worktree
+#   is NOT removed (following it would delete the main tree's dependencies). No orphan
+#   ~/fic-mirror-<hash> copy at the end of the replay.
+# Known limit: a prompt that quotes absolute paths of the main tree still quotes them.
 #
-# Uscita: quella della fase · 0 --check/--remove/--dry-run riusciti · 1 --check con mancanze ·
-#         2 uso o dati del ciclo non validi · 3 percorso rifiutato (non e' un worktree di replay.sh).
+# Exit: that of the phase · 0 --check/--remove/--dry-run succeeded · 1 --check with missing items ·
+#         2 invalid usage or cycle data · 3 path refused (not a replay.sh worktree).
 
 set -uo pipefail
 unset MSYS_NO_PATHCONV
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
-. "$HERE/../lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin) e PROJECT_ROOT (cartella di lavoro)
+. "$HERE/../lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin) and PROJECT_ROOT (working directory)
 maat_progetto || exit 4
 ROOT=$PROJECT_ROOT
 CR="$MAAT_SCRIPTS/cycle-report.py"
@@ -86,11 +86,11 @@ CR="$MAAT_SCRIPTS/cycle-report.py"
 die() { echo "replay: $*" >&2; exit 2; }
 refuse() { echo "replay: RIFIUTO — $*" >&2; exit 3; }
 q() { printf '%q' "$1"; }
-# winpath, canon, collegamento e scollegamento delle dipendenze, .git relativo, impronta, copia WSL: la
-# libreria condivisa con script/fic/ciclo-worktree.sh (messaggi col prefisso «replay:», come prima)
+# winpath, canon, linking and unlinking of dependencies, relative .git, fingerprint, WSL copy: the
+# library shared with script/fic/ciclo-worktree.sh (messages with the «replay:» prefix, as before)
 WT_TAG=replay DEP_LINKS_EXTRA=()
 . "$MAAT_SCRIPTS/worktree-lib.sh" || die "$MAAT_SCRIPTS/worktree-lib.sh o $MAAT_SCRIPTS/fic-mirror.sh non trovati"
-LAVORO=.claude/.ai-workflow   # la cartella di lavoro (cartelle.lavoro), relativa alla radice del repository
+LAVORO=.claude/.ai-workflow   # the work directory (cartelle.lavoro), relative to the repository root
 [ -n "$MAAT_WORK" ] && LAVORO=${MAAT_WORK#"$PROJECT_ROOT"/}
 
 common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "git non trova il repository di $ROOT"
@@ -98,7 +98,7 @@ MAIN=$(cd "$(dirname "$common")" && pwd) || die "tree principale non risolto da 
 MAINGIT=$(git -C "$MAIN" rev-parse --absolute-git-dir 2>/dev/null) || die "git dir del tree principale non risolta"
 MAINC=$(canon "$MAIN") ROOTC=$(canon "$ROOT") MAATC=$(canon "$MAAT_ROOT")
 
-# --- verifica: il percorso e' un worktree creato da replay.sh? (0 = si'; altrimenti il motivo su stderr) ---
+# --- check: is the path a worktree created by replay.sh? (0 = yes; otherwise the reason on stderr) ---
 ours() {
   local p c gd mk w found=0
   p=$1
@@ -119,10 +119,10 @@ ours() {
   return 0
 }
 
-# FIC_REPLAY_LIB=1: solo le funzioni (per i test, che le provano su cartelle sintetiche)
+# FIC_REPLAY_LIB=1: functions only (for the tests, which exercise them on synthetic directories)
 [ "${FIC_REPLAY_LIB:-0}" = 1 ] && return 0
 
-# --- argomenti ---
+# --- arguments ---
 DRY=0 MODE=replay HARNESS=$MAAT_ROOT SRC="" WT="" OUT="" INJECT=() POS=() RM_PATH="" ALLOW_DEPS=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -159,7 +159,7 @@ if [ "$MODE" = remove ]; then
 fi
 
 . "$MAAT_SCRIPTS/python.sh" || die "interprete Python non trovato (imposta FIC_PYTHON)"
-# il corpus del PROGETTO (cartelle.corpus di maat.json, relativo al repository), mai uno del plugin
+# the PROJECT corpus (cartelle.corpus of maat.json, relative to the repository), never a plugin one
 CORPUS_W=""
 if [ -n "${MAAT_CONFIG:-}" ] || [ -f "$ROOT/.claude/maat.json" ]; then
   . "$MAAT_SCRIPTS/lib/maat-conf.sh" || die "lettore della configurazione non trovato: $MAAT_SCRIPTS/lib/maat-conf.sh"
@@ -169,8 +169,8 @@ if [ -n "${MAAT_CONFIG:-}" ] || [ -f "$ROOT/.claude/maat.json" ]; then
     CORPUS_W=$(winpath "$ROOT/$cc")
   fi
 fi
-corpus() { # $1 = id → "<run>\t<spec>\t<base>" ; senza argomento → tutte le righe "<id>\t<run>\t<spec>\t<base>"
-  [ -n "$CORPUS_W" ] || return 0   # nessun corpus: solo run directory per nome
+corpus() { # $1 = id → "<run>\t<spec>\t<base>" ; no argument → all rows "<id>\t<run>\t<spec>\t<base>"
+  [ -n "$CORPUS_W" ] || return 0   # no corpus: run directories by name only
   "$FIC_PY" -c '
 import json, sys
 cs = json.load(open(sys.argv[1], encoding="utf-8"))["cicli"]
@@ -199,7 +199,7 @@ if [ "$MODE" = check ]; then
   exit $miss
 fi
 
-# --- ciclo e fase ---
+# --- cycle and phase ---
 [ ${#POS[@]} -eq 2 ] || die "uso: replay.sh <ciclo> <fase> [--harness <tree>] [--source <dir>] [--worktree <path>] [--out <dir>] [--inject <nome>]... [--dry-run] | --check | --remove <path>"
 CYC=${POS[0]} FASE=${POS[1]}
 row=$(corpus "$CYC")
@@ -241,7 +241,7 @@ EARLIER=$(printf '%s\n' "$LABELS" | while read -r l; do [ -n "$l" ] && [ $((10#$
 code_before=0
 for l in $EARLIER; do case "$l" in *-implement|*-fix) code_before=1 ;; esac; done
 
-# stato del codice all'inizio della fase
+# code state at the start of the phase
 STATE="" STATE_FROM="base $BASE"
 if [ -f "$RUN_SRC/log/$LABEL.pre-tree" ]; then
   STATE=$(tr -d '\r\n ' < "$RUN_SRC/log/$LABEL.pre-tree"); STATE_FROM="log/$LABEL.pre-tree"
@@ -257,7 +257,7 @@ fi
 [ "$code_before" -eq 1 ] && [ -z "$STATE" ] && [ "$PHASE" != implement ] &&
   die "una fase di codice precede $LABEL ma nessun .post-tree la registra: stato del codice non ricostruibile"
 
-# dipendenze: quelle del tree principale valgono per il codice della fase? (prima di creare qualunque cosa)
+# dependencies: do the main tree ones fit the phase code? (before creating anything)
 DEPS_DIFF=$(deps_diff "${STATE:-$BASE}") NONCONF=""
 if [ -n "$DEPS_DIFF" ]; then
   [ $ALLOW_DEPS -eq 1 ] || die "dipendenze diverse fra lo stato della fase ($STATE_FROM) e il tree principale: $(echo $DEPS_DIFF). node_modules e venv collegati dal tree principale non sarebbero quelli di questo codice e i gate non girerebbero come nell'originale. Niente worktree creato. Per rigiocare comunque (rigioco NON CONFRONTABILE): --non-confrontabile"
@@ -265,7 +265,7 @@ if [ -n "$DEPS_DIFF" ]; then
   echo "replay: NON CONFRONTABILE — $NONCONF"
 fi
 
-# harness e inject
+# harness and injects
 HARNESS=$(cd "$HARNESS" 2>/dev/null && pwd) || die "harness inesistente"
 [ -f "$HARNESS/.claude-plugin/plugin.json" ] || die "--harness non e' la radice di un plugin (manca .claude-plugin/plugin.json): $HARNESS"
 [ -f "$HARNESS/scripts/run-phase.sh" ] || die "il plugin non ha scripts/run-phase.sh: $HARNESS"
@@ -274,13 +274,13 @@ for n in ${INJECT[@]+"${INJECT[@]}"}; do
   [ -f "$HERE/inject/$n.sh" ] || die "inject sconosciuto: $n (in $HERE/inject: $(ls "$HERE/inject" | sed -n 's/\.sh$//p' | grep -v '^_' | tr '\n' ' '))"
 done
 
-# worktree e uscita
+# worktree and output
 STAMP=$(date +%Y%m%d-%H%M%S)-$$
 [ -n "$WT" ] || WT="$(dirname "$MAIN")/fic-replay-$LABEL-$STAMP"
 case "$(basename "$WT")" in fic-replay-*) ;; *) refuse "il worktree deve chiamarsi fic-replay-*: $WT" ;; esac
 [ -e "$WT" ] && refuse "$WT esiste gia': non l'ho creato io, non lo uso"
 pd=$(canon "$(dirname "$WT")") && [ -n "$pd" ] || refuse "la cartella madre di $WT non esiste"
-WT="$pd/$(basename "$WT")"   # forma canonica: e' anche quella scritta nel marcatore
+WT="$pd/$(basename "$WT")"   # canonical form: it is also the one written in the marker
 HARNESSC=$(canon "$HARNESS")
 case "$WT" in "$MAINC"/*|"$ROOTC"/*|"$HARNESSC"/*) refuse "il worktree non puo' stare dentro il tree principale o il harness: $WT" ;; esac
 OUT=${OUT:-$SRC/spec-$NAME.replay/$LABEL-$STAMP}
@@ -289,8 +289,8 @@ AIW="$WT/$LAVORO" RUN_DST="$WT/$LAVORO/spec-$NAME.run"
 REL_RUN="$LAVORO/spec-$NAME.run"
 LOCK="$MAINGIT/full-implementation-cycle.lock"
 
-# act: stampa ed esegue (in --dry-run solo stampa); un passo di preparazione fallito ferma tutto (la
-# trappola rimuove il worktree). act_rc: stampa, esegue e restituisce l'uscita (la fase, la misura).
+# act: prints and runs (in --dry-run only prints); a failed preparation step stops everything (the
+# trap removes the worktree). act_rc: prints, runs and returns the exit code (the phase, the measurement).
 act() { printf '+ %s\n' "$1"; [ $DRY -eq 1 ] && return 0; eval "$1" || die "passo fallito: $1"; }
 act_rc() { printf '+ %s\n' "$1"; [ $DRY -eq 1 ] && return 0; eval "$1"; }
 
@@ -308,7 +308,7 @@ cleanup() {
   mkdir -p "$OUT" && cp "$RUN_DST"/log/"$LABEL".* "$OUT"/ 2>/dev/null
   if ! ours "$CREATED"; then
     echo "replay: $CREATED non supera la verifica: NON rimosso" >&2
-  elif forget_mirror "$CREATED" && ! unlink_deps "$CREATED"; then   # prima i collegamenti: la rimozione non deve mai seguirli
+  elif forget_mirror "$CREATED" && ! unlink_deps "$CREATED"; then   # links first: the removal must never follow them
     echo "replay: collegamenti ancora presenti in $CREATED: worktree NON rimosso (seguirebbe le dipendenze del tree principale)" >&2
   else
     git -C "$MAIN" worktree remove --force "$CREATED" || echo "replay: rimozione del worktree fallita: $CREATED" >&2
@@ -316,11 +316,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1. worktree alla base, marcatore nella sua git dir
-[ $DRY -eq 1 ] || CREATED=$WT   # la trappola lo rimuove solo se supera la verifica
+# 1. worktree at the base, marker in its git dir
+[ $DRY -eq 1 ] || CREATED=$WT   # the trap removes it only if it passes the check
 act "git -C $(q "$MAIN") worktree add --detach $(q "$WT") $BASE"
 act "printf 'fic-replay\npath=%s\ncreated=%s\n' $(q "$WT") $STAMP > \"\$(git -C $(q "$WT") rev-parse --absolute-git-dir)/fic-replay\""
-# 1b. gate eseguibili come nell'originale: .git relativo (git di WSL), dipendenze collegate, tsconfig di nuxi
+# 1b. gates runnable as in the original: relative .git (WSL git), linked dependencies, nuxi tsconfig
 act "fic_relgit $(q "$WT")"
 while IFS= read -r p; do
   [ -n "$p" ] && act "link_dep $(q "$MAIN/$p") $(q "$WT/$p")"
@@ -328,13 +328,13 @@ done < <(dep_links "$MAIN")
 NUXT=modules/app/apps/admin/.nuxt
 [ -f "$MAIN/$NUXT/tsconfig.json" ] &&
   act "mkdir -p $(q "$WT/$NUXT") && cp $(q "$MAIN/$NUXT/tsconfig.json") $(q "$WT/$NUXT/") && { cp $(q "$MAIN/$NUXT")/*.d.ts $(q "$WT/$NUXT/") 2>/dev/null; true; }"
-# 2. codice allo stato della fase, come modifiche non committate
+# 2. code at the phase state, as uncommitted changes
 [ -n "$STATE" ] && act "git -C $(q "$WT") read-tree -u --reset $STATE && git -C $(q "$WT") read-tree HEAD"
-# 2b. dipendenze uguali per git (verificato sopra): l'impronta normalizzata coincide con quella del tree
-# principale, cioe' la copia WSL del worktree si seminera' (fic-mirror.sh). Non con --non-confrontabile.
+# 2b. dependencies equal for git (checked above): the normalized fingerprint matches that of the main
+# tree, i.e. the worktree's WSL copy will be seeded (fic-mirror.sh). Not with --non-confrontabile.
 [ -z "$NONCONF" ] && act "deps_fp_check $(q "$MAIN") $(q "$WT")"
-# 3. harness: NON copiato nel worktree (pk04a-1): la fase gira con scripts/run-phase.sh del plugin --harness (passo 6)
-# 4. spec e run directory fino alla fase esclusa
+# 3. harness: NOT copied into the worktree (pk04a-1): the phase runs with scripts/run-phase.sh of the --harness plugin (step 6)
+# 4. spec and run directory up to the phase, excluded
 act "mkdir -p $(q "$RUN_DST/log") $(q "$RUN_DST/prompts") && cp $(q "$SPEC_SRC") $(q "$AIW/")"
 for l in $EARLIER; do
   act "cp $(q "$RUN_SRC/log")/$l.* $(q "$RUN_DST/log/")"
@@ -352,7 +352,7 @@ if [ $code_before -eq 1 ]; then
   done
   act "sort -u -o $(q "$RUN_DST/touched.txt") $(q "$RUN_DST/touched.txt")"
 fi
-# la skill del plugin (prefisso maat:), non una .claude/skills/full-implementation-cycle del commit del ciclo
+# the plugin's skill (maat: prefix), not a .claude/skills/full-implementation-cycle of the cycle's commit
 if head -1 "$PROMPT_SRC" | grep -q -- '--no-dev'; then
   act "sed '1s|^/\\(maat:\\)\\{0,1\\}full-implementation-cycle |/maat:full-implementation-cycle |' $(q "$PROMPT_SRC") > $(q "$RUN_DST/prompts/$LABEL.md")"
 else
@@ -360,18 +360,18 @@ else
 fi
 # 5. inject
 for n in ${INJECT[@]+"${INJECT[@]}"}; do act "bash $(q "$HERE/inject/$n.sh") $(q "$WT")"; done
-# 6. la fase: run-phase.sh del plugin --harness, cwd nel worktree, il plugin caricato SEMPRE nella sotto-sessione
-# (MAAT_PLUGIN_DIR → --plugin-dir: l'abilitazione del worktree non conta), con il lock del tree principale
+# 6. the phase: run-phase.sh of the --harness plugin, cwd in the worktree, the plugin ALWAYS loaded in the sub-session
+# (MAAT_PLUGIN_DIR → --plugin-dir: whether the worktree enables it does not matter), with the main tree's lock
 act_rc "(cd $(q "$WT") && MAAT_PLUGIN_DIR=$(q "$HARNESS") FIC_LOCK=$(q "$LOCK") bash $(q "$HARNESS/scripts/run-phase.sh") $REL_RUN $LABEL $REL_RUN/prompts/$LABEL.md)"
 code=$?
-# 7. log in --out, misura
+# 7. logs to --out, measurement
 act_rc "mkdir -p $(q "$OUT") && cp $(q "$RUN_DST/log")/$LABEL.* $(q "$OUT/") && { cp $(q "$RUN_DST/touched.txt") $(q "$OUT/") 2>/dev/null; cp $(q "$AIW/spec-$NAME.md") $(q "$OUT/spec-dopo.md"); true; }"
 OUT_JSONL=$(winpath "$OUT/$LABEL.jsonl")
 MARK=""
 [ -n "$NONCONF" ] && MARK="printf 'NON CONFRONTABILE — %s\n' $(q "$NONCONF") | tee $(q "$OUT/NON-CONFRONTABILE.txt"); "
 [ -n "$FPWARN" ] && MARK="${MARK}printf 'AVVISO — %s\n' $(q "$FPWARN"); "
 act_rc "{ $MARK$(q "$FIC_PY") $(q "$(winpath "$CR")") $(q "$OUT_JSONL"); } | tee $(q "$OUT/report.txt"); $(q "$FIC_PY") $(q "$(winpath "$CR")") --json $(q "$OUT_JSONL") > $(q "$OUT/report.json")"
-# 8. rimozione, solo se il percorso supera la verifica e dopo aver tolto i collegamenti
+# 8. removal, only if the path passes the check and after removing the links
 if [ $DRY -eq 1 ]; then
   echo "+ forget_mirror $(q "$WT")"
   echo "+ unlink_deps $(q "$WT")"

@@ -4,223 +4,235 @@
 
 # Maat — Multi-Agent Assurance Toolkit
 
-**Maat è un plugin di Claude Code che fa lavorare gli agenti come un buon team.** Tu descrivi la modifica che vuoi.
-Maat la porta fino al codice scritto e rivisto, e si ferma quando serve una tua decisione.
+**Maat is a Claude Code plugin that makes agents work like a good team.** You describe the change you want. Maat
+carries it all the way to written and reviewed code, and stops when it needs a decision from you.
 
-## Cosa fa
+## What it does
 
-Gli dai una **spec**, cioè un file di testo che descrive la modifica. Con un solo comando Maat esegue cinque tappe, in
-ordine:
+You give it a **spec**, a text file that describes the change. With a single command Maat runs five stages, in
+order:
 
-1. **Piano.** Un agente scrive il piano, un altro lo critica. Si ripete finché il piano viene approvato.
-2. **Codice.** Un agente scrive il codice seguendo il piano e lancia i test del progetto.
-3. **Review.** Un agente diverso confronta il codice con il piano e con la spec.
-4. **Correzioni.** Se la review trova problemi seri, il codice si corregge e si rivede.
-5. **Firma.** L'esito finale: tutto fatto, oppure cosa resta da verificare.
+1. **Plan.** One agent writes the plan, another one critiques it. This repeats until the plan is approved.
+2. **Code.** An agent writes the code following the plan and runs the project's tests.
+3. **Review.** A different agent compares the code with the plan and the spec.
+4. **Fixes.** If the review finds serious problems, the code is fixed and reviewed again.
+5. **Sign-off.** The final outcome: everything done, or what is left to verify.
 
-Ogni tappa gira in una sessione separata di Claude: nessun agente giudica il proprio lavoro.
+Each stage runs in a separate Claude session: no agent judges its own work.
 
-Mentre lavora, Maat:
+While it works, Maat:
 
-- **blocca i comandi pericolosi**: produzione, push e comandi git che cambiano lo stato, installazioni;
-- **non fa mai commit**: il codice resta modificato nella cartella, e il commit lo fai tu dopo averlo guardato;
-- **riprende da dove era**: se si interrompe, rilanci lo stesso comando.
+- **blocks dangerous commands**: production, push and git commands that change state, installations;
+- **never commits**: the code stays modified in the folder, and you make the commit after looking at it;
+- **resumes where it left off**: if it is interrupted, you run the same command again.
 
-- Autore: [Diego Iorio](https://github.com/Diegoiorio). Licenza [MIT](LICENSE): libero da usare, modificare e
-  ridistribuire.
-- Guida completa ai flussi, con i diagrammi: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (da aprire nel browser).
-- Novità di ogni versione: [`CHANGELOG.md`](CHANGELOG.md). Versione attuale: **1.1.0**.
+- Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
+  redistribute.
+- Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.2.0**.
 
-## Prima di iniziare
+## Before you start
 
-| Ti serve | Versione | Come controlli |
+| You need | Version | How to check |
 |---|---|---|
-| Claude Code | 2.1.285 o più recente | `claude --version` |
-| git | 2.35 o più recente | `git --version` |
-| bash (su Windows: Git Bash, incluso in Git for Windows) | 4 o più recente | `bash --version` |
-| Python | 3.10 o più recente | `python --version` (su Windows: `py -3 --version`) |
+| Claude Code | 2.1.285 or newer | `claude --version` |
+| git | 2.35 or newer | `git --version` |
+| bash (on Windows: Git Bash, included in Git for Windows) | 4 or newer | `bash --version` |
+| Python | 3.10 or newer | `python --version` (on Windows: `py -3 --version`) |
 
-Su Windows **WSL non serve**: velocizza solo i test JavaScript.
+On Windows **WSL is not required**: it only speeds up JavaScript tests.
 
-## Installazione
+## Installation
 
-Maat si installa **una volta per ogni progetto** in cui vuoi usarlo.
+Maat is installed **once for each project** you want to use it in.
 
-**1. Installa il plugin.** Apri un terminale nella **cartella principale del progetto**, cioè la radice del repo git, e
-lancia questi due comandi, copiandoli così come sono:
+**1. Install the plugin.** Open a terminal in the **main folder of the project**, that is the root of the git repo,
+and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.1.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- Il primo comando dice a Claude Code **da dove prendere Maat**: il repo GitHub, alla versione `v1.1.0` (la parte dopo
-  `#`). Questo indirizzo è la «sorgente».
-- Il secondo installa il plugin `maat` da quella sorgente.
-- `--scope project` salva la scelta nel file `.claude/settings.json` del progetto. Se committi quel file, chi clona il
-  progetto trova Maat già configurato.
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.2.0` (the part
+  after `#`). This address is the "source".
+- The second one installs the `maat` plugin from that source.
+- `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
+  clones the project finds Maat already configured.
 
-Puoi dare gli stessi comandi anche dentro Claude Code: scrivi `/plugin` al posto di `claude plugin`.
+You can also give the same commands inside Claude Code: type `/plugin` instead of `claude plugin`.
 
-**2. Riavvia Claude Code** nella cartella del progetto, oppure scrivi `/reload-plugins`.
+**2. Restart Claude Code** in the project folder, or type `/reload-plugins`.
 
-**3. Configura il progetto.** Dentro Claude Code scrivi:
+**3. Configure the project.** Inside Claude Code type:
 
 ```text
 /maat:setup
 ```
 
-Il setup:
+The setup:
 
-1. guarda il progetto **senza modificare niente** e riconosce linguaggi, test e lint;
-2. ti mostra in una tabella i moduli e i comandi che userà: li confermi o li correggi;
-3. ti chiede solo quello che non può indovinare, cioè:
-   - l'indirizzo della produzione;
-   - lo script di rilascio;
-   - come accedi ai server;
-   - i file da non toccare mai;
-4. scrive `.claude/maat.json` **solo dopo la tua conferma**, prova la guardia e fa un controllo finale.
+1. looks at the project **without changing anything** and recognizes languages, tests and lint;
+2. shows you, in a table, the modules and commands it will use: you confirm or correct them;
+3. asks you only what it cannot guess, that is:
+   - the production address;
+   - the release script;
+   - how you access the servers;
+   - the files that must never be touched;
+4. writes `.claude/maat.json` **only after you confirm**, tests the guard and runs a final check.
 
-**4. Aggiungi al `.gitignore`** la cartella di lavoro di Maat, dove finiscono spec, piani e registri dei cicli:
+**4. Add to `.gitignore`** Maat's working folder, where specs, plans and cycle logs go:
 
 ```text
 .claude/.ai-workflow/
 ```
 
-**Controllo, quando vuoi.** Dalla cartella del progetto:
+**Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.1.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.2.0/scripts/maat-doctor.sh
 ```
 
-Il controllo non modifica niente e stampa una riga per ogni verifica:
+The check changes nothing and prints one line per verification:
 
-- `OK`: va bene;
-- `ATTENZIONE`: funziona, ma c'è qualcosa da sapere;
-- `MANCA`: va sistemato, e la riga dice come.
+- `OK`: all good;
+- `ATTENZIONE` (warning): it works, but there is something you should know;
+- `MANCA` (missing): needs fixing, and the line says how.
 
-## Uso
+## Usage
 
-### 1. Scrivi la spec
+### 1. Write the spec
 
-La spec è un file Markdown nella cartella `.claude/.ai-workflow/`, con un nome come `spec-<nome>.md`, per esempio
-`spec-export-csv.md`. Descrive **cosa** vuoi, non come farlo:
+The spec is a Markdown file in the `.claude/.ai-workflow/` folder, with a name like `spec-<name>.md`, for example
+`spec-export-csv.md`. It describes **what** you want, not how to do it:
 
 ```markdown
-# Spec: esportare i clienti in CSV
+# Spec: export customers to CSV
 
 ## Contesto
-Perché serve e come funziona oggi (file e righe utili, se li conosci).
+Why it is needed and how it works today (useful files and lines, if you know them).
 
 ## Requisiti
-1. Cosa deve fare, punto per punto, in modo che si possa verificare.
+1. What it must do, point by point, in a way that can be verified.
 
 ## Fuori ambito
-Cosa non va toccato.
+What must not be touched.
 
 ## Criteri di accettazione
-Come si capisce che è fatto, per esempio quali test devono passare.
+How you can tell it is done, for example which tests must pass.
 ```
 
-Non sai da dove partire? Chiedi a Claude: «usa l'agente `maat:spec-author` per scrivere la spec di: …», e descrivi la
-modifica. L'agente legge il codice, ti fa domande se qualcosa non è chiaro e scrive il file.
+For now the `##` headings must be written exactly as above, in Italian, because Maat reads them: `Contesto`
+(context), `Requisiti` (requirements), `Fuori ambito` (out of scope), `Criteri di accettazione` (acceptance criteria).
 
-### 2. Lancia il ciclo
+Don't know where to start? Ask Claude: "use the `maat:spec-author` agent to write the spec for: …", and describe
+the change. The agent reads the code, asks you questions if something is unclear and writes the file.
+
+### 2. Run the cycle
 
 ```text
 /maat:full-implementation-cycle .claude/.ai-workflow/spec-export-csv.md
 ```
 
-In chat vedi solo le righe di avanzamento. Secondo la modifica, il ciclo dura da qualche minuto a qualche ora.
+In the chat you only see the progress lines. Depending on the change, the cycle takes from a few minutes to a few
+hours.
 
-### 3. Leggi l'esito
+### 3. Read the outcome
 
-| Esito | Cosa vuol dire | Cosa fai |
+| Outcome | What it means | What you do |
 |---|---|---|
-| `IMPLEMENTED` | Codice scritto, rivisto e verificato. | Guardi le modifiche e fai il commit. |
-| `NEEDS_VERIFICATION` | La review è approvata, ma un controllo richiesto non è stato eseguito, per esempio perché il modulo non ha test. Il messaggio dice quale. | Fai tu quella verifica, poi il commit. |
-| `STOP` | Maat si è fermato perché serve una persona. Il messaggio dice perché e cosa decidere. | Decidi, poi rilanci lo stesso comando: riprende da lì. |
+| `IMPLEMENTED` | Code written, reviewed and verified. | Look at the changes and commit. |
+| `NEEDS_VERIFICATION` | The review is approved, but a required check was not run, for example because the module has no tests. The message says which one. | Run that check yourself, then commit. |
+| `STOP` | Maat stopped because a person is needed. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. |
 
-### Opzioni utili
+### Useful options
 
-- `--worktree`: il ciclo lavora in una copia separata del repo, su un branch suo, così tu continui a lavorare nella
-  cartella principale. Va lanciato dalla cartella principale del repo.
-- `--tests=min|std|full`: quanti test eseguire, da pochi a tutti.
-- `--light`: il piano viene rivisto da un solo revisore. Va bene per modifiche piccole.
-- **Spec grandi:** si dividono in spec più piccole, che Maat esegue in ordine. Le prepara `maat:spec-author`.
-- **Senza il ciclo completo:** `/maat:plan-review-cycle <spec>` fa solo il piano; poi
-  `/maat:implementation-review-cycle <nome>` fa la review del codice che hai scritto tu.
+- `--worktree`: the cycle works in a separate copy of the repo, on its own branch, so you can keep working in the
+  main folder. Run it from the main folder of the repo.
+- `--tests=min|std|full`: how many tests to run, from a few to all of them.
+- `--light`: the plan is reviewed by a single reviewer. Fine for small changes.
+- **Large specs:** they are split into smaller specs, which Maat runs in order. `maat:spec-author` prepares them.
+- **Without the full cycle:** `/maat:plan-review-cycle <spec>` only makes the plan; then
+  `/maat:implementation-review-cycle <name>` reviews the code you wrote yourself.
 
-## Configurazione
+## Configuration
 
-Tutto quello che riguarda il tuo progetto sta in `.claude/maat.json`, scritto da `/maat:setup`. Di solito non serve
-modificarlo a mano. Se vuoi farlo:
+Everything about your project lives in `.claude/maat.json`, written by `/maat:setup`. Usually you don't need to
+edit it by hand. If you want to:
 
-- profili pronti per gli stack comuni: `plugins/maat/profiles/`;
-- esempi completi: `plugins/maat/examples/`;
-- tutte le chiavi: `plugins/maat/schemas/maat-config.schema.json`.
+- ready-made profiles for common stacks: `plugins/maat/profiles/`;
+- complete examples: `plugins/maat/examples/`;
+- all the keys: `plugins/maat/schemas/maat-config.schema.json`.
 
-## Aggiornare a una versione nuova
+## Language
 
-Maat non si aggiorna mai da solo: resta alla versione scritta nella sorgente. Per passare a una versione nuova, per
-esempio `v1.2.0`, dalla cartella del progetto:
+English is the default language. It covers the explanation shown under each permission request, the guard's
+reasons and the progress lines of a cycle. To change it, set `"lingua"` in `.claude/maat.json`, for example
+`"lingua": "it"` for Italian. The key name is Italian for now; an English alias comes in a later release, together
+with English versions of the other runtime messages, which are still in Italian.
+
+## Updating to a new version
+
+Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
+`v1.3.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.3.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
-Poi riavvia Claude Code e lancia il controllo: la riga della versione deve dire OK. Non aggiornare mentre un ciclo è in
-corso. Se lo fai, il ciclo se ne accorge, si ferma e ti chiede di confermare.
+Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
+you do, the cycle notices, stops and asks you to confirm.
 
-## Disinstallare
+## Uninstalling
 
-Dalla cartella del progetto:
+From the project folder:
 
 ```bash
 claude plugin uninstall maat@maat --scope project
 claude plugin marketplace remove maat --scope project
 ```
 
-In `.claude/settings.json` restano due chiavi vuote (`enabledPlugins` ed `extraKnownMarketplaces`): sono innocue.
-Anche `.claude/maat.json` e la cartella `.claude/.ai-workflow/` restano: se non ti servono più, cancellali tu.
+Two empty keys remain in `.claude/settings.json` (`enabledPlugins` and `extraKnownMarketplaces`): they are harmless.
+`.claude/maat.json` and the `.claude/.ai-workflow/` folder also remain: if you no longer need them, delete them
+yourself.
 
-## Piattaforme
+## Platforms
 
-| Piattaforma | Stato |
+| Platform | Status |
 |---|---|
-| Windows con WSL | verificato con tutti i test |
-| Windows senza WSL | verificati i ripieghi senza WSL: test, controlli e diagnosi |
-| Linux | verificato con tutti i test, in un Linux senza strumenti di Windows |
-| Mac | previsto, non ancora provato |
+| Windows with WSL | verified with all tests |
+| Windows without WSL | the fallbacks without WSL verified: tests, checks and diagnostics |
+| Linux | verified with all tests, on a Linux with no Windows tools |
+| Mac | planned, not yet tried |
 
-I percorsi con spazi e con lettere accentate funzionano. Un solo limite: nei piani, i nomi dei file del progetto non
-devono contenere spazi.
+Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
+spaces.
 
-## Sviluppare Maat
+## Developing Maat
 
-Questa parte serve solo a chi modifica Maat:
+This part is only for people who modify Maat:
 
-- le modifiche si fanno con il **flusso H** (`.claude/skills/flusso-h/SKILL.md`), lanciando `claude` dalla cartella di
-  questo repo;
-- regola ferma: **il Maat che stai modificando si prova, non si usa per sviluppare**. Per provarlo a mano:
-  `claude --plugin-dir <cartella del repo>/plugins/maat`;
-- i test sono in [`docs/TESTING-harness.md`](docs/TESTING-harness.md).
+- changes are made with **flow H** (`.claude/skills/flusso-h/SKILL.md`), running `claude` from this repo's
+  folder;
+- firm rule: **the Maat you are modifying is tested, not used for development**. To try it by hand:
+  `claude --plugin-dir <repo folder>/plugins/maat`;
+- the tests are described in [`docs/TESTING-harness.md`](docs/TESTING-harness.md).
 
-Segnalazioni e proposte: apri una issue su GitHub.
+Reports and proposals: open an issue on GitHub.
 
-## Responsabilità
+## Disclaimer
 
-Maat fa lavorare agenti di intelligenza artificiale che leggono e modificano il codice del tuo progetto ed eseguono
-comandi sulla tua macchina. La guardia riduce i rischi, ma non li elimina.
+Maat runs artificial intelligence agents that read and modify your project's code and run commands on your
+machine. The guard reduces the risks, but does not eliminate them.
 
-- **Lo usi a tuo rischio.** Controlla sempre le modifiche prima del commit e non lanciarlo su progetti o macchine
-  dove un errore non è rimediabile.
-- Maat è fornito **«così com'è», senza garanzie di alcun tipo**. L'autore non risponde di danni, perdite di dati o
-  altre conseguenze del suo uso: vedi la [licenza](LICENSE).
-- Il costo delle sessioni di Claude Code che Maat avvia è a carico di chi lo usa.
-- Maat è un progetto indipendente, non affiliato ad Anthropic. Claude e Claude Code sono marchi di Anthropic.
+- **You use it at your own risk.** Always check the changes before committing, and don't run it on projects or
+  machines where a mistake cannot be undone.
+- Maat is provided **"as is", without warranties of any kind**. The author is not liable for damages, data loss or
+  other consequences of its use: see the [license](LICENSE).
+- The cost of the Claude Code sessions that Maat starts is borne by whoever uses it.
+- Maat is an independent project, not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.
 
-## Licenza
+## License
 
 [MIT](LICENSE) © 2026 Diego Iorio.

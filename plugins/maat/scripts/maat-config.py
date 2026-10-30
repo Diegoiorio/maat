@@ -1,60 +1,60 @@
 #!/usr/bin/env python3
-"""maat-config.py — lettore unico di .claude/maat.json (solo libreria standard).
+"""maat-config.py — the single reader of .claude/maat.json (standard library only).
 
-Uso:
+Usage:
   maat-config.py valida [file]
-  maat-config.py leggi <chiave.puntata> [--default x]      con i default dello schema
-  maat-config.py leggi --tutto                              ogni chiave: «chiave<TAB>valore» (cache di maat-conf.sh)
-  maat-config.py modulo-di <file relativo al repo>          «<nome> radice» | «<nome> pacchetti» | exit 2
+  maat-config.py leggi <dotted.key> [--default x]          with the schema defaults
+  maat-config.py leggi --tutto                              every key: «chiave<TAB>valore» (cache of maat-conf.sh)
+  maat-config.py modulo-di <file relative to the repo>      «<nome> radice» | «<nome> pacchetti» | exit 2
   maat-config.py comando <modulo> <test|lint|build|controlli|controprova>
                  [--file f]… [--test t]… [--base b] [--cache c] [--report r] [--nome n]
-      stampa due righe: cartella d'esecuzione (relativa al repo) e comando espanso; per controlli una coppia per
-      ogni voce e ogni file che la riguarda (un file per invocazione). I percorsi di --file e --test sono relativi al repo: diventano relativi alla
-      cartella del comando.
+      prints two lines: working directory (relative to the repo) and expanded command; for controlli one pair per
+      entry and per file it concerns (one file per invocation). The --file and --test paths are relative to the repo: they become relative to the
+      command's directory.
   maat-config.py copia-modulo
-      il modulo della copia WSL (test-fast.sh): MAAT_MODULO se impostata, altrimenti l'unico modulo con `copia`.
-      Stampa cinque righe: nome, radice, radice_pacchetti, lint_base (true|false), preparazione. Più moduli con copia e nessun
-      MAAT_MODULO: exit 64 «più moduli con copia: imposta MAAT_MODULO»; nessun modulo con copia: exit 2.
+      the module of the WSL copy (test-fast.sh): MAAT_MODULO if set, otherwise the only module with `copia`.
+      Prints five lines: name, radice, radice_pacchetti, lint_base (true|false), preparazione. Several modules with copia and no
+      MAAT_MODULO: exit 64 «più moduli con copia: imposta MAAT_MODULO»; no module with copia: exit 2.
   maat-config.py comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir>
                  [--pacchetto p] [--file f]… [--test t]… [--cache c]
-      il comando che test-fast.sh esegue DENTRO la copia (campo `copia`, mai `comandi`). Due righe: cartella
-      d'esecuzione assoluta (<dir> più la cartella del comando: radice = la radice relativa a radice_pacchetti,
-      radice_pacchetti = <dir>; --pacchetto la sostituisce, per lint_messaggi) e comando espanso. --file e --test
-      sono relativi a <dir> (la copia di radice_pacchetti) e diventano relativi alla cartella. copia.lint come
-      lista: vale la prima alternativa senza se_esiste o il cui se_esiste (relativo alla sua cartella) esiste.
+      the command that test-fast.sh runs INSIDE the copy (field `copia`, never `comandi`). Two lines: absolute
+      working directory (<dir> plus the command's directory: radice = the radice relative to radice_pacchetti,
+      radice_pacchetti = <dir>; --pacchetto replaces it, for lint_messaggi) and expanded command. --file and --test
+      are relative to <dir> (the copy of radice_pacchetti) and become relative to the directory. copia.lint as a
+      list: the first alternative without se_esiste, or whose se_esiste (relative to its directory) exists, wins.
   maat-config.py gate-richiesti <min|std|full|legacy> [--file f]…
-      i gate del livello, «etichetta<TAB>modulo<TAB>tipo»: tests-<modulo> (moduli con comandi.test o con file
-      toccati sotto la radice), controlli-<modulo>, lint e build (con -<modulo> se più moduli li dichiarano).
-  maat-config.py test-di <modulo> [--file f]…     i test che regola_test seleziona per i file (relativi al repo)
-  maat-config.py python <modulo>                  l'interprete di {python} del modulo (exit 2: non lo usa)
-  maat-config.py chiave <modulo>                  le voci chiave: «etichetta<TAB>file|comando|assente<TAB>cartella<TAB>valore»
+      the gates of the level, «etichetta<TAB>modulo<TAB>tipo»: tests-<modulo> (modules with comandi.test or with files
+      touched under the radice), controlli-<modulo>, lint and build (with -<modulo> if several modules declare them).
+  maat-config.py test-di <modulo> [--file f]…     the tests that regola_test selects for the files (relative to the repo)
+  maat-config.py python <modulo>                  the {python} interpreter of the module (exit 2: it does not use it)
+  maat-config.py chiave <modulo>                  the key entries: «etichetta<TAB>file|comando|assente<TAB>cartella<TAB>valore»
   maat-config.py elenco-moduli
   maat-config.py generati [--verifica]
-      i file generati rigenerabili da implement/fix: una riga per voce, «percorso | cartella | comando | test |
-      ambiente» (ambiente = quello del modulo che contiene la cartella, nativo fuori da ogni modulo); nessuna voce
-      = nessuna riga. --verifica controlla le voci sul progetto (PROJECT_ROOT): generato, cartella, test e script
-      del comando esistono, il test nomina il generato; «ERRORE: generati.<i>: …» ed exit 1, altrimenti
+      the regenerable generated files of implement/fix: one line per entry, «percorso | cartella | comando | test |
+      ambiente» (ambiente = that of the module containing the cartella, nativo outside every module); no entries
+      = no lines. --verifica checks the entries against the project (PROJECT_ROOT): the generated file, the cartella,
+      the test and the command's script exist, the test names the generated file; «ERRORE: generati.<i>: …» and exit 1, otherwise
       «generati: <n> voci verificate».
   maat-config.py sonda-produzione
   maat-config.py componi <profilo>… --radice <modulo>=<percorso> [--radice …] [--nativo]
-      --nativo (pk06, /maat:setup senza WSL o fuori da Windows): ogni modulo ha ambiente nativo e niente copia;
-      comandi.test e comandi.lint che chiamavano test-fast.sh diventano il comando della copia eseguito nel repo
-      (copia.test; per il lint la prima alternativa senza se_esiste o il cui se_esiste esiste nel progetto,
-      relativo alla sua cartella, senza {cache?…}); lint_base resta solo se il
-      lint ha ancora {base?…}; piattaforma.copia_wsl: no.
+      --nativo (pk06, /maat:setup without WSL or outside Windows): every module has ambiente nativo and no copia;
+      comandi.test and comandi.lint that called test-fast.sh become the copy's command run in the repo
+      (copia.test; for lint the first alternative without se_esiste or whose se_esiste exists in the project,
+      relative to its directory, without {cache?…}); lint_base stays only if the
+      lint still has {base?…}; piattaforma.copia_wsl: no.
 
-Importabile (importlib, dal percorso in MAAT_CONFIG_PY): carica(), risolto(cfg), modulo_di(risolto, percorso) e
-comando(cfg, modulo, tipo, file=…, test=…, …) sono le funzioni dei comandi modulo-di e comando, senza stampa:
-plan-check.sh, counterproof.sh, blocks-independent.py, context-pack.sh e worktree-lib.sh le usano così, con una sola
-implementazione per bash e Python.
+Importable (importlib, from the path in MAAT_CONFIG_PY): carica(), risolto(cfg), modulo_di(risolto, percorso) and
+comando(cfg, modulo, tipo, file=…, test=…, …) are the functions behind the modulo-di and comando commands, without printing:
+plan-check.sh, counterproof.sh, blocks-independent.py, context-pack.sh and worktree-lib.sh use them this way, with a single
+implementation for bash and Python.
 
-Dove trova il file: MAAT_CONFIG, altrimenti <PROJECT_ROOT>/.claude/maat.json (PROJECT_ROOT dall'ambiente,
-altrimenti `git rev-parse --show-toplevel` dalla cartella corrente). {maat} = MAAT_ROOT, altrimenti la radice del
-plugin che contiene questo file.
+Where it finds the file: MAAT_CONFIG, otherwise <PROJECT_ROOT>/.claude/maat.json (PROJECT_ROOT from the environment,
+otherwise `git rev-parse --show-toplevel` from the current directory). {maat} = MAAT_ROOT, otherwise the root of the
+plugin that contains this file.
 
-Uscite: 0 ok · 1 configurazione non valida · 2 nessun modulo / comando non dichiarato · 3 chiave assente (leggi),
-comando saltato e NOT RUN (dichiarato) (comando), ripiego del nucleo (sonda-produzione) · 4 progetto non
-configurato · 64 uso sbagliato.
+Exit codes: 0 ok · 1 invalid configuration · 2 no module / command not declared · 3 key missing (leggi),
+command skipped and NOT RUN (declared) (comando), core fallback (sonda-produzione) · 4 project not
+configured · 64 wrong usage.
 """
 import copy
 import json
@@ -70,7 +70,7 @@ SCHEMA = posixpath.join(PLUGIN, "schemas", "maat-config.schema.json")
 PROFILI = posixpath.join(PLUGIN, "profiles")
 
 VERSIONE_CORRENTE = 1
-VERSIONE_PRECEDENTE = None   # accettata con un avviso (R9); None finché esiste solo la 1
+VERSIONE_PRECEDENTE = None   # accepted with a warning (R9); None while only version 1 exists
 CARTELLE = ("radice", "radice_pacchetti", "repo")
 SALTA_DIR = {"node_modules", ".git", ".venv", ".nuxt", ".output", "__pycache__"}
 
@@ -85,7 +85,7 @@ def err(msg):
     sys.stderr.write("maat-config: %s\n" % msg)
 
 
-# --------------------------------------------------------------------------- validazione strutturale
+# --------------------------------------------------------------------------- structural validation
 TIPI = {
     "string": lambda v: isinstance(v, str),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
@@ -109,7 +109,7 @@ def unisci(chiave, k):
 
 
 def valida_struttura(v, sch, chiave, errori):
-    """Validatore minimo: type (anche lista), enum, pattern, required, properties, additionalProperties: false, items."""
+    """Minimal validator: type (also a list), enum, pattern, required, properties, additionalProperties: false, items."""
     t = sch.get("type")
     if t is not None:
         tipi = t if isinstance(t, list) else [t]
@@ -137,7 +137,7 @@ def valida_struttura(v, sch, chiave, errori):
             valida_struttura(x, sch["items"], unisci(chiave, i), errori)
 
 
-# --------------------------------------------------------------------------- validazione semantica
+# --------------------------------------------------------------------------- semantic validation
 def testo(c):
     if isinstance(c, str):
         return c
@@ -240,7 +240,7 @@ def s10(cfg):
             yield "moduli.%d.preparati" % i, "preparati chiede preparazione, il comando che li scrive (S10)"
 
 
-# Controlli semantici: dichiarati qui e nella `description` dello schema.
+# Semantic checks: declared here and in the schema `description`.
 SEMANTICA = [
     ("S1", "regola_test specchio => specchio presente", s1),
     ("S2", "comandi.test con {test}; comandi.lint e controlli[].comando con {file}", s2),
@@ -255,7 +255,7 @@ SEMANTICA = [
 ]
 
 
-# --------------------------------------------------------------------------- caricamento
+# --------------------------------------------------------------------------- loading
 def carica_schema():
     with open(SCHEMA, encoding="utf-8") as f:
         return json.load(f)
@@ -287,7 +287,7 @@ def percorso_config(arg=None):
 
 
 def controlla(cfg, nome):
-    """Strutturale, poi semantica. Errori: «<file>: <chiave>: <motivo>» ed exit 1."""
+    """Structural, then semantic. Errors: «<file>: <chiave>: <motivo>» and exit 1."""
     errori = []
     valida_struttura(cfg, carica_schema(), "", errori)
     if not errori:
@@ -343,7 +343,7 @@ def risolto(cfg):
     return r
 
 
-# --------------------------------------------------------------------------- utilità
+# --------------------------------------------------------------------------- utilities
 def norm(p):
     p = p.replace("\\", "/")
     while p.startswith("./"):
@@ -416,14 +416,14 @@ class NonRisolto(Exception):
 
 
 def espandi(testo_cmd, valori):
-    """{file} e {test}: liste, ogni voce quotata; {x?prefisso}: prefisso + valore quotato + spazio, oppure niente."""
+    """{file} and {test}: lists, each item quoted; {x?prefix}: prefix + quoted value + space, or nothing."""
     def sost(mo):
         nome, opz, pref = mo.group(1), mo.group(2), mo.group(3)
         v = valori.get(nome)
         if opz is not None:
             if v is None or v == "" or v == []:
                 return ""
-            return pref + sq(v) + " "   # un argomento intero: separato da ciò che segue
+            return pref + sq(v) + " "   # a single whole argument: separated from what follows
 
         if nome in ("file", "test"):
             return " ".join(sq(x) for x in (v or []))
@@ -434,15 +434,15 @@ def espandi(testo_cmd, valori):
                 raise NonRisolto("python non trovato: {python} non risolvibile")
             return sq_se_serve(v)
         if nome == "maat":
-            return sq(v)   # sempre quotata, come lo script in gates.sh (`bash $(sq "$VF")`)
+            return sq(v)   # always quoted, like the script in gates.sh (`bash $(sq "$VF")`)
         return mo.group(0) if v is None else sq_se_serve(v)
     return re.sub(r"[ \t]+$", "", SEGNAPOSTO.sub(sost, testo_cmd))
 
 
 def python_risponde(p):
-    """pk09: il ripiego python3 dal PATH sotto …/WindowsApps/ puo' essere lo stub dello Store (senza argomenti apre
-    lo Store, con argomenti esce 9009) o il Python Install Manager (vero). Sonda SEMPRE con argomenti e un timeout;
-    fuori da WindowsApps nessuna sonda."""
+    """pk09: the python3 fallback from PATH under …/WindowsApps/ may be the Store stub (without arguments it opens
+    the Store, with arguments it exits 9009) or the Python Install Manager (a real one). ALWAYS probes with
+    arguments and a timeout; outside WindowsApps, no probe."""
     if "/windowsapps/" not in p.lower():
         return True
     try:
@@ -454,8 +454,8 @@ def python_risponde(p):
 
 
 def python_dal_path(v, scartato):
-    """pk09: il primo `v` del PATH (`scartato`) non risponde: si cerca negli ALTRI elementi del PATH, in ordine,
-    una cartella alla volta; si sondano solo i percorsi sotto WindowsApps (python_risponde)."""
+    """pk09: the first `v` on PATH (`scartato`) does not respond: search the OTHER PATH entries, in order, one
+    directory at a time; only paths under WindowsApps are probed (python_risponde)."""
     for d in os.environ.get("PATH", "").split(os.pathsep):
         if not d:
             continue
@@ -477,8 +477,8 @@ def risolvi_python(cfg, m, root):
     for i, (valore, base) in enumerate(((m.get("python"), norm(m["radice"])),
                                         (cfg.get("piattaforma", {}).get("python"), ""),
                                         ("python3", ""))):
-        # una lista = alternative in ordine (la prima che esiste; nessuna -> l'ultimo percorso); una stringa = una
-        # lista di uno, il suo percorso vale anche se non esiste (come prima). Un nome senza / si cerca nel PATH.
+        # a list = alternatives in order (the first that exists; none -> the last path); a string = a list of one,
+        # whose path is used even if it does not exist (as before). A name without / is looked up on PATH.
         valori = valore if isinstance(valore, list) else [valore]
         ultimo = None
         for v in valori:
@@ -495,9 +495,9 @@ def risolvi_python(cfg, m, root):
             w = shutil.which(v)
             if w:
                 w = w.replace("\\", "/")
-                # solo l'ultimo ripiego (python3 dal PATH): moduli[].python e piattaforma.python restano come prima
+                # only the last fallback (python3 from PATH): moduli[].python and piattaforma.python stay as before
                 if i == 2 and not python_risponde(w):
-                    w = python_dal_path(v, w)   # lo stub e' il primo del PATH: gli altri elementi, in ordine
+                    w = python_dal_path(v, w)   # the stub is first on PATH: try the other entries, in order
                     if not w:
                         continue
                 return w
@@ -531,7 +531,7 @@ def presente(se_presente, radice_abs):
     return shutil.which(se_presente) is not None
 
 
-# --------------------------------------------------------------------------- comandi
+# --------------------------------------------------------------------------- commands
 def cmd_valida(args):
     if len(args) > 1:
         raise Uscita(64, "uso: valida [file]")
@@ -574,7 +574,7 @@ def cmd_leggi(args):
 
 
 def instrada(r, p):
-    """(nome, "radice" | "pacchetti") del file p (relativo al repo), None fuori da ogni modulo."""
+    """(nome, "radice" | "pacchetti") of file p (relative to the repo), None outside every module."""
     p = norm(p)
     cand = [(len(norm(m["radice"])), m["nome"]) for m in r["moduli"] if sotto(p, norm(m["radice"]))]
     if cand:
@@ -587,8 +587,8 @@ def instrada(r, p):
 
 
 def modulo_di(r, percorso):
-    """Il modulo del file (relativo al repo) nella configurazione RISOLTA r (risolto(cfg)): (nome, "radice" |
-    "pacchetti"), None fuori da ogni modulo. La stessa regola del comando modulo-di, importabile (plan-check.sh,
+    """The module of the file (relative to the repo) in the RESOLVED configuration r (risolto(cfg)): (nome, "radice" |
+    "pacchetti"), None outside every module. The same rule as the modulo-di command, importable (plan-check.sh,
     counterproof.sh, blocks-independent.py)."""
     return instrada(r, percorso)
 
@@ -611,11 +611,11 @@ def modulo_di_nome(r, nome):
 
 
 def cmd_gate_richiesti(args):
-    """I gate di un livello: una riga «etichetta<TAB>modulo<TAB>tipo» (tipo = test | controlli | lint | build).
-    tests-<modulo> per ogni modulo con comandi.test o con un file toccato sotto la radice (senza comando di test
-    il gate è NOT RUN dichiarato); controlli-<modulo> per ogni modulo con controlli; lint e build per i moduli
-    che li dichiarano, senza suffisso se è uno solo. Ordine: tests, controlli, lint, build, ognuno per etichetta.
-    legacy = std. La stessa funzione per gates.sh (quali eseguire) e finalize.sh (quali richiedere)."""
+    """The gates of a level: one line «etichetta<TAB>modulo<TAB>tipo» (tipo = test | controlli | lint | build).
+    tests-<modulo> for each module with comandi.test or with a touched file under its root (without a test command
+    the gate is a declared NOT RUN); controlli-<modulo> for each module with controlli; lint and build for the
+    modules that declare them, without a suffix if there is only one. Order: tests, controlli, lint, build, each by label.
+    legacy = std. The same function serves gates.sh (which to run) and finalize.sh (which to require)."""
     if not args:
         raise Uscita(64, "uso: gate-richiesti <min|std|full|legacy> [--file f]…")
     livello = "std" if args[0] == "legacy" else args[0]
@@ -652,8 +652,8 @@ CANDIDATI_ACCANTO = ("test.ts", "test.tsx", "spec.ts", "spec.tsx")
 
 
 def test_accanto(rad_abs, rel):
-    """regola accanto: un file di test toccato (se esiste); per un sorgente il test con lo stesso nome nella sua
-    cartella, altrimenti ovunque sotto la radice (senza node_modules, .nuxt, .output)."""
+    """`accanto` rule: a touched test file (if it exists); for a source file, the test with the same name in its
+    directory, otherwise anywhere under the root (excluding node_modules, .nuxt, .output)."""
     if rel.split("/")[0] in ESCLUSE_ACCANTO:
         return set()
     nome = posixpath.basename(rel)
@@ -676,13 +676,13 @@ def test_accanto(rad_abs, rel):
 
 
 def glob_pezzi(g, sost):
-    """Regex del glob g in cui {m} vale sost (già una regex)."""
+    """Regex of glob g where {m} stands for sost (already a regex)."""
     return sost.join(glob_re(x).pattern for x in g.split("{m}"))
 
 
 def test_specchio(rad_abs, rel, sp):
-    """regola specchio: un file che corrisponde a `a` (con {m} qualunque) è un test toccato (se esiste); un file
-    che corrisponde a `da` dà i file che corrispondono a `a` con lo stesso {m}."""
+    """`specchio` (mirror) rule: a file matching `a` (with any {m}) is a touched test (if it exists); a file
+    matching `da` yields the files matching `a` with the same {m}."""
     if re.fullmatch(glob_pezzi(sp["a"], "[^/]*"), rel):
         return {rel} if os.path.isfile(posixpath.join(rad_abs, rel)) else set()
     mo = re.fullmatch(glob_pezzi(sp["da"], "([^/]+)"), rel)
@@ -698,8 +698,8 @@ def test_specchio(rad_abs, rel, sp):
 
 
 def cmd_test_di(args):
-    """I test selezionati dalla regola_test del modulo per i file toccati: uno per riga, relativi al repo,
-    ordinati e senza doppioni. regola nessuna: nessuno. I file fuori dalla radice si ignorano."""
+    """The tests selected by the module's regola_test for the touched files: one per line, relative to the repo,
+    sorted and without duplicates. Rule `nessuna`: none. Files outside the root are ignored."""
     if not args:
         raise Uscita(64, "uso: test-di <modulo> [--file f]…")
     o = opzioni(args[1:], ("file",), ())
@@ -729,8 +729,8 @@ def testi_del_modulo(m):
 
 
 def cmd_python(args):
-    """L'interprete del modulo (precedenza di {python}), se un suo comando, controllo o voce di chiave usa
-    {python}: exit 2 se nessuno lo usa, 3 se non si risolve."""
+    """The module's interpreter ({python} precedence), if one of its commands, controlli or chiave entries uses
+    {python}: exit 2 if none uses it, 3 if it does not resolve."""
     if len(args) != 1:
         raise Uscita(64, "uso: python <modulo>")
     cfg, p = carica()
@@ -744,9 +744,9 @@ def cmd_python(args):
 
 
 def cmd_chiave(args):
-    """Le voci `chiave` del modulo, una riga «etichetta<TAB>tipo<TAB>cartella<TAB>valore»: tipo file (valore = il
-    file, relativo alla cartella) o comando (valore = il comando espanso, {python} e {maat} compresi); assente se
-    il comando non si risolve. cartella relativa al repo («.» = il repo)."""
+    """The module's `chiave` entries, one line «etichetta<TAB>tipo<TAB>cartella<TAB>valore»: tipo file (valore = the
+    file, relative to cartella) or comando (valore = the expanded command, {python} and {maat} included); assente if
+    the command does not resolve. cartella is relative to the repo («.» = the repo)."""
     if len(args) != 1:
         raise Uscita(64, "uso: chiave <modulo>")
     cfg, p = carica()
@@ -787,11 +787,11 @@ def opzioni(args, ripetibili, singole):
 
 
 def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=None, nome=None, root=None):
-    """Il comando <tipo> del modulo, espanso: lista di coppie (cartella d'esecuzione relativa al repo, "" = il repo;
-    comando). Una coppia, salvo controlli (una per voce e per file). cfg = la configurazione di carica(); file e
-    test relativi al repo; root = la radice del progetto (default: radice_progetto()). Le uscite come il comando
-    `comando` (Uscita 2 non dichiarato, 3 saltato e NOT RUN dichiarato, 64 percorso fuori dalla cartella), di cui e'
-    l'implementazione: lo usano anche plan-check.sh e counterproof.sh importando questo file."""
+    """The module's <tipo> command, expanded: list of pairs (working directory relative to the repo, "" = the repo;
+    command). One pair, except for controlli (one per entry and per file). cfg = the configuration from carica(); file
+    and test relative to the repo; root = the project root (default: radice_progetto()). Exit codes as for the
+    `comando` command (Uscita 2 not declared, 3 skipped and declared NOT RUN, 64 path outside the directory), which
+    this implements: plan-check.sh and counterproof.sh also use it by importing this file."""
     if tipo not in ("test", "lint", "build", "controlli", "controprova"):
         raise Uscita(64, "tipo sconosciuto: %s" % tipo)
     r = risolto(cfg)
@@ -826,8 +826,8 @@ def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=N
                 saltate += 1
                 continue
             try:
-                # una riga per file: `bash -n a b` e `node --check a b` controllano solo a,
-                # `python -m json.tool a b` scriverebbe su b
+                # one line per file: `bash -n a b` and `node --check a b` check only a,
+                # `python -m json.tool a b` would write to b
                 out.extend([espansa(norm(m["radice"]), v["comando"], "file", [f]) for f in files])
                 eseguite += 1
             except NonRisolto as e:
@@ -895,7 +895,7 @@ def modulo_della_copia(r):
 
 
 def relativa(radice, pacchetti):
-    """La radice relativa a radice_pacchetti ("" se coincidono)."""
+    """The root relative to radice_pacchetti ("" if they coincide)."""
     if radice == pacchetti:
         return ""
     if pacchetti == "" or radice.startswith(pacchetti + "/"):
@@ -1025,14 +1025,14 @@ def cmd_sonda(args):
 
 
 def nativo(out):
-    """componi --nativo: niente WSL. La copia si toglie; un comando che passava da test-fast.sh diventa il comando
-    che test-fast.sh eseguiva dentro la copia (S5: senza copia non si puo' chiamare test-fast.sh)."""
+    """componi --nativo: no WSL. The copy is removed; a command that went through test-fast.sh becomes the command
+    that test-fast.sh ran inside the copy (S5: without a copy, test-fast.sh cannot be called)."""
     out.setdefault("piattaforma", {})["copia_wsl"] = "no"
     root = radice_progetto()
 
     def applicabile(a, m):
-        # come comando-copia: vale la prima alternativa senza se_esiste o il cui se_esiste esiste, qui nel progetto
-        # (relativo alla cartella dell'alternativa: radice o radice_pacchetti del modulo)
+        # as in comando-copia: the first alternative without se_esiste, or whose se_esiste exists, wins, here in the
+        # project (relative to the alternative's directory: the module's radice or radice_pacchetti)
         if not a.get("se_esiste"):
             return True
         quale = a.get("cartella", "radice")
@@ -1078,7 +1078,7 @@ def cmd_componi(args):
             i += 1
     if not nomi or len(nomi) != len(radici):
         raise Uscita(64, "uso: componi <profilo>… --radice <modulo>=<percorso> (una --radice per profilo)")
-    out = {"versione_schema": VERSIONE_CORRENTE, "lingua": "it"}
+    out = {"versione_schema": VERSIONE_CORRENTE, "lingua": "en"}
     mods = []
     for nome, (mod, rad) in zip(nomi, radici):
         f = posixpath.join(PROFILI, nome + ".json")

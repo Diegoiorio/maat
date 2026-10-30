@@ -19,7 +19,7 @@ source files and never applies findings: it writes only the spec's `## Review im
 Read only when this file sends you there: `freschezza.md` (a section with a `Reviewed snapshot:`),
 `gate-manuali.md` (gates run by the model), `light.md` (`--light`, by hand); the reviewer reads its own mandate
 in `prompt-revisore.md`. What moved into code, with its test: `${CLAUDE_PLUGIN_ROOT}/skills/full-implementation-cycle/
-riferimento.md`, «Regole in codice».
+riferimento.md`, «Rules in code».
 
 User input:
 
@@ -58,7 +58,8 @@ Review rounds: <n>/3 · post-approval NEEDS_CHANGES: <k>/1
   `Review rounds:` are the counters across sessions: read them at Step 1 (a legacy section starts at round 1).
 - `Reviewed contract:` = the `Basis:` of `plan-check.sh basis` at Step 1, re-checked at Step 3.
 - **Manifest**, after the snapshot line: `<details><summary>Manifest (<n> paths)</summary>` with `Scope:` (the
-  reviewed paths; a rename: both) and `Excluded:` (another flow's), one path per line — data for freshness. The
+  reviewed paths; a rename: both) and `Excluded:` (another flow's), one path per line, optionally followed by ` — <reason>` (only the path
+  counts) — data for freshness. The
   fingerprint is `review-surface.sh fingerprint --tree <Tree> --paths-file <scope list>`.
 
 ## Hard rules
@@ -158,8 +159,8 @@ the scope (`min`/`std`/`legacy`: tests of the touched modules; `full`: plus lint
   table, blocker/major findings, optional ones as suggestions. Mode (b): the same in the conversation.
 - `NEEDS_CHANGES`: do not fix; recommend a separate fix step. `NEEDS_VERIFICATION`: which required gate is
   missing and the command to obtain it (same snapshot → promotion only); an obligation: the check to do and
-  «rilancia `/maat:implementation-review-cycle <name>` incollando comando e output (o la descrizione della verifica
-  manuale)».
+  «re-run `/maat:implementation-review-cycle <name>` pasting the command and its output (or the description of the
+  manual check)».
 
 Evidence table — one line per gate, no logs:
 

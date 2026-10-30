@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# maat-paths.test.sh — le due radici (pk04a-1): il harness trova se' stesso (MAAT_ROOT, il plugin) e il progetto
-# (PROJECT_ROOT, la cartella di lavoro). Tutto su repo sintetici e su COPIE del plugin in cartelle con spazi; ogni
-# controprova gira su una copia MUTATA, mai sul plugin vero.
+# maat-paths.test.sh — the two roots (pk04a-1): the harness finds itself (MAAT_ROOT, the plugin) and the project
+# (PROJECT_ROOT, the working directory). Everything on synthetic repos and on COPIES of the plugin in folders with spaces; every
+# counterproof runs on a MUTATED copy, never on the real plugin.
 #
 #   bash plugins/maat/scripts/maat-paths.test.sh
 #
-# Sezioni: 1 risolutore bash e Python (spazi, sottocartella, fuori da git exit 4, MAAT_ROOT non valida, MAAT_WORK
-# da maat.json) · 2 default del progetto negli script con override (context-pack.sh, gates.sh, driver.py) ·
-# 3 FIC_DRIVER_ROOT resta la radice del harness · 4 schema G (worktree-lib.sh trova fic-mirror.sh in scripts/) ·
-# 5 lock nel .git del repo · 6 lock del worktree, non di FIC_REPO (run-phase.sh --lock-status e ciclo-worktree.sh
-# rimuovi, con le due controprove) · 7 esclusione col harness interno (lock con lo stesso nome) · 8 istantanea di
-# MAAT_ROOT · 9 ricerca anti-struttura.
-# Il harness «interno» della sezione 7 e' run-phase.sh della copia fedele di pk02 (commit $INTERNO_REF di questo
-# repo): il lock dalla posizione dello script (git -C "$HERE").
+# Sections: 1 bash and Python resolver (spaces, subfolder, outside git exit 4, invalid MAAT_ROOT, MAAT_WORK
+# from maat.json) · 2 project default in the scripts with an override (context-pack.sh, gates.sh, driver.py) ·
+# 3 FIC_DRIVER_ROOT stays the harness root · 4 layout G (worktree-lib.sh finds fic-mirror.sh in scripts/) ·
+# 5 lock in the repo's .git · 6 lock of the worktree, not of FIC_REPO (run-phase.sh --lock-status and ciclo-worktree.sh
+# rimuovi, with the two counterproofs) · 7 mutual exclusion with the internal harness (lock with the same name) · 8 snapshot of
+# MAAT_ROOT · 9 anti-layout search.
+# The «internal» harness of section 7 is run-phase.sh of the faithful pk02 copy (commit $INTERNO_REF of this
+# repo): the lock from the script location (git -C "$HERE").
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
@@ -30,14 +30,14 @@ fail=0 n=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; [ -n "${3:-}" ] && printf '%s\n' "$3" | head -20 | sed 's/^/    /'; fi; }
 canon() { (cd "$1" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); }
 val() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }
-newrepo() { # $1 cartella → repo git con un commit; spec-* gitignorate come nei progetti veri
+newrepo() { # $1 folder → git repo with one commit; spec-* gitignored as in real projects
   mkdir -p "$1" && (cd "$1" && git init -q . && git config user.email t@t && git config user.name t &&
     git config core.autocrlf false && mkdir -p .claude/.ai-workflow && printf 'spec-*\n' > .claude/.ai-workflow/.gitignore &&
     printf 'x\n' > a.txt && git add -A && git commit -qm init)
 }
 copia() { mkdir -p "$(dirname "$2")" && cp -r "$1" "$2" && find "$2" -name __pycache__ -type d -prune -exec rm -rf {} +; }
 snap() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum); }
-muta() { # $1 file, $2 riga esatta da sostituire, $3 riga nuova → 0 se applicata (una sola occorrenza)
+muta() { # $1 file, $2 exact line to replace, $3 new line → 0 if applied (a single occurrence)
   local f=$1; [ "$(grep -cxF -- "$2" "$f")" = 1 ] || return 1
   "$FIC_PY" -c 'import sys
 p, a, b = sys.argv[1:4]
@@ -51,7 +51,7 @@ R="$T/progetto con spazi/repo"; newrepo "$R" >/dev/null 2>&1; mkdir -p "$R/sub/d
 F="$T/fuori da git"; mkdir -p "$F"
 CEIL=$(canon "$T")
 
-# ---------------------------------------------------------------- 1. risolutore bash e Python
+# ---------------------------------------------------------------- 1. bash and Python resolver
 ob=$(cd "$R" && bash "$P/scripts/lib/maat-paths.sh" 2>&1); rb=$?
 check "bash: plugin e progetto in cartelle con spazi, giusti e diversi" \
   '[ $rb -eq 0 ] && [ "$(val "$ob" MAAT_ROOT)" = "$(canon "$P")" ] && [ "$(val "$ob" PROJECT_ROOT)" = "$(canon "$R")" ] && [ "$(val "$ob" MAAT_ROOT)" != "$(val "$ob" PROJECT_ROOT)" ]' "$ob"
@@ -61,7 +61,7 @@ os=$(cd "$R/sub/dir" && bash "$P/scripts/lib/maat-paths.sh" 2>&1); rs=$?
 check "bash: da una sottocartella PROJECT_ROOT e' la radice del progetto" '[ $rs -eq 0 ] && [ "$(val "$os" PROJECT_ROOT)" = "$(canon "$R")" ]' "$os"
 of=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL bash "$P/scripts/lib/maat-paths.sh" 2>&1); rf=$?
 check "bash: fuori da un repo git → exit 4 con errore chiaro" '[ $rf -eq 4 ] && printf "%s" "$of" | grep -q "non e'"'"' in un repository git: PROJECT_ROOT non risolta"' "rc=$rf $of"
-py() { local r; "$FIC_PY" "$P/scripts/maat_paths.py" > "$T/py.out"; r=$?; tr -d '\r' < "$T/py.out"; return $r; }   # stdout di Windows: CRLF
+py() { local r; "$FIC_PY" "$P/scripts/maat_paths.py" > "$T/py.out"; r=$?; tr -d '\r' < "$T/py.out"; return $r; }   # Windows stdout: CRLF
 pb=$(cd "$R" && py 2>&1); prb=$?
 ps_=$(cd "$R/sub/dir" && py 2>&1); prs=$?
 pf=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL py 2>&1); prf=$?
@@ -77,7 +77,7 @@ printf '{"versione_schema": 1, "moduli": [{"nome": "tutto", "radice": ".", "rego
 oc=$(cd "$RC" && bash "$P/scripts/lib/maat-paths.sh" 2>&1); pc=$(cd "$RC" && py 2>&1)
 check "MAAT_WORK da cartelle.lavoro di maat.json, bash e Python" '[ "$(val "$oc" MAAT_WORK)" = "$(canon "$RC")/lavoro/cicli" ] && [ "$pc" = "$oc" ]' "$oc / $pc"
 
-# ---------------------------------------------------------------- 2. default del progetto, non del harness
+# ---------------------------------------------------------------- 2. project default, not the harness's
 SP="$R/.claude/.ai-workflow"
 printf '# Prova\n\nRequisito: `a.txt`\n' > "$SP/spec-cp.md"; cp "$SP/spec-cp.md" "$SP/spec-cp2.md"
 o=$(cd "$R/sub/dir" && bash "$P/scripts/context-pack.sh" .claude/.ai-workflow/spec-cp.md 2>&1); r=$?
@@ -88,7 +88,7 @@ o=$(cd "$R/sub/dir" && bash "$PM1/scripts/context-pack.sh" .claude/.ai-workflow/
 check "  controprova: col default di prima la spec non si trova (cercata nel plugin)" '[ $r -ne 0 ] && [ ! -e "$SP/spec-cp2.run/context-pack.md" ] && printf "%s" "$o" | grep -q "spec non trovato"' "rc=$r $o"
 
 gk() { printf '%s\n' "$1" | sed -n 's/^gates: .* chiave=\([0-9a-f]*\) .*/\1/p'; }
-# gates.sh legge moduli e comandi da maat.json (pk04b-1): un modulo minimo, senza gate a questo livello e senza file
+# gates.sh reads moduli and comandi from maat.json (pk04b-1): a minimal module, with no gate at this level and no files
 printf '{"versione_schema": 1, "moduli": [{"nome": "tutto", "radice": ".", "regola_test": "nessuna"}]}\n' > "$R/.claude/maat.json"
 g1=$(cd "$R/sub/dir" && bash "$P/scripts/gates.sh" --run-dir "$T/g1.run" min 2>&1)
 g2=$(cd "$F" && FIC_GATES_ROOT="$R" bash "$P/scripts/gates.sh" --run-dir "$T/g2.run" min 2>&1)
@@ -108,7 +108,7 @@ printf '# Prova driver\n\nRequisito: `a.txt`\n' > "$SP/spec-dr.md"
 o=$(cd "$R/sub/dir" && SPYF="$T/dr.spia" FIC_RUN_PHASE="$T/rp-spia" "$FIC_PY" "$P/scripts/driver.py" run "$SP/spec-dr.md" --max-fasi 1 2>&1); r=$?
 check "driver.py run senza CONTEXT_PACK_ROOT: context-pack: exit 0, pacchetto nella run dir del progetto" 'grep -q "context-pack: exit 0" "$SP/spec-dr.run/driver.log" && [ -f "$SP/spec-dr.run/context-pack.md" ] && grep -q "|$(canon "$R")|.claude/.ai-workflow/spec-dr.run$" "$T/dr.spia"' "rc=$r $o"
 
-# ---------------------------------------------------------------- 3. FIC_DRIVER_ROOT = radice del harness
+# ---------------------------------------------------------------- 3. FIC_DRIVER_ROOT = harness root
 PC="$T/copia driver/maat"; copia "$PLUGIN" "$PC"
 cp "$T/rp-spia" "$PC/scripts/run-phase.sh"
 printf '# Prova FIC_DRIVER_ROOT\n\nRequisito: `a.txt`\n' > "$SP/spec-fd.md"; cp "$SP/spec-fd.md" "$SP/spec-fd2.md"
@@ -119,7 +119,7 @@ check "  premessa: mutazione «run dir da FIC_DRIVER_ROOT» applicata" 'muta "$P
 o=$(cd "$F" && SPIA_TAG=copia SPYF="$T/fd2.spia" FIC_DRIVER_ROOT="$PC" FIC_CONTEXT_PACK=- "$FIC_PY" "$PC/scripts/driver-mut.py" run "$SP/spec-fd2.md" --max-fasi 1 2>&1)
 check "  controprova: con le run dir lette da FIC_DRIVER_ROOT il caso con la spec in un altro repo fallisce" '! { grep -qx "copia|$(canon "$R")|.claude/.ai-workflow/spec-fd2.run" "$T/fd2.spia" 2>/dev/null && [ -f "$SP/spec-fd2.run/driver.log" ]; }' "$o"
 
-# ---------------------------------------------------------------- 4. schema G
+# ---------------------------------------------------------------- 4. layout G
 o=$(cd "$R" && bash -c '. "$1/scripts/worktree-lib.sh" && declare -F fic_deps_fp' _ "$P" 2>&1); r=$?
 check "worktree-lib.sh incluso dal plugin trova fic-mirror.sh in scripts/" '[ $r -eq 0 ] && printf "%s" "$o" | grep -qx fic_deps_fp' "rc=$r $o"
 PG="$T/mut g/maat"; copia "$PLUGIN" "$PG"
@@ -127,7 +127,7 @@ check "  premessa: mutazione WTLIB_TEST=\$WTLIB_DIR/../test applicata" 'muta "$P
 o=$(cd "$R" && bash -c '. "$1/scripts/worktree-lib.sh"' _ "$PG" 2>&1); r=$?
 check "  controprova: con \$WTLIB_DIR/../test l'inclusione esce con 1" '[ $r -eq 1 ] && printf "%s" "$o" | grep -q "fic-mirror.sh non trovato"' "rc=$r $o"
 
-# ---------------------------------------------------------------- 5. lock nel .git del repo del progetto
+# ---------------------------------------------------------------- 5. lock in the .git of the project repo
 OKJ='{"type":"result","result":"ESITO FASE implement: OK — finto","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}'
 cat > "$T/claude" <<EOF
 #!/usr/bin/env bash
@@ -145,7 +145,7 @@ EOF
 printf '#!/usr/bin/env bash\necho "gates: esito=PASS chiave=k0 evidence=-"\n' > "$T/gates"
 chmod +x "$T/claude" "$T/claude-attende" "$T/gates"
 echo "/maat:full-implementation-cycle --worker=implement x" > "$T/prompt.md"
-fase() { # $1 plugin (o cartella degli script), $2 repo (cwd), $3 run dir, $4 etichetta; claude finto da CLAUDE_BIN
+fase() { # $1 plugin (or scripts folder), $2 repo (cwd), $3 run dir, $4 label; fake claude from CLAUDE_BIN
   (cd "$2" && env -u FIC_REPO -u FIC_LOCK -u FIC_PHASE CLAUDE_BIN="${CL_FINTO:-$T/claude}" FIC_GATES="$T/gates" \
     FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 FIC_DRIVER=0 bash "$1" "$3" "$4" "$T/prompt.md" </dev/null)
 }
@@ -157,7 +157,7 @@ check "  premessa: mutazione git -C \"\$HERE\" applicata" 'muta "$PM3/scripts/ru
 LOCK_ATTESO="$GD/full-implementation-cycle.lock" SPYL="$T/lk2.spia" fase "$PM3/scripts/run-phase.sh" "$R" "$SP/spec-lk2.run" 01-implement >/dev/null 2>&1
 check "  controprova: col lock da git -C \"\$HERE\" il lock non e' nel .git del repo" '! grep -qx si "$T/lk2.spia" 2>/dev/null'
 
-# ---------------------------------------------------------------- 6. lock del worktree, non di FIC_REPO
+# ---------------------------------------------------------------- 6. lock of the worktree, not of FIC_REPO
 RW="$T/wt/principale"; newrepo "$RW" >/dev/null 2>&1
 WT="$T/wt/collegato"; git -C "$RW" worktree add -q -b collegato "$WT" >/dev/null 2>&1
 MG=$(cd "$RW" && git rev-parse --absolute-git-dir)
@@ -176,10 +176,10 @@ rm -rf "$MG/full-implementation-cycle.lock"
 
 PM5="$T/mut lock e difesa/maat"; copia "$PM4" "$PM5"
 check "  premessa: mutazione «senza -u FIC_REPO» in ciclo-worktree.sh applicata (2 righe)" '[ "$(grep -c "env -u FIC_LOCK -u FIC_PHASE -u FIC_REPO bash" "$PM5/scripts/ciclo-worktree.sh")" = 2 ] && sed -i "s/env -u FIC_LOCK -u FIC_PHASE -u FIC_REPO bash/env -u FIC_LOCK -u FIC_PHASE bash/" "$PM5/scripts/ciclo-worktree.sh" && [ "$(grep -c "env -u FIC_LOCK -u FIC_PHASE bash" "$PM5/scripts/ciclo-worktree.sh")" = 2 ]'
-rimuovi_occupato() { # $1 plugin, $2 repo → «rc presente|assente»: rimuovi con FIC_REPO del principale e il lock del worktree occupato
+rimuovi_occupato() { # $1 plugin, $2 repo → «rc presente|assente»: rimuovi with the main tree's FIC_REPO and the worktree lock held
   local pl=$1 rb=$2 w gd o rc
   newrepo "$rb" >/dev/null 2>&1
-  # ciclo-worktree.sh chiede --lock-status a run-phase.sh DEL PLUGIN (MAAT_ROOT=$pl, schema H): la variante e' li'
+  # ciclo-worktree.sh asks the PLUGIN's run-phase.sh for --lock-status (MAAT_ROOT=$pl, layout H): the variant is there
   printf '# Uno\n' > "$rb/.claude/.ai-workflow/spec-uno.md"
   w=$(cd "$rb" && MAAT_ROOT="$pl" bash "$pl/scripts/ciclo-worktree.sh" crea .claude/.ai-workflow/spec-uno.md 2>/dev/null | tail -1)
   [ -d "$w" ] || { echo "crea fallito"; return; }
@@ -197,9 +197,9 @@ check "  con la sola mutazione del lock resta verde: -u FIC_REPO difende da solo
 x=$(rimuovi_occupato "$PM5" "$T/b3/proj")
 check "  controprova della difesa: lock da PROJECT_ROOT e senza -u FIC_REPO ⇒ il worktree si rimuove" '[ "${x#* }" = assente ]' "$x $(cat "$T/rimuovi.b3.out" 2>/dev/null)"
 
-# ---------------------------------------------------------------- 7. esclusione col harness interno
-# Il harness interno di riferimento si legge dalla storia ($INTERNO_REF): in un repo senza quel commit (il repo
-# pubblico parte da un commit solo) la sezione si SALTA con motivo; l'esclusione e' stata verificata dove c'era.
+# ---------------------------------------------------------------- 7. mutual exclusion with the internal harness
+# The reference internal harness is read from history ($INTERNO_REF): in a repo without that commit (the public
+# repo starts from a single commit) the section is SKIPPED with a reason; the exclusion was verified where it existed.
 if ! git -c safe.directory='*' -C "$PLUGIN" cat-file -e "$INTERNO_REF:plugins/maat/scripts/run-phase.sh" 2>/dev/null; then
   echo "SKIP [7. esclusione col harness interno — la storia non ha $INTERNO_REF]"
 else
@@ -231,7 +231,7 @@ check "  controprova: col lock rinominato il plugin non aspetta e parte nonostan
 touch "$T/rilascio"; wait "$BG" 2>/dev/null; BG=""
 fi
 
-# ---------------------------------------------------------------- 8. istantanea di MAAT_ROOT
+# ---------------------------------------------------------------- 8. snapshot of MAAT_ROOT
 S1=$(snap "$P")
 check "istantanea: nessun file creato, cambiato o cancellato sotto MAAT_ROOT (copia del plugin usata dalle sezioni 1-7)" '[ "$S0" = "$S1" ]' "$(diff <(printf '%s\n' "$S0") <(printf '%s\n' "$S1") | head -10)"
 PS="$T/istantanea/maat"; copia "$PLUGIN" "$PS"; s0=$(snap "$PS")
@@ -239,12 +239,12 @@ touch "$PS/scripts/nuovo.txt"; s1=$(snap "$PS"); rm -f "$PS/scripts/nuovo.txt"
 echo "# cambiato" >> "$PS/scripts/python.sh"; s2=$(snap "$PS")
 check "  controprova: un file creato sotto MAAT_ROOT ⇒ rosso; uno modificato ⇒ rosso" '[ "$s0" != "$s1" ] && [ "$s0" != "$s2" ]'
 
-# ---------------------------------------------------------------- 8b. ${CLAUDE_PLUGIN_ROOT} nei testi letti senza sostituzione
-# Claude Code lo sostituisce solo in SKILL.md e negli agenti (pk01 D3). (1) ogni altro .md di una skill che lo contiene
-# sta in una skill il cui SKILL.md dichiara la radice; (2) child-rules.md arriva alla sotto-sessione gia' sostituito,
-# e la sotto-sessione riceve CLAUDE_PLUGIN_ROOT=MAAT_ROOT. Controprove su copie mutate.
+# ---------------------------------------------------------------- 8b. ${CLAUDE_PLUGIN_ROOT} in texts read without substitution
+# Claude Code substitutes it only in SKILL.md and in the agents (pk01 D3). (1) every other .md of a skill containing it
+# is in a skill whose SKILL.md declares the root; (2) child-rules.md reaches the sub-session already substituted,
+# and the sub-session receives CLAUDE_PLUGIN_ROOT=MAAT_ROOT. Counterproofs on mutated copies.
 RIGA_RADICE='Radice del plugin: `${CLAUDE_PLUGIN_ROOT}`. Nei file di questa skill che leggi con Read, `${CLAUDE_PLUGIN_ROOT}` vale questo percorso: sostituiscilo prima di eseguire un comando.'
-senza_radice() { # $1 plugin → i .md con la forma letterale la cui skill non dichiara la radice (vuoto = ok)
+senza_radice() { # $1 plugin → the .md files with the literal form whose skill does not declare the root (empty = ok)
   local f s
   (cd "$1/skills" && grep -rlF '${CLAUDE_PLUGIN_ROOT}' --include='*.md' . | grep -v '/SKILL\.md$') | while IFS= read -r f; do
     s=${f#./}; s=${s%%/*}
@@ -271,14 +271,14 @@ check "  premessa: sostituzione di child-rules.md tolta da run-phase.sh" 'muta "
 SPYR="$T/cr2" CL_FINTO="$T/claude-cr" fase "$PCR/scripts/run-phase.sh" "$R" "$SP/spec-cr2.run" 01-implement >/dev/null 2>&1
 check "  controprova: senza la sostituzione la forma letterale arriva alla sotto-sessione" '[ -s "$T/cr2.args" ] && grep -qF "\${CLAUDE_PLUGIN_ROOT}" "$T/cr2.args"'
 
-# ---------------------------------------------------------------- 9. ricerca anti-struttura
-# Fuori da commenti e test; examples/ escluso: sono configurazioni di progetto (percorsi del progetto, non del harness).
-# Esclusioni DICHIARATE (non sono il harness che cerca se' stesso; ognuna ha la sua parte che la chiude):
-#   PK04B    i comandi di progetto dei wrapper WSL: `script/test/vitest-fast.sh` e `script/test/counterproof.sh` nei testi,
-#            nei comandi emessi da plan-check.sh, in WRAPPER_SCRIPTS di guard.py e nell'inject del corpus; i due wrapper
-#            stessi (scripts/vitest-fast.sh, scripts/counterproof.sh: radice dal layout del progetto guida) → pk04b-1/pk04b-2;
-#   CR-RX    cycle-report.py: la regex che classifica i comandi dei transcript (anche dei cicli storici) come
-#            git/harness; non e' un percorso usato per trovare file.
+# ---------------------------------------------------------------- 9. anti-layout search
+# Outside comments and tests; examples/ excluded: they are project configurations (project paths, not harness paths).
+# DECLARED exclusions (they are not the harness looking for itself; each has its own part that closes it):
+#   PK04B    the project commands of the WSL wrappers: `script/test/vitest-fast.sh` and `script/test/counterproof.sh` in the texts,
+#            in the commands emitted by plan-check.sh, in WRAPPER_SCRIPTS of guard.py and in the corpus inject; the two wrappers
+#            themselves (scripts/vitest-fast.sh, scripts/counterproof.sh: root from the reference project layout) → pk04b-1/pk04b-2;
+#   CR-RX    cycle-report.py: the regex that classifies the transcript commands (historical cycles too) as
+#            git/harness; it is not a path used to find files.
 PK04B='script/test/(vitest-fast|counterproof)\.sh|^\./scripts/(vitest-fast|counterproof)\.sh:'
 CRRX='^\./scripts/cycle-report\.py:[0-9]+:[[:space:]]*\("git/harness"'
 antistruttura() {

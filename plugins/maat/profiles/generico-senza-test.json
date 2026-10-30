@@ -1,6 +1,6 @@
 {
   "profilo": "generico-senza-test",
-  "descrizione": "Nessuna suite di test: solo controlli dichiarati (bash -n, JSON valido, shellcheck se installato). Il gate dei test è NOT RUN (dichiarato).",
+  "descrizione": "No test suite: only declared checks (bash -n, valid JSON, shellcheck if installed). The tests gate is NOT RUN (declared).",
   "modulo": {
     "regola_test": "nessuna",
     "controlli": [

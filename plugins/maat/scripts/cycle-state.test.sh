@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# cycle-state.test.sh — la tabella di ripresa, riga per riga, in un repo git usa-e-getta.
+# cycle-state.test.sh — the resume table, row by row, in a throwaway git repo.
 #   bash plugins/maat/scripts/cycle-state.test.sh
-#   CS=/percorso/variante.sh bash .../cycle-state.test.sh   # controprova su una mutazione
+#   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation
 set -uo pipefail
 set -f
 HERE=$(cd "$(dirname "$0")" && pwd)
 CS=${CS:-$HERE/cycle-state.sh}
 PC="$HERE/plan-check.sh"
 RS="$HERE/review-surface.sh"
-# lo script cerca plan-check e review-surface accanto a se': una variante va messa in una copia dell'albero
+# the script looks for plan-check and review-surface next to itself: a variant must go into a copy of the tree
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 O=$(mktemp -d) || exit 2
@@ -22,7 +22,7 @@ git add -A; git commit -qm init
 SP=.claude/.ai-workflow/spec-x.md
 RUN=.claude/.ai-workflow/spec-x.run
 
-expect() { # $1 descrizione, $2 regex attesa sulla riga Next
+expect() { # $1 description, $2 expected regex on the Next line
   local out; out=$(bash "$CS" "$SP" 2>&1)
   if printf '%s\n' "$out" | grep -q "^Next: " && printf '%s\n' "$out" | sed -n "s/^Next: //p" | grep -Eq -- "$2"; then pass=$((pass + 1))
   else fail=$((fail + 1)); echo "FAIL [$1] atteso /$2/"; printf '%s\n' "$out" | sed 's/^/    /'; fi
@@ -34,7 +34,7 @@ plan() { # $1 Plan status
   printf '%s\n' "## Piano di implementazione" "Plan status: $1" "Test level: std" "Superfici a rischio: nessuna" \
     "### Passi" "1. Modificare \`src/a.py\`." "### Changelog revisione piano" "- giro 1: ok"
 }
-with_basis() { # scrive la riga Approved basis nella spec corrente
+with_basis() { # writes the Approved basis line into the current spec
   local cur; cur=$(bash "$PC" basis "$SP" | sed -n 's/^Basis: //p')
   sed -i "s/^Superfici a rischio: .*/&\nApproved basis: $cur/" "$SP"
 }
@@ -45,21 +45,21 @@ review() { # $1 Review status, $2 Feature status, [$3 snapshot line], [$4 contra
   printf '%s\n' "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" "" "<details><summary>Manifest (1 paths)</summary>" "" \
     "Scope:" "src/a.py" "" "Excluded:" "src/b.py" "" "</details>"
 }
-esito() { # $1 label, $2 riga ESITO, $3 state — come run-phase: .jsonl, .esito e, se l'attribuzione e' misurata, pre/post-tree
+esito() { # $1 label, $2 ESITO line, $3 state — like run-phase: .jsonl, .esito and, if attribution is measured, pre/post-tree
   mkdir -p "$RUN/log"; : > "$RUN/log/$1.jsonl"; printf '%s\nstate=%s\n' "$2" "$3" > "$RUN/log/$1.esito"
   case "$1" in *implement*|*fix*) echo x > "$RUN/log/$1.pre-tree"; echo y > "$RUN/log/$1.post-tree" ;; esac
 }
-esito_inline() { # come la modalita' --inline: nessun .jsonl
+esito_inline() { # like the --inline mode: no .jsonl
   mkdir -p "$RUN/log"; printf '%s\nstate=%s\n' "$2" "$3" > "$RUN/log/$1.esito"
   echo x > "$RUN/log/$1.pre-tree"; echo y > "$RUN/log/$1.post-tree"
 }
 reset() { rm -rf "$RUN"; git checkout -q -- src; git clean -qfd src; }
-rjson() { # $1 label, $2 fase, $3 esito, $4 deviazioni (lista JSON), $5 bloccato_su — come run-phase: result.json valido
+rjson() { # $1 label, $2 phase, $3 esito, $4 deviazioni (JSON list), $5 bloccato_su — like run-phase: valid result.json
   printf '{"fase":"%s","esito":"%s","motivo":"m","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}\n' \
     "$2" "$3" "$4" "$5" > "$RUN/log/$1.result.json"
 }
 
-# --- piano ---
+# --- plan ---
 above > "$SP"; expect "nessun piano" "^PLAN"
 { above; plan DRAFT; } > "$SP"; expect "DRAFT senza review" "^PLAN"
 { above; plan "NEEDS HUMAN DECISION"; } > "$SP"; expect "NHD senza review" "^STOP — decisione aperta"
@@ -80,7 +80,7 @@ esito 02-implement "ESITO FASE implement: OK — fatto" "000000000000"; expect "
 rm -f "$RUN/log/02-implement.esito"; expect "implement uccisa (nessun .esito)" "^IMPLEMENT"
 reset
 
-# --- esito strutturato (harness-pt08): result.json, regole in codice ---
+# --- structured outcome (harness-pt08): result.json, rules in code ---
 { above; plan APPROVED; } > "$SP"; with_basis
 esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"
 expect "run dir vecchia senza result.json: stesso Next di prima" "^REVIEW — implementazione finita \(02-implement\)"
@@ -102,27 +102,27 @@ esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"; printf '{rot
 expect "result.json illeggibile → STOP" "^STOP — 02-implement: result.json illeggibile"
 rjson 02-implement implement OK '["x"]' nessuno; esito 02-implement "ESITO FASE implement: OK — fatto" "000000000000"
 expect "result.json STOP ma spec cambiata da allora → IMPLEMENT (non uno STOP perpetuo)" "^IMPLEMENT"
-esito 02-implement "ESITO FASE implement: STOP — JSON: deviazioni dichiarate (1): x" "$(state)"   # come la scrive run-phase
+esito 02-implement "ESITO FASE implement: STOP — JSON: deviazioni dichiarate (1): x" "$(state)"   # as run-phase writes it
 expect "deviazioni con stato invariato → STOP" "^STOP — 02-implement: deviazioni"
 mv "$RUN/log/02-implement.result.json" "$RUN/log/02-implement.result.json.visto"
 expect "recupero: result.json rinominato → decide la riga ESITO (STOP: si rilancia)" "^IMPLEMENT"
 reset
 
-# --- attribuzione misurata (R-b) ---
+# --- measured attribution (R-b) ---
 { above; plan APPROVED; } > "$SP"; with_basis
 esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"; rm -f "$RUN/log/02-implement.post-tree"
 expect "implement OK senza .post-tree → STOP" "^STOP — attribuzione non misurata \(02-implement senza .post-tree\)"
 rm -f "$RUN/log/02-implement.pre-tree"; expect "implement OK senza pre ne' post-tree → STOP" "^STOP — attribuzione non misurata"
 reset; { above; plan APPROVED; } > "$SP"; with_basis
-mkdir -p "$RUN/log"; : > "$RUN/log/02-implement.jsonl"; echo x > "$RUN/log/02-implement.pre-tree"   # fase uccisa
-: > "$RUN/log/04-implement.jsonl"; echo 4 > "$RUN/log/04-implement.exit"                          # rilancio: lock occupato
+mkdir -p "$RUN/log"; : > "$RUN/log/02-implement.jsonl"; echo x > "$RUN/log/02-implement.pre-tree"   # killed phase
+: > "$RUN/log/04-implement.jsonl"; echo 4 > "$RUN/log/04-implement.exit"                          # relaunch: lock occupato
 expect "pre-tree aperto + rilancio bloccato dal lock: nessuno STOP spurio" "^IMPLEMENT"
 esito 05-implement "ESITO FASE implement: OK — fatto" "$(state)"
 expect "fase OK ma un .pre-tree di un label minore e' rimasto aperto → STOP" "^STOP — attribuzione non misurata \(02-implement con .pre-tree ancora aperto\)"
 echo z > "$RUN/log/02-implement.post-tree"; expect "controprova: chiuso il .pre-tree → REVIEW" "^REVIEW — implementazione finita \(05-implement\)"
 reset
 
-# --- --inline: solo .esito, nessun .jsonl ---
+# --- --inline: only .esito, no .jsonl ---
 { above; plan APPROVED; } > "$SP"; with_basis
 esito_inline 02-implement "ESITO FASE implement: OK — inline" "$(state)"; expect "implement inline OK → REVIEW" "^REVIEW — implementazione finita \(02-implement\)"
 esito_inline 02-implement "ESITO FASE implement: STOP — deviazione" "$(state)"; expect "implement inline con STOP → IMPLEMENT (l'orchestratore si ferma sulla riga STOP)" "^IMPLEMENT"
@@ -143,7 +143,7 @@ esito 9-review "ESITO FASE review: OK" "x"; esito 10-fix "ESITO FASE fix: OK —
 expect "fix OK (ordinamento numerico: 10 dopo 9)" "^REVIEW — correzione finita \(10-fix\)"
 : > "$RUN/log/11-review.jsonl"; expect "review lanciata e mai partita dopo il fix (lock, crash): resta REVIEW" "^REVIEW — correzione finita \(10-fix\)"
 sed -i 's/^Review rounds: 1\/3/Review rounds: 2\/3/' "$SP"; expect "una review ha scritto dopo il fix (stato cambiato)" "^FIX"
-# budget dei fix calcolato (harness-pt08)
+# fix budget computed (harness-pt08)
 sed -i 's/^Review rounds: 2\/3/Review rounds: 3\/3/' "$SP"; expect "budget esaurito: 3/3 → STOP" "^STOP — budget dei fix esaurito \(Review rounds 3/3"
 sed -i 's/^Review rounds: 3\/3 · post-approval NEEDS_CHANGES: 0\/1/Review rounds: 1\/3 · post-approval NEEDS_CHANGES: 1\/1/' "$SP"
 expect "budget esaurito: post-approval 1/1 → STOP" "^STOP — budget dei fix esaurito .*post-approval NEEDS_CHANGES 1/1"
@@ -161,7 +161,7 @@ reset
 { above; plan APPROVED; review APPROVED PLANNED; } > "$SP"; expect "combinazione impossibile" "^STOP — combinazione non riconosciuta"
 { above; plan APPROVED; review APPROVED IMPLEMENTED; } > "$SP"; expect "IMPLEMENTED senza snapshot (legacy)" "^DONE — sezione senza snapshot"
 
-# --- IMPLEMENTED: freschezza del codice ---
+# --- IMPLEMENTED: freshness of the code ---
 printf 'due\n' > src/a.py
 snap=$(bash "$RS" snapshot); B=$(printf '%s\n' "$snap" | sed -n 's/^Base: //p'); T=$(printf '%s\n' "$snap" | sed -n 's/^Tree: //p')
 printf 'src/a.py\n' > "$O/scope"; FP=$(bash "$RS" fingerprint --tree "$T" --paths-file "$O/scope" | sed -n 's/^Fingerprint: //p')
@@ -172,21 +172,29 @@ expect "IMPLEMENTED + codice FRESH" "^DONE — codice uguale"
 printf 'tre\n' > src/a.py; expect "IMPLEMENTED + file in scope cambiato" "^REVIEW — codice cambiato.*STALE"
 printf 'due\n' > src/a.py; printf 'x\n' > src/b.py; expect "file escluso cambiato: resta DONE" "^DONE"
 o=$(bash "$CS" "$SP"); printf '%s\n' "$o" | grep -q "EXCLUDED-CHANGED" && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL [EXCLUDED-CHANGED stampato]"; }
+# In rings k>1 the reviewer also writes the reason after « — » in Excluded: (workers/review.md). The annotated
+# path counts as the bare path: the excluded file that changed stays EXCLUDED-CHANGED and the code FRESH, never NEW-SURFACE
+# (before: STALE forever, and the driver stopped on the anti-loop with the review APPROVED)
+sed -i 's|^src/b\.py$|src/b.py — stessa catena, anello precedente (spec-m-1-a)|' "$SP"
+expect "Excluded annotato «path — stessa catena, anello precedente (…)», file escluso cambiato → DONE, non STALE" "^DONE"
+o=$(bash "$CS" "$SP"); printf '%s\n' "$o" | grep -q "^Code: FRESH" && ! printf '%s\n' "$o" | grep -q "NEW-SURFACE" && pass=$((pass + 1)) ||
+  { fail=$((fail + 1)); echo "FAIL [  Excluded annotato: Code FRESH, nessun NEW-SURFACE]"; printf '%s\n' "$o" | sed 's/^/    /'; }
+sed -i 's|^src/b\.py — stessa catena, anello precedente (spec-m-1-a)$|src/b.py|' "$SP"
 git checkout -q -- src/b.py
 sed -i 's/^Reviewed contract: .*/Reviewed contract: spec 000000000000 · plan 000000000000/' "$SP"
 expect "contratto diverso dalla basis" "^REVIEW — spec o piano cambiati dopo la review"
 sed -i 's/^Reviewed contract: .*/Reviewed contract: '"$C"'/' "$SP"; expect "controprova: contratto uguale" "^DONE"
-# 13f (harness-pt08): nel nuovo regime DONE solo con una riga Finalize: IMPLEMENTED sullo snapshot attuale, non piu'
-# vecchia della review. SFP = impronta del Reviewed snapshot come la scrive finalize.sh (sha256 del valore, 12 cifre).
+# 13f (harness-pt08): in the new regime DONE only with a Finalize: IMPLEMENTED line on the current snapshot, not
+# older than the review. SFP = fingerprint of the Reviewed snapshot as finalize.sh writes it (sha256 of the value, 12 digits).
 SFP=$(printf '%s' "${SNAPL#Reviewed snapshot: }" | sha256sum | cut -c1-12)
 mkdir -p "$RUN/evidence"
 expect "nuovo regime (evidence/) senza Finalize → REVIEW, mai DONE" "^REVIEW — IMPLEMENTED non firmato da finalize.sh \(nessuna riga Finalize:\)"
 sed -i "s/^Feature status: IMPLEMENTED\$/&\nFinalize: IMPLEMENTED — snapshot $SFP — firmato · $(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$SP"
 expect "  con Finalize: IMPLEMENTED sullo snapshot attuale → DONE" "^DONE — codice uguale"
-# review a mano / --inline: nuovo Reviewed snapshot, nessun .jsonl nuovo, la vecchia Finalize sopravvive
+# manual / --inline review: new Reviewed snapshot, no new .jsonl, the old Finalize survives
 cp "$SP" "$O/spec-prima"
-# (base, tree e fingerprint restano quelli FRESH, altrimenti la riga 13 darebbe REVIEW per il codice e 13f non
-# verrebbe mai raggiunta: cambia solo il resto del valore, come un'altra review sullo stesso albero)
+# (base, tree and fingerprint stay the FRESH ones, otherwise row 13 would give REVIEW for the code and 13f would
+# never be reached: only the rest of the value changes, like another review on the same tree)
 sed -i 's/^Reviewed snapshot: .* · 1 paths$/& (review inline)/' "$SP"
 expect "vecchia Finalize: IMPLEMENTED + Reviewed snapshot cambiato, nessun .jsonl → REVIEW, non DONE" "^REVIEW — Finalize: firmata su un altro snapshot \(snapshot $SFP\)"
 cp "$O/spec-prima" "$SP"
@@ -204,7 +212,7 @@ echo '{}' > "$RUN/log/02-implement.result.json"; expect "nuovo regime anche da u
 mv "$RUN/log/02-implement.result.json" "$RUN/log/02-implement.result.json.visto"
 expect "nuovo regime anche da un *.result.json.visto (dopo il recupero) → REVIEW" "^REVIEW — IMPLEMENTED non firmato"
 sed -i '/^Finalize:/d' "$SP"; rm -rf "$RUN"; expect "run dir vecchia, nessuna Finalize → DONE come prima" "^DONE"
-# X1: un file toccato dalla feature (touched.txt) fra gli esclusi → STOP, anche se tutto il resto darebbe DONE
+# X1: a file touched by the feature (touched.txt) among the excluded ones → STOP, even if everything else would give DONE
 mkdir -p "$RUN"; printf 'src/a.py\nsrc/b.py\n' > "$RUN/touched.txt"
 expect "file toccato fra gli esclusi → STOP" "^STOP — la review ha escluso un file toccato dalla feature: src/b.py"
 printf 'src/a.py\n' > "$RUN/touched.txt"; expect "controprova: touched solo in Scope → DONE" "^DONE"
@@ -212,28 +220,28 @@ printf 'src/b.pyc\n' > "$RUN/touched.txt"; expect "controprova: match esatto, no
 rm -rf "$RUN"
 sed -i 's/^Review status: APPROVED/Review status: NEEDS HUMAN DECISION/; s/^Reviewed contract: .*/Reviewed contract: spec 000000000000 · plan 000000000000/' "$SP"
 expect "NHD vince sul contratto cambiato" "^STOP — Review status: NEEDS HUMAN DECISION"
-# una riga di stato dentro un recinto nella review non conta
+# a state line inside a fence in the review does not count
 { above; plan APPROVED; printf '%s\n' "## Review implementazione" '```text' "Review status: APPROVED" "Feature status: IMPLEMENTED" '```'; } > "$SP"
 expect "stati dentro un recinto non contano" "^REVIEW — sezione di review legacy"
 reset
 
-# --- catene (harness-pt12): madre, anelli nello stesso working tree, L6, chiusura ---
+# --- chains (harness-pt12): mother, rings in the same working tree, L6, closing ---
 CW=.claude/.ai-workflow; MA=$CW/spec-m.md; RA=$CW/spec-m-1-a.run; RB=$CW/spec-m-2-b.run; RM=$CW/spec-m.run
 KA=$CW/spec-m-1-a.md; KB=$CW/spec-m-2-b.md
 printf '%s\n' "# M" "Figlie: spec-m-1-a, spec-m-2-b" "## Requisiti funzionali" "1. RF1 — a" "2. RF2 — b" > "$MA"
-ring() { # $1 spec, $2 Plan status, $3 file citato dal piano
+ring() { # $1 spec, $2 Plan status, $3 file cited by the plan
   { printf '%s\n' "# Anello" "Dipende da: x" "Interfaccia per: nessuna" "## Requisiti funzionali" "1. RF1 — a"
     printf '%s\n' "## Piano di implementazione" "Plan status: $2" "Test level: std" "Superfici a rischio: nessuna" "### Passi" "1. Modificare \`$3\`."; } > "$1"
 }
-# EFP: impronta del Reviewed snapshot vuoto (la fixture non ne ha uno), come la scrive finalize.sh
+# EFP: fingerprint of the empty Reviewed snapshot (the fixture has none), as finalize.sh writes it
 EFP=$(printf '' | sha256sum | cut -c1-12)
-closed() { # $1 spec, $2 Scope, $3 Excluded, [$4 senza-finalize] — anello chiuso = Finalize: IMPLEMENTED fresca
+closed() { # $1 spec, $2 Scope, $3 Excluded, [$4 senza-finalize] — closed ring = fresh Finalize: IMPLEMENTED
   local fz="Finalize: IMPLEMENTED — snapshot $EFP — firmato · $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   [ "${4:-}" = senza-finalize ] && fz=""
   printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" ${fz:+"$fz"} "Verification: VERIFIED" \
   "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" "" "<details><summary>Manifest</summary>" "" "Scope:" "$2" "" "Excluded:" "$3" "" "</details>" >> "$1"; }
-out_has() { # $1 spec, $2 descrizione, $3 regex su una riga dell'output
-  local out; out=$(bash "$CS" "$1" 2>&1)   # prima l'output: grep -q in pipe con pipefail darebbe SIGPIPE
+out_has() { # $1 spec, $2 description, $3 regex on a line of the output
+  local out; out=$(bash "$CS" "$1" 2>&1)   # output first: grep -q in a pipe with pipefail would give SIGPIPE
   if printf '%s\n' "$out" | grep -Eq -- "$3"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [$2] manca /$3/"; printf '%s\n' "$out" | sed 's/^/    /'; fi
 }
 ring "$KA" DRAFT src/a.py; printf '%s\n' "# Anello 2" "Dipende da: spec-m-1-a" "Interfaccia per: nessuna" > "$KB"
@@ -244,7 +252,7 @@ SP=$KB; expect "piano di 1 APPROVED → il piano di 2 parte mentre 1 implementa 
 ring "$KB" APPROVED src/b.py; with_basis
 expect "anello 2 approvato, anello 1 aperto → WAIT: l'implement aspetta" "^WAIT — catena: l'implement dell'anello 2 aspetta l'anello 1"
 SP=$KA; expect "anello 1: una spec normale → IMPLEMENT" "^IMPLEMENT"
-# l'anello 1 chiude: il suo lavoro (src/a.py) resta nel working tree, il commit e' dell'utente
+# ring 1 closes: its work (src/a.py) stays in the working tree, the commit is the user's
 printf 'uno-anello1\n' > src/a.py
 mkdir -p "$RA/log"; printf 'src/a.py\n' > "$RA/touched.txt"; bash "$RS" tree > "$RA/log/02-implement.post-tree"
 closed "$KA" src/a.py "" senza-finalize
@@ -264,7 +272,7 @@ printf 'src/a.py\n' > "$RA/touched.txt"
 printf 'mano umana\n' > src/b.py
 expect "anello 2 all'avvio con il tree diverso dal .post-tree di 1 → STOP" "^STOP — catena: il working tree .* non e' il .post-tree dell'anello 1"
 git checkout -q -- src/b.py; expect "  controprova: tree riportato com'era → IMPLEMENT" "^IMPLEMENT"
-# l'anello 2 lavora: la sua superficie e' solo il suo diff, non quello dell'anello 1
+# ring 2 works: its surface is only its own diff, not that of ring 1
 mkdir -p "$RB/log"; bash "$RS" tree > "$RB/log/03-implement.pre-tree"; printf 'altro-anello2\n' > src/b.py
 out_has "$KB" "la review dell'anello 2 vede solo il suo diff (base = .post-tree di 1, mai HEAD)" "^Diff anello: src/b.py$"
 printf 'mano umana dopo\n' > src/c.py
@@ -282,8 +290,8 @@ expect "chiusura IMPLEMENTED sul codice attuale → DONE" "^DONE — catena chiu
 printf 'cambiato dopo\n' > src/a.py; expect "codice della catena cambiato dopo la chiusura → CHIUSURA" "^CHIUSURA — codice della catena cambiato"
 rm -rf "$RA" "$RB" "$RM" "$MA" "$KA" "$KB"; SP=.claude/.ai-workflow/spec-x.md; reset
 
-# --- riga 7t: fase test-red (harness-pt11), solo formato 2, fra piano APPROVED e implement ---
-plan2() { # $1 Plan status — piano in formato 2 con un test di accettazione nuovo
+# --- row 7t: test-red phase (harness-pt11), format 2 only, between APPROVED plan and implement ---
+plan2() { # $1 Plan status — format-2 plan with a new acceptance test
   printf '%s\n' "## Piano di implementazione" "Plan format: 2" "Plan status: $1" "Test level: std" "Superfici a rischio: nessuna" \
     "### File toccati" "- \`src/a.py\`" "- \`src/test_a.py\` (nuovo)" "### Passi" "#### Blocco B1 — x" "scrive: \`src/a.py\`" "dopo: nessuno" "" \
     "| id | file | modifica | test |" "|---|---|---|---|" "| P1 | \`src/a.py\` | x | T1 |" \
@@ -315,10 +323,10 @@ esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"
 expect "formato 2 gia' implementato senza test-red (ciclo avviato prima): REVIEW come prima" "^REVIEW — implementazione finita \(02-implement\)"
 reset
 
-# --- riga 0: impronta del harness (pt03; pk04a-2: la decide run-phase.sh --harness-fp-confronta), solo sopra le fasi
-# da lanciare. Le mutazioni si fanno su una COPIA del plugin: MAAT_ROOT per cycle-state.sh e FIC_DRIVER_ROOT per
-# `driver.py next` (porting in driver.test.sh, sezione 9: i due devono stampare lo stesso percorso nel rimedio).
-unset FIC_REPO   # il repository e' quello della spec, non quello di una fase che ospita il test
+# --- row 0: harness fingerprint (pt03; pk04a-2: decided by run-phase.sh --harness-fp-confronta), only above the phases
+# to launch. Mutations are made on a COPY of the plugin: MAAT_ROOT for cycle-state.sh and FIC_DRIVER_ROOT for
+# `driver.py next` (ported in driver.test.sh, section 9: both must print the same path in the remedy).
+unset FIC_REPO   # the repository is the spec's one, not that of a phase hosting the test
 HPC="$O/plug/maat"; mkdir -p "$O/plug" && cp -r "$HERE/.." "$HPC" && find "$HPC" -name __pycache__ -type d -prune -exec rm -rf {} +
 HPC_M=$(cygpath -m "$HPC" 2>/dev/null || printf '%s' "$HPC")
 fdr_prima=${FIC_DRIVER_ROOT-__non_impostata__}

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""stop-hook.py — hook `Stop` delle sotto-sessioni di /full-implementation-cycle (harness-pt04, 1g).
+"""stop-hook.py — `Stop` hook of the /full-implementation-cycle sub-sessions (harness-pt04, 1g).
 
-run-phase.sh lo passa con --settings accanto a guard.py. Una sotto-sessione `-p` che chiude il turno
-senza la riga `ESITO FASE`, o mentre un suo job in background non e' ancora stato raccolto, finisce li'
-(«attesa passiva»: nessuno la risveglia). L'hook NEGA la fine del turno in due casi:
-  1. l'ultimo messaggio dell'assistente (il testo dopo l'ultima chiamata di tool) non contiene una riga
-     `ESITO FASE <fase>: OK|STOP` (il formato JSON arrivera' con pt08);
-  2. il transcript mostra job lanciati in background (Bash, «running in background with ID: <id>») non
-     raccolti: nessuna notifica `<task-notification>` di quel <task-id> con <status> finale, nessun
-     BashOutput/TaskOutput che ne mostri lo stato finale, nessun TaskStop/KillShell su quell'id.
+run-phase.sh passes it with --settings next to guard.py. A `-p` sub-session that ends its turn
+without the `ESITO FASE` line, or while one of its background jobs has not been collected yet, ends there
+("passive wait": nobody wakes it up). The hook DENIES the end of the turn in two cases:
+  1. the assistant's last message (the text after the last tool call) does not contain an
+     `ESITO FASE <fase>: OK|STOP` line (the JSON format will come with pt08);
+  2. the transcript shows jobs launched in background (Bash, "running in background with ID: <id>") not
+     collected: no `<task-notification>` for that <task-id> with a final <status>, no
+     BashOutput/TaskOutput showing its final status, no TaskStop/KillShell on that id.
 
-Contro il loop: con `stop_hook_active` (la sessione sta gia' continuando per un diniego di questo hook)
-lascia sempre chiudere. Un hook che fallisce non deve bloccare una sessione: input illeggibile,
-transcript assente o qualunque eccezione -> lascia chiudere (uscita 0 senza output).
+Against loops: with `stop_hook_active` (the session is already continuing because of a denial from this hook)
+it always lets the session close. A failing hook must not block a session: unreadable input,
+missing transcript or any exception -> it lets the session close (exit 0 with no output).
 
-Uso: stdin = JSON dell'evento Stop (transcript_path, stop_hook_active). Diniego = JSON
-{"decision": "block", "reason": ...} su stdout, uscita 0. Test: scripts/stop-hook.test.sh del plugin.
+Usage: stdin = JSON of the Stop event (transcript_path, stop_hook_active). Denial = JSON
+{"decision": "block", "reason": ...} on stdout, exit 0. Tests: the plugin's scripts/stop-hook.test.sh.
 """
 import json
 import re
@@ -31,7 +31,7 @@ ID_KEYS = ("task_id", "bash_id", "shell_id", "id")
 
 
 def text_of(content):
-    """Testo di un content (stringa o lista di blocchi)."""
+    """Text of a content (string or list of blocks)."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -41,7 +41,7 @@ def text_of(content):
 
 
 def strings(obj):
-    """Tutte le stringhe dentro un oggetto JSON (per le notifiche, ovunque stiano)."""
+    """All the strings inside a JSON object (for notifications, wherever they are)."""
     if isinstance(obj, str):
         yield obj
     elif isinstance(obj, dict):
@@ -53,8 +53,8 @@ def strings(obj):
 
 
 def analyze(lines):
-    """(testo finale dell'assistente, id dei job in background ancora aperti)."""
-    uses = {}          # tool_use_id -> (nome, input)
+    """(final assistant text, ids of the background jobs still open)."""
+    uses = {}          # tool_use_id -> (name, input)
     launched, closed = [], set()
     tail = []
     for ln in lines:
@@ -84,7 +84,7 @@ def analyze(lines):
                 elif c.get("type") == "text" and c.get("text"):
                     tail.append(c["text"])
         elif ev.get("type") == "user":
-            tail = []   # un risultato di tool o un nuovo messaggio: il testo finale viene dopo
+            tail = []   # a tool result or a new message: the final text comes after it
             for c in content if isinstance(content, list) else []:
                 if not isinstance(c, dict) or c.get("type") != "tool_result":
                     continue
@@ -107,7 +107,7 @@ def main():
             return
         with open(data["transcript_path"], encoding="utf-8", errors="replace") as f:
             final, open_jobs = analyze(f)
-    except Exception:   # un hook rotto non deve mai trattenere una sessione
+    except Exception:   # a broken hook must never hold a session back
         return
     reasons = []
     if open_jobs:

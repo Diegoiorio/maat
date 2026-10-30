@@ -1,49 +1,49 @@
 #!/usr/bin/env bash
-# driver.test.sh — test di script/fic/driver.py (harness-pt14), senza claude vero e senza toccare il progetto:
-# repo git usa-e-getta, HOME temporanea, run-phase.sh e context-pack.sh finti per la macchina a stati.
+# driver.test.sh — tests of script/fic/driver.py (harness-pt14), without real claude and without touching the project:
+# throwaway git repo, temporary HOME, fake run-phase.sh and context-pack.sh for the state machine.
 #   bash script/fic/driver.test.sh
-#   DRIVER_TEST_RAPIDO=1 bash script/fic/driver.test.sh   # salta la sezione 9, il porting di cycle-state.test.sh (~20 min)
-#   DRV=/percorso/variante.py bash script/fic/driver.test.sh   # controprova su una mutazione (FIC_DRIVER_ROOT
-#                                                              # fa trovare alla copia gli script del repository)
-# Sezioni:
-#   1 uso · 2 valida: casi di run-phase.test.sh 6b, confrontati byte per byte con `run-phase.sh --valida`
-#   3 involucri: cycle-state.sh e run-phase.sh chiamano il driver solo col certificato (o FIC_DRIVER=1)
-#   4 run: la macchina a stati (anti-loop, ESITO STOP, uscite 4/6/7 di run-phase, NEEDS_VERIFICATION, result.json
-#     non valido, fase in corso, budget, dry-run, flag inoltrati, context-pack, avanzamento fino a DONE)
-#   5 equiv e certificato · 6 controprove del piano: anti-loop tolto, validazione dei JSON tolta
-#   7 lotti e corsie decisi dal driver (passo 5) · 8 righe caricate per fase (passo 4, tetto sul carico base)
-#   9 porting di cycle-state.test.sh: ogni chiamata confronta l'output intero di cycle-state.sh (autonomo) e di
-#     `driver.py next`; i casi devono passare E le due uscite coincidere
-#  10 promozione L2 prima della review: assorbita solo se regge il controllo di finalize (plan-check.sh l2)
+#   DRIVER_TEST_RAPIDO=1 bash script/fic/driver.test.sh   # skips section 9, the port of cycle-state.test.sh (~20 min)
+#   DRV=/path/variant.py bash script/fic/driver.test.sh   # counterproof on a mutation (FIC_DRIVER_ROOT
+#                                                              # lets the copy find the repository's scripts)
+# Sections:
+#   1 usage · 2 valida: cases from run-phase.test.sh 6b, compared byte by byte with `run-phase.sh --valida`
+#   3 wrappers: cycle-state.sh and run-phase.sh call the driver only with the certificate (or FIC_DRIVER=1)
+#   4 run: the state machine (anti-loop, ESITO STOP, run-phase exits 4/6/7, NEEDS_VERIFICATION, invalid
+#     result.json, phase running, budget, dry-run, forwarded flags, context-pack, progress up to DONE)
+#   5 equiv and certificate · 6 plan counterproofs: anti-loop removed, JSON validation removed
+#   7 batches and lanes decided by the driver (step 5) · 8 lines loaded per phase (step 4, cap on the base load)
+#   9 port of cycle-state.test.sh: every call compares the whole output of cycle-state.sh (standalone) and of
+#     `driver.py next`; the cases must pass AND the two outputs must match
+#  10 L2 promotion before the review: assorbita only if it holds finalize's check (plan-check.sh l2)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)   # radice del plugin
+ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 FC=$ROOT/scripts
 DRV=${DRV:-$HERE/driver.py}
 . "$FC/python.sh" || { echo "driver.test.sh: nessun interprete Python (FIC_PYTHON)"; exit 2; }
 export FIC_DRIVER_ROOT=$ROOT
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
-cp "$HERE/maat_paths.py" "$T/"   # i driver mutati scritti in $T importano maat_paths accanto a se' (pk04a-1)
+cp "$HERE/maat_paths.py" "$T/"   # the mutated drivers written in $T import maat_paths from next to themselves (pk04a-1)
 export HOME="$T/home"; mkdir -p "$HOME"
 unset FIC_DRIVER FIC_DRIVER_PY FIC_DRIVER_CERT FIC_RUN_PHASE FIC_CONTEXT_PACK FIC_MAX_FASI FIC_REPO FIC_LOCK
 pass=0 fail=0
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
 drv() { "$FIC_PY" "$DRV" "$@"; }
 
-# --- 1. uso ---
+# --- 1. usage ---
 drv >/dev/null 2>&1; rc=$?; check "senza comando → 2" '[ $rc -eq 2 ]'
 drv next "$T/non-esiste.md" >/dev/null 2>&1; rc=$?; check "next su una spec assente → 2" '[ $rc -eq 2 ]'
 drv run >/dev/null 2>&1; rc=$?; check "run senza spec → 2" '[ $rc -eq 2 ]'
 drv valida a b >/dev/null 2>&1; rc=$?; check "valida con argomenti sbagliati → 2" '[ $rc -eq 2 ]'
 
-# --- 2. valida: stessi casi e stessi byte del validatore interno di run-phase.sh ---
+# --- 2. valida: same cases and same bytes as the internal validator of run-phase.sh ---
 SCHEMA=$ROOT/schemas/phase-result.schema.json
-ok_json() { # $1 fase, $2 esito, $3 deviazioni, $4 bloccato_su
+ok_json() { # $1 phase, $2 esito, $3 deviazioni, $4 bloccato_su
   printf '{"fase":"%s","esito":"%s","motivo":"finto","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}' "$1" "$2" "$3" "$4"
 }
 V=$T/valida; mkdir -p "$V"
-vcase() { # $1 nome, $2 fase, $3 contenuto del log · stampa l'output del driver in $V/$1.out
+vcase() { # $1 name, $2 phase, $3 log content · prints the driver output to $V/$1.out
   printf '%s\n' "$3" > "$V/$1.jsonl"
   rm -f "$V/$1.a.json" "$V/$1.b.json"
   FIC_DRIVER=0 bash "$FC/run-phase.sh" --valida "$V/$1.jsonl" "$SCHEMA" "$2" "$V/$1.a.json" > "$V/$1.a" 2> "$V/$1.a.err"
@@ -59,8 +59,8 @@ check "  valido: la riga ESITO del testo e result.json scritto" 'grep -qx "ESITO
 vcase senza implement '{"type":"result","result":"ESITO FASE implement: OK — fatto"}'
 check "  JSON assente → STOP «uscita non valida» con originale=" 'sed -n 1p "$V/senza.out" | grep -q "^ESITO FASE implement: STOP — uscita non valida: nessun blocco JSON" && grep -qx "originale=ESITO FASE implement: OK — fatto" "$V/senza.out"'
 vcase fuori implement '{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"implement","esito":"FORSE","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],"extra":1}}'
-# Errori in qualunque ordine e formato: validatore minimo ("$.esito … FORSE", "extra") o jsonschema ("'extra' was
-# unexpected; 'FORSE' is not one of …"), a seconda che l'interprete abbia jsonschema.
+# Errors in any order and format: minimal validator ("$.esito … FORSE", "extra") or jsonschema ("'extra' was
+# unexpected; 'FORSE' is not one of …"), depending on whether the interpreter has jsonschema.
 check "  JSON fuori schema → STOP con gli errori, niente result.json" 'l=$(sed -n 1p "$V/fuori.out"); case "$l" in "ESITO FASE implement: STOP — uscita non valida: "*) e=${l#"ESITO FASE implement: STOP — uscita non valida: "}; case "$e" in *FORSE*) ;; *) false ;; esac && case "$e" in *extra*) ;; *) false ;; esac ;; *) false ;; esac && [ ! -f "$V/fuori.b.json" ]'
 vcase altra implement '{"type":"result","result":"ESITO FASE implement: OK","structured_output":'"$(ok_json review OK '[]' nessuno)"'}'
 check "  JSON di un'altra fase → STOP" 'grep -q "uscita non valida: fase .review. diversa" "$V/altra.out"'
@@ -81,7 +81,7 @@ check "  recinto illeggibile → STOP" 'grep -q "uscita non valida: blocco JSON 
 vcase noriga plan '{"type":"result","result":"niente riga","structured_output":'"$(ok_json plan STOP '[]' "migrazione da applicare")"'}'
 check "  senza riga ESITO: la compone dal JSON (bloccato_su)" 'grep -qx "ESITO FASE plan: STOP — bloccato su: migrazione da applicare" "$V/noriga.out"'
 
-# --- repo usa-e-getta per involucri, run ed equiv ---
+# --- throwaway repo for wrappers, run and equiv ---
 W=$T/repo; mkdir -p "$W"; cd "$W" || exit 2
 git init -q .; git config user.email t@t; git config user.name t; git config core.autocrlf false
 mkdir -p src .claude/.ai-workflow; printf 'spec-*\n' > .claude/.ai-workflow/.gitignore
@@ -97,7 +97,7 @@ spec_approved() {
 }
 spec_approved
 
-# --- 3. involucri ---
+# --- 3. wrappers ---
 cat > "$T/finto-drv.py" <<'EOF'
 import os, sys
 open(os.environ["SPY"], "a").write(" ".join(sys.argv[1:2]) + "\n")
@@ -121,7 +121,7 @@ out=$(FIC_DRIVER_CERT="$T/non-esiste" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/
 check "  nessun certificato → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
 out=$(FINTO_ESCE=1 FIC_DRIVER=1 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>"$T/cs.err")
 check "  driver fallito → autonomo, con AVVISO" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && grep -q "AVVISO: driver.py next non riuscito" "$T/cs.err"'
-# run-phase.sh: la validazione dell'esito passa dal driver solo quando delega (spia su una fase vera, claude finto)
+# run-phase.sh: outcome validation goes through the driver only when it delegates (spy on a real phase, fake claude)
 cat > "$T/spia-drv.py" <<EOF
 import os, runpy, sys
 open(os.environ["SPY"], "a").write("valida\n")
@@ -136,7 +136,7 @@ EOF
 chmod +x "$T/claude"
 printf '#!/usr/bin/env bash\necho "gates: esito=PASS chiave=k0 evidence=-"\n' > "$T/gates"; chmod +x "$T/gates"
 echo "/maat:full-implementation-cycle --worker=implement x" > "$T/prompt.md"
-rp() { # $1 = FIC_DRIVER, $2 = etichetta
+rp() { # $1 = FIC_DRIVER, $2 = label
   rm -f "$SPY"
   FIC_DRIVER=$1 FIC_DRIVER_PY="$T/spia-drv.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" \
     FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 bash "$FC/run-phase.sh" "$T/rp.run" "$2" "$T/prompt.md" >/dev/null 2>&1 </dev/null
@@ -147,7 +147,7 @@ rp 0 02-implement
 check "run-phase.sh, FIC_DRIVER=0: validatore interno (spia muta), stesso esito" '[ ! -f "$SPY" ] && [ "$(sed -n 1p "$T/rp.run/log/01-implement.esito")" = "$(sed -n 1p "$T/rp.run/log/02-implement.esito")" ]'
 printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" "$(h "$FC/run-phase.sh")" > "$T/cert-rp-ok"
 printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" 0000 > "$T/cert-rp-ko"
-rpc() { # $1 = certificato, $2 = etichetta (FIC_DRIVER non impostata: decide il certificato)
+rpc() { # $1 = certificate, $2 = label (FIC_DRIVER not set: the certificate decides)
   rm -f "$SPY"
   FIC_DRIVER_CERT="$1" FIC_DRIVER_PY="$T/spia-drv.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" \
     FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 bash "$FC/run-phase.sh" "$T/rp.run" "$2" "$T/prompt.md" >/dev/null 2>&1 </dev/null
@@ -159,10 +159,10 @@ check "  certificato con un altro hash di run-phase.sh → validatore interno (s
 rpc "$T/non-esiste" 05-implement
 check "  nessun certificato → validatore interno" '[ ! -f "$SPY" ] && sed -n 1p "$T/rp.run/log/05-implement.esito" | grep -q "uscita non valida"'
 
-# --- 4. run: la macchina a stati, con run-phase.sh e context-pack.sh finti ---
+# --- 4. run: the state machine, with fake run-phase.sh and context-pack.sh ---
 cat > "$T/rp-finto" <<'EOF'
 #!/usr/bin/env bash
-# run-phase.sh finto: <run-dir> <label> <prompt>; FAKE_MODE sceglie cosa fa la "fase"
+# fake run-phase.sh: <run-dir> <label> <prompt>; FAKE_MODE chooses what the "phase" does
 d=$1 l=$2; mkdir -p "$d/log"; echo "$l" >> "$FAKE_CALLS"; spec="${d%.run}.md"
 st() { FIC_DRIVER=0 bash "$FC/cycle-state.sh" "$spec" 2>/dev/null | sed -n 's/^State: //p'; }
 case "$FAKE_MODE" in
@@ -183,7 +183,7 @@ case "$FAKE_MODE" in
         printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: $fs" >> "$spec"
         [ "$FAKE_MODE" = nv ] && printf '%s\n' "Finalize: NEEDS_VERIFICATION — snapshot 0123456789ab — tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi · 2026-10-29T10:00:00Z" \
           "Verification: PARTIAL (finalize.sh: tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi)" >> "$spec"
-        # pk09: la sola riga Verification: PARTIAL (nessuna Finalize:), oppure nessuna delle due
+        # pk09: only the Verification: PARTIAL line (no Finalize:), or neither of the two
         [ "$FAKE_MODE" = nv-ver ] && printf '%s\n' "Verification: PARTIAL (finalize.sh: tests-y: NOT RUN (solo la riga Verification))" >> "$spec"
         printf 'ESITO FASE review: OK — finta\nstate=%s\n' "$(st)" > "$d/log/$l.esito" ;;
     esac; exit 0 ;;
@@ -193,7 +193,7 @@ EOF
 chmod +x "$T/rp-finto"
 printf '#!/usr/bin/env bash\necho "$@" >> "$FAKE_CALLS.cp"\necho "context-pack: invariato"\n' > "$T/cp-finto"; chmod +x "$T/cp-finto"
 export FC FAKE_CALLS=$T/calls
-drun() { # $1 FAKE_MODE, poi gli argomenti di run · uscita in rc, output in $T/run.out
+drun() { # $1 FAKE_MODE, then the run arguments · exit code in rc, output in $T/run.out
   rm -rf "$RUN" "$FAKE_CALLS" "$FAKE_CALLS.cp"; spec_approved
   FAKE_MODE=$1 FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK="$T/cp-finto" "$FIC_PY" "${DRUN_DRV:-$DRV}" run "${@:2}" > "$T/run.out" 2>&1
   rc=$?
@@ -217,7 +217,7 @@ check "run: result.json non valido dopo la fase → STOP (fail-closed)" '[ $rc -
 drun avanza "$SP"
 check "run: implement OK → review → DONE (exit 0), etichette in ordine" '[ $rc -eq 0 ] && grep -q "Esito driver: DONE" "$T/run.out" && [ "$(tr "\n" " " < "$FAKE_CALLS")" = "01-implement 02-review " ]'
 check "  prompt della review" '[ "$(cat "$RUN/prompts/02-review.md")" = "/maat:full-implementation-cycle --worker=review x" ]'
-caso_nv() { # pk09: il motivo dice ciclo finito e cosa verificare (dalla riga Finalize:, senza l'ora finale « · …Z»)
+caso_nv() { # pk09: the reason says cycle finished and what to verify (from the Finalize: line, without the final time « · …Z»)
   drun nv "$SP"
   [ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi; la promozione" "$T/run.out" && [ "$(calls)" = 2 ]
 }
@@ -227,7 +227,7 @@ drun nv-ver "$SP"
 check "  solo la riga Verification: PARTIAL (nessuna Finalize:) → il dettaglio viene da lì" '[ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-y: NOT RUN (solo la riga Verification); la promozione" "$T/run.out"'
 drun nv-vuoto "$SP"
 check "  nessuna delle due righe → «dettaglio non trovato», sempre STOP (exit 1)" '[ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: dettaglio non trovato nella spec (righe Finalize:/Verification:)" "$T/run.out"'
-# controprova (pk09, su una copia): il vecchio motivo «riprovare ora troverebbe…» fa rosso il caso sopra
+# counterproof (pk09, on a copy): the old reason «riprovare ora troverebbe…» turns the case above red
 sed 's/"ciclo finito: firma NEEDS_VERIFICATION — da verificare: %s; /"la review di questa invocazione ha dato NEEDS_VERIFICATION: riprovare ora troverebbe lo stesso ambiente bloccato (%s); /' "$DRV" > "$T/drv-nv-vecchio.py"
 check "controprova NEEDS_VERIFICATION: la mutazione e' applicata" 'grep -q "riprovare ora troverebbe" "$T/drv-nv-vecchio.py"'
 check "controprova NEEDS_VERIFICATION: col vecchio motivo «riprovare ora» il caso diventa rosso" '! DRUN_DRV="$T/drv-nv-vecchio.py" caso_nv && grep -q "riprovare ora troverebbe" "$T/run.out"'
@@ -243,7 +243,7 @@ check "run: fase in corso (.running senza .exit) → exit 4, niente lanci" '[ $r
 rm -rf "$RUN"; spec_approved; printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$SP"; : > "$FAKE_CALLS"
 FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK="$T/cp-finto" "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
 check "run: spec gia' DONE → exit 0 senza lanci" '[ $rc -eq 0 ] && grep -q "Esito driver: DONE" "$T/run.out" && [ "$(calls)" = 0 ]'
-# M1: senza certificato valido Next/State vengono da cycle-state.sh autonomo (qui un finto che risponde diverso)
+# M1: without a valid certificate Next/State come from standalone cycle-state.sh (here a fake one that answers differently)
 printf '#!/usr/bin/env bash\necho "Plan status: finto"; echo "State: 000000000000"; echo "Next: STOP — finto da cycle-state"\n' > "$T/cs-finto"; chmod +x "$T/cs-finto"
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER_CERT="$T/cert-ko" FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
@@ -251,7 +251,7 @@ check "run: certificato scaduto → segue cycle-state.sh (il finto dice STOP), e
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER=1 FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
 check "  controprova: col driver in vigore (FIC_DRIVER=1) il finto non e' consultato" 'grep -q "Next: IMPLEMENT" "$T/run.out" && ! grep -q "finto da cycle-state\|certificato scaduto" "$T/run.out"'
-# M2: la catena — WAIT sulla madre → l'anello nominato; DONE di un anello → la madre → l'anello successivo
+# M2: the chain — WAIT on the mother → the named ring; DONE of a ring → the mother → the next ring
 CW=.claude/.ai-workflow
 mk_catena() {
   rm -rf $CW/spec-m*.run
@@ -274,7 +274,7 @@ crun $CW/spec-m-1-a.md
 check "catena: anello 1 DONE → la madre → WAIT sull'anello 2 → il suo piano (01-plan nella sua run dir)" '[ "$(cat "$FAKE_CALLS")" = 01-plan ] && [ "$(cat $CW/spec-m-2-b.run/prompts/01-plan.md)" = "/maat:full-implementation-cycle --worker=plan m-2-b" ] && grep -q "catena: DONE — passo a spec-m" $CW/spec-m-1-a.run/driver.log && grep -q "catena: WAIT — passo a spec-m-2-b" $CW/spec-m.run/driver.log'
 rm -rf $CW/spec-m*.run $CW/spec-m.md $CW/spec-m-1-a.md $CW/spec-m-2-b.md
 
-# --- 5. equiv e certificato ---
+# --- 5. equiv and certificate ---
 rm -rf "$RUN"; spec_approved; mkdir -p "$RUN/log"
 printf '%s\n' '{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$RUN/log/01-implement.jsonl"
 printf '%s\n' '{"type":"result","result":"ESITO FASE review: OK"}' > "$RUN/log/02-review.jsonl"
@@ -292,7 +292,7 @@ sed 's/"IMPLEMENT — piano approvato, nessuna review"/"IMPLEMENT — diverso"/'
 check "equiv: un driver che risponde diverso → DIVERSO, exit 1, niente certificato" '[ $rc -eq 1 ] && grep -q "^DIVERSO spec-x" "$T/eq.out" && grep -q "diverse=2" "$T/eq.out"'
 rm -rf .claude/.ai-workflow/spec-y.md .claude/.ai-workflow/spec-y.run
 
-# --- 6. controprove del piano (mutazioni su una copia; il caso deve diventare rosso) ---
+# --- 6. plan counterproofs (mutations on a copy; the case must turn red) ---
 sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
 check "controprova anti-loop: la mutazione e' applicata" 'grep -q "ANTI-LOOP tolto" "$T/drv-noloop.py"'
 DRUN_DRV="$T/drv-noloop.py" drun nulla "$SP" --max-fasi 3
@@ -302,9 +302,9 @@ check "controprova validazione: la mutazione e' applicata" 'grep -q "VALIDAZIONE
 "$FIC_PY" "$T/drv-novalida.py" valida "$V/fuori.jsonl" "$SCHEMA" implement "$T/nv.json" > "$T/nv.out" 2>&1
 check "controprova validazione: senza validazione il JSON fuori schema passa (result.json scritto, nessuno STOP)" '[ -f "$T/nv.json" ] && ! grep -q "uscita non valida" "$T/nv.out"'
 
-# --- 7. lotti dimensionati e corsie decise dal driver (passo 5) ---
+# --- 7. batches sized and lanes decided by the driver (step 5) ---
 printf 'def a():\n    return 1\n' > src/a.py; printf 'def b():\n    return 2\n' > src/b.py; git add -A; git commit -qm ab
-spec_f2() { # piano in formato 2 con due blocchi indipendenti, approvato, test di accettazione registrati
+spec_f2() { # format-2 plan with two independent blocks, approved, acceptance tests recorded
   printf '%s\n' "# X" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare A." "## Piano di implementazione" \
     "Plan format: 2" "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" \
     "### File toccati" "- \`src/a.py\`" "- \`src/b.py\`" "- \`src/test_a.py\` (nuovo)" "- \`src/test_b.py\` (nuovo)" \
@@ -327,7 +327,7 @@ cat > "$T/rp-env" <<'EOF'
 echo "$2" >> "$FAKE_CALLS"; echo "FIC_CORSIE=${FIC_CORSIE:-}" > "$FAKE_CALLS.env"; cp "$3" "$FAKE_CALLS.prompt"; exit 0
 EOF
 chmod +x "$T/rp-env"
-drun5() { # [variabili] — un giro di run con il run-phase che registra ambiente e prompt
+drun5() { # [variables] — one run round with the run-phase recording environment and prompt
   rm -rf "$RUN" "$FAKE_CALLS"*; spec_f2
   env "$@" FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-env" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1
 }
@@ -341,7 +341,7 @@ check "  FIC_LANES=0 → nessuna decisione di corsie, FIC_CORSIE vuota" '[ ! -f 
 rm -rf "$RUN" "$FAKE_CALLS"*; spec_approved; : > "$FAKE_CALLS"
 FIC_RUN_PHASE="$T/rp-env" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1
 check "  formato 1 → niente lotti ne' corsie (le decide il worker)" '! grep -q LOTTI "$FAKE_CALLS.prompt" && grep -qx "FIC_CORSIE=" "$FAKE_CALLS.env"'
-# run-phase.sh con FIC_CORSIE: la decisione del driver diventa log/<label>.corsie e launch_lanes parte (due corsie)
+# run-phase.sh with FIC_CORSIE: the driver's decision becomes log/<label>.corsie and launch_lanes starts (two lanes)
 printf '%s\n' "blocks-independent: esito=parallelo corsie=2" "corsia 1: B1" "corsia 2: B2" "scope 1: src/a.py" "scope 2: src/b.py" > "$T/corsie"
 rm -rf "$T/rpc.run"
 FIC_CORSIE="$T/corsie" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" FIC_FINALIZE="$T/non-esiste" \
@@ -353,13 +353,13 @@ FIC_LANES=0 FIC_CORSIE="$T/corsie" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="
 check "  FIC_LANES=0 vince su FIC_CORSIE: serie" 'grep -q "esito=serie motivo=FIC_LANES=0" "$T/rpc.run/log/01-implement.corsie" && [ ! -f "$T/rpc.run/log/01-implement.corsia-1.prompt" ]'
 rm -f src/test_a.py src/test_b.py
 
-# --- 8. righe caricate per fase (passo 4): la misura del beneficio, tetto 300 ---
+# --- 8. lines loaded per phase (step 4): the measure of the benefit, cap 300 ---
 drv righe > "$T/righe.out"; rc=$?
 cat "$T/righe.out" | sed 's/^/    /'
 check "righe: il carico BASE di ogni fase e' <=300 righe di istruzioni" '[ $rc -eq 0 ] && [ "$(grep -c "^righe " "$T/righe.out")" = 7 ] && ! grep -q "ASSENTE\|SOPRA" "$T/righe.out"'
 check "  e le letture a parte sono riportate (scrittura del piano con autore.md, revisori con il loro agente), senza file mancanti" 'grep "^righe plan:" "$T/righe.out" | grep -q "con la scrittura del piano: [0-9]* (base plan-review-cycle/autore.md=[0-9]*)" && grep "^righe plan:" "$T/righe.out" | grep -q "revisore del piano: [0-9]* (plan-review-cycle/revisori.md=[0-9]* agents/spec-plan-reviewer.md=[0-9]*)" && grep "^righe review:" "$T/righe.out" | grep -q "revisore: [0-9]* (implementation-review-cycle/prompt-revisore.md=[0-9]* agents/implementation-reviewer.md=[0-9]*)" && ! grep -q "=None" "$T/righe.out"'
 
-# --- 9. porting di cycle-state.test.sh: stessi casi, output confrontato con cycle-state.sh autonomo ---
+# --- 9. port of cycle-state.test.sh: same cases, output compared with standalone cycle-state.sh ---
 if [ "${DRIVER_TEST_RAPIDO:-0}" = 1 ]; then
   echo "driver.test.sh: sezione 9 saltata (DRIVER_TEST_RAPIDO=1)"
 else
@@ -377,12 +377,12 @@ EOF
   [ -s "$T/cs-diff" ] && head -40 "$T/cs-diff"
 fi
 
-# --- 10. promozione L2 prima della review (harness-pt15): l'assorbimento con lo stesso criterio di finalize.sh ---
-# File NUOVO calc.py: test-red registra lo stub (somma), gen marca T1 assorbita; il codice finale esporta anche
-# LIMITE, che lo stub non aveva: `plan-check.sh l2` (il controllo di finalize) dice NO, quindi prima della review la
-# voce deve perdere "assorbita" e arrivare a counterproof.sh da eseguire davvero. Controprova: con il driver di prima
-# (DRV=<copia>) la review riceve la voce ancora assorbita, che finalize poi rifiuta; con gen di prima
-# (l2_eval(..., False)) la lista rigenerata non coincide piu'.
+# --- 10. L2 promotion before the review (harness-pt15): absorption with the same criterion as finalize.sh ---
+# NEW file calc.py: test-red records the stub (somma), gen marks T1 assorbita; the final code also exports
+# LIMITE, which the stub did not have: `plan-check.sh l2` (finalize's check) says NO, so before the review the
+# entry must lose "assorbita" and reach counterproof.sh to be really executed. Counterproof: with the old driver
+# (DRV=<copy>) the review receives the entry still absorbed, which finalize then rejects; with the old gen
+# (l2_eval(..., False)) the regenerated list no longer matches.
 spec_l2() {
   printf '%s\n' "# X" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare la somma." "## Piano di implementazione" \
     "Plan format: 2" "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" \
@@ -397,7 +397,7 @@ spec_l2() {
   sed -i "s/^Superfici a rischio: .*/&\nApproved basis: $cur/" "$SP"
   mkdir -p modules/api/app/services modules/api/tests
   printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert somma(1, 2) == 3\n' > modules/api/tests/test_calc.py
-  printf 'def somma(a, b):\n    return 0\n' > modules/api/app/services/calc.py   # lo stub di test-red
+  printf 'def somma(a, b):\n    return 0\n' > modules/api/app/services/calc.py   # the test-red stub
   bash "$PC" basis "$SP" --write-tests >/dev/null
   bash "$PC" stubs "$SP" --run-dir "$RUN" >/dev/null
   printf '{"esito":"OK","test":{"T1":{"esito":"dimostrato","motivo":"","messaggio":"E  assert 0 == 3","posizione":"modules/api/tests/test_calc.py:4"}}}\n' > "$RUN/test-red/rossi.json"
@@ -407,12 +407,12 @@ spec_l2() {
 printf '#!/usr/bin/env bash\necho "Plan status: APPROVED"; echo "State: 000000000000"; echo "Next: REVIEW — finta"\n' > "$T/cs-review"; chmod +x "$T/cs-review"
 printf '#!/usr/bin/env bash\necho "$2" >> "$FAKE_CALLS"; cp "$1/counterproof/mutations.json" "$FAKE_CALLS.mut"; exit 0\n' > "$T/rp-mut"; chmod +x "$T/rp-mut"
 lrun() { rm -f "$FAKE_CALLS"*; FIC_DRIVER_CERT="$T/cert-ko" FIC_CYCLE_STATE="$T/cs-review" FIC_RUN_PHASE="$T/rp-mut" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; }
-# maat.json del repo finto (pk04b-2): plan-check instrada file e test solo con i moduli dichiarati
+# maat.json of the fake repo (pk04b-2): plan-check routes files and tests only with the declared modules
 printf '{"versione_schema": 1, "moduli": [{"nome": "be", "radice": "modules/api", "ambiente": "nativo"}]}\n' > "$T/cfg-be.json"
 export MAAT_CONFIG="$T/cfg-be.json"
 rm -rf "$RUN"; spec_l2
 check "L2: fixture — dopo test-red gen marca T1 assorbita (stub = codice)" 'grep -q "\"assorbita\": true" "$RUN/counterproof/mutations.json"'
-printf 'LIMITE = 10\n\n\ndef somma(a, b):\n    return a + b\n' > modules/api/app/services/calc.py   # il codice finale: un simbolo in piu'
+printf 'LIMITE = 10\n\n\ndef somma(a, b):\n    return a + b\n' > modules/api/app/services/calc.py   # the final code: one extra symbol
 check "  il controllo di finalize (plan-check.sh l2) sul codice finale dice NO" 'bash "$PC" l2 "$SP" --run-dir "$RUN" | grep -q "^L2 T1: NO — gli stub non coprono tutti e soli i simboli nuovi"'
 lrun
 check "L2: stub che non coprono i simboli nuovi → la review riceve T1 NON assorbita (si esegue davvero)" '[ "$(cat "$FAKE_CALLS")" = 01-review ] && [ -s "$FAKE_CALLS.mut" ] && ! grep -q "assorbita\|\"motivo\"" "$FAKE_CALLS.mut" && grep -q "\"id\": \"T1\"" "$FAKE_CALLS.mut"'
@@ -420,13 +420,13 @@ check "  copia di prima in mutations.json.pre-promozione, T1.json assorbito spos
 mkdir -p "$T/gen-ora"; cp -r "$RUN/test-red" "$T/gen-ora/"; bash "$PC" gen "$SP" --run-dir "$T/gen-ora" >/dev/null
 check "  e coincide con la lista che gen genera ORA (cp_from_gen di run-phase.sh: le controprove le esegue il driver)" 'cmp -s "$RUN/counterproof/mutations.json" "$T/gen-ora/counterproof/mutations.json"'
 rm -rf "$RUN" "$T/gen-ora"; spec_l2
-printf 'def somma(a, b):\n    return a + b\n' > modules/api/app/services/calc.py   # stessi simboli dello stub
+printf 'def somma(a, b):\n    return a + b\n' > modules/api/app/services/calc.py   # same symbols as the stub
 lrun
 check "L2: stub che coprono tutti e soli i simboli nuovi → resta assorbita, nessuna promozione" 'grep -q "\"assorbita\": true" "$FAKE_CALLS.mut" && [ ! -f "$RUN/counterproof/mutations.json.pre-promozione" ] && [ -f "$RUN/counterproof/T1.json" ]'
 rm -rf "$RUN" "$FAKE_CALLS"* modules
 
 cd /
-# informativo, non un check: con il certificato SCADUTO gli involucri restano autonomi (direzione sicura)
+# informative, not a check: with an SCADUTO certificate the wrappers stay standalone (safe direction)
 echo "driver.test.sh: $(unset FIC_DRIVER_CERT; drv certificato)"
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

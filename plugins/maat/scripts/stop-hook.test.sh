@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# stop-hook.test.sh — test di stop-hook.py (hook Stop delle sotto-sessioni) su transcript sintetici:
-# turno senza `ESITO FASE` negato; con stop_hook_active non rientra in loop; job in background non
-# raccolto negato, raccolto (notifica, TaskOutput finale, TaskStop) ammesso; hook rotto -> lascia chiudere.
+# stop-hook.test.sh — tests of stop-hook.py (the sub-sessions' Stop hook) on synthetic transcripts:
+# a turn without `ESITO FASE` is denied; with stop_hook_active it does not loop again; a background job not
+# collected is denied, collected (notification, final TaskOutput, TaskStop) is allowed; broken hook -> lets it close.
 #   bash script/fic/stop-hook.test.sh
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -12,7 +12,7 @@ fail=0 n=0
 TR="$T/transcript.jsonl"
 WTR=$(cygpath -m "$TR" 2>/dev/null || printf '%s' "$TR")
 
-# $1 atteso (allow|block), $2 descrizione, $3 stop_hook_active (true|false), $4 testo atteso nel motivo
+# $1 expected (allow|block), $2 description, $3 stop_hook_active (true|false), $4 text expected in the reason
 hook() {
   n=$((n + 1))
   local out rc got
@@ -44,7 +44,7 @@ hook block "ESITO solo dentro un tool_result letto: negato" false "ESITO FASE"
 { txt "$OK_LINE"; use tu8 Bash '{"command":"ls"}'; res tu8 'a b'; } > "$TR"
 hook block "ESITO seguito da altro lavoro, nessun testo finale: negato"
 
-# --- job in background ---
+# --- background jobs ---
 { BG_START; txt "$OK_LINE"; } > "$TR"
 hook block "job in background non raccolto: negato (anche con ESITO)" false "b123"
 hook allow "  con stop_hook_active: lascia chiudere" true
@@ -61,7 +61,7 @@ hook allow "TaskStop sul job: ammesso"
 { BG_START; use tu5 Bash '{"command":"sleep 5","run_in_background":true}'; res tu5 'Command running in background with ID: b456. Output is being written to: C:\\x'; notif b123 completed; txt "$OK_LINE"; } > "$TR"
 hook block "due job, uno solo concluso: negato per l'altro" false "b456"
 
-# --- hook rotto: mai trattenere la sessione ---
+# --- broken hook: never hold the session back ---
 rm -f "$TR"
 hook allow "transcript assente: lascia chiudere"
 n=$((n + 1))

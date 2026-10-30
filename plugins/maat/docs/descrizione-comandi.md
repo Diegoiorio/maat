@@ -1,23 +1,25 @@
-# Descrizione dei comandi nelle richieste di permesso (R11.1)
+# Describing commands in permission requests (R11.1)
 
-Il campo `description` dei tool Bash e PowerShell è ciò che l'utente legge quando Claude Code gli chiede il permesso.
-Nei flussi Maat della sessione principale scrivilo così, nella lingua di `.claude/maat.json` → `lingua` (default it):
+The `description` field of the Bash and PowerShell tools is what the user reads when Claude Code asks for permission
+to run a command. In every session of a project that uses Maat, write it like this, in the language set by `lingua`
+in `.claude/maat.json` (default: English):
 
-1. **Una frase**: cosa fa il comando e che effetto ha, cioè cosa cambia e dove (locale, ambiente di prova,
-   produzione, servizio esterno).
-2. **I comandi principali**, uno per voce, nella forma `nome — cosa fa qui`. Solo quelli che contano: ometti
-   `cd`, `tail`, `2>&1` e simili, salvo che cambino il senso.
-3. **L'avviso** se l'azione è irreversibile o esce dalla macchina: push, scritture su un database, cancellazioni,
-   rilasci, invii.
+1. **One sentence**: what the command does and what it changes, and where (this machine, a test environment,
+   production, an external service).
+2. **The main commands**, one per item, as `name — what it does here`. Only the ones that matter: leave out `cd`,
+   `tail`, `2>&1` and the like, unless they change the meaning.
+3. **A warning** when the action cannot be undone or leaves the machine: push, database writes, deletions,
+   releases, messages sent.
 
-Al massimo ~5 righe. Per i comandi di sola lettura (`ls`, `git status`, `grep`) basta la frase.
+At most about 5 lines. For read-only commands (`ls`, `git status`, `grep`) the sentence is enough.
 
-Esempio — `git push origin sviluppo`:
+Example — `git push origin main`:
 
 ```text
-Pubblica sul repository remoto i commit locali del ramo sviluppo (esce dalla macchina, visibile al team).
-· git push origin sviluppo — invia i commit del ramo al remoto «origin»
+Publishes the local commits of the main branch to the remote repository (leaves the machine, visible to the team).
+· git push origin main — sends the branch's commits to the remote "origin"
 ```
 
-Limite (R11.4): fuori dai flussi Maat vale la regola del `CLAUDE.md` di ciascun progetto. Le sotto-sessioni non
-mostrano richieste, perché girano senza chiedere; la regola vale comunque nei loro log.
+The plugin's `SessionStart` hook (`scripts/session-start.sh`) loads this rule into every session, so it also applies
+outside the Maat flows. Sub-sessions of a cycle run without asking, so they show no prompts; the rule still applies
+to their logs.

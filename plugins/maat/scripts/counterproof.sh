@@ -1,142 +1,142 @@
 #!/usr/bin/env bash
-# counterproof.sh — le controprove di una review, eseguite SOLO nella copia locale (mirror), mai nel working tree.
+# counterproof.sh — the counterproofs of a review, run ONLY in the local copy (mirror), never in the working tree.
 #
-# Uso:
+# Usage:
 #   PROJECT_ROOT=<repo> bash <plugin>/scripts/counterproof.sh <run-dir>/counterproof/mutations.json
-# Lo lancia run_cp di run-phase.sh: dentro WSL (percorsi /mnt/…, PROJECT_ROOT e MAAT_CONFIG tradotti) solo su Windows
-# e con un modulo `ambiente: wsl` fra quelli delle mutazioni; altrimenti diretto.
-# Radice del progetto: PROJECT_ROOT, altrimenti FIC_REPO, altrimenti il toplevel git della cartella di lavoro
-# (lib/maat-paths.sh, maat_progetto); mai dalla posizione dello script, che sta nel plugin. Non risolta -> exit 64.
-# Moduli, runner e comandi: maat.json del progetto (MAAT_CONFIG vince), letto IMPORTANDO maat-config.py (lo stesso
-# lettore dei comandi `modulo-di` e `comando`). I risultati vanno nella cartella di mutations.json: un <id>.json
-# per ogni mutazione.
+# Launched by run_cp in run-phase.sh: inside WSL (/mnt/… paths, PROJECT_ROOT and MAAT_CONFIG translated) only on Windows
+# and with an `ambiente: wsl` module among those of the mutations; otherwise directly.
+# Project root: PROJECT_ROOT, otherwise FIC_REPO, otherwise the git toplevel of the working directory
+# (lib/maat-paths.sh, maat_progetto); never from the script location, which is inside the plugin. Unresolved -> exit 64.
+# Modules, runners and commands: the project's maat.json (MAAT_CONFIG wins), read by IMPORTING maat-config.py (the same
+# reader as the `modulo-di` and `comando` commands). Results go into the folder of mutations.json: one <id>.json
+# per mutation.
 #
-# FORMATO DI INPUT — mutations.json e' una LISTA di oggetti:
+# INPUT FORMAT — mutations.json is a LIST of objects:
 #   {
-#     "id":        "CP-3",                                   lettere, cifre, . _ -  (nome del file risultato)
-#     "file":      "web/src/utils/goals.ts",                 relativo al repository
-#     "simbolo":   "companyAssignStatus",                    dove sta la mutazione (per chi legge)
+#     "id":        "CP-3",                                   letters, digits, . _ -  (name of the result file)
+#     "file":      "web/src/utils/goals.ts",                 relative to the repository
+#     "simbolo":   "companyAssignStatus",                    where the mutation is (for the reader)
 #     "mutazione": {"cerca": "gap.cents * 20 > goalCents", "sostituisci": "gap.cents * 20 >= goalCents"},
 #     "test":      {"percorso": "web/src/tests/goals-utils.test.ts", "nome": "companyAssignStatus soglia"},
-#     "rosso_se":  {"test_id": "<nome completo del test nel runner>", "asserzione": "<testo nel messaggio di errore>"},
-#     "superficie": "…"                                     facoltativo, riportato tale e quale
-#     "assorbita": true, "motivo": "…"                      facoltativi (L2, harness-pt11): la scrive
-#                                                           `plan-check.sh gen` dopo la fase test-red
+#     "rosso_se":  {"test_id": "<full name of the test in the runner>", "asserzione": "<text in the error message>"},
+#     "superficie": "…"                                     optional, reported as is
+#     "assorbita": true, "motivo": "…"                      optional (L2, harness-pt11): written by
+#                                                           `plan-check.sh gen` after the test-red phase
 #   }
-# - "assorbita": true (L2: file NUOVO, rosso alla base con stub dimostrato, verde dopo) -> la mutazione NON si
-#   esegue: <id>.json con esito "assorbita" (controprova ASSORBITA, motivo), niente runner. Non entra nei conteggi
-#   (prove=<n>/<tot> conta le sole eseguite); l'ultima riga aggiunge "assorbite=<n>". Solo assorbite -> exit 0 senza
-#   mirror ne' lock. Le condizioni di L2 le ricontrolla finalize.sh (plan-check.sh l2), non questo script.
-# - "cerca" deve comparire ESATTAMENTE una volta nel file (sostituzione esatta, byte per byte; se il file ha
-#   fine riga CRLF e "cerca" contiene \n, si riprova con \r\n). Zero o piu' occorrenze -> bloccata.
-# - Il MODULO lo decide maat.json (instradamento di `modulo-di`): file e test nello STESSO modulo, con il test sotto
-#   la `radice` del modulo; altrimenti exit 64 (il runner di un modulo non vede la mutazione di un altro: sarebbe
-#   un falso «verde»).
-# - Il RUNNER e' `controprova.runner` del modulo; la riga di comando e' `controprova.comando`, con i segnaposto
-#   {test}, {nome}, {report}, {python}, eseguita nella `radice` del modulo dentro la copia:
-#   - vitest, pytest: adattatori del nucleo (tempi, gruppo di processi, lock, classificazione dal report). {test}
-#     e' il file di test relativo alla radice (pytest: <file>::<nome>), {nome} il nome del test (vitest: gia'
-#     protetto per la regex di -t, da "test.nome", default rosso_se.test_id), {report} il report che il nucleo legge;
-#   - comando: rosso = uscita diversa da 0 -> rosso_generico, uscita 0 -> verde. Nessun report: la prova e' DEBOLE
-#     (non dice su quale asserzione e' rosso), e la review la conta come tale.
-# - Modulo senza `controprova` (o senza `controprova.comando`) -> la mutazione non si esegue: <id>.json con esito
-#   "non_eseguita" e controprova "NOT RUN" (dichiarato), mai «verde» ne' «rosso». Non entra nei conteggi; l'ultima
-#   riga aggiunge "non_eseguite=<n>". Solo non eseguite (e assorbite) -> "esito=NOT RUN", exit 0, senza mirror.
-# - S5, duplicati esatti: stesso file, simbolo, cerca, sostituisci, test e rosso_se => eseguita UNA volta,
-#   il risultato vale per tutti gli ID (campo "duplicato_di"). Mutazioni in punti diversi non sono duplicati.
+# - "assorbita": true (L2: NEW file, red at the base with a proven stub, green afterwards) -> the mutation is NOT
+#   run: <id>.json with outcome "assorbita" (counterproof ASSORBITA, reason), no runner. It does not enter the counts
+#   (prove=<n>/<tot> counts only those run); the last line adds "assorbite=<n>". Absorbed only -> exit 0 without
+#   mirror or lock. The L2 conditions are rechecked by finalize.sh (plan-check.sh l2), not by this script.
+# - "cerca" must appear EXACTLY once in the file (exact replacement, byte for byte; if the file has
+#   CRLF line endings and "cerca" contains \n, it is retried with \r\n). Zero or several occurrences -> blocked.
+# - The MODULE is decided by maat.json (`modulo-di` routing): file and test in the SAME module, with the test under
+#   the module's `radice`; otherwise exit 64 (one module's runner does not see another module's mutation: it would be
+#   a false «green»).
+# - The RUNNER is the module's `controprova.runner`; the command line is `controprova.comando`, with the placeholders
+#   {test}, {nome}, {report}, {python}, run in the module's `radice` inside the copy:
+#   - vitest, pytest: core adapters (timing, process group, lock, classification from the report). {test}
+#     is the test file relative to the root (pytest: <file>::<nome>), {nome} the test name (vitest: already
+#     escaped for the -t regex, from "test.nome", default rosso_se.test_id), {report} the report the core reads;
+#   - comando: red = exit code other than 0 -> rosso_generico, exit 0 -> green. No report: the proof is WEAK
+#     (it does not say on which assertion it is red), and the review counts it as such.
+# - Module without `controprova` (or without `controprova.comando`) -> the mutation is not run: <id>.json with outcome
+#   "non_eseguita" and counterproof "NOT RUN" (declared), never «green» nor «red». It does not enter the counts; the last
+#   line adds "non_eseguite=<n>". Only not-run (and absorbed) -> "esito=NOT RUN", exit 0, without mirror.
+# - S5, exact duplicates: same file, simbolo, cerca, sostituisci, test and rosso_se => run ONCE,
+#   the result applies to all IDs (field "duplicato_di"). Mutations at different points are not duplicates.
 #
-# ESITI (campo "esito" di <id>.json) e controprova:
-#   rosso_asserzione  il test nominato e' rosso E il messaggio contiene rosso_se.asserzione  -> PASS (prova)
-#   rosso_generico    (runner comando) il comando esce diverso da 0                          -> PASS (prova debole)
-#   rosso_import      il file di test non si carica / errore d'import: MAI una prova         -> FAIL
-#   rosso_raccolta    file o test nominato non raccolto, saltato, o errore di raccolta       -> FAIL
-#   rosso_diverso     il test nominato e' rosso ma non sull'asserzione attesa               -> FAIL
-#   verde             la mutazione non e' coperta                                            -> FAIL
-#   bloccato          mutazione non applicabile, runner assente, nessun report, tetto di tempo -> BLOCKED
-#   assorbita         (L2) non eseguita: la coppia rosso-con-stub / verde-dopo vale da controprova -> ASSORBITA
-#   non_eseguita      modulo senza controprova dichiarata                                    -> NOT RUN
-# Gli adattatori vitest e pytest leggono il report del runner, mai il solo codice d'uscita (JSON di vitest, JUnit
-# di pytest: la riga che lo chiede sta in `controprova.comando`, nei profili).
+# OUTCOMES ("esito" field of <id>.json) and counterproof:
+#   rosso_asserzione  the named test is red AND the message contains rosso_se.asserzione   -> PASS (proof)
+#   rosso_generico    (comando runner) the command exits with non-zero                       -> PASS (weak proof)
+#   rosso_import      the test file does not load / import error: NEVER a proof              -> FAIL
+#   rosso_raccolta    named file or test not collected, skipped, or collection error         -> FAIL
+#   rosso_diverso     the named test is red but not on the expected assertion                -> FAIL
+#   verde             the mutation is not covered                                            -> FAIL
+#   bloccato          mutation not applicable, runner missing, no report, time cap           -> BLOCKED
+#   assorbita         (L2) not run: the red-with-stub / green-after pair counts as counterproof -> ASSORBITA
+#   non_eseguita      module without a declared counterproof                                 -> NOT RUN
+# The vitest and pytest adapters read the runner's report, never the exit code alone (vitest JSON, pytest
+# JUnit: the option that asks for it is in `controprova.comando`, in the profiles).
 #
-# GARANZIE
-# - Il working tree NON viene mai scritto: la mutazione si applica alla copia nel mirror, lo stesso di test-fast.sh
-#   e con la stessa regola (fic-mirror.sh): <mirror> = $HOME/fic-mirror dal tree principale, $HOME/fic-mirror-<hash>
-#   da un worktree (anche creato da Git per Windows). Ogni modulo delle mutazioni sta in <mirror>/<radice_pacchetti>.
-#   Il modulo con `copia` (al piu' uno fra quelli delle mutazioni, altrimenti exit 64 «più moduli con copia») e'
-#   quello di test-fast.sh: la sua copia di un worktree senza node_modules si semina come li' (hardlink dalla copia
-#   del tree principale, solo con le stesse dipendenze). Un modulo senza `copia` si sincronizza e si verifica col
-#   manifest, senza semina ne' impronta.
-# - Lock: lo stesso file di test-fast.sh, <mirror>/<radice_pacchetti del modulo con copia>/.fic-lock (senza un
-#   modulo con copia fra le mutazioni: quello del primo modulo con copia di maat.json, altrimenti del primo modulo
-#   delle mutazioni), preso con `flock -w "${FIC_LOCK_WAIT:-900}"`: si ATTENDE, e oltre il tetto -> exit 3. MAI un
-#   ripiego su /mnt/c: li' il test girerebbe sull'albero non mutato e darebbe un falso «non rosso».
-# - Senza rsync o senza flock (pk08, per esempio Git Bash su Windows senza WSL; CAMBIA IL CONTRATTO di pk04b-2, che dava
-#   BLOCKED): le controprove girano lo stesso, con i ripieghi di fic-mirror.sh, piu' lenti e dichiarati in una riga
-#   «counterproof: … di ripiego …». Copia: fic_sync (find + impronte sha256 + tar, stesse esclusioni, --delete e
-#   confronto del contenuto di rsync; la verifica del manifest qui sotto resta). Lock: mkdir atomico di
-#   <lock>.d (fic_lock_dir, stesso tetto FIC_LOCK_WAIT), anche per la coda dei worker del gradino 2; rilasciato dal
-#   trap EXIT. La copia di un modulo con `copia` (preparazione, semina, riallineamento) resta di test-fast.sh, che
-#   vuole rsync e flock: senza, «mirror assente» o il riallineamento non riuscito, col motivo.
-# - Sotto il lock: impronta delle dipendenze del modulo con copia (quella di `test-fast.sh --setup`), poi per ogni
-#   modulo sync con cancellazione (esclusioni: l'elenco unico del nucleo FIC_MIRROR_EXCL di fic-mirror.sh piu' le
-#   cartelle di `collega_nel_worktree` del modulo), pulizia della copia (fic_mirror_pulisci: le cartelle dei
-#   `preparati` e, col runner vitest, le cache di vite/vitest), le cartelle di sola lettura di `copia_anche`
-#   (rsync -a --delete --checksum --exclude=node_modules, fuori dal manifest), poi manifest (path + sha256 dei file
-#   tracciati e non tracciati non ignorati, piu' i .env*: lo stesso di test-fast.sh, node_modules escluso)
-#   confrontato fra origine e mirror. Dipendenze stantie -> la copia si riallinea da sola sotto il lock come in
-#   test-fast.sh (fic_deps_autorefresh), riga "counterproof: dipendenze cambiate (impronta <vecchia> -> <nuova>):
-#   copia riallineata dall'origine", poi l'impronta di nuovo. Mirror assente, dipendenze stantie non riallineabili,
-#   sync fallito o copia non allineata -> exit 3.
-# - Per ogni mutazione: copia di sicurezza del SOLO file, sostituzione (unlink + write), run del solo test
-#   nominato, ripristino (unlink + copia), poi hash del modulo nel mirror riconfrontato con il manifest iniziale. Se
-#   non torna -> exit 5 e ci si ferma (un mirror sporco falserebbe le mutazioni successive). Se lo script muore
-#   a meta', il trap EXIT ripristina il file in volo.
-# - {python}: $FIC_PYTEST_PY se impostata (override); altrimenti, per un modulo `ambiente: wsl`, la ricerca di
-#   gates.sh (moduli[].python, stringa o lista, relativa alla radice; poi piattaforma.python; poi python3: il primo
-#   che esiste, qui dentro WSL) e nessuno -> exit 3 «python WSL assente»; per un modulo nativo la precedenza del
-#   lettore (risolvi_python) e nessun interprete -> exit 3 «python assente». pytest gira con `-B -p no:cacheprovider`
-#   (nel comando del profilo): nessun .pyc che sopravviva alla mutazione.
+# GUARANTEES
+# - The working tree is NEVER written: the mutation is applied to the copy in the mirror, the same as test-fast.sh
+#   and with the same rule (fic-mirror.sh): <mirror> = $HOME/fic-mirror from the main tree, $HOME/fic-mirror-<hash>
+#   from a worktree (also one created by Git for Windows). Every module of the mutations lives in <mirror>/<radice_pacchetti>.
+#   The module with `copia` (at most one among those of the mutations, otherwise exit 64 «più moduli con copia») is
+#   the test-fast.sh one: its copy for a worktree without node_modules is seeded as there (hardlinks from the copy
+#   of the main tree, only with the same dependencies). A module without `copia` is synced and verified with the
+#   manifest, without seeding or fingerprint.
+# - Lock: the same file as test-fast.sh, <mirror>/<radice_pacchetti of the module with copia>/.fic-lock (without a
+#   module with copia among the mutations: that of the first module with copia in maat.json, otherwise of the first
+#   module of the mutations), taken with `flock -w "${FIC_LOCK_WAIT:-900}"`: it WAITS, and beyond the cap -> exit 3. NEVER a
+#   fallback to /mnt/c: there the test would run on the unmutated tree and give a false «not red».
+# - Without rsync or without flock (pk08, for example Git Bash on Windows without WSL; CHANGES THE CONTRACT of pk04b-2, which gave
+#   BLOCKED): counterproofs run anyway, with the fic-mirror.sh fallbacks, slower and declared in one line
+#   «counterproof: … di ripiego …». Copy: fic_sync (find + sha256 fingerprints + tar, same exclusions, --delete and
+#   rsync's content comparison; the manifest check below stays). Lock: atomic mkdir of
+#   <lock>.d (fic_lock_dir, same FIC_LOCK_WAIT cap), also for the worker queue of step 2; released by the
+#   EXIT trap. The copy of a module with `copia` (preparation, seeding, realignment) stays with test-fast.sh, which
+#   needs rsync and flock: without them, «mirror assente» or the failed realignment, with the reason.
+# - Under the lock: fingerprint of the dependencies of the module with copia (the one of `test-fast.sh --setup`), then for each
+#   module a sync with deletion (exclusions: the core's single list FIC_MIRROR_EXCL of fic-mirror.sh plus the
+#   module's `collega_nel_worktree` folders), cleanup of the copy (fic_mirror_pulisci: the folders of the
+#   `preparati` and, with the vitest runner, the vite/vitest caches), the read-only folders of `copia_anche`
+#   (rsync -a --delete --checksum --exclude=node_modules, outside the manifest), then the manifest (path + sha256 of the
+#   tracked and non-ignored untracked files, plus the .env*: the same as test-fast.sh, node_modules excluded)
+#   compared between origin and mirror. Stale dependencies -> the copy realigns itself under the lock as in
+#   test-fast.sh (fic_deps_autorefresh), line "counterproof: dipendenze cambiate (impronta <vecchia> -> <nuova>):
+#   copia riallineata dall'origine", then the fingerprint again. Mirror missing, stale dependencies that cannot be realigned,
+#   failed sync or copy not aligned -> exit 3.
+# - For each mutation: backup copy of that file ONLY, replacement (unlink + write), run of the named test
+#   only, restore (unlink + copy), then the hash of the module in the mirror compared again with the initial manifest. If
+#   it does not match -> exit 5 and it stops (a dirty mirror would falsify the following mutations). If the script dies
+#   halfway, the EXIT trap restores the in-flight file.
+# - {python}: $FIC_PYTEST_PY if set (override); otherwise, for an `ambiente: wsl` module, the gates.sh
+#   search (moduli[].python, string or list, relative to the root; then piattaforma.python; then python3: the first
+#   that exists, here inside WSL) and none -> exit 3 «python WSL assente»; for a native module the reader's
+#   precedence (risolvi_python) and no interpreter -> exit 3 «python assente». pytest runs with `-B -p no:cacheprovider`
+#   (in the profile command): no .pyc survives the mutation.
 #
-# GRADINO 1 e GRADINO 2
-# - Gradino 1, seriale nel mirror sotto il lock: i moduli senza copia, i file del modulo con copia fuori dalla sua
-#   radice (i link del workspace in node_modules puntano ai pacchetti DEL MIRROR, una copia privata non li
-#   vedrebbe), ogni runner diverso da vitest, e tutto quando N < 2.
-# - Gradino 2, parallelo: le mutazioni vitest su file sotto la radice del modulo con copia girano su N copie private
-#   del SOLO sorgente ($HOME/fic-cp.XXXXXX/<i>/<radice_pacchetti>, fuori dal mirror), fatte dal mirror verificato. Il
-#   lock del mirror resta preso per TUTTO il gradino (snapshot, run, verifica finale dei sorgenti del mirror): le
-#   copie leggono ancora node_modules e packages/ del mirror, che un altro scrittore non deve cambiare sotto i run.
-#   node_modules radice = symlink a quello del mirror (sola lettura); node_modules annidati copiati senza
-#   cache. Per copia: FIC_VITE_CACHE_DIR (cacheDir privata) e FIC_VITE_FS_ALLOW (radice della copia +
-#   node_modules e packages del mirror: vite 5 non carica file fuori da server.fs.allow), nell'ambiente del run e
-#   lette da vitest.config.ts SOLO se impostate. Niente `cp -al`. Le copie si cancellano alla fine.
+# STEP 1 and STEP 2
+# - Step 1, serial in the mirror under the lock: the modules without copia, the files of the module with copia outside its
+#   root (the workspace links in node_modules point to the packages OF THE MIRROR, a private copy would not
+#   see them), every runner other than vitest, and everything when N < 2.
+# - Step 2, parallel: the vitest mutations on files under the root of the module with copia run on N private copies
+#   of the source ONLY ($HOME/fic-cp.XXXXXX/<i>/<radice_pacchetti>, outside the mirror), made from the verified mirror. The
+#   mirror lock stays held for the WHOLE step (snapshot, runs, final check of the mirror sources): the
+#   copies still read node_modules and packages/ of the mirror, which another writer must not change under the runs.
+#   root node_modules = symlink to the mirror's one (read-only); nested node_modules copied without
+#   caches. Per copy: FIC_VITE_CACHE_DIR (private cacheDir) and FIC_VITE_FS_ALLOW (root of the copy +
+#   node_modules and packages of the mirror: vite 5 does not load files outside server.fs.allow), in the run environment and
+#   read by vitest.config.ts ONLY if set. No `cp -al`. The copies are deleted at the end.
 #
-# SEGNALI
-# - TERM, INT (Ctrl-C), HUP: il trap scatta subito (i run girano in background e si attendono con `wait`) e,
-#   in ordine, uccide con KILL tutti i discendenti — worker, `timeout`, il comando del runner e i suoi figli — e i
-#   process group aperti da `timeout` (registrati per pid: sopravvivono ai worker se un Ctrl-C uccide prima questi),
-#   ripristina il file in volo nel mirror, cancella le copie private $HOME/fic-cp.*; altri segnali durante la pulizia
-#   si ignorano, perche' non la interrompano a meta'. Esce 143;
-#   i <id>.json gia' scritti restano, quelli non ancora scritti mancano: il run non e' completo.
-# - KILL (o la morte di WSL) non e' intercettabile: possono restare un file mutato nel mirror (lo riallinea il
-#   sync con --checksum del run successivo, di test-fast.sh o di questo script: il working tree non e'
-#   toccato), copie $HOME/fic-cp.* (da cancellare a mano) e processi orfani (`pkill -f fic-cp`). Il lock si libera
-#   da se' quando muore l'ultimo processo che ne tiene aperto il descrittore: i run lo chiudono. Il lock di ripiego
-#   (senza flock) resta come cartella <lock>.d col pid morto: chi attende la riconosce orfana e la riprende.
-# - N = min(FIC_CP_PARALLEL [4], MemAvailable / FIC_CP_MEM_MB [1500, misurato], nproc/2, mutazioni del
-#   gradino 2). FIC_CP_PARALLEL=1 forza il seriale.
+# SIGNALS
+# - TERM, INT (Ctrl-C), HUP: the trap fires at once (runs go in the background and are awaited with `wait`) and,
+#   in order, KILLs all descendants — workers, `timeout`, the runner command and its children — and the
+#   process groups opened by `timeout` (recorded by pid: they outlive the workers if a Ctrl-C kills those first),
+#   restores the in-flight file in the mirror, deletes the private copies $HOME/fic-cp.*; other signals during cleanup
+#   are ignored, so that they do not interrupt it halfway. It exits 143;
+#   the <id>.json already written stay, those not yet written are missing: the run is not complete.
+# - KILL (or the death of WSL) cannot be trapped: what may remain is a mutated file in the mirror (realigned by the
+#   sync with --checksum of the next run, of test-fast.sh or of this script: the working tree is not
+#   touched), copies $HOME/fic-cp.* (to delete by hand) and orphaned processes (`pkill -f fic-cp`). The lock is released
+#   by itself when the last process holding its descriptor open dies: the runs close it. The fallback lock
+#   (without flock) stays as a folder <lock>.d with the dead pid: whoever waits recognizes it as orphaned and takes it over.
+# - N = min(FIC_CP_PARALLEL [4], MemAvailable / FIC_CP_MEM_MB [1500, measured], nproc/2, mutations of
+#   step 2). FIC_CP_PARALLEL=1 forces serial.
 #
-# Output: una riga per mutazione, ultima riga
+# Output: one line per mutation, last line
 #   "counterproof: esito=<PASS|FAIL|BLOCKED|NOT RUN> prove=<n>/<tot> fail=<n> bloccate=<n> tempo=<s>s luogo=<mirror|copie(N)>".
-# Exit: 0 tutte prove valide (o nessuna da eseguire) · 1 almeno una FAIL · 2 almeno una bloccata (nessuna FAIL) ·
-#       3 BLOCKED d'ambiente (strumenti assenti senza ripiego — sha256sum, timeout, un Python da python.sh, rsync e tar
-#         insieme: «controprove non disponibili: manca <strumento>» —, interprete di {python} assente, lock oltre il
-#         tetto, mirror assente,
-#         dipendenze stantie non riallineabili, sync fallito, copia non allineata, copia privata non creabile; oppure
-#         mirror cambiato durante il gradino 2): i risultati di questo run non valgono, anche se qualche <id>.json e'
-#         stato scritto ·
-#       5 mirror o copia privata non ripristinati (integrita': ci si ferma) ·
-#       64 uso errato: argomenti, radice del progetto non risolta (PROJECT_ROOT), maat.json non leggibile,
-#          mutations.json non valido.
+# Exit: 0 all valid proofs (or none to run) · 1 at least one FAIL · 2 at least one blocked (no FAIL) ·
+#       3 environment BLOCKED (tools missing with no fallback — sha256sum, timeout, a Python from python.sh, rsync and tar
+#         together: «controprove non disponibili: manca <strumento>» —, {python} interpreter missing, lock beyond the
+#         cap, mirror missing,
+#         stale dependencies that cannot be realigned, failed sync, copy not aligned, private copy that cannot be created; or
+#         mirror changed during step 2): the results of this run are not valid, even if some <id>.json has
+#         been written ·
+#       5 mirror or private copy not restored (integrity: it stops) ·
+#       64 wrong usage: arguments, project root not resolved (PROJECT_ROOT), maat.json not readable,
+#          invalid mutations.json.
 set -u
 
 usage() { echo "uso: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>" >&2; exit 64; }
@@ -144,8 +144,8 @@ usage() { echo "uso: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>" >&2; 
 case "$1" in -*) usage ;; esac
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-# Radice del progetto: PROJECT_ROOT dell'ambiente vince (run_cp la passa, anche dentro WSL); senza, il risolutore
-# unico (FIC_REPO, poi git dalla cartella di lavoro). Mai $HERE/../..: nel plugin sarebbe la cartella dei plugin.
+# Project root: PROJECT_ROOT from the environment wins (run_cp passes it, also inside WSL); without it, the single
+# resolver (FIC_REPO, then git from the working directory). Never $HERE/../..: in the plugin it would be the plugins folder.
 _PR=${PROJECT_ROOT:-}
 . "$HERE/lib/maat-paths.sh" || { echo "counterproof: lib/maat-paths.sh non caricabile (plugin incompleto: $HERE)" >&2; exit 64; }
 [ -n "$_PR" ] && PROJECT_ROOT=$_PR
@@ -153,8 +153,8 @@ maat_progetto || { echo "counterproof: radice del progetto non risolta: imposta 
 ROOT=$(cd "$PROJECT_ROOT" 2>/dev/null && pwd) || { echo "counterproof: radice del progetto non accessibile: $PROJECT_ROOT" >&2; exit 64; }
 export PROJECT_ROOT=$ROOT MAAT_CONFIG_PY="$HERE/maat-config.py"
 
-# Strumenti (pk08): rsync e flock hanno un ripiego (fic_sync con tar, fic_lock_dir con mkdir: fic-mirror.sh), piu'
-# lento e dichiarato; senza ripiego -> BLOCKED: sha256sum, timeout, un Python da python.sh, e tar quando manca rsync.
+# Tools (pk08): rsync and flock have a fallback (fic_sync with tar, fic_lock_dir with mkdir: fic-mirror.sh), slower
+# and declared; without a fallback -> BLOCKED: sha256sum, timeout, a Python from python.sh, and tar when rsync is missing.
 . "$HERE/python.sh" 2>/dev/null || FIC_PY=""
 manca=""
 for t in sha256sum timeout; do command -v "$t" >/dev/null 2>&1 || manca+="${manca:+, }$t"; done
@@ -166,9 +166,9 @@ RIPIEGO=""
 command -v rsync >/dev/null 2>&1 || RIPIEGO="rsync assente: copia di ripiego (find, impronte sha256, tar)"
 [ -n "$FLOCK" ] || RIPIEGO+="${RIPIEGO:+; }flock assente: lock di ripiego (mkdir atomico)"
 
-# Destinazione con la STESSA regola di test-fast.sh (fic-mirror.sh): ~/fic-mirror dal tree principale,
-# ~/fic-mirror-<hash> da un worktree. Da un worktree non si sincronizza mai il suo codice nella copia del tree
-# principale. Radice non determinabile -> BLOCKED (piu' sotto).
+# Destination with the SAME rule as test-fast.sh (fic-mirror.sh): ~/fic-mirror from the main tree,
+# ~/fic-mirror-<hash> from a worktree. From a worktree its code is never synced into the copy of the main
+# tree. Root that cannot be determined -> BLOCKED (further below).
 . "$HERE/fic-mirror.sh" || { echo "counterproof: fic-mirror.sh non trovato accanto a counterproof.sh" >&2; exit 64; }
 if fic_mirror_init "$ROOT"; then MIR=$FIC_MIRROR; else MIR=""; fi
 WAIT=${FIC_LOCK_WAIT:-900}
@@ -179,7 +179,7 @@ MJ=$1
 [ -f "$MJ" ] || { echo "counterproof: mutations.json non trovato: $1" >&2; exit 64; }
 OUT=$(cd "$(dirname "$MJ")" && pwd)
 
-# Logica su JSON e report, in Python (niente jq in WSL). Nessun apice singolo qui dentro.
+# Logic on JSON and reports, in Python (no jq in WSL). No single quote in here.
 PY='
 import importlib.util, json, os, posixpath, re, shutil, sys
 import xml.etree.ElementTree as ET
@@ -194,10 +194,10 @@ IMPORT_JS = re.compile(r"Failed to load url|Failed to resolve import|Cannot find
 IMPORT_PY = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|cannot import name")
 
 def lettore():
-    # maat-config.py importato (MAAT_CONFIG_PY): le stesse funzioni dei comandi modulo-di e comando
+    # maat-config.py imported (MAAT_CONFIG_PY): the same functions as the modulo-di and comando commands
     p = os.environ.get("MAAT_CONFIG_PY") or ""
     try:
-        import sys; sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+        import sys; sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
         spec = importlib.util.spec_from_file_location("maat_config", p)
         mc = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mc)
@@ -232,7 +232,7 @@ def dove(d):
     return "fuori da ogni modulo" if d is None else "%s (%s)" % d
 
 def cerca_python_wsl(mc, cfg, m, root):
-    # la ricerca di gates.sh: candidati del modulo (radice) o piattaforma.python (repo) o python3; il primo che esiste
+    # the gates.sh search: candidates of the module (root) or piattaforma.python (repo) or python3; the first that exists
     v, base = m.get("python"), mc.norm(m["radice"])
     if not v:
         v, base = cfg.get("piattaforma", {}).get("python") or "python3", ""
@@ -268,8 +268,8 @@ def interprete(mc, cfg, m, root):
     return None, "python assente: " + (p or "nessun candidato")
 
 def pattern(s):
-    # -t confronta il fullName, dove vitest unisce antenati e titolo con uno spazio: un nome scritto come vitest
-    # lo stampa nei FAIL ("describe > it") va riportato a quella forma, o nessun test combacia (tutti skipped)
+    # -t matches the fullName, where vitest joins ancestors and title with a space: a name written the way vitest
+    # prints it in FAILs ("describe > it") must be brought back to that form, or no test matches (all skipped)
     return re.sub(r"([\\^$.*+?()\[\]{}|/])", r"\\\1", s.replace(" > ", " "))
 
 def prep(mj, root, tmp, out):
@@ -326,11 +326,11 @@ def prep(mj, root, tmp, out):
         ab = m.get("assorbita", False)
         if not isinstance(ab, bool) or not isinstance(m.get("motivo", ""), str):
             die(where + ": assorbita deve essere true/false e motivo un testo")
-        if ab:  # L2 (harness-pt11): non si esegue, il risultato si scrive sotto
+        if ab:  # L2 (harness-pt11): not run, the result is written below
             absorbed.append(m)
             continue
         cp = mod.get("controprova") or {}
-        if not cp.get("comando"):   # NOT RUN (dichiarato): mai verde ne rosso
+        if not cp.get("comando"):   # NOT RUN (declared): never green nor red
             why = ("il modulo %s non dichiara controprova" % mod["nome"]) if not cp else ("controprova.comando non dichiarato per il modulo %s" % mod["nome"])
             notrun.append((m, cp.get("runner"), why))
             continue
@@ -382,8 +382,8 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "gruppo"), gruppo)
         wtxt(os.path.join(d, "copia"), "1" if x.get("copia") else "")
         wtxt(os.path.join(d, "runner"), cp["runner"])
-        # esclusioni in piu del modulo: le cartelle di collega_nel_worktree (dipendenze installate), relative alla
-        # radice dei pacchetti, ancorate
+        # extra exclusions of the module: the collega_nel_worktree folders (installed dependencies), relative to the
+        # packages root, anchored
         esc = []
         for v in x.get("collega_nel_worktree", []):
             v = {"percorso": v} if isinstance(v, str) else v
@@ -415,7 +415,7 @@ def prep(mj, root, tmp, out):
         runner = g["runner"]
         if runner == "vitest":
             val = {"test": [trel], "nome": pattern(nome)}
-        elif runner == "pytest":  # nome relativo al file: via "<radice>/" e "<percorso>::"
+        elif runner == "pytest":  # name relative to the file: strip "<radice>/" and "<percorso>::"
             nome = nome[len(radp):] if radp and nome.startswith(radp) else nome
             nome = nome[len(trel) + 2:] if nome.startswith(trel + "::") else nome
             val = {"test": [trel + "::" + nome] if nome else [trel], "nome": nome}
@@ -436,8 +436,8 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "tpl"), x["controprova"]["comando"])
         with open(os.path.join(d, "valori.json"), "w", encoding="utf-8") as fh:
             json.dump(val, fh, ensure_ascii=False)
-    # lock: quello del modulo con copia delle mutazioni (lo stesso di test-fast.sh); senza, del primo modulo con
-    # copia di maat.json (la copia condivisa con test-fast.sh), altrimenti del primo modulo delle mutazioni
+    # lock: that of the module with copia among the mutations (the same as test-fast.sh); without one, that of the first module with
+    # copia in maat.json (the copy shared with test-fast.sh), otherwise that of the first module of the mutations
     lock = ""
     if con_copia:
         lock = mc.norm(mods[con_copia[0]]["radice_pacchetti"])
@@ -450,7 +450,7 @@ def prep(mj, root, tmp, out):
     print(len(order), len(data) - len(absorbed) - len(notrun), len(absorbed), len(notrun))
 
 def riga(d, report):
-    # la riga del runner: controprova.comando espanso con i valori del prep e il report di questo run
+    # the runner line: controprova.comando expanded with the values from prep and the report of this run
     mc = lettore()
     with open(os.path.join(d, "valori.json"), encoding="utf-8") as fh:
         val = json.load(fh)
@@ -483,9 +483,9 @@ def apply(path, cf, sf):
         fh.write(new)
 
 def vitest_ids(a):
-    # nomi con cui un test si puo citare: fullName (antenati + titolo, uniti da spazio), il titolo, e ogni
-    # suffisso della catena degli antenati, uniti da spazio o da " > " come nei FAIL; confronto esatto, mai
-    # per sottostringa
+    # names by which a test can be cited: fullName (ancestors + title, joined by a space), the title, and every
+    # suffix of the ancestor chain, joined by a space or by " > " as in FAILs; exact comparison, never
+    # by substring
     anc, title = a.get("ancestorTitles") or [], a.get("title") or ""
     ids = {a.get("fullName"), title}
     for k in range(len(anc)):
@@ -564,7 +564,7 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
     return "rosso_raccolta", "test nominato non eseguito (assente o saltato): nessuna prova", ""
 
 def classify_comando(rc):
-    # runner comando: nessun report, conta solo l uscita (prova debole)
+    # comando runner: no report, only the exit code counts (weak proof)
     if rc != 0:
         return "rosso_generico", "il comando della controprova esce %d: rosso senza report, prova debole (nessuna asserzione verificata)" % rc, ""
     return "verde", "il comando della controprova esce 0: la mutazione non e coperta", ""
@@ -616,17 +616,17 @@ elif cmd == "result":
 '
 
 TMPD=$(mktemp -d)
-CPD=""; LOCKD=""   # LOCKD: il lock di ripiego (mkdir) preso da questo processo, da rilasciare in cleanup
+CPD=""; LOCKD=""   # LOCKD: the fallback lock (mkdir) taken by this process, to release in cleanup
 : > "$TMPD/inflight"
-# Su segnale (TERM, INT, HUP -> uscita normale -> trap EXIT), in quest'ordine: si uccidono TUTTI i discendenti
-# (worker, `timeout`, il comando del runner: `timeout` apre un proprio process group, quindi uccidere i soli job
-# non basta), si ripristina il file in volo nel mirror, si cancellano le copie private. SIGKILL non e' gestibile:
-# vedi la testata.
-descendants() {  # <pid>: tutti i discendenti, in profondita'
+# On a signal (TERM, INT, HUP -> normal exit -> EXIT trap), in this order: ALL descendants are killed
+# (workers, `timeout`, the runner command: `timeout` opens its own process group, so killing only the jobs
+# is not enough), the in-flight file in the mirror is restored, the private copies are deleted. SIGKILL cannot be handled:
+# see the header.
+descendants() {  # <pid>: all descendants, depth-first
   local c
   for c in $(pgrep -P "$1" 2>/dev/null); do echo "$c"; descendants "$c"; done
 }
-kill_tree() {  # piu' passate: un worker fra una raccolta e l'altra puo' aver lanciato il run successivo
+kill_tree() {  # several passes: between one collection and the next a worker may have launched the next run
   local k pids
   for k in 1 2 3 4 5; do
     pids=$(descendants $$)
@@ -635,20 +635,20 @@ kill_tree() {  # piu' passate: un worker fra una raccolta e l'altra puo' aver la
     sleep 0.2
   done
 }
-kill_runs() {  # i gruppi aperti da `timeout`: sopravvivono ai worker se questi muoiono per primi (Ctrl-C)
+kill_runs() {  # the groups opened by `timeout`: they outlive the workers if those die first (Ctrl-C)
   local p
   [ -f "$TMPD/runpgids" ] || return 0
   while read -r p; do [ -n "$p" ] && kill -KILL -- "-$p" "$p" 2>/dev/null; done < "$TMPD/runpgids"
 }
 cleanup() {
-  # Un secondo segnale durante la pulizia la interromperebbe a meta' (copie e processi lasciati li'): da qui
-  # in poi i segnali si ignorano.
+  # A second signal during cleanup would interrupt it halfway (copies and processes left behind): from here
+  # on signals are ignored.
   trap '' TERM INT HUP
   kill_tree; kill_runs; kill_tree; wait 2>/dev/null
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
   [ -n "$CPD" ] && rm -rf "$CPD"
   rm -rf "$TMPD"
-  [ -z "$LOCKD" ] || fic_unlock_dir "$LOCKD" "$$"   # ultimo: il mirror e' gia' ripristinato
+  [ -z "$LOCKD" ] || fic_unlock_dir "$LOCKD" "$$"   # last: the mirror is already restored
 }
 trap 'exit 143' TERM INT HUP
 trap cleanup EXIT
@@ -661,7 +661,7 @@ if [ "${NN:-0}" -gt 0 ]; then
   ABS+=" non_eseguite=$NN"
   echo "counterproof: $NN NOT RUN (dichiarato): moduli senza controprova, <id>.json con esito=non_eseguita"
 fi
-if [ "$NU" -eq 0 ]; then   # niente da eseguire (assorbite o NOT RUN): nessun lock, nessun mirror
+if [ "$NU" -eq 0 ]; then   # nothing to run (absorbed or NOT RUN): no lock, no mirror
   E=PASS; [ "${NN:-0}" -gt 0 ] && E="NOT RUN"
   echo "counterproof: esito=$E prove=0/0 fail=0 bloccate=0 tempo=0s luogo=-$ABS"; exit 0
 fi
@@ -669,7 +669,7 @@ fi
 blocked() { echo "counterproof: esito=BLOCKED ($1) luogo=-"; exit 3; }
 [ -n "$MIR" ] || blocked "radice del repository non determinabile (git): nessuna copia associabile"
 
-# I moduli delle mutazioni (ordine di maat.json), dal prep: cartelle, copia, runner, esclusioni, preparati, copia_anche
+# The modules of the mutations (maat.json order), from prep: folders, copia, runner, exclusions, preparati, copia_anche
 modv() { cat "$TMPD/mod/$1/$2" 2>/dev/null; }
 mapfile -t MODS < "$TMPD/mods"
 declare -A M_RAD M_PAC M_GRP M_RUN
@@ -677,24 +677,24 @@ for m in "${MODS[@]}"; do
   M_RAD[$m]=$(modv "$m" radice); M_PAC[$m]=$(modv "$m" pacchetti); M_GRP[$m]=$(modv "$m" gruppo); M_RUN[$m]=$(modv "$m" runner)
   miss=$(modv "$m" pymiss); [ -z "$miss" ] || blocked "$miss"
 done
-excl_of() {  # <modulo> -> EX: l'elenco del nucleo + le cartelle di collega_nel_worktree del modulo
+excl_of() {  # <module> -> EX: the core list + the module's collega_nel_worktree folders
   local x
   EX=("${FIC_MIRROR_EXCL[@]}")
   while IFS= read -r x; do [ -n "$x" ] && EX+=("--exclude=$x"); done < "$TMPD/mod/$1/escludi"
 }
-CM=$(cat "$TMPD/copiamod")   # il modulo con copia fra quelli delle mutazioni ("" se nessuno)
+CM=$(cat "$TMPD/copiamod")   # the module with copia among those of the mutations ("" if none)
 LOCKPKG=$(cat "$TMPD/lockpkg")
 LOCK="$MIR/$LOCKPKG/.fic-lock"
 SRCC=""; DSTC=""
 [ -n "$CM" ] && { SRCC="$ROOT/${M_PAC[$CM]}"; DSTC="$MIR/${M_PAC[$CM]}"; }
 
-manifest_list() {  # <dir sorgente>: come test-fast.sh — tracciati + non tracciati non ignorati + .env*
+manifest_list() {  # <source dir>: like test-fast.sh — tracked + non-ignored untracked + .env*
   { git -c safe.directory='*' -C "$1" ls-files -co --exclude-standard -z . | tr '\0' '\n'
     (cd "$1" && find . \( -name node_modules -o -name .nuxt -o -name .output -o -name .venv \) -prune -o -name '.env*' -type f -print | sed 's|^\./||')
   } | LC_ALL=C sort -u
 }
 
-hashes() {  # <dir> <lista>: "sha  path" per ogni path della lista; ABSENT se manca
+hashes() {  # <dir> <list>: "sha  path" for each path in the list; ABSENT if missing
   (cd "$1" && while IFS= read -r f; do
      [ -n "$f" ] || continue
      if [ -f "$f" ]; then printf '%s  %s\n' "$(sha256sum < "$f" | cut -c1-64)" "$f"; else printf 'ABSENT  %s\n' "$f"; fi
@@ -703,7 +703,7 @@ hashes() {  # <dir> <lista>: "sha  path" per ogni path della lista; ABSENT se ma
 
 if [ -n "$CM" ]; then
   why=""
-  # copia di un worktree al primo uso: node_modules seminati dalla copia del tree principale (come test-fast.sh)
+  # a worktree's copy on first use: node_modules seeded from the main tree's copy (like test-fast.sh)
   if [ "$MIR" != "$HOME/fic-mirror" ] && ! { [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ]; }; then
     why=$(fic_seed_node_modules "$SRCC" "$DSTC") && why="" || why="; semina non possibile: $why"
   fi
@@ -720,8 +720,8 @@ else
 fi
 
 if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
-  # dipendenze stantie: riallineamento automatico sotto il lock (fic-mirror.sh, fic_deps_autorefresh), poi di nuovo
-  # l'impronta; preparati e cache si ripuliscono comunque a ogni run nel sync qui sotto
+  # stale dependencies: automatic realignment under the lock (fic-mirror.sh, fic_deps_autorefresh), then the
+  # fingerprint again; preparati and caches are cleaned anyway on every run in the sync below
   deps_out=$(fic_deps_autorefresh "$SRCC" "$DSTC") ||
     blocked "dipendenze stantie, riallineamento automatico non riuscito: $deps_out"
   echo "counterproof: $deps_out"
@@ -734,8 +734,8 @@ for m in "${MODS[@]}"; do
   fic_sync --delete --checksum "${EX[@]}" "$src/" "$dst/" || blocked "sync fallito ($pk)"
   mapfile -t prepg < "$TMPD/mod/$m/preparati"
   fic_mirror_pulisci "$dst" "${M_GRP[$m]}" "${M_RUN[$m]}" ${prepg[@]+"${prepg[@]}"} || blocked "pulizia della copia fallita ($pk)"
-  # copia_anche: cartelle di sola lettura che i test del modulo leggono (per esempio uno schema), allineate con
-  # --delete, fuori dal manifest. Le mutazioni restano sotto il modulo.
+  # copia_anche: read-only folders that the module's tests read (for example a schema), aligned with
+  # --delete, outside the manifest. The mutations stay under the module.
   while IFS= read -r a; do
     [ -n "$a" ] && [ -d "$ROOT/$a" ] || continue
     mkdir -p "$MIR/$a" &&
@@ -751,34 +751,34 @@ for m in "${MODS[@]}"; do
   fi
 done
 
-py_ok() {  # <interprete>: eseguibile (percorso) o nel PATH (nome)
+py_ok() {  # <interpreter>: executable (path) or in PATH (name)
   case "$1" in */*) [ -x "$1" ] ;; *) command -v "$1" >/dev/null 2>&1 ;; esac
 }
 
-# Il runner di UNA mutazione: controprova.comando del modulo, espanso (riga del prep), nella radice del modulo dentro
-# <radice>. <dir mutazione> <radice> <dir di lavoro> <cacheDir o ""> <riga>. Solo nelle copie private (cache
-# impostata) e col runner vitest: cacheDir privata e fs.allow = radice della copia + node_modules del mirror, dove
-# si risolve il symlink, + packages del mirror, dove si risolvono i link del workspace di node_modules.
+# The runner of ONE mutation: the module's controprova.comando, expanded (line from prep), in the module root inside
+# <root>. <mutation dir> <root> <work dir> <cacheDir or ""> <line>. Only in the private copies (cache
+# set) and with the vitest runner: private cacheDir and fs.allow = root of the copy + node_modules of the mirror, where
+# the symlink resolves, + packages of the mirror, where the node_modules workspace links resolve.
 run_cmd() {
   local d=$1 mroot=$2 w=$3 cache=$4 line=$5 mod cwd allow=""
   mod=$(cat "$d/modulo")
   cwd="$mroot${M_RAD[$mod]:+/${M_RAD[$mod]}}"
   if [ -n "$cache" ] && [ "$(cat "$d/runner")" = vitest ]; then allow="$mroot/${M_PAC[$mod]}:$DSTC/node_modules:$DSTC/packages"; fi
   CMD="(cd $cwd && ${allow:+FIC_VITE_CACHE_DIR=$cache FIC_VITE_FS_ALLOW=$allow }$line)"
-  # 9>&-: il lock resta del solo processo principale, non dei run. `& wait`: un segnale al principale fa
-  # scattare subito il trap, senza aspettare la fine del run. Il pid di `timeout` (env fa exec) e' anche il
-  # pgid del gruppo che apre: registrato in runpgids, il trap uccide il gruppo intero.
+  # 9>&-: the lock belongs to the main process only, not to the runs. `& wait`: a signal to the main process makes
+  # the trap fire at once, without waiting for the run to end. The pid of `timeout` (env does exec) is also the
+  # pgid of the group it opens: recorded in runpgids, the trap kills the whole group.
   (cd "$cwd" || exit 1
    env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line" &
    echo $! >> "$TMPD/runpgids"; wait $!) 9>&- > "$w/log" 2>&1 &
   wait $!
 }
 
-restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <copia di sicurezza> <file>: unlink + copia
+restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <backup copy> <file>: unlink + copy
 
-# UNA mutazione in una radice che rispecchia il repo: il mirror (gradino 1) o una copia privata (gradino 2).
-# <dir mutazione> <radice> <dir di lavoro> [cacheDir di vite]. Scrive <id>.json, appende la riga d'esito a
-# <dir di lavoro>/results. Torna 5 se dopo il ripristino la radice non e' identica al manifest iniziale.
+# ONE mutation in a root that mirrors the repo: the mirror (step 1) or a private copy (step 2).
+# <mutation dir> <root> <work dir> [vite cacheDir]. Writes <id>.json, appends the result line to
+# <work dir>/results. Returns 5 if after the restore the root is not identical to the initial manifest.
 run_one() {
   local d=$1 mroot=$2 w=$3 cache=${4:-}
   local f mod py rep line mf why rc t0 ms out cp esito ids
@@ -786,7 +786,7 @@ run_one() {
   mf="$mroot/$f"
   rm -f "$w/report" "$w/bak"; : > "$w/log"
   why=""; rc=0; CMD=""; t0=$(date +%s%N)
-  # un interprete Windows (.exe, lanciato da WSL) scrive il report con un percorso Windows
+  # a Windows interpreter (.exe, launched from WSL) writes the report with a Windows path
   rep="$w/report"
   case "$py" in *.exe) command -v wslpath >/dev/null 2>&1 && rep=$(wslpath -w "$w/report") ;; esac
   if [ -n "$py" ] && ! py_ok "$py"; then
@@ -798,14 +798,14 @@ run_one() {
   elif ! cp -p "$mf" "$w/bak"; then
     why="copia di sicurezza non riuscita: $f"
   else
-    printf '%s' "$mf" > "$w/inflight"   # registrato PRIMA di scrivere: il trap sa cosa ripristinare
+    printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
     if out=$("$FIC_PY" -c "$PY" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
       run_cmd "$d" "$mroot" "$w" "$cache" "$line"
       rc=$?
     else
       why=${out:-mutazione non applicabile}
     fi
-    restore "$w/bak" "$mf"   # RIPRISTINO
+    restore "$w/bak" "$mf"   # RESTORE
     : > "$w/inflight"
     hashes "$mroot/${M_PAC[$mod]}" "$TMPD/list.$mod" > "$w/now.$mod"
     if ! cmp -s "$TMPD/base.$mod" "$w/now.$mod"; then
@@ -821,15 +821,15 @@ run_one() {
   echo "counterproof: $ids -> $esito ($cp, $((ms / 1000)) s)${line#*--}"
 }
 
-# ── Gradino 2: quali mutazioni vanno in parallelo, e su quante copie ─────────────────────────────────
-# Solo vitest su file sotto la radice del modulo con copia: i link del workspace in node_modules puntano ai
-# pacchetti DEL MIRROR, quindi una mutazione fuori dalla radice fatta in una copia privata sarebbe invisibile
-# (falso «verde»): quelle, gli altri moduli e gli altri runner restano seriali nel mirror. Per la stessa ragione
-# (le copie leggono i pacchetti del mirror) il lock del mirror resta preso per tutto il gradino 2.
-# N = min(FIC_CP_PARALLEL [4], MemAvailable / FIC_CP_MEM_MB, nproc/2, mutazioni parallelizzabili); N < 2 =>
-# tutto seriale. FIC_CP_MEM_MB: memoria di UN run vitest. Misurata il 2026-09-29 su MemAvailable durante i
-# run (goals-utils + goals-page): ~1,1 GB di picco per un run da solo, ~3,3 GB per 4 in parallelo. Il default
-# 1500 tiene il picco del run singolo con margine: con ~11 GB liberi il tetto resta quello di FIC_CP_PARALLEL.
+# ── Step 2: which mutations go in parallel, and on how many copies ─────────────────────────────────
+# Only vitest on files under the root of the module with copia: the workspace links in node_modules point to the
+# packages OF THE MIRROR, so a mutation outside the root made in a private copy would be invisible
+# (false «green»): those, the other modules and the other runners stay serial in the mirror. For the same reason
+# (the copies read the mirror packages) the mirror lock stays held for the whole of step 2.
+# N = min(FIC_CP_PARALLEL [4], MemAvailable / FIC_CP_MEM_MB, nproc/2, parallelizable mutations); N < 2 =>
+# everything serial. FIC_CP_MEM_MB: memory of ONE vitest run. Measured on 2026-09-29 on MemAvailable during the
+# runs (goals-utils + goals-page): ~1.1 GB peak for a run alone, ~3.3 GB for 4 in parallel. The default
+# 1500 covers the single-run peak with margin: with ~11 GB free the cap stays that of FIC_CP_PARALLEL.
 MEM_MB=${FIC_CP_MEM_MB:-1500}
 N=${FIC_CP_PARALLEL:-4}
 case "$N$MEM_MB" in *[!0-9]*) echo "counterproof: FIC_CP_PARALLEL e FIC_CP_MEM_MB vogliono un intero" >&2; exit 64 ;; esac
@@ -851,7 +851,7 @@ NMEM=$(( ${AVAIL:-0} / MEM_MB )); NCPU=$(( $(nproc) / 2 ))
 if [ "$N" -lt 2 ]; then SER+=(${PAR[@]+"${PAR[@]}"}); PAR=(); fi
 
 q_pop() { k=$(cat "$TMPD/q.next"); echo $((k + 1)) > "$TMPD/q.next"; sed -n "$((k + 1))p" "$TMPD/q.all"; }
-next_job() {  # coda dinamica condivisa dai worker: la prossima mutazione, o niente. Senza flock: mkdir, senza tetto
+next_job() {  # dynamic queue shared by the workers: the next mutation, or nothing. Without flock: mkdir, without a cap
   if [ -n "$FLOCK" ]; then
     ( flock 8; q_pop ) 8>"$TMPD/q.lock"
   else
@@ -861,7 +861,7 @@ next_job() {  # coda dinamica condivisa dai worker: la prossima mutazione, o nie
 
 T_ALL=$(date +%s%N)
 : > "$TMPD/results"
-# Gradino 1: seriale nel mirror, sotto il lock.
+# Step 1: serial in the mirror, under the lock.
 for d in ${SER[@]+"${SER[@]}"}; do
   run_one "$d" "$MIR" "$TMPD"; r=$?
   if [ "$r" -eq 5 ]; then
@@ -870,13 +870,13 @@ for d in ${SER[@]+"${SER[@]}"}; do
   [ "$r" -eq 0 ] || exit "$r"
 done
 
-# Gradino 2: N copie private del SOLO sorgente del modulo con copia, fatte dal mirror verificato; i run girano nelle
-# copie, fuori dal mirror. Il lock del mirror resta preso per TUTTO il gradino (snapshot, run, verifica finale): le
-# copie leggono ancora il mirror — node_modules radice e' un symlink al suo (sola lettura), e i link del workspace
-# li' dentro portano ai SUOI pacchetti — quindi un altro test-fast.sh o counterproof.sh che lo sincronizzasse
-# cambierebbe il codice sotto i run. I node_modules annidati (piccoli, con le cache di vite/jiti) sono copiati
-# senza cache; cacheDir di vite/vitest privata per copia (FIC_VITE_CACHE_DIR, letta da vitest.config.ts).
-# Niente `cp -al`: un hard link condividerebbe l'inode, e la mutazione di una copia toccherebbe le altre.
+# Step 2: N private copies of the source ONLY of the module with copia, made from the verified mirror; the runs happen in the
+# copies, outside the mirror. The mirror lock stays held for the WHOLE step (snapshot, runs, final check): the
+# copies still read the mirror — root node_modules is a symlink to its own (read-only), and the workspace links
+# in there lead to ITS packages — so another test-fast.sh or counterproof.sh syncing it
+# would change the code under the runs. Nested node_modules (small, with the vite/jiti caches) are copied
+# without caches; private vite/vitest cacheDir per copy (FIC_VITE_CACHE_DIR, read by vitest.config.ts).
+# No `cp -al`: a hard link would share the inode, and mutating one copy would touch the others.
 INTEG=0; DEPS_CHANGED=0; LUOGO=mirror
 if [ ${#PAR[@]} -gt 0 ]; then
   DEPS0=$(cat "$DSTC/.fic-deps")
@@ -904,8 +904,8 @@ if [ ${#PAR[@]} -gt 0 ]; then
     PIDS+=($!)
   done
   for p in "${PIDS[@]}"; do wait "$p" || INTEG=1; done
-  # Verifica finale, ancora sotto il lock: i sorgenti del mirror (letti dalle copie tramite il workspace) sono quelli
-  # dello snapshot. `test-fast.sh --setup` il lock non lo prende: se ha cambiato node_modules, lo si dice.
+  # Final check, still under the lock: the mirror sources (read by the copies through the workspace) are those
+  # of the snapshot. `test-fast.sh --setup` does not take the lock: if it changed node_modules, this is reported.
   hashes "$DSTC" "$TMPD/list.$CM" > "$TMPD/final.$CM"
   cmp -s "$TMPD/base.$CM" "$TMPD/final.$CM" || DEPS_CHANGED=1
   [ "$(cat "$DSTC/.fic-deps" 2>/dev/null)" = "$DEPS0" ] || DEPS_CHANGED=1
@@ -918,8 +918,8 @@ while read -r cp _ n _; do
   case "$cp" in PASS) NPASS=$((NPASS + n)) ;; FAIL) NFAIL=$((NFAIL + n)) ;; *) NBLOCK=$((NBLOCK + n)) ;; esac
 done < <(cat "$TMPD/results" "$TMPD"/w*/results 2>/dev/null)
 
-# Il working tree non e' mai stato scritto da qui: se e' cambiato, l'ha cambiato qualcun altro durante le
-# controprove, e i risultati valgono per lo stato sincronizzato all'inizio. Dichiarato, non nascosto.
+# The working tree was never written from here: if it changed, someone else changed it during the
+# counterproofs, and the results apply to the state synced at the start. Declared, not hidden.
 for m in "${MODS[@]}"; do
   hashes "$ROOT/${M_PAC[$m]}" "$TMPD/list.$m" > "$TMPD/src1.$m"
   cmp -s "$TMPD/src0.$m" "$TMPD/src1.$m" ||

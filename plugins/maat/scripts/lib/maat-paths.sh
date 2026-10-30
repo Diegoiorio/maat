@@ -1,29 +1,29 @@
-# maat-paths.sh — risolutore unico delle due radici (pk04a-1, passo 1). Da includere con `.` all'inizio di ogni
-# script bash del harness; eseguito direttamente (`bash maat-paths.sh`) stampa le variabili, una per riga
-# «NOME=valore» (diagnosi e test: stesso formato di `maat_paths.py`).
+# maat-paths.sh — single resolver of the two roots (pk04a-1, step 1). To be sourced with `.` at the start of every
+# bash script of the harness; run directly (`bash maat-paths.sh`) it prints the variables, one per line
+# «NOME=valore» (diagnostics and tests: same format as `maat_paths.py`).
 #
-#   MAAT_ROOT     radice del plugin: MAAT_ROOT dell'ambiente se impostata, altrimenti due livelli sopra questo file.
-#                 Deve contenere .claude-plugin/plugin.json, altrimenti errore ed uscita 4.
-#   PROJECT_ROOT  radice del progetto: FIC_REPO se impostata, altrimenti `git rev-parse --show-toplevel` lanciato
-#                 dalla CARTELLA DI LAVORO (mai dalla posizione dello script). Fuori da un repo git resta vuota:
-#                 chi ne ha bisogno chiama `maat_progetto`, che stampa un errore chiaro e ritorna 4 (eseguito
-#                 direttamente, questo file esce con 4).
+#   MAAT_ROOT     plugin root: MAAT_ROOT from the environment if set, otherwise two levels above this file.
+#                 It must contain .claude-plugin/plugin.json, otherwise error and exit 4.
+#   PROJECT_ROOT  project root: FIC_REPO if set, otherwise `git rev-parse --show-toplevel` run
+#                 from the WORKING DIRECTORY (never from the script location). Outside a git repo it stays empty:
+#                 whoever needs it calls `maat_progetto`, which prints a clear error and returns 4 (when run
+#                 directly, this file exits with 4).
 #   MAAT_SCRIPTS  $MAAT_ROOT/scripts · MAAT_SKILLS $MAAT_ROOT/skills · MAAT_AGENTS $MAAT_ROOT/agents ·
 #   MAAT_SCHEMAS  $MAAT_ROOT/schemas
-#   MAAT_WORK     $PROJECT_ROOT/<cartelle.lavoro> (maat.json, letta con maat_conf; default .claude/.ai-workflow).
-#                 Vuota senza progetto.
+#   MAAT_WORK     $PROJECT_ROOT/<cartelle.lavoro> (maat.json, read with maat_conf; default .claude/.ai-workflow).
+#                 Empty without a project.
 #
-# Forma dei percorsi: su Windows (Git Bash) C:/… come `pwd -W` e come l'uscita di git; altrove quella di `pwd`.
-# Il lock delle fasi di codice NON usa PROJECT_ROOT: run-phase.sh lo calcola dalla cartella di lavoro.
-# Nessuna variabile e' esportata: ogni script la ricalcola dalla propria posizione e dalla propria cartella.
+# Path form: on Windows (Git Bash) C:/… like `pwd -W` and like git's output; elsewhere that of `pwd`.
+# The lock of the code phases does NOT use PROJECT_ROOT: run-phase.sh computes it from the working directory.
+# No variable is exported: each script recomputes it from its own location and its own working directory.
 
 _maat_paths_err() { echo "maat: $*" >&2; }
 
-# Percorso in forma C:/… per i programmi Windows: gli script che passano percorsi a Python, WSL o pytest chiamano
-# questa, mai cygpath -m direttamente (resta solo `mostra` di cycle-state.sh, gemella di driver.py). cygpath -m antepone //?/
-# ai percorsi oltre MAX_PATH (260): un run dir dal nome lungo diventava //?/C:/… e pytest in WSL non scriveva il JUnit.
-# maat_cygm toglie il prefisso. Argomenti come cygpath -m (anche `maat_cygm -a <percorso>`); non-zero se cygpath
-# manca o fallisce (chi la chiama tiene il proprio ripiego).
+# Path in C:/… form for Windows programs: scripts that pass paths to Python, WSL or pytest call
+# this, never cygpath -m directly (only `mostra` of cycle-state.sh remains, twin of driver.py). cygpath -m prepends //?/
+# to paths beyond MAX_PATH (260): a run dir with a long name became //?/C:/… and pytest in WSL did not write the JUnit.
+# maat_cygm strips the prefix. Arguments as for cygpath -m (also `maat_cygm -a <path>`); non-zero if cygpath
+# is missing or fails (the caller keeps its own fallback).
 maat_cygm() { local o; o=$(cygpath -m "$@" 2>/dev/null) || return 1; printf '%s' "${o#//\?/}"; }
 
 if [ -n "${MAAT_ROOT:-}" ]; then
@@ -46,7 +46,7 @@ else
   PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') || PROJECT_ROOT=""
 fi
 
-maat_progetto() { # PROJECT_ROOT obbligatoria: errore chiaro e 4 se manca
+maat_progetto() { # PROJECT_ROOT required: clear error and 4 if missing
   [ -n "${PROJECT_ROOT:-}" ] && return 0
   _maat_paths_err "la cartella di lavoro $(pwd) non e' in un repository git: PROJECT_ROOT non risolta" \
     "(lancia dalla cartella del progetto, o imposta FIC_REPO)"
@@ -57,7 +57,7 @@ MAAT_WORK=""
 if [ -n "$PROJECT_ROOT" ]; then
   _maat_lavoro=.claude/.ai-workflow
   if [ -n "${MAAT_CONFIG:-}" ] || [ -f "$PROJECT_ROOT/.claude/maat.json" ]; then
-    # il file c'e': cartelle.lavoro dal lettore unico (il default dello schema e' lo stesso)
+    # the file exists: cartelle.lavoro from the single reader (the schema default is the same)
     if . "$MAAT_SCRIPTS/lib/maat-conf.sh" && _v=$(PROJECT_ROOT=$PROJECT_ROOT maat_conf cartelle.lavoro --default "$_maat_lavoro"); then
       [ -n "$_v" ] && _maat_lavoro=$_v
     else

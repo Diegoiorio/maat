@@ -1,55 +1,55 @@
 #!/usr/bin/env python3
-"""driver.py — orchestratore deterministico di /full-implementation-cycle (harness-pt14, blocco 1).
+"""driver.py — deterministic orchestrator of /full-implementation-cycle (harness-pt14, block 1).
 
-    driver.py next <spec.md>                   la tabella di ripresa: stesso output di cycle-state.sh (State/Next)
-    driver.py run <spec.md> [--max-fasi N] [--dry-run] [-- <flag inoltrati alle fasi>…]
-                                               la macchina a stati: next -> fase -> next … fino a DONE/STOP/WAIT
+    driver.py next <spec.md>                   the resume table: same output as cycle-state.sh (State/Next)
+    driver.py run <spec.md> [--max-fasi N] [--dry-run] [-- <flags forwarded to the phases>…]
+                                               the state machine: next -> phase -> next … until DONE/STOP/WAIT
     driver.py valida <log.jsonl> <schema> <fase> <result.json>
-                                               l'esito strutturato di una fase (lo stesso di run-phase.sh)
-    driver.py equiv [--certifica] <cartella|spec.md>…
-                                               prova di equivalenza con cycle-state.sh e con il validatore di
-                                               run-phase.sh; con --certifica, se passa, scrive driver.equiv
-    driver.py certificato                      stato del certificato: VALIDO (exit 0) · ASSENTE/SCADUTO (exit 1)
-    driver.py righe [<tetto>]                  righe di istruzioni caricate per fase; exit 1 se il carico BASE di una
-                                               supera il tetto (default 300); a parte, senza tetto, i file condizionali,
-                                               il carico con la scrittura del piano (autore.md) e quello dei sotto-agenti
+                                               the structured outcome of a phase (the same as run-phase.sh)
+    driver.py equiv [--certifica] <folder|spec.md>…
+                                               equivalence proof against cycle-state.sh and the validator of
+                                               run-phase.sh; with --certifica, if it passes, writes driver.equiv
+    driver.py certificato                      certificate status: VALIDO (exit 0) · ASSENTE/SCADUTO (exit 1)
+    driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
+                                               exceeds the cap (default 300); separately, with no cap, the conditional files,
+                                               the load with plan writing (autore.md) and that of the sub-agents
 
-CATENE in `run`: un WAIT che nomina un anello fa proseguire il driver su quella spec; il DONE di un anello lo
-riporta alla madre (che nomina il prossimo anello o la chiusura). Stesso budget, stesso anti-loop; un passaggio
-gia' fatto senza lanci in mezzo non si ripete. Senza certificato valido (driver.equiv) `run` prende Next/State da
-cycle-state.sh autonomo (FIC_CYCLE_STATE lo sostituisce nei test) e lo scrive nel log.
+CHAINS in `run`: a WAIT naming a ring makes the driver go on with that spec; the DONE of a ring brings it
+back to the mother (which names the next ring or the closing). Same budget, same anti-loop; a hand-over
+already made with no launches in between is not repeated. Without a valid certificate (driver.equiv) `run` takes Next/State from
+standalone cycle-state.sh (FIC_CYCLE_STATE replaces it in tests) and writes it to the log.
 
-LOTTI E CORSIE (passo 5). Prima di un implement in formato 2 il driver rigenera la procedura dal piano, raggruppa
-i blocchi in LOTTI con il contesto stimato dell'implementer sotto FIC_LOTTO_MAX (riga "LOTTI (driver): …" nel
-prompt, log/<label>.lotti) e decide le corsie con blocks-independent.py (log/<label>.corsie-driver, passato a
-run-phase.sh in FIC_CORSIE; run-phase.sh lancia le corsie con il suo launch_lanes). Formato 1: niente, come prima.
+BATCHES AND LANES (step 5). Before a format-2 implement the driver regenerates the procedure from the plan, groups
+the blocks into BATCHES with the implementer's estimated context below FIC_LOTTO_MAX ("LOTTI (driver): …" line in the
+prompt, log/<label>.lotti) and decides the lanes with blocks-independent.py (log/<label>.corsie-driver, passed to
+run-phase.sh in FIC_CORSIE; run-phase.sh launches the lanes with its own launch_lanes). Format 1: nothing, as before.
 
-PROMOZIONE L2 (harness-pt15). Prima di ogni review il driver ricontrolla le controprove "assorbita" di
-counterproof/mutations.json con `plan-check.sh l2` (lo stesso controllo di finalize.sh, sul codice finale): quelle
-che finalize rifiuterebbe perdono "assorbita" e si eseguono davvero (promuovi_l2).
+L2 PROMOTION (harness-pt15). Before every review the driver re-checks the "assorbita" counterproofs of
+counterproof/mutations.json with `plan-check.sh l2` (the same check as finalize.sh, on the final code): those
+that finalize would reject lose "assorbita" and are really executed (promuovi_l2).
 
-RIUSO, NON REIMPLEMENTAZIONE. Il driver sta SOPRA run-phase.sh: ogni fase parte con
-`run-phase.sh <run-dir> <label> <prompt>`, che resta il solo a gestire lock (codice e per spec), guardia, hook Stop,
-impronta del harness, attribuzione, gates.sh, review ∥ VERIFY, counterproof.sh, finalize.sh, catene, test-red e
-corsie. Il driver aggiunge cio' che era prosa dell'orchestratore LLM (SKILL.md, «Orchestrator mode» e «Resumption»):
-context-pack.sh prima di ogni fase, numerazione delle etichette, prompt della fase, lettura dell'esito, le uscite
-di run-phase come STOP, NEEDS_VERIFICATION nella stessa invocazione -> STOP, anti-loop, budget di fasi.
-Due parti sono portate in Python, con la prova di equivalenza (`equiv`) come condizione per usarle:
-  - `next`   = la tabella di cycle-state.sh (righe 0-14, 7t/7s/11s/11b/13f, catene C1-C4), che chiama gli stessi
-               script (plan-check.sh contract/basis/closed, review-surface.sh tree/check, run-phase.sh --harness-fp-confronta);
-  - `valida` = il validatore dell'esito di run-phase.sh (schema phase-result, prosa e JSON: il piu' conservativo).
+REUSE, NOT REIMPLEMENTATION. The driver sits ON TOP of run-phase.sh: every phase starts with
+`run-phase.sh <run-dir> <label> <prompt>`, which remains the only one handling locks (code and per spec), guard, Stop hook,
+harness fingerprint, attribution, gates.sh, review ∥ VERIFY, counterproof.sh, finalize.sh, chains, test-red and
+lanes. The driver adds what used to be prose for the LLM orchestrator (SKILL.md, «Orchestrator mode» and «Resumption»):
+context-pack.sh before every phase, label numbering, phase prompt, reading the outcome, run-phase exits
+as STOP, NEEDS_VERIFICATION in the same invocation -> STOP, anti-loop, phase budget.
+Two parts are ported to Python, with the equivalence proof (`equiv`) as the condition for using them:
+  - `next`   = the cycle-state.sh table (rows 0-14, 7t/7s/11s/11b/13f, chains C1-C4), which calls the same
+               scripts (plan-check.sh contract/basis/closed, review-surface.sh tree/check, run-phase.sh --harness-fp-confronta);
+  - `valida` = the outcome validator of run-phase.sh (phase-result schema, prose and JSON: the most conservative).
 
-INVOLUCRI. cycle-state.sh e run-phase.sh restano script completi. Chiamano il driver (cycle-state.sh: `next`;
-run-phase.sh: `valida`) solo se il certificato driver.equiv porta l'hash attuale di driver.py e il loro, cioe'
-se l'equivalenza e' passata su QUESTI file; altrimenti restano autonomi. FIC_DRIVER=0 li forza autonomi,
-FIC_DRIVER=1 li forza sul driver (test). Un driver che fallisce -> ripiego sul codice autonomo, con un AVVISO.
+WRAPPERS. cycle-state.sh and run-phase.sh remain complete scripts. They call the driver (cycle-state.sh: `next`;
+run-phase.sh: `valida`) only if the certificate driver.equiv carries the current hash of driver.py and their own, i.e.
+if equivalence passed on THESE files; otherwise they stay standalone. FIC_DRIVER=0 forces them standalone,
+FIC_DRIVER=1 forces them onto the driver (tests). A driver that fails -> fallback to the standalone code, with an AVVISO.
 
-USCITE di `run`: 0 DONE · 1 STOP · 2 uso · 3 WAIT (catena) · 4 fase in corso o lock occupato.
-Eventi: righe "driver: …" su stdout e in <run-dir>/driver.log.
+EXITS of `run`: 0 DONE · 1 STOP · 2 usage · 3 WAIT (chain) · 4 phase running or lock occupato.
+Events: "driver: …" lines on stdout and in <run-dir>/driver.log.
 
-Variabili: FIC_BASH (bash da usare) · FIC_RUN_PHASE (run-phase.sh al posto del vero, test) · FIC_CONTEXT_PACK
-(context-pack.sh; "-" = saltato) · FIC_MAX_FASI (budget di default, 12) · FIC_DRIVER_CERT (certificato, test) ·
-FIC_DRIVER_ROOT (radice del harness al posto di MAAT_ROOT: una copia mutata del plugin, controprove dei test).
+Variables: FIC_BASH (bash to use) · FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK
+(context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) · FIC_DRIVER_CERT (certificate, tests) ·
+FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
 Test: driver.test.sh.
 """
 import datetime
@@ -66,27 +66,27 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT (pk04a-1)
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT (pk04a-1)
 sys.path.insert(0, HERE)
 import maat_paths  # noqa: E402
 
-# ROOT = radice del HARNESS (MAAT_ROOT; FIC_DRIVER_ROOT la sostituisce: una copia mutata del plugin, controprove dei
-# test). Il PROGETTO non passa da qui: e' il toplevel git della cartella della spec (run, `entra`).
+# ROOT = root of the HARNESS (MAAT_ROOT; FIC_DRIVER_ROOT replaces it: a mutated copy of the plugin, test
+# counterproofs). The PROJECT does not go through here: it is the git toplevel of the spec's folder (run, `entra`).
 try:
     ROOT = os.environ.get("FIC_DRIVER_ROOT") or maat_paths.maat_root()
 except maat_paths.ErroreMaat as _e:
     sys.stderr.write("driver: %s\n" % _e)
     sys.exit(2)
-HERE = os.path.join(ROOT, "scripts")   # una copia mutata (controprove dei test) usa i propri script
-FC = os.path.join(ROOT, "skills", "full-implementation-cycle")   # testi della skill: child-rules.md, SKILL.md, workers/
+HERE = os.path.join(ROOT, "scripts")   # a mutated copy (test counterproofs) uses its own scripts
+FC = os.path.join(ROOT, "skills", "full-implementation-cycle")   # skill texts: child-rules.md, SKILL.md, workers/
 PC = os.path.join(HERE, "plan-check.sh")
 RS = os.path.join(HERE, "review-surface.sh")
 CS = os.path.join(HERE, "cycle-state.sh")
 RP = os.path.join(HERE, "run-phase.sh")
 CPK = os.path.join(HERE, "context-pack.sh")
 SCHEMA = os.path.join(ROOT, "schemas", "phase-result.schema.json")
-# Deviazione PURAMENTE DIFENSIVA (nessun effetto sui casi previsti dal piano): la sua stringa in "deviazioni" comincia
-# cosi'. Se tutte lo fanno la fase non si ferma per deviazione (run-phase.sh le registra, la review le giudica).
+# PURELY DEFENSIVE deviation (no effect on the cases the plan foresees): its string in "deviazioni" starts
+# like this. If all of them do, the phase does not stop for deviation (run-phase.sh records them, the review judges them).
 DIFENSIVA = "difensiva: "
 
 
@@ -94,7 +94,7 @@ def _cert_path():
     return os.environ.get("FIC_DRIVER_CERT") or os.path.join(HERE, "driver.equiv")
 
 
-# ─────────────────────────────────────────────────────────────── utilita'
+# ─────────────────────────────────────────────────────────────── utilities
 def _dec(b):
     return b.decode("utf-8", "surrogateescape")
 
@@ -119,7 +119,7 @@ def _bash():
     b = os.environ.get("FIC_BASH")
     if b:
         return b
-    if os.name == "nt":   # mai il bash.exe di WSL (System32) ne' lo stub dello Store
+    if os.name == "nt":   # never WSL's bash.exe (System32) nor the Store stub
         for c in (shutil.which("bash"), os.environ.get("SHELL"), r"C:\Program Files\Git\usr\bin\bash.exe",
                   r"C:\Program Files\Git\bin\bash.exe"):
             if c and os.path.isfile(c) and "system32" not in c.lower() and "windowsapps" not in c.lower():
@@ -131,7 +131,7 @@ BASH = _bash()
 
 
 def _run(args, cwd=None, merge=False, env=None):
-    """(codice, stdout decodificato); stderr scartato (o unito a stdout con merge)."""
+    """(code, decoded stdout); stderr discarded (or merged into stdout with merge)."""
     try:
         p = subprocess.run(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT if merge else subprocess.DEVNULL, env=env)
@@ -141,7 +141,7 @@ def _run(args, cwd=None, merge=False, env=None):
 
 
 def _subst(s):
-    """Come $(…) di bash: toglie le sole righe vuote in coda."""
+    """Like bash $(…): strips only the trailing empty lines."""
     return s.rstrip("\n")
 
 
@@ -149,7 +149,7 @@ _SHOWN = {}
 
 
 def shown(p):
-    """Il percorso come lo stampa `cd … && pwd` in Git Bash (i messaggi di cycle-state.sh lo contengono)."""
+    """The path as `cd … && pwd` prints it in Git Bash (cycle-state.sh messages contain it)."""
     if os.name != "nt":
         return p
     if p not in _SHOWN:
@@ -162,8 +162,8 @@ _MOSTRATI = {}
 
 
 def mostra(p):
-    """Il percorso assoluto di uno script del harness nei messaggi, come `cygpath -m` in Git Bash: C:/… su Windows
-    (i messaggi di cycle-state.sh lo contengono nella stessa forma, pk04a-1)."""
+    """The absolute path of a harness script in messages, like `cygpath -m` in Git Bash: C:/… on Windows
+    (cycle-state.sh messages contain it in the same form, pk04a-1)."""
     if os.name != "nt":
         return p
     if p not in _MOSTRATI:
@@ -173,7 +173,7 @@ def mostra(p):
 
 
 def _records(t):
-    """I record di awk/sed: righe senza il terminatore, l'ultima anche senza a capo."""
+    """awk/sed records: lines without the terminator, the last one also without a newline."""
     if not t:
         return []
     r = t.split("\n")
@@ -183,7 +183,7 @@ def _records(t):
 
 
 def _names(run_fs):
-    """`ls <run>/log`: i nomi non nascosti."""
+    """`ls <run>/log`: the non-hidden names."""
     try:
         return [n for n in os.listdir(os.path.join(run_fs, "log")) if not n.startswith(".")]
     except OSError:
@@ -223,7 +223,7 @@ FENCE = re.compile(r"^[ \t]*(```|~~~)")
 
 
 def _review_lines(txt):
-    """Le righe della sezione "## Review implementazione" in giu', fuori dai recinti (CR tolti)."""
+    """The lines of the "## Review implementazione" section downwards, outside the fences (CRs removed)."""
     res, inf, r = [], False, False
     for l in _records(txt.replace("\r", "")):
         if FENCE.match(l):
@@ -239,7 +239,7 @@ def _review_lines(txt):
 
 
 def _chead(path, lit):
-    """Il valore della prima riga "<lit> …" sopra il piano, fuori dai recinti."""
+    """The value of the first "<lit> …" line above the plan, outside the fences."""
     t = _read(path)
     if t is None:
         return ""
@@ -266,7 +266,7 @@ def _cfiglie(path):
 
 
 def _cpost(rd):
-    """Il tree dell'ultimo .post-tree (etichetta di numero piu' alto) della run dir."""
+    """The tree of the last .post-tree (highest-numbered label) of the run dir."""
     labs = [m.group(1) for n in _names(rd) for m in [re.match(r"^([0-9]+-[^.]*)\.post-tree$", n)] if m]
     if not labs:
         return ""
@@ -290,7 +290,7 @@ def _snap_fp(v):
 
 
 def _json_rule(p):
-    """La regola in codice di cycle-state.sh sul result.json: "OK|…" o "STOP|…"; "" se illeggibile."""
+    """The cycle-state.sh rule in code on result.json: "OK|…" or "STOP|…"; "" if unreadable."""
     try:
         d = json.load(open(p, encoding="utf-8"))
         one = lambda s: " ".join(str(s).split())[:300]
@@ -316,9 +316,9 @@ class _Next(Exception):
         self.msg = msg
 
 
-# ─────────────────────────────────────────────────────────────── next (tabella di cycle-state.sh)
+# ─────────────────────────────────────────────────────────────── next (cycle-state.sh table)
 def cycle_state(spec_arg):
-    """Le righe che stampa cycle-state.sh <spec>, l'ultima e' "Next: …". Stessa tabella, stessi script."""
+    """The lines cycle-state.sh <spec> prints, the last one is "Next: …". Same table, same scripts."""
     spec_fs = os.path.abspath(spec_arg)
     tmp = tempfile.mkdtemp(prefix="fic-driver-")
     try:
@@ -334,7 +334,7 @@ def _cycle_state(spec_fs, tmp):
     cwd = os.path.dirname(spec_fs)
     log = lambda n: os.path.join(run_fs, "log", n)
 
-    # --- piano ---
+    # --- plan ---
     rc, contract = _run([BASH, _fw(PC), "contract", SPEC], cwd=cwd)
     has_plan = rc == 0
     contract = _subst(contract)
@@ -358,7 +358,7 @@ def _cycle_state(spec_fs, tmp):
                                     if l.startswith("Tests status: ")))
     fmt2 = "Plan format: 2" in contract.replace("\r", "").split("\n")
 
-    # --- sezione review ---
+    # --- review section ---
     review = _review_lines(_read(spec_fs) or "")
     has_review = bool(review)
 
@@ -386,13 +386,15 @@ def _cycle_state(spec_fs, tmp):
                 res.append(l)
         return res
 
-    scope, excl = list_of("Scope"), list_of("Excluded")
+    # Excluded lines may carry a note after « — » (e.g. «stessa catena, anello precedente»): only the path counts,
+    # as in cycle-state.sh
+    scope, excl = list_of("Scope"), [re.sub(r" — .*", "", l) for l in list_of("Excluded")]
     scope_f, excl_f = os.path.join(tmp, "scope"), os.path.join(tmp, "excl")
     for f, ls in ((scope_f, scope), (excl_f, excl)):
         with open(f, "wb") as fh:
             fh.write(_enc("".join(l + "\n" for l in ls)))
 
-    # --- catene ---
+    # --- chains ---
     def cclosed(p):
         return _run([BASH, _fw(PC), "closed", p], cwd=cwd)[0] == 0
 
@@ -442,7 +444,7 @@ def _cycle_state(spec_fs, tmp):
                 chain_state += c + " aperto;"
         chain_state += _first_line(os.path.join(run_fs, "chiusura.txt"))
 
-    # --- contratto registrato dalla review ---
+    # --- contract recorded by the review ---
     hx = re.compile(r"spec [0-9a-f]{12}|plan [0-9a-f]{12}")
     contract_st = "n/a"
     if has_review:
@@ -453,14 +455,14 @@ def _cycle_state(spec_fs, tmp):
         else:
             contract_st = "STALE"
 
-    # --- impronta dello stato ---
+    # --- state fingerprint ---
     st = plan_raw + "\n" + basis_out + "\n"
     st += "".join(l + "\n" for l in review if re.match(
         r"(Review status|Feature status|Verification|Reviewed snapshot|Reviewed contract|Review rounds):", l))
     st += "".join(l + "\n" for l in scope) + "".join(l + "\n" for l in excl) + chain_state
     STATE = hashlib.sha256(_enc(st)).hexdigest()[:12]
 
-    # --- ultima fase di codice che scrive (implement/fix) ---
+    # --- last code phase that writes (implement/fix) ---
     last_label = last_esito = last_state = ""
     has_log = os.path.isdir(os.path.join(run_fs, "log"))
     if has_log:
@@ -486,7 +488,7 @@ def _cycle_state(spec_fs, tmp):
         tl = _labels(run_fs, "test-red")
         tr_label = tl[-1] if tl else ""
 
-    # --- codice (solo per IMPLEMENTED) ---
+    # --- code (only for IMPLEMENTED) ---
     code, code_out = "n/a", ""
     if fstatus.startswith("IMPLEMENTED"):
         if not snap:
@@ -548,10 +550,10 @@ def _cycle_state(spec_fs, tmp):
                + (" · result.json: %s — %s" % (json_esito, json_why) if json_esito else ""))
     out.append("State: " + STATE)
 
-    # --- decisione ---
+    # --- decision ---
     def harness_gap(nxt):
-        # la decisione e' di run-phase.sh --harness-fp-confronta (la funzione unica dei tre lettori, pk04a-2): qui
-        # non si legge il contenuto del file, si decide sulla prima parola, come cycle-state.sh
+        # the decision belongs to run-phase.sh --harness-fp-confronta (the single function of the three readers, pk04a-2): here
+        # the file's content is not read, we decide on the first word, like cycle-state.sh
         hf = os.path.join(run_fs, "harness.fp")
         if not os.path.isfile(hf):
             return ""
@@ -821,7 +823,7 @@ def _cycle_state(spec_fs, tmp):
     return out
 
 
-# ─────────────────────────────────────────────────────────────── valida (esito strutturato di run-phase.sh)
+# ─────────────────────────────────────────────────────────────── valida (structured outcome of run-phase.sh)
 KEYS = {"type", "enum", "required", "properties", "additionalProperties", "items", "minLength", "minimum"}
 ANNOT = {"$schema", "$id", "title", "description"}
 TYPES = {"object": lambda x: isinstance(x, dict), "array": lambda x: isinstance(x, list),
@@ -832,7 +834,7 @@ TYPES = {"object": lambda x: isinstance(x, dict), "array": lambda x: isinstance(
 
 
 def _valida_min(x, s, p):
-    """Validatore minimo: le sole keyword di KEYS; una keyword sconosciuta e un errore (fail-closed)."""
+    """Minimal validator: only the keywords in KEYS; an unknown keyword is an error (fail-closed)."""
     extra = sorted(set(s) - KEYS - ANNOT)
     if extra:
         return ["%s: keyword non supportata dal validatore minimo: %s" % (p, ", ".join(extra))]
@@ -862,7 +864,7 @@ def _valida_min(x, s, p):
 
 
 def schema_errors(obj, schema):
-    """Gli errori di obj rispetto allo schema: jsonschema se c'e', altrimenti il validatore minimo."""
+    """The errors of obj against the schema: jsonschema if available, otherwise the minimal validator."""
     try:
         import jsonschema
     except ImportError:
@@ -871,8 +873,8 @@ def schema_errors(obj, schema):
 
 
 def cmd_valida(log, schema_path, phase, out):
-    """Stampa la riga ESITO (o lo STOP «uscita non valida» e, sotto, originale=<riga>) e scrive result.json se
-    valido. Stesse regole, stessi byte, del validatore interno di run-phase.sh (run-phase.sh --valida)."""
+    """Prints the ESITO line (or the «uscita non valida» STOP and, below it, originale=<line>) and writes result.json if
+    valid. Same rules, same bytes, as the internal validator of run-phase.sh (run-phase.sh --valida)."""
     res = None
     for ln in open(log, encoding="utf-8", errors="replace"):
         try:
@@ -882,7 +884,7 @@ def cmd_valida(log, schema_path, phase, out):
         if isinstance(ev, dict) and ev.get("type") == "result":
             res = ev
         elif isinstance(ev, dict) and ev.get("subtype") == "fic_scartato":
-            res = None   # review parallela scartata (harness-pt09): vale solo quello che segue
+            res = None   # parallel review discarded (harness-pt09): only what follows counts
     if res is None or res.get("is_error"):
         return 0
     text = res.get("result") or ""
@@ -927,7 +929,7 @@ def cmd_valida(log, schema_path, phase, out):
     one = lambda s: " ".join(str(s).split())
     dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
     jstop = ""
-    if [x for x in dev if not x.startswith(DIFENSIVA)]:   # tutte "difensiva: " -> nessuno STOP per deviazione
+    if [x for x in dev if not x.startswith(DIFENSIVA)]:   # all "difensiva: " -> no STOP for deviation
         jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
     elif one(obj["bloccato_su"]).lower() != "nessuno":
         jstop = "bloccato su: " + one(obj["bloccato_su"])
@@ -945,7 +947,7 @@ def cmd_valida(log, schema_path, phase, out):
 
 
 def result_errors(path, fase):
-    """Il result.json di una fase conclusa, rivalidato dal driver prima di proseguire (fail-closed)."""
+    """The result.json of a finished phase, revalidated by the driver before going on (fail-closed)."""
     try:
         obj = json.load(open(path, encoding="utf-8"))
         schema = json.load(open(SCHEMA, encoding="utf-8"))
@@ -957,17 +959,17 @@ def result_errors(path, fase):
     return errs
 
 
-# ─────────────────────────────────────────────────────────────── lotti e corsie dell'implement (passo 5)
-# STIMA del contesto di un plan-implementer (token): BASE (prompt, agente, regole, report) + TOKEN_RIGA × (righe
-# del piano + LETTURE × righe dei file che il lotto scrive; un file che non esiste ancora vale NUOVO_RIGHE). Una
-# stima dichiarata, non una misura: serve a non dare a un solo agente un lotto che lo porta oltre il tetto
-# (FIC_LOTTO_MAX, default 150000; misurato: implementer a 597k di contesto su un piano non diviso).
+# ─────────────────────────────────────────────────────────────── implement batches and lanes (step 5)
+# ESTIMATE of a plan-implementer's context (tokens): BASE (prompt, agent, rules, report) + TOKEN_RIGA × (lines
+# of the plan + LETTURE × lines of the files the batch writes; a file that does not exist yet counts NUOVO_RIGHE). A
+# declared estimate, not a measurement: it serves to avoid giving a single agent a batch that takes it beyond the cap
+# (FIC_LOTTO_MAX, default 150000; measured: implementer at 597k of context on an undivided plan).
 TOKEN_RIGA, BASE_TOKEN, LETTURE, NUOVO_RIGHE = 12, 30000, 2, 100
 BLOCCO_RX = re.compile(r"^blocco[ \t]+(\S+):[ \t]*scrive=(.*?)[ \t]*·[ \t]*dopo=(.*)$")
 
 
 def _blocchi(procedura):
-    """[(id, [file], [dipendenze])] dalle righe "blocco <id>: scrive=… · dopo=…" di gen/procedura.txt."""
+    """[(id, [files], [dependencies])] from the "blocco <id>: scrive=… · dopo=…" lines of gen/procedura.txt."""
     res = []
     for l in (_read(procedura) or "").replace("\r", "").split("\n"):
         m = BLOCCO_RX.match(l)
@@ -979,7 +981,7 @@ def _blocchi(procedura):
 
 
 def _ordine(blocchi):
-    """I blocchi in un ordine che rispetta dopo: (a parita', quello del piano); un ciclo lascia l'ordine del piano."""
+    """The blocks in an order that respects dopo: (on a tie, the plan's order); a cycle keeps the plan's order."""
     ids = [b[0] for b in blocchi]
     fatti, res = set(), []
     while len(res) < len(blocchi):
@@ -1003,8 +1005,8 @@ def _righe_file(root, f):
 
 
 def lotti(procedura, root, righe_piano, tetto):
-    """[(ids, stima)]: i blocchi, in ordine di dopo:, raggruppati finche' la stima resta sotto il tetto. Un blocco
-    che da solo lo supera resta un lotto a se' (la stima lo dice: il piano va tagliato, non l'agente affamato)."""
+    """[(ids, estimate)]: the blocks, in dopo: order, grouped as long as the estimate stays below the cap. A block
+    that exceeds it alone stays a batch of its own (the estimate says so: the plan must be cut, not the agent starved)."""
     res, cur, tot = [], [], 0
     fisso = BASE_TOKEN + TOKEN_RIGA * righe_piano
     for bid, fs, _ in _ordine(_blocchi(procedura)):
@@ -1031,10 +1033,10 @@ def _righe_piano(spec_fs):
 
 
 def prepara_implement(spec_fs, run_fs, label, root, ev):
-    """Prima di un implement in formato 2: procedura rigenerata dal piano attuale (in una cartella a parte), lotti
-    dimensionati (log/<label>.lotti, riga LOTTI nel prompt) e decisione delle corsie (log/<label>.corsie-driver,
-    che run-phase.sh riceve in FIC_CORSIE e usa al posto della propria: launch_lanes resta suo). Ritorna
-    (riga da aggiungere al prompt | "", file delle corsie | "")."""
+    """Before a format-2 implement: procedure regenerated from the current plan (in a separate folder), batches
+    sized (log/<label>.lotti, LOTTI line in the prompt) and lane decision (log/<label>.corsie-driver,
+    which run-phase.sh receives in FIC_CORSIE and uses instead of its own: launch_lanes stays its own). Returns
+    (line to add to the prompt | "", lanes file | "")."""
     tmp = tempfile.mkdtemp(prefix="fic-lotti-")
     try:
         rc, _ = _run([BASH, _fw(PC), "gen", shown(spec_fs), "--run-dir", _fw(tmp)], cwd=os.path.dirname(spec_fs))
@@ -1071,18 +1073,18 @@ def prepara_implement(spec_fs, run_fs, label, root, ev):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-L2_RIGA = re.compile(r"^L2 (\S+): (OK|NO)(?: — (.*))?$")   # la stessa regex di finalize.sh (cmd_controprove)
+L2_RIGA = re.compile(r"^L2 (\S+): (OK|NO)(?: — (.*))?$")   # the same regex as finalize.sh (cmd_controprove)
 
 
 def promuovi_l2(spec_fs, run_fs, ev):
-    """Prima di una review (harness-pt15): le controprove marcate "assorbita" (L2) in counterproof/mutations.json
-    si ricontrollano con LO STESSO controllo di finalize.sh — `plan-check.sh l2` sul codice attuale — e quelle che
-    non reggono (NO, o nessuna riga: finalize le rifiuterebbe) si PROMUOVONO: tolti "assorbita"/"motivo", si
-    eseguono davvero. Copia di prima in mutations.json.pre-promozione, il vecchio <id>.json con esito assorbita in
-    <id>.json.assorbita. Una voce gia' eseguita non torna mai assorbita. Ritorna gli id promossi."""
+    """Before a review (harness-pt15): the counterproofs marked "assorbita" (L2) in counterproof/mutations.json
+    are re-checked with THE SAME check as finalize.sh — `plan-check.sh l2` on the current code — and those that
+    do not hold (NO, or no line: finalize would reject them) are PROMOTED: "assorbita"/"motivo" removed, they
+    are really executed. Previous copy in mutations.json.pre-promozione, the old <id>.json with outcome assorbita in
+    <id>.json.assorbita. An entry already executed never goes back to assorbita. Returns the promoted ids."""
     mj = os.path.join(run_fs, "counterproof", "mutations.json")
     t = _read(mj)
-    if not t or not re.search(r'"assorbita": *true', t):   # la stessa condizione di finalize.sh
+    if not t or not re.search(r'"assorbita": *true', t):   # the same condition as finalize.sh
         return []
     try:
         lst = json.loads(t)
@@ -1117,18 +1119,18 @@ def promuovi_l2(spec_fs, run_fs, ev):
         r = os.path.join(run_fs, "counterproof", mid + ".json")
         if re.match(r"^[\w.-]+$", mid) and os.path.isfile(r):
             os.replace(r, r + ".assorbita")
-    with open(mj + ".tmp", "w", encoding="utf-8", newline="\n") as fh:   # lo stesso formato di plan-check.sh gen
+    with open(mj + ".tmp", "w", encoding="utf-8", newline="\n") as fh:   # the same format as plan-check.sh gen
         json.dump(lst, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
     os.replace(mj + ".tmp", mj)
     return promosse
 
 
-# ─────────────────────────────────────────────────────────────── righe caricate per fase (passo 4)
-# I file di istruzioni che ogni fase carica per costruzione (child-rules in --append-system-prompt, la SKILL del
-# ciclo, il file del worker, la SKILL invocata): la misura del beneficio di pt14 (obiettivo <=300 righe per fase).
-# I file condizionali (formato 1, ramo leggero, freschezza, gate eseguiti dal modello, controprove del worker)
-# sono elencati a parte: si caricano solo su quel percorso. Gli agenti hanno il loro contesto e sono a parte.
+# ─────────────────────────────────────────────────────────────── lines loaded per phase (step 4)
+# The instruction files every phase loads by construction (child-rules in --append-system-prompt, the cycle's
+# SKILL, the worker's file, the invoked SKILL): the measure of pt14's benefit (target <=300 lines per phase).
+# The conditional files (format 1, light branch, freshness, gates run by the model, worker counterproofs)
+# are listed separately: they are loaded only on that path. Agents have their own context and are separate.
 CARICO = {
     "orchestratore": ["SKILL", "full-implementation-cycle/orchestratore.md"],
     "plan": ["child", "SKILL", "w:plan", "prc"],
@@ -1143,9 +1145,9 @@ CONDIZIONALI = {
     "review": ["full-implementation-cycle/workers/controprove.md", "implementation-review-cycle/freschezza.md",
                "implementation-review-cycle/gate-manuali.md"],
 }
-# Letture fuori dal carico base, riportate a parte (non entrano nel tetto): la fase di piano legge autore.md
-# quando scrive o rivede il piano (in una fase di piano nuova: sempre); i sotto-agenti hanno un contesto loro
-# (il loro file di mandato + la definizione dell'agente).
+# Reads outside the base load, reported separately (they do not count toward the cap): the plan phase reads autore.md
+# when it writes or revises the plan (in a new plan phase: always); the sub-agents have a context of their own
+# (their mandate file + the agent definition).
 LETTURE_A_PARTE = {
     "plan": [("con la scrittura del piano", ["+base", "plan-review-cycle/autore.md"]),
              ("revisore del piano", ["plan-review-cycle/revisori.md", "agents/spec-plan-reviewer.md"])],
@@ -1194,7 +1196,7 @@ def cmd_righe(argv):
     return 1 if sopra else 0
 
 
-# ─────────────────────────────────────────────────────────────── run (la macchina a stati)
+# ─────────────────────────────────────────────────────────────── run (the state machine)
 FASI = {"PLAN": "plan", "TEST-RED": "test-red", "IMPLEMENT": "implement", "REVIEW": "review", "FIX": "fix",
         "CHIUSURA": "chiusura"}
 
@@ -1229,7 +1231,7 @@ def _next_label(run_fs, fase):
 def _rel(p, root):
     try:
         r = os.path.relpath(p, root) if root else ".."
-    except ValueError:   # unita' diverse (Windows)
+    except ValueError:   # different drives (Windows)
         r = ".."
     return shown(p) if r.startswith("..") else _fw(r)
 
@@ -1262,12 +1264,12 @@ def cmd_run(argv):
         return _uso()
     rp = os.environ.get("FIC_RUN_PHASE") or RP
     cpk = os.environ.get("FIC_CONTEXT_PACK") or CPK
-    # M1: la tabella in Python solo se l'equivalenza e' certificata per QUESTI file (come gli involucri);
-    # altrimenti Next/State vengono da cycle-state.sh autonomo. FIC_DRIVER=0/1 forza, come negli involucri.
+    # M1: the table in Python only if equivalence is certified for THESE files (like the wrappers);
+    # otherwise Next/State come from standalone cycle-state.sh. FIC_DRIVER=0/1 forces it, as in the wrappers.
     fd = os.environ.get("FIC_DRIVER", "")
     usa_driver = fd == "1" or (fd != "0" and _cert_valido())
     spec_fs, entrati, avviso = None, set(), not usa_driver
-    visti = set()   # (spec, State) da cui si e' gia' passati a un'altra spec della catena senza lanciare nulla
+    visti = set()   # (spec, State) from which we already moved to another spec of the chain without launching anything
     prev, launched = None, 0
 
     def entra(p):
@@ -1308,9 +1310,9 @@ def cmd_run(argv):
         if prev is not None and word == prev[0] and state == prev[1]:  # ANTI-LOOP
             return fine("STOP", "anti-loop: la fase %s non ha cambiato lo stato (State %s prima e dopo): Next %s"
                         % (prev[2], state, nx), 1)
-        # M2: la catena. WAIT che nomina un anello -> quell'anello; DONE di un anello -> la madre, che dice il
-        # prossimo anello o la chiusura. Stesso budget, stesso anti-loop; un passaggio gia' fatto senza lanci
-        # in mezzo non si ripete (niente giro a vuoto fra madre e anelli).
+        # M2: the chain. WAIT naming a ring -> that ring; DONE of a ring -> the mother, which names the
+        # next ring or the closing. Same budget, same anti-loop; a hand-over already made with no launches
+        # in between is not repeated (no idle loop between mother and rings).
         dest = ""
         if word == "WAIT":
             m = re.search(r"\((spec-[A-Za-z0-9._-]+)\)", nx)
@@ -1346,7 +1348,7 @@ def cmd_run(argv):
             last = [l for l in co.replace("\r", "").split("\n") if l.strip()]
             ev("context-pack: exit %d%s" % (crc, " · " + last[-1] if last else ""))
         riga_lotti, corsie = prepara_implement(spec_fs, run_fs, label, root, ev) if fase == "implement" else ("", "")
-        if fase == "review":   # L2 col criterio di finalize: mai una controprova assorbita che finalize rifiuta
+        if fase == "review":   # L2 with finalize's criterion: never an absorbed counterproof that finalize rejects
             promuovi_l2(spec_fs, run_fs, ev)
         os.makedirs(os.path.join(run_fs, "prompts"), exist_ok=True)
         pf = os.path.join(run_fs, "prompts", label + ".md")
@@ -1363,7 +1365,7 @@ def cmd_run(argv):
         except OSError as e:
             return fine("STOP", "run-phase.sh non lanciato: %s" % e, 1)
         launched += 1
-        visti.clear()   # una fase e' partita: la catena puo' essere andata avanti
+        visti.clear()   # a phase has started: the chain may have moved on
         esito = _first_line(os.path.join(run_fs, "log", label + ".esito"))
         ev("■ %s finita: exit %d · %s" % (label, prc, esito or "(nessuna riga ESITO)"))
         err = os.path.join(run_fs, "log", label + ".stderr")
@@ -1392,8 +1394,8 @@ def cmd_run(argv):
                     fs = l[len("Feature status:"):].strip()
                     break
             if fs.startswith("NEEDS_VERIFICATION"):
-                # pk09: l'esito normale di un ciclo finito senza tutta l'evidenza; exit 1 invariato (orchestratore).
-                # Cosa resta da verificare: il dettaglio della firma (Finalize:, altrimenti Verification: PARTIAL)
+                # pk09: the normal outcome of a cycle finished without all the evidence; exit 1 unchanged (orchestrator).
+                # What remains to verify: the detail of the signature (Finalize:, otherwise Verification: PARTIAL)
                 da = ""
                 for l in rlines:
                     mo = re.match(r"^Finalize: NEEDS_VERIFICATION — snapshot \S+ — (.*?)(?: · \S+)?\s*$", l)
@@ -1412,7 +1414,7 @@ def cmd_run(argv):
         prev = (word, state, label)
 
 
-# ─────────────────────────────────────────────────────────────── equivalenza e certificato
+# ─────────────────────────────────────────────────────────────── equivalence and certificate
 def _hash(p):
     d = open(p, "rb").read().replace(b"\r", b"")
     return hashlib.sha256(d).hexdigest()
@@ -1434,7 +1436,7 @@ def _cert_valido():
 
 
 def _next_da_cycle_state(spec_fs):
-    """Le righe di cycle-state.sh AUTONOMO (FIC_DRIVER=0): la fonte di Next/State senza certificato."""
+    """The lines of STANDALONE cycle-state.sh (FIC_DRIVER=0): the source of Next/State without a certificate."""
     cs = os.environ.get("FIC_CYCLE_STATE") or CS
     _, o = _run([BASH, _fw(cs), shown(spec_fs)], env=dict(os.environ, FIC_DRIVER="0"))
     return _subst(o.replace("\r", "")).split("\n")
@@ -1465,7 +1467,7 @@ def cmd_equiv(argv):
         else:
             print("equiv: non trovato: %s" % t, file=sys.stderr)
             return 2
-    py = os.environ.get("FIC_PY") or sys.executable   # lo stesso interprete per il driver e per --valida
+    py = os.environ.get("FIC_PY") or sys.executable   # the same interpreter for the driver and for --valida
     env0 = dict(os.environ, FIC_DRIVER="0", FIC_PYTHON=py)
     ds = dj = nj = 0
     for s in specs:

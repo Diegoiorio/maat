@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""vitest-classify.py — in quale progetto vitest va un file di test di apps/admin: `unit` o `nuxt`.
+"""vitest-classify.py — which vitest project a test file of apps/admin belongs to: `unit` or `nuxt`.
 
-Script UNA TANTUM (harness-pt06, passo 1): ha prodotto l'elenco UNIT_TEST_FILES di
-modules/app/apps/admin/vitest.config.ts (usato da vitest.workspace.ts), e lo si rilancia quando si vuole spostare altri file. Lo usa anche
-scripts/vitest-classify.test.sh, che verifica l'elenco contro la classificazione corrente.
+ONE-OFF script (harness-pt06, step 1): it produced the UNIT_TEST_FILES list of
+modules/app/apps/admin/vitest.config.ts (used by vitest.workspace.ts), and it is run again to move more files. It is also used by
+scripts/vitest-classify.test.sh, which checks the list against the current classification.
 
-Uso:  python3 scripts/vitest-classify.py <dir di apps/admin> [--nuxt-dir <dir .nuxt>] [file di test…]
-      senza file: tutti i `*.test.ts` fuori da node_modules, e2e, .nuxt, .output.
-Output: una riga per file, TAB-separata: `unit<TAB><file>` oppure `nuxt<TAB><file><TAB><motivo>`.
-Exit: 0 · 2 = uso errato o dichiarazioni generate assenti (serve `npx nuxi prepare` o un run di vitest).
+Usage: python3 scripts/vitest-classify.py <apps/admin dir> [--nuxt-dir <.nuxt dir>] [test files…]
+      without files: all `*.test.ts` outside node_modules, e2e, .nuxt, .output.
+Output: one line per file, TAB-separated: `unit<TAB><file>` or `nuxt<TAB><file><TAB><reason>`.
+Exit: 0 · 2 = wrong usage or generated declarations missing (needs `npx nuxi prepare` or a vitest run).
 
-REGOLA: il DUBBIO VA A `nuxt` (errore in una sola direzione). Un file va a `nuxt` se lui, o un file locale che
-importa (transitivamente: relativi, `~/`, `@/`, `~~/`, `@@/`, `@repo/<pacchetto>`), soddisfa uno di:
-- usa un'API del runtime Nuxt o del DOM di test: mountSuspended, renderSuspended, mockNuxtImport, mockComponent,
-  registerEndpoint, useNuxtApp, `$fetch`, import da `#…` (#imports, #app, #components, #build), da
+RULE: WHEN IN DOUBT, `nuxt` (errors in one direction only). A file goes to `nuxt` if it, or a local file it
+imports (transitively: relative, `~/`, `@/`, `~~/`, `@@/`, `@repo/<package>`), meets one of:
+- uses an API of the Nuxt runtime or of the test DOM: mountSuspended, renderSuspended, mockNuxtImport, mockComponent,
+  registerEndpoint, useNuxtApp, `$fetch`, imports from `#…` (#imports, #app, #components, #build), from
   `@nuxt/test-utils`, `@vue/test-utils`, `@testing-library/…`, `nuxt`, `vuetify`, `happy-dom`, `jsdom`;
-- importa un `.vue` (montaggio, template, componenti auto-importati);
-- nomina un globale del DOM (document, window, localStorage, …): nel progetto `unit` non esistono;
-- usa, senza importarlo ne' dichiararlo, un nome AUTO-IMPORTATO (`.nuxt/imports.d.ts`: composable, utils,
-  store, API di vue) o un componente auto-importato (`.nuxt/components.d.ts`, anche in kebab-case);
-- dipende dai define di Nuxt (`import.meta.client|server|dev|browser`, `process.client|server`);
-- ha un import non risolvibile (file locale assente, pacchetto @repo sconosciuto).
-Un docblock `@vitest-environment <x>` diverso da `node` -> nuxt. Con `node` il file passa comunque le regole qui
-sopra: il progetto `unit` non ha la pipeline di Nuxt (auto-import, alias `#…`), che nel progetto `nuxt` il file
-continua ad avere anche con l'environment `node` del docblock.
-I commenti a blocco e le righe di solo commento non contano; tutto il resto (stringhe comprese) si.
+- imports a `.vue` file (mounting, template, auto-imported components);
+- names a DOM global (document, window, localStorage, …): they do not exist in the `unit` project;
+- uses, without importing or declaring it, an AUTO-IMPORTED name (`.nuxt/imports.d.ts`: composables, utils,
+  stores, vue APIs) or an auto-imported component (`.nuxt/components.d.ts`, also in kebab-case);
+- depends on Nuxt defines (`import.meta.client|server|dev|browser`, `process.client|server`);
+- has an unresolvable import (local file missing, unknown @repo package).
+A `@vitest-environment <x>` docblock other than `node` -> nuxt. With `node` the file still goes through the rules
+above: the `unit` project lacks the Nuxt pipeline (auto-imports, `#…` aliases), which in the `nuxt` project the file
+keeps having even with the docblock's `node` environment.
+Block comments and comment-only lines do not count; everything else (strings included) does.
 """
 import os
 import re
@@ -77,7 +77,7 @@ def kebab(name):
 
 
 def local_names(src):
-    """Nomi importati o dichiarati nel file: questi NON sono auto-import."""
+    """Names imported or declared in the file: these are NOT auto-imports."""
     got = set()
     for m in re.finditer(r"""\bimport\s+(type\s+)?([^'"]*?)\s+from\s""", src, flags=re.S):
         clause = m.group(2)
@@ -95,7 +95,7 @@ def local_names(src):
                 got.add(tok)
     for m in re.finditer(r'\b(?:function\*?|class|const|let|var|type|interface|enum)\s+([A-Za-z_$][\w$]*)', src):
         got.add(m.group(1))
-    # parametri di arrow function: `h => …`, `(a, h) => …`
+    # arrow function parameters: `h => …`, `(a, h) => …`
     for m in re.finditer(r'(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>', src):
         got.add(m.group(1))
     for m in re.finditer(r'\(([^()]*)\)\s*(?::[^=()]*)?=>', src):
@@ -119,8 +119,8 @@ class Classifier:
         self.auto_re = self._words(self.auto)
         comp_words = sorted(self.comps | {'Lazy' + c for c in self.comps}, key=len, reverse=True)
         self.comp_re = re.compile(r'(?<![\w$.-])(' + '|'.join(re.escape(c) for c in comp_words)
-                                  # kebab-case solo per i nomi di piu' parole: `Title` -> `title` e' una parola
-                                  # qualunque, `GoalsUserPanelBody` -> `goals-user-panel-body` no
+                                  # kebab-case only for multi-word names: `Title` -> `title` is an ordinary
+                                  # word, `GoalsUserPanelBody` -> `goals-user-panel-body` is not
                                   + ''.join('|' + re.escape(kebab(c)) for c in self.comps if '-' in kebab(c))
                                   + r')(?![\w$-])') \
             if self.comps else None
@@ -143,7 +143,7 @@ class Classifier:
                           + r')(?![\w$])') if words else None
 
     def resolve(self, spec, frm):
-        """Percorso assoluto del file locale, None se il modulo e' esterno, '' se locale e non risolvibile."""
+        """Absolute path of the local file, None if the module is external, '' if local and unresolvable."""
         base = None
         if spec.startswith('.'):
             base = os.path.join(os.path.dirname(frm), spec)
@@ -167,11 +167,11 @@ class Classifier:
         return ''
 
     def reason(self, path, stack=()):
-        """Motivo per cui il file (o un suo import locale) chiede `nuxt`; None se e' puro."""
+        """Reason why the file (or one of its local imports) needs `nuxt`; None if it is pure."""
         if path in self.memo:
             return self.memo[path]
         if path in stack:
-            return None   # ciclo: il file e' gia' in esame piu' su
+            return None   # cycle: the file is already being examined further up
         self.memo[path] = None
         why = self._reason(path, stack + (path,))
         self.memo[path] = why
@@ -198,9 +198,9 @@ class Classifier:
                 return f'globale del DOM {m.group(1)} in {rel}'
         known = local_names(src)
         if self.auto_re:
-            # Un nome auto-importato dentro una stringa '…' o "…" non e' un riferimento a runtime ('Manager' come
-            # ruolo); i template literal restano, per via di `${…}`. `readonly` conta solo come chiamata: e' anche
-            # il modificatore di TypeScript (`readonly string[]`).
+            # An auto-imported name inside a '…' or "…" string is not a runtime reference ('Manager' as a
+            # role); template literals stay, because of `${…}`. `readonly` counts only as a call: it is also
+            # the TypeScript modifier (`readonly string[]`).
             code = re.sub(r"""'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*\"""", "''", src)
             for m in self.auto_re.finditer(code):
                 name = m.group(1)

@@ -1,96 +1,96 @@
 #!/usr/bin/env bash
-# cycle-state.sh — la tabella di ripresa di /full-implementation-cycle, calcolata e non interpretata.
+# cycle-state.sh — the resume table of /full-implementation-cycle, computed and not interpreted.
 #
 #   cycle-state.sh <.claude/.ai-workflow/spec-<name>.md>
 #
-# Stampa le righe che ha letto e due righe finali:
-#   State: <hash12>   impronta delle righe di stato della spec (per la guardia anti-loop dell'orchestratore)
-#   Next: PLAN | IMPLEMENT | REVIEW | FIX | DONE | STOP — <motivo>   (catene: anche WAIT e CHIUSURA, sotto)
-# Uscita 0 (anche per STOP: e' una risposta) · 2 uso.
+# Prints the lines it read and two final lines:
+#   State: <hash12>   fingerprint of the spec's state lines (for the orchestrator's anti-loop guard)
+#   Next: PLAN | IMPLEMENT | REVIEW | FIX | DONE | STOP — <reason>   (chains: also WAIT and CHIUSURA, below)
+# Exit 0 (also for STOP: it is an answer) · 2 usage.
 #
-# Legge: il piano con plan-check.sh (contract per Plan status, basis per "Approved basis"); la sezione
-# "## Review implementazione" fuori dai recinti; per IMPLEMENTED il codice con review-surface.sh check
-# sul "Reviewed snapshot" e sul manifest; la run dir <spec senza .md>.run/log/ per l'esito dell'ultima
-# fase (<label>.esito, scritto da run-phase.sh: riga ESITO + "state=<hash>" allo stato di fine fase).
+# Reads: the plan with plan-check.sh (contract for Plan status, basis for "Approved basis"); the
+# "## Review implementazione" section outside the fences; for IMPLEMENTED the code with review-surface.sh check
+# on the "Reviewed snapshot" and on the manifest; the run dir <spec without .md>.run/log/ for the outcome of the last
+# phase (<label>.esito, written by run-phase.sh: ESITO line + "state=<hash>" at the end-of-phase state).
 #
-# ESITO STRUTTURATO (harness-pt08): se l'ultima fase implement/fix ha log/<label>.result.json (scritto da
-# run-phase.sh solo se valido per script/fic/schemas/phase-result.schema.json) l'esito si legge da li', con le
-# regole in codice: deviazioni[] non vuoto -> STOP a prescindere da "esito" (salvo che TUTTE comincino con
-# "difensiva: ": deviazioni puramente difensive, non fermano, le giudica la review); bloccato_su diverso da "nessuno" ->
-# STOP; altrimenti "esito". Un result.json illeggibile -> STOP. La fase e' OK solo se lo sono SIA il result.json
-# SIA la riga ESITO di <label>.esito (il piu' conservativo; .esito e' l'autorita': run-phase.sh la scrive gia'
-# STOP quando il JSON lo e'). Senza result.json (run dir vecchie, --inline) decide la sola riga ESITO, come prima.
-# Un result.json STOP ferma il ciclo (riga 7s/11s) finche' la spec non cambia; per riprendere dopo la decisione
-# umana si rinomina il file in <label>.result.json.visto: decide la riga ESITO (STOP -> si rilancia la fase, in
-# completion). Una deviazione si accetta riaprendo il piano, non con la rinomina.
-# NUOVO REGIME (run dir con evidence/ o con almeno un *.result.json, anche rinominato .result.json.visto): DONE
-# (riga 13) solo con una riga "Finalize: IMPLEMENTED — snapshot <x12> — … · <ora UTC>" nella sezione di review,
-# dove <x12> e' l'impronta del "Reviewed snapshot:" ATTUALE (lo snapshot che finalize.sh ha firmato: una review
-# a mano o --inline che cambia lo snapshot senza rilanciare finalize non passa) e l'ora non e' piu' vecchia
-# dell'ultima review lanciata (log/<n>-*review*.jsonl, se c'e'); altrimenti REVIEW (13f). Le run dir vecchie
-# danno DONE come prima.
-# BUDGET DEI FIX (riga 11b): calcolato qui da "Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1", non
-# letto dall'LLM.
+# STRUCTURED OUTCOME (harness-pt08): if the last implement/fix phase has log/<label>.result.json (written by
+# run-phase.sh only if valid against script/fic/schemas/phase-result.schema.json) the outcome is read from there, with the
+# rules in code: non-empty deviazioni[] -> STOP regardless of "esito" (unless ALL of them start with
+# "difensiva: ": purely defensive deviations do not stop, the review judges them); bloccato_su other than "nessuno" ->
+# STOP; otherwise "esito". An unreadable result.json -> STOP. The phase is OK only if BOTH the result.json
+# AND the ESITO line of <label>.esito are (the most conservative; .esito is the authority: run-phase.sh already writes it
+# as STOP when the JSON is). Without result.json (old run dirs, --inline) the ESITO line alone decides, as before.
+# A STOP result.json stops the cycle (row 7s/11s) until the spec changes; to resume after the human
+# decision, rename the file to <label>.result.json.visto: the ESITO line decides (STOP -> the phase is relaunched, in
+# completion). A deviation is accepted by reopening the plan, not by renaming.
+# NEW REGIME (run dir with evidence/ or with at least one *.result.json, even renamed .result.json.visto): DONE
+# (row 13) only with a "Finalize: IMPLEMENTED — snapshot <x12> — … · <UTC time>" line in the review section,
+# where <x12> is the fingerprint of the CURRENT "Reviewed snapshot:" (the snapshot finalize.sh signed: a manual
+# or --inline review that changes the snapshot without relaunching finalize does not pass) and the time is not older
+# than the last review launched (log/<n>-*review*.jsonl, if any); otherwise REVIEW (13f). Old run dirs
+# give DONE as before.
+# FIX BUDGET (row 11b): computed here from "Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1", not
+# read by the LLM.
 #
-# TABELLA — la prima riga che combacia vince. E' la fonte autorevole: SKILL.md rimanda qui.
-#   1  sezione review senza piano                               → STOP (niente da pianificare sopra)
-#   2  nessun piano, o Plan status DRAFT senza review             → PLAN
-#   3  piano DRAFT o NEEDS HUMAN DECISION con una review          → STOP (piano riaperto dopo la review)
-#   4  Plan status NEEDS HUMAN DECISION                           → STOP (decisione aperta)
-#   5  Plan status non standard                                   → STOP
-#   6  Approved basis STALE (spec o piano cambiati dopo l'approvazione) → STOP: riaprire il piano. STALE (tests):
-#      un file dei test di accettazione cambiato dopo test-red (harness-pt11) → STOP (deviazione, decisione umana)
-#   7t (harness-pt11) piano in FORMATO 2, nessuna review, nessuna implement/fix lanciata, impronta "tests" non
-#      registrata nella Approved basis → TEST-RED; se l'ultima test-red ha un .esito con lo stato invariato (STOP, o
-#      chiusa senza registrare i test) → STOP con quella riga. Formato 1: mai. Un ciclo in formato 2 gia' passato
-#      da implement senza test-red (avviato prima della regola) prosegue come prima.
-#   7s nessuna review, ultima implement/fix con result.json STOP (regole sopra) e stato invariato → STOP
-#   7  nessuna review: ultima implement/fix lanciata = "implement", esito OK, stato invariato → REVIEW,
-#      altrimenti IMPLEMENT (una review lanciata e mai partita non conta: non ha cambiato la spec)
-#      (full o completion lo decide il worker implement). ATTRIBUZIONE (anche riga 11): il passaggio a
-#      REVIEW richiede il <label>.post-tree di quella fase e nessun .pre-tree aperto di un label minore;
-#      altrimenti STOP (attribuzione non misurata: la review non saprebbe quali file sono della feature).
-#   8  sezione review legacy senza righe di stato                 → REVIEW (la review fa un giro pieno)
+# TABLE — the first matching row wins. It is the authoritative source: SKILL.md points here.
+#   1  review section without a plan                            → STOP (nothing to plan on top of)
+#   2  no plan, or Plan status DRAFT without a review             → PLAN
+#   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
+#   4  Plan status NEEDS HUMAN DECISION                           → STOP (open decision)
+#   5  non-standard Plan status                                   → STOP
+#   6  Approved basis STALE (spec or plan changed after approval) → STOP: reopen the plan. STALE (tests):
+#      an acceptance test file changed after test-red (harness-pt11) → STOP (deviation, human decision)
+#   7t (harness-pt11) plan in FORMAT 2, no review, no implement/fix launched, "tests" fingerprint not
+#      recorded in the Approved basis → TEST-RED; if the last test-red has an .esito with unchanged state (STOP, or
+#      closed without recording the tests) → STOP with that line. Format 1: never. A format-2 cycle that already went
+#      through implement without test-red (started before the rule) goes on as before.
+#   7s no review, last implement/fix with a STOP result.json (rules above) and unchanged state → STOP
+#   7  no review: last implement/fix launched = "implement", outcome OK, unchanged state → REVIEW,
+#      otherwise IMPLEMENT (a review launched that never started does not count: it did not change the spec)
+#      (full or completion is decided by the implement worker). ATTRIBUTION (also row 11): moving to
+#      REVIEW requires the <label>.post-tree of that phase and no open .pre-tree of a lower label;
+#      otherwise STOP (attribution not measured: the review would not know which files belong to the feature).
+#   8  legacy review section without state lines                 → REVIEW (the review does a full round)
 #   9  Review status NEEDS HUMAN DECISION                         → STOP
-#   10 Reviewed contract diverso dalla basis attuale              → REVIEW (giro a scope pieno; vale anche
-#      con NEEDS_CHANGES: quei finding erano sul contratto vecchio)
-#   10b un path di touched.txt elencato sotto "Excluded:" del manifest → STOP (la review ha escluso codice
-#      della feature). Le righe 10-13 non ripassano dall'attribuzione: una review c'e' gia' stata, e
-#      run-phase chiude i .pre-tree aperti all'avvio di ogni fase di codice, review compresa.
-#   11s NEEDS_CHANGES, ultima implement/fix con result.json STOP e stato invariato → STOP
-#   11 NEEDS_CHANGES: ultima implement/fix lanciata = "fix", esito OK, stato invariato → REVIEW, altrimenti
-#   11b FIX solo se n < 3 e k < 1 (Review rounds); budget esaurito o riga illeggibile → STOP
-#   12 Feature status NEEDS_VERIFICATION                          → REVIEW (un tentativo di promozione)
-#   13f nuovo regime, APPROVED + IMPLEMENTED senza "Finalize: IMPLEMENTED" sullo snapshot attuale e recente
+#   10 Reviewed contract different from the current basis         → REVIEW (full-scope round; holds also
+#      with NEEDS_CHANGES: those findings were on the old contract)
+#   10b a touched.txt path listed under "Excluded:" in the manifest → STOP (the review excluded code
+#      of the feature). Rows 10-13 do not go through attribution again: a review already happened, and
+#      run-phase closes the open .pre-tree files at the start of every code phase, review included.
+#   11s NEEDS_CHANGES, last implement/fix with a STOP result.json and unchanged state → STOP
+#   11 NEEDS_CHANGES: last implement/fix launched = "fix", outcome OK, unchanged state → REVIEW, otherwise
+#   11b FIX only if n < 3 and k < 1 (Review rounds); budget exhausted or unreadable line → STOP
+#   12 Feature status NEEDS_VERIFICATION                          → REVIEW (one promotion attempt)
+#   13f new regime, APPROVED + IMPLEMENTED without a "Finalize: IMPLEMENTED" on the current snapshot that is recent
 #       → REVIEW (fail-closed)
-#   13 APPROVED + IMPLEMENTED: codice FRESH → DONE · STALE/UNKNOWN → REVIEW · senza snapshot (legacy) → DONE
-#      con nota. EXCLUDED-CHANGED non cambia l'esito: le righe vengono stampate per il report.
-#   14 altro                                                      → STOP con le righe lette
-#   0  (vale sopra ogni riga che manda a PLAN/IMPLEMENT/REVIEW/FIX, mai su DONE o su un altro STOP)
-#      <run-dir>/harness.fp non UGUALE all'impronta attuale (run-phase.sh --harness-fp-confronta: CAMBIATO,
-#      FORMATO-PRECEDENTE, ILLEGGIBILE o NON-CALCOLABILE) → STOP col motivo, la data e il rimedio. Senza harness.fp
-#      (ciclo avviato prima della regola) nessun controllo.
+#   13 APPROVED + IMPLEMENTED: code FRESH → DONE · STALE/UNKNOWN → REVIEW · no snapshot (legacy) → DONE
+#      with a note. EXCLUDED-CHANGED does not change the outcome: the lines are printed for the report.
+#   14 anything else                                              → STOP with the lines read
+#   0  (applies above every row leading to PLAN/IMPLEMENT/REVIEW/FIX, never on DONE or on another STOP)
+#      <run-dir>/harness.fp not EQUAL to the current fingerprint (run-phase.sh --harness-fp-confronta: CAMBIATO,
+#      FORMATO-PRECEDENTE, ILLEGGIBILE or NON-CALCOLABILE) → STOP with the reason, the date and the remedy. Without harness.fp
+#      (cycle started before the rule) no check.
 #
-# CATENE (harness-pt12). Una MADRE ha la riga "Figlie: spec-<nome>-1-…, -2-…" sopra il piano; un ANELLO e' una
-# spec che una madre della stessa cartella elenca. Una spec fuori da una catena non vede nulla di questo.
-#   C1 madre: la prima figlia assente → STOP; la prima non chiusa (plan-check.sh closed: APPROVED + IMPLEMENTED
-#      e Finalize: IMPLEMENTED fresca sul Reviewed snapshot attuale, nessun ripiego legacy) → WAIT
-#   C2 madre, anelli tutti chiusi: <run-dir della madre>/chiusura.txt assente → CHIUSURA (fase di codice di
-#      run-phase.sh, etichetta NN-chiusura: gate full sull'albero finale contro la base del primo anello, e2e
-#      via /dev-verify se le figlie hanno [e2e-locator:); "Chiusura: IMPLEMENTED — base <b> · tree <t> …" e
-#      codice FRESH (review-surface.sh check sui file dei touched.txt degli anelli) → DONE, altrimenti
-#      CHIUSURA; chiusura non riuscita → STOP col recupero. La madre e' IMPLEMENTED solo cosi'.
-#   C3 anello k>1, verso PLAN: il piano di k-1 non e' APPROVED → WAIT (L6: il piano parte a piano di k-1 APPROVED)
-#   C4 anello k>1, verso IMPLEMENT: k-1 non chiuso → WAIT; nessuna fase di codice di k ancora (nessun .pre-tree)
-#      e working tree diverso dall'ultimo .post-tree di k-1, o .post-tree assente → STOP (modifiche umane che
-#      l'anello si attribuirebbe). Le righe 6 (Approved basis, che per un anello include madre, piano di k-1,
-#      interfaccia e touched: plan-check.sh basis) e le altre valgono come per ogni spec.
-#   Stampa per un anello k>1: "Anelli precedenti: <file dei loro touched.txt>" (stessa catena: ne' altri flussi
-#   ne' misti, niente completion), "Base anello: <.post-tree di k-1>" (mai HEAD) e "Diff anello: <path>" (solo i
-#   path cambiati dalla base dell'anello: la superficie della sua review).
-# Restano all'orchestratore: una fase ancora in corso (.running senza .exit), un ESITO FASE … STOP,
-# e «NEEDS_VERIFICATION ottenuto in QUESTA invocazione → STOP». IMPLEMENTED lo firma script/fic/finalize.sh
-# (run-phase.sh, dopo ogni review): qui si legge la riga che ha lasciato.
+# CHAINS (harness-pt12). A MOTHER has the line "Figlie: spec-<nome>-1-…, -2-…" above the plan; a RING is a
+# spec listed by a mother in the same folder. A spec outside a chain sees none of this.
+#   C1 mother: first child missing → STOP; the first one not closed (plan-check.sh closed: APPROVED + IMPLEMENTED
+#      and a fresh Finalize: IMPLEMENTED on the current Reviewed snapshot, no legacy fallback) → WAIT
+#   C2 mother, all rings closed: <mother's run-dir>/chiusura.txt missing → CHIUSURA (code phase of
+#      run-phase.sh, label NN-chiusura: full gates on the final tree against the base of the first ring, e2e
+#      via /dev-verify if the children have [e2e-locator:); "Chiusura: IMPLEMENTED — base <b> · tree <t> …" and
+#      code FRESH (review-surface.sh check on the files of the rings' touched.txt) → DONE, otherwise
+#      CHIUSURA; failed closing → STOP with the recovery. Only this way is the mother IMPLEMENTED.
+#   C3 ring k>1, towards PLAN: the plan of k-1 is not APPROVED → WAIT (L6: the plan starts once the plan of k-1 is APPROVED)
+#   C4 ring k>1, towards IMPLEMENT: k-1 not closed → WAIT; no code phase of k yet (no .pre-tree)
+#      and working tree different from the last .post-tree of k-1, or .post-tree missing → STOP (human changes that
+#      the ring would claim as its own). Row 6 (Approved basis, which for a ring includes mother, plan of k-1,
+#      interface and touched: plan-check.sh basis) and the others apply as for any spec.
+#   Prints for a ring k>1: "Anelli precedenti: <files of their touched.txt>" (same chain: neither other flows
+#   nor mixed ones, no completion), "Base anello: <.post-tree of k-1>" (never HEAD) and "Diff anello: <path>" (only the
+#   paths changed since the ring's base: the surface of its review).
+# Left to the orchestrator: a phase still running (.running without .exit), an ESITO FASE … STOP,
+# and «NEEDS_VERIFICATION obtained in THIS invocation → STOP». IMPLEMENTED is signed by script/fic/finalize.sh
+# (run-phase.sh, after every review): here we read the line it left.
 #
 # Test: cycle-state.test.sh.
 
@@ -99,13 +99,13 @@ set -f
 
 [ $# -eq 1 ] && [ -f "$1" ] || { echo "uso: $0 <spec-<name>.md>" >&2; exit 2; }
 HERE=$(cd "$(dirname "$0")" && pwd)
-. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin) e PROJECT_ROOT (cartella di lavoro)
+. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin) and PROJECT_ROOT (working folder)
 
-# INVOLUCRO (harness-pt14): la stessa tabella e' portata in script/fic/driver.py (`driver.py next`). Lo si usa al
-# posto del codice qui sotto solo se il certificato script/fic/driver.equiv porta l'hash attuale di driver.py e di
-# QUESTO file (equivalenza provata da `driver.py equiv --certifica` sulle run directory reali); altrimenti questo
-# script resta autonomo. FIC_DRIVER=0 forza il codice qui sotto, FIC_DRIVER=1 il driver (test); FIC_DRIVER_PY e
-# FIC_DRIVER_CERT sostituiscono driver e certificato (test). Driver fallito o senza riga Next -> codice qui sotto.
+# WRAPPER (harness-pt14): the same table is ported to script/fic/driver.py (`driver.py next`). It is used
+# instead of the code below only if the certificate script/fic/driver.equiv carries the current hash of driver.py and of
+# THIS file (equivalence proved by `driver.py equiv --certifica` on the real run directories); otherwise this
+# script stays standalone. FIC_DRIVER=0 forces the code below, FIC_DRIVER=1 the driver (tests); FIC_DRIVER_PY and
+# FIC_DRIVER_CERT replace driver and certificate (tests). Driver failed or without a Next line -> code below.
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
 CERT=${FIC_DRIVER_CERT:-$MAAT_SCRIPTS/driver.equiv}
 fic_hash() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
@@ -124,7 +124,7 @@ if driver_on; then
 fi
 PC="$MAAT_SCRIPTS/plan-check.sh"
 RS="$MAAT_SCRIPTS/review-surface.sh"
-# percorso assoluto di uno script del harness nei messaggi: C:/… su Windows (cygpath -m), come driver.py (mostra)
+# absolute path of a harness script in messages: C:/… on Windows (cygpath -m), like driver.py (mostra)
 mostra() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 SPEC="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 RUN="${SPEC%.md}.run"
@@ -132,7 +132,7 @@ cd "$(dirname "$SPEC")" || exit 2
 TMP=$(mktemp -d) || exit 2
 trap 'rm -rf "$TMP"' EXIT
 
-# --- piano ---
+# --- plan ---
 has_plan=1
 contract=$(bash "$PC" contract "$SPEC" 2>/dev/null) || has_plan=0
 plan_raw=$(printf '%s\n' "$contract" | sed -n '1s/^Plan status:[[:space:]]*//p')
@@ -144,11 +144,11 @@ if [ $has_plan -eq 1 ]; then
   basis_out=$(bash "$PC" basis "$SPEC" 2>/dev/null)
   basis=$(printf '%s\n' "$basis_out" | sed -n 's/^Status: //p')
   basis_cur=$(printf '%s\n' "$basis_out" | sed -n 's/^Basis: //p')
-  tests_st=$(printf '%s\n' "$basis_out" | tr -d '\r' | sed -n 's/^Tests status: //p')   # solo formato 2
+  tests_st=$(printf '%s\n' "$basis_out" | tr -d '\r' | sed -n 's/^Tests status: //p')   # format 2 only
 fi
 fmt2=0; printf '%s\n' "$contract" | tr -d '\r' | grep -qx 'Plan format: 2' && fmt2=1
 
-# --- sezione review: righe fuori dai recinti, da "## Review implementazione" in giu' ---
+# --- review section: lines outside the fences, from "## Review implementazione" down ---
 tr -d '\r' < "$SPEC" | awk '
   { isf = ($0 ~ /^[ \t]*(```|~~~)/) }
   isf { inf = !inf; next }
@@ -159,24 +159,25 @@ has_review=0; [ -s "$TMP/review" ] && has_review=1
 line() { sed -n "s/^$1:[[:space:]]*//p" "$TMP/review" | head -1; }
 rstatus=$(line "Review status"); fstatus=$(line "Feature status")
 snap=$(line "Reviewed snapshot"); rcontract=$(line "Reviewed contract"); rounds=$(line "Review rounds")
-# Manifest: i path sotto "Scope:" e sotto "Excluded:", fino a una riga vuota o alla fine del blocco.
+# Manifest: the paths under "Scope:" and under "Excluded:", up to an empty line or the end of the block.
 list_of() { awk -v h="$1" '
   $0 == h ":" { on = 1; next }
   on && (/^[ \t]*$/ || /^Excluded:/ || /^Scope:/ || /^<\/details>/) { exit }
   on { print }' "$TMP/review"; }
-list_of Scope > "$TMP/scope"; list_of Excluded > "$TMP/excl"
+# Excluded lines may carry a note after « — » (e.g. «stessa catena, anello precedente»): only the path is compared.
+list_of Scope > "$TMP/scope"; list_of Excluded | sed "s/ — .*//" > "$TMP/excl"
 
-# --- catene (harness-pt12): madre (riga Figlie:) o anello (una madre della stessa cartella lo elenca) ---
-chead() { # <file> <letterale>: il valore della prima riga "<letterale> …" sopra il piano, fuori dai recinti
+# --- chains (harness-pt12): mother (Figlie: line) or ring (a mother in the same folder lists it) ---
+chead() { # <file> <literal>: the value of the first "<literal> …" line above the plan, outside the fences
   tr -d '\r' < "$1" | awk -v l="$2" '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
     /^## (Piano di implementazione|Review implementazione)/ { exit }
     index($0, l) == 1 { v = substr($0, length(l) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'
 }
 cfiglie() { chead "$1" "Figlie:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
-cclosed() { # <spec>: chiusa = plan-check.sh closed (un solo criterio: Finalize: IMPLEMENTED fresca, niente legacy)
+cclosed() { # <spec>: closed = plan-check.sh closed (a single criterion: fresh Finalize: IMPLEMENTED, no legacy)
   bash "$PC" closed "$1" >/dev/null 2>&1
 }
-cpost() { # <run-dir>: il tree dell'ultimo .post-tree (etichetta di numero piu' alto)
+cpost() { # <run-dir>: the tree of the last .post-tree (highest-numbered label)
   local l; l=$(ls "$1/log" 2>/dev/null | sed -n 's/^\([0-9][0-9]*-[^.]*\)\.post-tree$/\1/p' | sort -t- -k1,1n | tail -1)
   [ -n "$l" ] && tr -d '\r\n ' < "$1/log/$l.post-tree"
 }
@@ -195,10 +196,10 @@ if [ -z "$figlie" ]; then
   done < <(find "$CDIR" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -l '^Figlie:' {} + 2>/dev/null | LC_ALL=C sort)
 fi
 if [ -n "$ring_prev" ]; then
-  ring_base=$(cpost "${ring_prev%.md}.run")   # BASE-ANELLO: il .post-tree registrato di k-1, mai HEAD
+  ring_base=$(cpost "${ring_prev%.md}.run")   # BASE-ANELLO: the recorded .post-tree of k-1, never HEAD
   ring_now=$(bash "$RS" tree 2>/dev/null)
 fi
-# la madre: stato di ogni anello e della chiusura (entra nello State; vuoto fuori da una catena)
+# the mother: state of each ring and of the closing (goes into State; empty outside a chain)
 chain_state=""
 if [ -n "$figlie" ]; then
   for c in $figlie; do
@@ -209,7 +210,7 @@ if [ -n "$figlie" ]; then
   chain_state="$chain_state$([ -f "$RUN/chiusura.txt" ] && tr -d '\r' < "$RUN/chiusura.txt" | head -1)"
 fi
 
-# --- contratto registrato dalla review ---
+# --- contract recorded by the review ---
 hexes() { printf '%s\n' "$1" | grep -o 'spec [0-9a-f]\{12\}\|plan [0-9a-f]\{12\}' | tr '\n' ' '; }
 contract_st=n/a
 if [ $has_review -eq 1 ]; then
@@ -218,15 +219,15 @@ if [ $has_review -eq 1 ]; then
   else contract_st=STALE; fi
 fi
 
-# --- impronta dello stato (tutto cio' che una fase puo' cambiare nella spec) ---
+# --- state fingerprint (everything a phase can change in the spec) ---
 STATE=$( { echo "$plan_raw"; printf '%s\n' "$basis_out"; grep -E '^(Review status|Feature status|Verification|Reviewed snapshot|Reviewed contract|Review rounds):' "$TMP/review"; cat "$TMP/scope" "$TMP/excl"; printf '%s' "$chain_state"; } | sha256sum | cut -c1-12)
 
-# --- ultima fase di CODICE che scrive (implement/fix) della run dir ---
-# I label vengono da .jsonl (fasi lanciate da run-phase) e da .esito (anche le fasi --inline, che non
-# hanno .jsonl).
-# Non l'ultima fase in assoluto: una review lanciata e mai partita (lock occupato, guardia assente,
-# sessione morta) lascia il suo .jsonl ma non cambia la spec, e non deve far ripetere l'implement o
-# il fix gia' finiti. Una review che ha SCRITTO cambia lo State, e il confronto con state= la esclude.
+# --- last CODE phase that writes (implement/fix) in the run dir ---
+# Labels come from .jsonl (phases launched by run-phase) and from .esito (also the --inline phases, which
+# have no .jsonl).
+# Not the very last phase: a review launched and never started (lock occupato, missing guard,
+# dead session) leaves its .jsonl but does not change the spec, and must not cause the implement or
+# the fix already finished to be repeated. A review that WROTE changes the State, and the comparison with state= excludes it.
 last_label="" last_esito="" last_state=""
 if [ -d "$RUN/log" ]; then
   last_label=$(ls "$RUN/log" 2>/dev/null | sed -n 's/^\([0-9][0-9]*-[^.]*\)\.\(jsonl\|esito\)$/\1/p' | grep -E 'implement|fix' | sort -u | sort -t- -k1,1n | tail -1)
@@ -235,7 +236,7 @@ if [ -d "$RUN/log" ]; then
     last_state=$(tr -d '\r' < "$RUN/log/$last_label.esito" | sed -n 's/^state=//p')
   fi
 fi
-# --- esito strutturato (harness-pt08): result.json dell'ultima implement/fix, regole in codice ---
+# --- structured outcome (harness-pt08): result.json of the last implement/fix, rules in code ---
 json_esito="" json_why=""
 if [ -n "$last_label" ] && [ -f "$RUN/log/$last_label.result.json" ]; then
   FIC_PY=""; . "$HERE/python.sh" 2>/dev/null
@@ -258,25 +259,25 @@ else:
     *) json_esito=STOP json_why="result.json illeggibile" ;;
   esac
 fi
-# last_ok <fase>: l'ultima implement/fix lanciata e' <fase>, e' finita OK (riga ESITO E, se c'e', result.json:
-# vale il piu' conservativo), e da allora la spec non e' cambiata
+# last_ok <phase>: the last implement/fix launched is <phase>, it finished OK (ESITO line AND, if present, result.json:
+# the most conservative wins), and the spec has not changed since
 last_ok() {
   case "$last_label" in *"$1"*) ;; *) return 1 ;; esac
   case "$last_esito" in "ESITO FASE $1: OK"*) ;; *) return 1 ;; esac
   [ -z "$json_esito" ] || [ "$json_esito" = OK ] || return 1
   [ "$last_state" = "$STATE" ]
 }
-# json_stop: righe 7s/11s — result.json STOP e spec invariata da allora → STOP con il recupero.
+# json_stop: rows 7s/11s — STOP result.json and spec unchanged since → STOP with the recovery.
 json_stop() {
   [ "$json_esito" = STOP ] && [ -n "$last_state" ] && [ "$last_state" = "$STATE" ] || return 0
   next "STOP — $last_label: $json_why (regola in codice su $RUN/log/$last_label.result.json). Decidi; per riprendere dopo la decisione (es. migrazione applicata) rinomina quel file in $last_label.result.json.visto: decide la riga ESITO di $last_label.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano (spec cambiata), non con la rinomina"
 }
-# finalize_gap: riga 13f — nel nuovo regime stampa perche' IMPLEMENTED non e' firmato da finalize.sh.
+# finalize_gap: row 13f — in the new regime prints why IMPLEMENTED is not signed by finalize.sh.
 new_regime=0
 [ -d "$RUN/evidence" ] && new_regime=1
 ls "$RUN/log" 2>/dev/null | grep -q '\.result\.json\(\.visto\)\{0,1\}$' && new_regime=1
-# snap_fp <valore di Reviewed snapshot:>: impronta a 12 cifre, la stessa che finalize.sh scrive in "snapshot <x>"
-# (spazi e tab compressi, estremi tolti, sha256).
+# snap_fp <value of Reviewed snapshot:>: 12-digit fingerprint, the same one finalize.sh writes in "snapshot <x>"
+# (spaces and tabs squeezed, ends trimmed, sha256).
 snap_fp() { printf '%s' "$1" | tr -s ' \t' '  ' | sed 's/^ //; s/ $//' | tr -d '\n' | sha256sum | cut -c1-12; }
 finalize_gap() {
   local f fs ts rl rt
@@ -286,7 +287,7 @@ finalize_gap() {
     *) echo "IMPLEMENTED non firmato da finalize.sh (Finalize: $f)"; return ;; esac
   fs=$(printf '%s\n' "$f" | sed -n 's/.*snapshot \([0-9a-f]\{12\}\).*/\1/p' | head -1)
   [ -n "$fs" ] || { echo "riga Finalize: senza l'impronta dello snapshot firmato"; return; }
-  [ "$fs" = "$(snap_fp "$snap")" ] || { echo "Finalize: firmata su un altro snapshot (snapshot $fs), non sul Reviewed snapshot attuale"; return; }   # confronto dello snapshot
+  [ "$fs" = "$(snap_fp "$snap")" ] || { echo "Finalize: firmata su un altro snapshot (snapshot $fs), non sul Reviewed snapshot attuale"; return; }   # snapshot comparison
   ts=$(printf '%s\n' "$f" | grep -o '[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z' | tail -1)
   ts=$( [ -n "$ts" ] && date -u -d "$ts" +%s 2>/dev/null )
   [ -n "$ts" ] || { echo "riga Finalize: senza un'ora leggibile"; return; }
@@ -296,7 +297,7 @@ finalize_gap() {
   [ -n "$rt" ] || { echo "ora dell'ultima review ($rl) non leggibile"; return; }
   [ "$ts" -ge "$rt" ] || echo "Finalize: piu' vecchia dell'ultima review lanciata ($rl)"
 }
-# budget_fix: riga 11b — un fix solo se n < 3 e k < 1 (la sezione non dice che tipo di giro fu l'ultimo).
+# budget_fix: row 11b — a fix only if n < 3 and k < 1 (the section does not say what kind of round the last one was).
 budget_fix() {
   local n k
   n=$(printf '%s\n' "$rounds" | sed -n 's|^\([0-9][0-9]*\)/3.*|\1|p')
@@ -304,23 +305,23 @@ budget_fix() {
   [ -n "$n" ] && [ -n "$k" ] || next "STOP — budget dei fix non calcolabile: riga 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' assente o illeggibile ('${rounds}')"
   [ "$n" -lt 3 ] && [ "$k" -lt 1 ] || next "STOP — budget dei fix esaurito (Review rounds $n/3 · post-approval NEEDS_CHANGES $k/1): un fix che nessuna review vedra' non si scrive; decide una persona"
 }
-# attribution_gap: stampa il motivo se la fase OK <last_label> non ha l'attribuzione misurata.
+# attribution_gap: prints the reason if the OK phase <last_label> does not have measured attribution.
 attribution_gap() {
   local n f l
   [ -f "$RUN/log/$last_label.post-tree" ] || { echo "$last_label senza .post-tree"; return; }
   n=${last_label%%-*}
-  for l in $(ls "$RUN/log" 2>/dev/null | sed -n 's/\.pre-tree$//p'); do   # set -f: niente glob
+  for l in $(ls "$RUN/log" 2>/dev/null | sed -n 's/\.pre-tree$//p'); do   # set -f: no globbing
     [ -f "$RUN/log/$l.post-tree" ] && continue
     [ "$((10#${l%%-*}))" -lt "$((10#$n))" ] 2>/dev/null && { echo "$l con .pre-tree ancora aperto"; return; }
   done
 }
-# to_review <messaggio>: REVIEW solo con l'attribuzione misurata, altrimenti STOP con il recupero.
+# to_review <message>: REVIEW only with measured attribution, otherwise STOP with the recovery.
 to_review() {
   local gap; gap=$(attribution_gap)
   [ -z "$gap" ] && next "REVIEW — $1"
   next "STOP — attribuzione non misurata ($gap): la review non saprebbe quali file sono della feature. Con il .pre-tree: git -c core.quotePath=false diff --name-only --no-renames \$(cat <pre-tree>) \$(bash $(mostra "$RS") tree) >> $RUN/touched.txt, poi quel tree in <label>.post-tree (e' cio' che fa run-phase). Senza .pre-tree: elenca a mano in touched.txt i file della feature, poi crea il .post-tree — decisione tua"
 }
-# test_red_gate: riga 7t (harness-pt11) — piano in formato 2 senza i test di accettazione dimostrati rossi.
+# test_red_gate: row 7t (harness-pt11) — format-2 plan without acceptance tests proven red.
 tr_label=""
 [ -d "$RUN/log" ] && tr_label=$(ls "$RUN/log" 2>/dev/null | sed -n 's/^\([0-9][0-9]*-[^.]*\)\.\(jsonl\|esito\)$/\1/p' | grep 'test-red' | sort -u | sort -t- -k1,1n | tail -1)
 test_red_gate() {
@@ -333,13 +334,13 @@ test_red_gate() {
   fi
   next "TEST-RED — piano in formato 2 approvato: test di accettazione e stub da scrivere e dimostrare rossi prima dell'implementazione"
 }
-# touched_excluded: il primo path di touched.txt che la review ha messo fra gli esclusi.
+# touched_excluded: the first touched.txt path that the review put among the excluded ones.
 touched_excluded() {
   [ -s "$RUN/touched.txt" ] && [ -s "$TMP/excl" ] || return 0
   tr -d '\r' < "$RUN/touched.txt" | grep -Fx -f "$TMP/excl" | head -1
 }
 
-# --- codice (solo per IMPLEMENTED) ---
+# --- code (only for IMPLEMENTED) ---
 code=n/a code_out=""
 case "$fstatus" in IMPLEMENTED*)
   if [ -z "$snap" ]; then code=LEGACY
@@ -360,7 +361,7 @@ esac
 
 echo "Plan status: ${plan_raw:-(assente)}"
 echo "Plan basis: $basis"
-# Catene (harness-pt12): righe in piu' solo per una madre o un anello.
+# Chains (harness-pt12): extra lines only for a mother or a ring.
 if [ -n "$figlie" ]; then
   echo "Catena: madre di $(printf '%s\n' "$figlie" | grep -c .) anelli · $(printf '%s' "$chain_state" | sed 's/;\(.\)/; \1/g')"
 elif [ -n "$ring_k" ]; then
@@ -375,8 +376,8 @@ elif [ -n "$ring_k" ]; then
     fi
   fi
 fi
-# Formato 2 (harness-pt10): il formato e la procedura generata da `plan-check.sh gen`, confrontata con l'impronta
-# del piano. Solo righe in piu', solo per i piani in formato 2: non entrano in State e non cambiano Next.
+# Format 2 (harness-pt10): the format and the procedure generated by `plan-check.sh gen`, compared with the plan's
+# fingerprint. Extra lines only, only for format-2 plans: they do not enter State and do not change Next.
 if printf '%s\n' "$contract" | grep -qx 'Plan format: 2'; then
   echo "Plan format: 2"
   gp="$RUN/gen/procedura.txt"
@@ -393,10 +394,10 @@ echo "Code: $code"
 echo "Last code phase: ${last_label:-(nessuna)}${last_esito:+ · $last_esito}${json_esito:+ · result.json: $json_esito — $json_why}"
 echo "State: $STATE"
 
-# Riga 0: impronta del harness registrata al primo lancio (run-phase.sh, IMPRONTA DEL HARNESS).
-harness_gap() { # stampa il motivo dello STOP se il harness e' cambiato dal primo lancio del ciclo
-  # La decisione e' di run-phase.sh --harness-fp-confronta (la funzione unica dei tre lettori, pk04a-2): qui non si
-  # legge il contenuto del file, si decide sulla prima parola.
+# Row 0: harness fingerprint recorded at the first launch (run-phase.sh, HARNESS FINGERPRINT).
+harness_gap() { # prints the reason for the STOP if the harness changed since the first launch of the cycle
+  # The decision belongs to run-phase.sh --harness-fp-confronta (the single function of the three readers, pk04a-2): here we
+  # do not read the file's content, we decide on the first word.
   local out e a b repo since rim
   [ -f "$RUN/harness.fp" ] || return 0
   repo=${FIC_REPO:-$(git rev-parse --show-toplevel 2>/dev/null)}
@@ -418,10 +419,10 @@ next() {
     [ -n "$gap" ] && { echo "Next: STOP — $gap"; exit 0; } ;;
   esac
   case "$*" in PLAN*|IMPLEMENT*) [ -n "$ring_prev" ] && ring_gate "${*%% *}" ;;
-    TEST-RED*) [ -n "$ring_prev" ] && ring_gate IMPLEMENT ;; esac   # test-red scrive il tree: come implement (C4)
+    TEST-RED*) [ -n "$ring_prev" ] && ring_gate IMPLEMENT ;; esac   # test-red writes the tree: like implement (C4)
   echo "Next: $*"; exit 0
 }
-# ring_gate PLAN|IMPLEMENT (righe C3, C4): pipeline della catena (L6) e tree all'avvio dell'anello k>1.
+# ring_gate PLAN|IMPLEMENT (rows C3, C4): chain pipeline (L6) and tree at the start of ring k>1.
 ring_gate() {
   local pn pst
   pn=$(basename "$ring_prev" .md)
@@ -431,12 +432,12 @@ ring_gate() {
     echo "Next: WAIT — catena: il piano dell'anello $ring_k parte quando il piano dell'anello $((ring_k - 1)) ($pn) e' APPROVED (ora: ${pst:-nessun piano})"; exit 0
   fi
   cclosed "$ring_prev" || { echo "Next: WAIT — catena: l'implement dell'anello $ring_k aspetta l'anello $((ring_k - 1)) ($pn) IMPLEMENTED; il piano puo' girare"; exit 0; }
-  ls "$RUN/log" 2>/dev/null | grep -q '\.pre-tree$' && return 0   # l'anello e' gia' partito
+  ls "$RUN/log" 2>/dev/null | grep -q '\.pre-tree$' && return 0   # the ring has already started
   [ -n "$ring_base" ] || { echo "Next: STOP — catena: l'anello $((ring_k - 1)) ($pn) non ha un .post-tree: la base dell'anello $ring_k non e' misurata. Decisione tua"; exit 0; }
   [ "$ring_now" = "$ring_base" ] && return 0   # CONTROLLO-TREE-ANELLO
   echo "Next: STOP — catena: il working tree (${ring_now:-non calcolabile}) non e' il .post-tree dell'anello $((ring_k - 1)) ($ring_base): modifiche fatte dopo la sua chiusura, che l'anello $ring_k si attribuirebbe. Decisione tua: riportale fuori dal tree e riprendi; per tenerle nella catena aggiungile al touched.txt di $pn e registra il tree attuale come suo .post-tree (bash $(mostra "$RS") tree)"; exit 0
 }
-# --- madre di una catena (righe C1, C2): nessuna fase propria finche' gli anelli non sono chiusi ---
+# --- mother of a chain (rows C1, C2): no phase of its own until the rings are closed ---
 mother_next() {
   local i=0 n c cz b t st
   n=$(printf '%s\n' "$figlie" | grep -c .)

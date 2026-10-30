@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# file-lasciato-mutato.sh <worktree> [--file <path> --from <testo> --to <testo>]
-# Difetto: una controprova morta a meta' che ha lasciato il file mutato. Come fa il worker review
-# (SKILL.md, «Counterproofs», passi 2-3): copia del file in <run-dir>/counterproof/<path>, sidecar
-# <path>.meta con path, base, hash della copia e hash del file mutato; poi la mutazione nominata nel file.
-# Default: la stessa mutazione di confine di mutazione-non-coperta.sh (utils/goals.ts, `<=` → `<`).
-# Il file NON e' attribuito alla feature: e' lo scarto di una controprova, non codice.
-# Chi lo prende: il worker review (passo 1: ripristino delle copie rimaste, solo se l'hash combacia).
+# file-lasciato-mutato.sh <worktree> [--file <path> --from <text> --to <text>]
+# Defect: a counterproof that died halfway and left the file mutated. As the review worker does
+# (SKILL.md, «Counterproofs», steps 2-3): copy of the file in <run-dir>/counterproof/<path>, sidecar
+# <path>.meta with path, base, hash of the copy and hash of the mutated file; then the named mutation in the file.
+# Default: the same boundary mutation as mutazione-non-coperta.sh (utils/goals.ts, `<=` → `<`).
+# The file is NOT attributed to the feature: it is the leftover of a counterproof, not code.
+# Who catches it: the review worker (step 1: restore of the leftover copies, only if the hash matches).
 . "$(dirname "$0")/_lib.sh"
 F=modules/app/apps/admin/utils/goals.ts
 FROM='Math.abs(cents) <= COMPACT_THRESHOLD_CENTS'

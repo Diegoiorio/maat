@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test di plan-check.sh. Ogni controllo ha il caso VERDE e la sua CONTROPROVA ROSSA: un controllo
-# che non puo' diventare rosso si presenta come copertura e non lo e'.
+# Tests of plan-check.sh. Every check has its GREEN case and its RED COUNTERPROOF: a check
+# that cannot turn red looks like coverage and is not.
 #   bash plugins/maat/scripts/plan-check.test.sh
 set -uo pipefail
 set -f
@@ -10,7 +10,7 @@ PC=${PC:-$HERE/plan-check.sh}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 
-# expect <codice-atteso> <pattern-atteso-nell-output|-> <descrizione> -- comando...
+# expect <expected-code> <expected-pattern-in-output|-> <description> -- command...
 expect() {
   local want="$1" pat="$2" desc="$3"; shift 4
   local out code; out=$("$@" 2>&1); code=$?
@@ -18,7 +18,7 @@ expect() {
   if [ "$pat" != "-" ] && ! printf '%s\n' "$out" | grep -qE -- "$pat"; then echo "FAIL [$desc] manca /$pat/"; printf '%s\n' "$out" | sed 's/^/    /'; fail=$((fail+1)); return; fi
   pass=$((pass+1))
 }
-# refute <pattern> <descrizione> -- comando...   (l'output NON deve contenere il pattern)
+# refute <pattern> <description> -- command...   (the output must NOT contain the pattern)
 refute() {
   local pat="$1" desc="$2"; shift 3
   local out; out=$("$@" 2>&1)
@@ -26,8 +26,8 @@ refute() {
   pass=$((pass+1))
 }
 
-# Spec di riferimento: contiene di proposito le trappole reali — una H2 dentro il piano, un
-# "Plan status:" dentro un blocco di codice, un changelog, una review di implementazione.
+# Reference spec: it deliberately contains the real traps — an H2 inside the plan, a
+# "Plan status:" inside a code block, a changelog, an implementation review.
 spec() {
 cat <<'EOF'
 # Titolo
@@ -65,19 +65,19 @@ expect 1 "baseline assente" "delta: baseline mancante = errore duro" -- bash "$P
 expect 1 "diff vuoto" "delta: file identico = errore duro" -- bash "$PC" delta "$T/base.md" "$T/base.md"
 sed 's/$/\r/' "$T/base.md" > "$T/crlf.md"
 expect 1 "diff vuoto" "delta: sola conversione CRLF = nessun cambiamento" -- bash "$PC" delta "$T/base.md" "$T/crlf.md"
-# controprova: una riga vera cambiata produce un range che la contiene (riga 12)
+# counterproof: a real changed line produces a range that contains it (line 12)
 sed 's/nel router\./nel router e nel job./' "$T/base.md" > "$T/one.md"
 expect 0 "range: offset=10 limit=5" "delta: una riga cambiata -> range corretto (+-2)" -- bash "$PC" delta "$T/base.md" "$T/one.md"
-# xref: il path della riga cambiata compare anche alla riga 11 (fuori range? no: dentro il +-2). Uso una modifica alla riga 22.
+# xref: the path of the changed line also appears on line 11 (outside the range? no: inside the +-2). I use a change on line 22.
 sed 's/rosso se: il filtro e. ignorato/rosso se: `apply_filter()` ignora il filtro/' "$T/base.md" > "$T/x.md"
 expect 0 "xref: riga 11 \(apply_filter\(\)\)" "delta: xref trova l'altro uso del simbolo fuori range" -- bash "$PC" delta "$T/base.md" "$T/x.md"
-# xref deve scartare i token generici della stop-list (std, true) ma tenere i path
-# (la modifica sta alla riga 22, lontano dalle righe 11-12 che citano il path: dentro il +-2 non
-#  sarebbero xref, ma parte del range)
+# xref must discard the generic stop-list tokens (std, true) but keep the paths
+# (the change is on line 22, far from lines 11-12 that cite the path: inside the +-2 they would not
+#  be xref, but part of the range)
 sed 's/rosso se: il filtro e. ignorato/rosso se: `std`, `true` o `modules\/api\/app\/services\/foo.py` lo ignorano/' "$T/base.md" > "$T/x2.md"
 refute "\((std|true)\)" "delta: xref scarta std/true" -- bash "$PC" delta "$T/base.md" "$T/x2.md"
 expect 0 "xref: riga 11 \(modules/api/app/services/foo.py\)" "delta: xref tiene il path" -- bash "$PC" delta "$T/base.md" "$T/x2.md"
-# riformattazione dell'intero file (>90%)
+# reformatting of the whole file (>90%)
 awk '{ print $0 " " }' "$T/base.md" | awk 'BEGIN{for(i=0;i<5;i++) print "riga extra " i} {print}' > "$T/reflow.md"
 expect 1 "90%" "delta: diff su quasi tutto il file = errore duro" -- bash "$PC" delta "$T/base.md" "$T/reflow.md"
 
@@ -103,47 +103,47 @@ sed 's/^Superfici a rischio: permessi, logica-condivisa/Superfici a rischio: per
 expect 1 "solo per le superfici critiche" "lint: pavimento su superficie non critica = VIOLAZIONE" -- bash "$PC" lint "$T/pav2.md"
 sed 's/^- \[pavimento: permessi\].*/&\n- [pavimento: permessi] `test_perm.py::test_other` rosso se: x/' "$T/base.md" > "$T/pav3.md"
 expect 1 "piu' di una riga \[pavimento: permessi\]" "lint: due pavimenti sulla stessa superficie = VIOLAZIONE" -- bash "$PC" lint "$T/pav3.md"
-# Piano di test: al livello min 1 riga; la riga [pavimento: non conta
+# Test plan: at level min 1 line; the [pavimento: line does not count
 sed 's/^Test level: std$/Test level: min/' "$T/base.md" > "$T/min.md"
 expect 0 "lint: OK" "lint: a min, 1 caso + 1 pavimento = entro il tetto" -- bash "$PC" lint "$T/min.md"
 sed 's/^- caso 1:.*/&\n- caso 2: `test_foo.py::test_b` rosso se: y/' "$T/min.md" > "$T/min2.md"
 expect 0 "AVVISO: '### Piano di test' ha 2 righe al livello min" "lint: a min, 2 casi = AVVISO (uscita 0)" -- bash "$PC" lint "$T/min2.md"
-# [e2e-locator: fuori dal tetto come il pavimento; al massimo 2 righe
+# [e2e-locator: outside the cap like the floor; at most 2 lines
 sed 's/^- caso 1:.*/&\n- [e2e-locator: e2e-6-customer.spec.ts] riga cambiata usata da un locator — rosso se: il testo non combacia/' "$T/min.md" > "$T/mine2e.md"
 expect 0 "lint: OK" "lint: a min, 1 caso + 1 pavimento + 1 [e2e-locator: = entro il tetto" -- bash "$PC" lint "$T/mine2e.md"
 sed 's/^- caso 1:.*/&\n- e2e-6-customer.spec.ts riga cambiata usata da un locator — rosso se: x/' "$T/min.md" > "$T/mine2e-nomark.md"
 expect 0 "righe al livello min" "lint: la stessa riga SENZA marcatore conta nel tetto (controprova)" -- bash "$PC" lint "$T/mine2e-nomark.md"
 sed 's/^- caso 1:.*/&\n- [e2e-locator: a.spec.ts] x rosso se: x\n- [e2e-locator: b.spec.ts] y rosso se: y\n- [e2e-locator: c.spec.ts] z rosso se: z/' "$T/base.md" > "$T/e2e3.md"
 expect 0 "AVVISO: 3 righe \[e2e-locator: — al massimo 2" "lint: 3 righe [e2e-locator: = AVVISO" -- bash "$PC" lint "$T/e2e3.md"
-# senza sezione del piano
+# without a plan section
 head -5 "$T/base.md" > "$T/noplan.md"
 expect 1 "nessuna sezione" "lint: spec senza piano = VIOLAZIONE" -- bash "$PC" lint "$T/noplan.md"
-# primo run: baseline senza piano, piano aggiunto dopo UNA RIGA VUOTA → la spec non e' cambiata
+# first run: baseline without plan, plan added after ONE BLANK LINE → the spec has not changed
 { head -5 "$T/base.md"; echo; sed -n '6,$p' "$T/base.md" | grep -v '^## Review implementazione' | grep -v '^Review status:'; } > "$T/blank.md"
 expect 0 "lint: OK" "lint: riga vuota prima del piano non e' una modifica della spec" -- bash "$PC" lint "$T/blank.md" --baseline "$T/noplan.md"
-# controprova: una parola cambiata nella spec, stesso scenario → VIOLAZIONE
+# counterproof: one word changed in the spec, same scenario → VIOLAZIONE
 sed 's/^Contesto della feature\./Contesto cambiato./' "$T/blank.md" > "$T/blank2.md"
 expect 1 "sezioni della SPEC" "lint: stessa situazione ma spec toccata = VIOLAZIONE" -- bash "$PC" lint "$T/blank2.md" --baseline "$T/noplan.md"
-# superfici fra backtick: tollerate
+# backticked surfaces: tolerated
 sed 's/^Superfici a rischio: permessi, logica-condivisa/Superfici a rischio: `permessi`, `logica-condivisa`/' "$T/base.md" > "$T/bt.md"
 expect 0 "lint: OK" "lint: superfici fra backtick = accettate" -- bash "$PC" lint "$T/bt.md"
 sed 's/^Superfici a rischio: permessi, logica-condivisa/Superfici a rischio: nessuna, permessi/' "$T/base.md" > "$T/none.md"
 expect 1 "'nessuna' insieme" "lint: 'nessuna' con altre superfici = VIOLAZIONE" -- bash "$PC" lint "$T/none.md"
-# una menzione del pavimento in prosa, fuori dall'elenco del Piano di test, non e' un secondo pavimento
+# a mention of the floor in prose, outside the list of the Piano di test, is not a second floor
 sed 's/^La H2 qui sopra NON chiude la sezione del piano\./& Coperto dal [pavimento: permessi] sotto./' "$T/base.md" > "$T/prosa.md"
 expect 0 "lint: OK" "lint: [pavimento: citato in prosa non conta" -- bash "$PC" lint "$T/prosa.md"
-# superficie critica dichiarata senza pavimento ne' ⚠️ → AVVISO
+# declared critical surface without a floor or ⚠️ → AVVISO
 sed 's/\[pavimento: permessi\] //' "$T/base.md" > "$T/nopav.md"
 expect 0 "AVVISO: superficie critica 'permessi'" "lint: critica senza pavimento ne' ⚠️ = AVVISO" -- bash "$PC" lint "$T/nopav.md"
 sed 's/^- caso 1:.*/&\n- ⚠️ Superficie permessi non coperta dai gate al livello std/' "$T/nopav.md" > "$T/warnln.md"
 refute "superficie critica 'permessi'" "lint: la riga ⚠️ soddisfa la superficie critica" -- bash "$PC" lint "$T/warnln.md"
-# a min, la riga ⚠️ non conta nel tetto di 1 riga
+# at min, the ⚠️ line does not count in the 1-line cap
 grep -v 'test_perm.py::test_forbidden' "$T/warnln.md" | sed 's/^Test level: std$/Test level: min/' > "$T/minwarn.md"
 refute "righe al livello min" "lint: a min, 1 caso + riga ⚠️ = entro il tetto" -- bash "$PC" lint "$T/minwarn.md"
-# la riga ⚠️ vale per la superficie che NOMINA: una ⚠️ su un'altra superficie non copre 'permessi'
+# the ⚠️ line applies to the surface it NAMES: a ⚠️ on another surface does not cover 'permessi'
 sed 's/^- caso 1:.*/&\n- ⚠️ Superficie contratto-api non coperta dai gate al livello std/' "$T/nopav.md" > "$T/warnother.md"
 expect 0 "AVVISO: superficie critica 'permessi'" "lint: ⚠️ su un'altra superficie NON copre la critica" -- bash "$PC" lint "$T/warnother.md"
-# deroga: senza motivo, oppure spezzata a capo → AVVISO (a valle sembrerebbe un obbligo)
+# waiver: without a reason, or broken across lines → AVVISO (downstream it would look like an obligation)
 sed 's/^- ⚠️ Superficie permessi .*/& — statica sufficiente:/' "$T/warnln.md" > "$T/wvoid.md"
 expect 0 "AVVISO: riga 22: deroga 'statica sufficiente:' senza motivo" "lint: deroga senza motivo = AVVISO" -- bash "$PC" lint "$T/wvoid.md"
 sed 's/^- ⚠️ Superficie permessi .*/& —\n  statica sufficiente: rinomina/' "$T/warnln.md" > "$T/wsplit.md"
@@ -179,7 +179,7 @@ sed 's/^3\. Nessun effetto.*/&\n### Tracciabilità requisiti\n| Req | Passi | Ve
 expect 0 "^Tracciabilità requisiti: offset=14 limit=7$" "contract: range della tracciabilità (fino alla H2 successiva)" -- bash "$PC" contract "$T/trac.md"
 expect 1 "nessuna sezione" "contract: spec senza piano = uscita 1" -- bash "$PC" contract "$T/noplan.md"
 
-# ── basis: l'approvazione legata a spec e piano ──────────────────────────────────────────────────
+# ── basis: the approval bound to spec and plan ──────────────────────────────────────────────────
 expect 0 "^Status: LEGACY$" "basis: nessuna riga Approved basis = LEGACY" -- bash "$PC" basis "$T/base.md"
 cur=$(bash "$PC" basis "$T/base.md" | sed -n 's/^Basis: //p')
 sed "s/^Superfici a rischio: .*/&\nApproved basis: $cur/" "$T/base.md" > "$T/ab.md"
@@ -200,26 +200,26 @@ sed 's/^Contesto della feature\./Contesto cambiato./; s/nel router\./nel job./' 
 expect 0 "^Status: STALE \(spec, plan\)$" "basis: entrambe cambiate" -- bash "$PC" basis "$T/ab-both.md"
 sed 's/^Plan status: DRAFT/Plan status: APPROVED/' "$T/ab.md" > "$T/ab-st.md"
 expect 0 "^Status: STALE \(plan\)$" "basis: Plan status fa parte del corpo" -- bash "$PC" basis "$T/ab-st.md"
-# una riga con un TAB: il cambio DOPO il TAB deve contare (awk $4 si fermerebbe al TAB)
+# a line with a TAB: the change AFTER the TAB must count (awk $4 would stop at the TAB)
 printf '%s\n' "# T" "## Piano di implementazione" "Plan status: APPROVED" "- a	b" > "$T/tab.md"
 curt=$(bash "$PC" basis "$T/tab.md" | sed -n 's/^Basis: //p')
 printf '%s\n' "# T" "## Piano di implementazione" "Plan status: APPROVED" "Approved basis: $curt" "- a	c" > "$T/tab2.md"
 expect 0 "^Status: STALE \(plan\)$" "basis: cambio dopo un TAB = STALE" -- bash "$PC" basis "$T/tab2.md"
 expect 1 "nessuna sezione" "basis: spec senza piano = uscita 1" -- bash "$PC" basis "$T/noplan.md"
-# lint della riga
+# lint of the line
 sed "s/^Approved basis: .*/&\nApproved basis: $cur/" "$T/ab.md" > "$T/ab-dup.md"
 expect 1 "'Approved basis:' compare 2 volte" "lint: Approved basis duplicata = VIOLAZIONE" -- bash "$PC" lint "$T/ab-dup.md"
 sed 's/^Plan status: DRAFT/Plan status: APPROVED/' "$T/base.md" > "$T/appr-nobasis.md"
 expect 0 "AVVISO: piano APPROVED senza riga 'Approved basis:'" "lint: APPROVED senza basis = AVVISO" -- bash "$PC" lint "$T/appr-nobasis.md"
 refute "Approved basis" "lint: DRAFT senza basis = nessun avviso" -- bash "$PC" lint "$T/base.md"
 
-# ── delta: gli xref non pescano nel changelog (e' storia, consumerebbe gli 8 posti) ─────────────
+# ── delta: the xrefs do not fish in the changelog (it is history, it would use up the 8 slots) ─────────────
 sed 's/^- Giro 1: corretto il path di `apply_filter()`; rimosso `solo_nel_changelog`\./&\n- Giro 2: `rosso_unico_token` sistemato./' "$T/base.md" > "$T/cl1.md"
 sed 's/^Contesto della feature\./Contesto della feature./; s/^3\. Nessun effetto su `std` o `true`\./3. Nessun effetto su `rosso_unico_token`./' "$T/cl1.md" > "$T/cl2.md"
 refute "xref: riga 2[0-9] \(rosso_unico_token\)" "delta: xref non punta al changelog" -- bash "$PC" delta "$T/cl1.md" "$T/cl2.md"
 
-# ── formato 2: lint2, gen, route, s2 ─────────────────────────────────────────────────────────────
-# Un repository finto: i percorsi del piano devono esistere (prima cartella) e lint2 cerca nei test veri.
+# ── format 2: lint2, gen, route, s2 ─────────────────────────────────────────────────────────────
+# A fake repository: the plan paths must exist (first folder) and lint2 searches the real tests.
 R="$T/repo"
 mkdir -p "$R/modules/api/app/routers" "$R/modules/api/tests" "$R/modules/app/apps/admin/components" \
   "$R/modules/app/apps/admin/tests" "$R/modules/app/apps/admin/e2e/specs" "$R/modules/app/packages/ui" "$R/script"
@@ -230,15 +230,15 @@ printf '%s\n' 'it("bar", () => { expect(w.find("[data-test=goals-company-bar]").
 printf '%s\n' 'it("old", () => { expect(w.find("[data-test=goals-old-section]").exists()).toBe(true) })' > "$R/modules/app/apps/admin/tests/old.test.ts"
 printf '%s\n' 'test("e2e", async () => { await page.getByText("Vecchio titolo").click() })' > "$R/modules/app/apps/admin/e2e/specs/e2e-6-goals.spec.ts"
 export PLAN_CHECK_ROOT="$R"
-. "$HERE/python.sh"; export FIC_PY   # un solo interprete per tutte le chiamate
-# pk04b-2: moduli, superfici e migrazioni vengono da maat.json (l'esempio nuxt-fastapi); il prep di
-# counterproof.sh la legge importando il lettore, con la radice del progetto finto
+. "$HERE/python.sh"; export FIC_PY   # a single interpreter for all calls
+# pk04b-2: modules, surfaces and migrations come from maat.json (the nuxt-fastapi example); the prep of
+# counterproof.sh reads it by importing the reader, with the root of the fake project
 mkdir -p "$R/.claude"; cp "$HERE/../examples/nuxt-fastapi.maat.json" "$R/.claude/maat.json"
 export MAAT_CONFIG_PY="$HERE/maat-config.py" PROJECT_ROOT="$R"
-# l'interprete di be (python dell'esempio: .venv312/bin/python, poi .venv/bin/python): il secondo esiste
+# the be interpreter (python of the example: .venv312/bin/python, then .venv/bin/python): the second one exists
 mkdir -p "$R/modules/api/.venv/bin"; : > "$R/modules/api/.venv/bin/python"
 PLUGIN_DIR=$(cd "$HERE/.." && pwd)
-mutpc() { # <nome> <espressione sed> → mutante di plan-check.sh accanto a lib/maat-paths.sh (il plugin da MAAT_ROOT)
+mutpc() { # <name> <sed expression> → mutant of plan-check.sh next to lib/maat-paths.sh (the plugin from MAAT_ROOT)
   mkdir -p "$T/pcm-$1/lib"; cp "$HERE/lib/maat-paths.sh" "$T/pcm-$1/lib/"
   sed "$2" "$PC" > "$T/pcm-$1/plan-check.sh"; ! cmp -s "$PC" "$T/pcm-$1/plan-check.sh"
 }
@@ -302,26 +302,26 @@ dopo: B1
 EOF
 }
 spec2 > "$T/f2.md"
-# lint2 e il lint di sempre sul piano in formato 2 di riferimento
+# lint2 and the usual lint on the reference format 2 plan
 expect 0 "^lint2: OK$" "lint2: piano in formato 2 di riferimento pulito" -- bash "$PC" lint2 "$T/f2.md"
 expect 0 "AVVISO: .*goals-company-bar aggiunto dal piano ma gia presente in modules/app/apps/admin/tests/bar.test.ts:1" "lint2: stringa aggiunta gia presente in un test = AVVISO" -- bash "$PC" lint2 "$T/f2.md"
 expect 0 "lint: OK" "lint: il formato 2 passa anche il lint di sempre" -- bash "$PC" lint "$T/f2.md"
 refute "righe al livello" "lint: in formato 2 intestazione e separatore della tabella non contano nel tetto" -- bash "$PC" lint "$T/f2.md"
-# piano in formato 1: lint2 e gen non si applicano
+# format 1 plan: lint2 and gen do not apply
 expect 0 "^lint2: non si applica" "lint2: piano in formato 1 = non si applica (uscita 0)" -- bash "$PC" lint2 "$T/base.md"
 refute "VIOLAZIONE" "lint2: formato 1, nessuna violazione" -- bash "$PC" lint2 "$T/base.md"
-# requisito senza test (controprova per mutazione: togliere il controllo rende verde questo caso)
+# requirement without a test (counterproof by mutation: removing the check makes this case green)
 sed 's/^| T2 | RF2 |/| T2 | RF1 |/' "$T/f2.md" > "$T/f2-noreq.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: requisito RF2 senza test" "lint2: requisito senza test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-noreq.md"
 refute "requisito RF3" "lint2: 'non verificabile a test' esenta il requisito" -- bash "$PC" lint2 "$T/f2-noreq.md"
-# file nei passi ma non nella lista
+# file in the steps but not in the list
 grep -v '^- `modules/app/apps/admin/components/Bar.vue`$' "$T/f2.md" > "$T/f2-nofile.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: passo P3: modules/app/apps/admin/components/Bar.vue non e nella lista ### File toccati" "lint2: file di un passo fuori lista = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-nofile.md"
-# test fuori da un passo
+# test outside a step
 sed 's/^| P3 | \(.*\) | T2 |$/| P3 | \1 | — |/' "$T/f2.md" > "$T/f2-nostep.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2 non compare in nessun passo" "lint2: test fuori da un passo = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-nostep.md"
-# harness-pt15 (D): un test ESISTENTE di non-regressione nella tabella ("resta verde") ferma il ciclo a test-red:
-# VIOLAZIONE che spiega dove va. Varianti: "rimane verde", "continua a passare", maiuscola.
+# harness-pt15 (D): an EXISTING non-regression test in the table ("resta verde") stops the cycle at test-red:
+# a VIOLAZIONE that explains where it goes. Variants: "rimane verde", "continua a passare", uppercase.
 sed 's/^| T2 | RF2 | \(`[^`]*`\) (nuovo) | rosso se: /| T2 | RF2 | \1 | resta verde: /' "$T/f2.md" > "$T/f2-verde.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2: asserzione \"resta verde\": un test esistente di non-regressione non e una riga del Piano di test" "lint2: riga 'resta verde' nel piano di test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-verde.md"
 expect 1 "nota sotto di essa .*non verificabile a test \(invarianza, non dimostrabile rossa\)" "lint2: il messaggio dice dove va il test di non-regressione" -- bash "$PC" lint2 "$T/f2-verde.md"
@@ -329,33 +329,33 @@ sed 's/^| T2 | RF2 | \(`[^`]*`\) (nuovo) | rosso se: /| T2 | RF2 | \1 | **Rimane
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2: asserzione \"resta verde\"" "lint2: 'Rimane verde' in grassetto = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-verde2.md"
 sed 's/^| T2 | RF2 | \(`[^`]*`\) (nuovo) | rosso se: /| T2 | RF2 | \1 | continua a passare: /' "$T/f2.md" > "$T/f2-verde3.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2: asserzione \"resta verde\"" "lint2: 'continua a passare' = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-verde3.md"
-# forma giusta: T2 fuori dalla tabella, nota sotto, RF2 "non verificabile a test (invarianza, ...)" = pulito
+# right form: T2 outside the table, note below, RF2 "non verificabile a test (invarianza, ...)" = clean
 grep -v '^| T2 |' "$T/f2.md" | sed -e 's/^| P3 | \(.*\) | T2 |$/| P3 | \1 | — |/' \
   -e 's/^| RF2 | P3 | T2 |$/| RF2 | P3 | non verificabile a test (invarianza, non dimostrabile rossa): la copre il test esistente `bar.test.ts`, nel gate |/' \
   -e 's/^- \[pavimento: permessi\] T1$/Test ESISTENTI di non-regressione (non sono righe del Piano di test): `modules\/app\/apps\/admin\/tests\/bar.test.ts` resta verde (RF2).\n- [pavimento: permessi] T1/' \
   > "$T/f2-verde-ok.md"
 expect 0 "^lint2: OK$" "lint2: test di non-regressione nella nota, tracciabilita 'non verificabile a test (invarianza...)' = pulito" -- bash "$PC" lint2 "$T/f2-verde-ok.md"
-# "resta verde" DENTRO un'asserzione rossa (non in testa) non e' un test di non-regressione
+# "resta verde" INSIDE a red assertion (not at the start) is not a non-regression test
 sed 's/^| T2 | RF2 | \(`[^`]*`\) (nuovo) | rosso se: /| T2 | RF2 | \1 (nuovo) | rosso se: il caso vecchio resta verde ma /' "$T/f2.md" > "$T/f2-verde-mid.md"
 expect 0 "^lint2: OK$" "lint2: 'resta verde' a meta asserzione = pulito" -- bash "$PC" lint2 "$T/f2-verde-mid.md"
-# blocco senza scrive:
+# block without scrive:
 awk '!(/^scrive:/ && ++n == 2)' "$T/f2.md" > "$T/f2-noscrive.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: blocco B2 senza scrive:" "lint2: blocco senza scrive: = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-noscrive.md"
-# passo fuori da un blocco
+# step outside a block
 sed 's/^#### Blocco B1 — backend$/Blocco B1 — backend/' "$T/f2.md" > "$T/f2-noblock.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: passo P1 fuori da un blocco" "lint2: passo fuori da un blocco = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-noblock.md"
-# stringa tolta ancora asserita da un test esistente che il piano non tocca
+# removed string still asserted by an existing test that the plan does not touch
 sed 's/^| aggiunge | data-test | `goals-company-bar` |$/&\n| toglie | data-test | `goals-old-section` |/' "$T/f2.md" > "$T/f2-rm.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: data-test goals-old-section tolto dal piano ma ancora asserito da modules/app/apps/admin/tests/old.test.ts:1" "lint2: data-test tolto ancora asserito = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-rm.md"
-# controprova: se il piano tocca quel test, il caso torna pulito
+# counterproof: if the plan touches that test, the case is clean again
 sed 's/^- `modules\/app\/apps\/admin\/tests\/bar.test.ts`$/&\n- `modules\/app\/apps\/admin\/tests\/old.test.ts`/' "$T/f2-rm.md" > "$T/f2-rm-ok.md"
 expect 0 "^lint2: OK$" "lint2: data-test tolto ma il piano tocca il test che lo asserisce = pulito" -- bash "$PC" lint2 "$T/f2-rm-ok.md"
-# una stringa tolta asserita da un e2e: serve la riga [e2e-locator:]
+# a removed string asserted by an e2e: the [e2e-locator:] line is needed
 sed 's/^| aggiunge | data-test | `goals-company-bar` |$/&\n| toglie | stringa | `Vecchio titolo` |/' "$T/f2.md" > "$T/f2-e2e.md"
 expect 1 "stringa Vecchio titolo tolto dal piano ma ancora asserito da modules/app/apps/admin/e2e/specs/e2e-6-goals.spec.ts:1" "lint2: stringa tolta asserita da un e2e = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-e2e.md"
 sed 's/^- \[pavimento: permessi\] T1$/&\n- [e2e-locator: e2e-6-goals.spec.ts] il titolo cambia rosso se: il locator non trova il testo/' "$T/f2-e2e.md" > "$T/f2-e2e-ok.md"
 expect 0 "^lint2: OK$" "lint2: con la riga [e2e-locator:] dello spec = pulito" -- bash "$PC" lint2 "$T/f2-e2e-ok.md"
-# stringhe tolte: solo nei letterali, valore intero; assenza = AVVISO; deroga con la colonna verificato
+# removed strings: only in literals, whole value; absence = AVVISO; waiver with the verificato column
 printf '%s\n' "it(\"neg\", () => { expect(text).not.toContain('Attivo'); expect(w.text()).toContain(\"Attivonuovo\") })" > "$R/modules/app/apps/admin/tests/neg.test.ts"
 printf '%s\n' "it(\"pos\", () => { expect(w.text()).toContain('Scaduto') })" > "$R/modules/app/apps/admin/tests/pos.test.ts"
 strrow() { sed "s/^| aggiunge | data-test | \`goals-company-bar\` |\$/&\n$1/" "$T/f2.md"; }
@@ -368,7 +368,7 @@ refute "Scad" "lint2: sottostringa, nemmeno un AVVISO" -- bash "$PC" lint2 "$T/f
 printf '%s\n' '// colonna "Chiuso" della tabella' "it('mostra lo stato Chiuso', () => { expect(1).toBe(1) })" > "$R/modules/app/apps/admin/tests/title.test.ts"
 strrow '| toglie | stringa | `Chiuso` |' > "$T/f2-title.md"
 refute "Chiuso" "lint2: titolo di un test e commento non sono asserzioni = nessun match" -- bash "$PC" lint2 "$T/f2-title.md"
-# assenza vera contro presenza (2a review): .not.toBeNull() e i selettori data-test chiedono che l'elemento esista
+# real absence versus presence (2nd review): .not.toBeNull() and data-test selectors require the element to exist
 printf '%s\n' "it(\"p\", () => { expect(w.find('[data-test=\"goals-contrib-total\"]').element.closest('.x')).not.toBeNull() })" > "$R/modules/app/apps/admin/tests/presence.test.ts"
 strrow '| toglie | data-test | `goals-contrib-total` |' > "$T/f2-nn.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: data-test goals-contrib-total tolto dal piano ma ancora asserito da modules/app/apps/admin/tests/presence.test.ts:1" "lint2: .not.toBeNull() afferma la presenza = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-nn.md"
@@ -379,7 +379,7 @@ printf '%s\n' "it(\"e\", () => { expect(w.find('[data-test=\"goals-gone\"]').exi
 strrow '| toglie | data-test | `goals-gone` |' > "$T/f2-gone.md"
 expect 0 "AVVISO: riga [0-9]+: data-test goals-gone tolto dal piano: modules/app/apps/admin/tests/gone.test.ts:1 lo cita solo in un asserzione di assenza" "lint2: exists()).toBe(false) = assenza, AVVISO" -- bash "$PC" lint2 "$T/f2-gone.md"
 expect 0 "^lint2: OK$" "lint2: exists()).toBe(false) non blocca" -- bash "$PC" lint2 "$T/f2-gone.md"
-# posizione per letterale, e TUTTI i letterali del valore (3a review): una sola posizione positiva basta
+# position per literal, and ALL literals of the value (3rd review): a single positive position is enough
 printf '%s\n' '    assert "Sospeso" in body and "x" not in body' > "$R/modules/api/tests/test_pos_and_not_in.py"
 strrow '| toglie | stringa | `Sospeso` |' > "$T/f2-py1.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: stringa Sospeso tolto dal piano ma ancora asserito da modules/api/tests/test_pos_and_not_in.py:1" "lint2: assert \"X\" in body and \"y\" not in body = VIOLAZIONE su X" -- bash "$PC" lint2 "$T/f2-py1.md"
@@ -392,7 +392,7 @@ expect 1 "VIOLAZIONE: riga [0-9]+: data-test save tolto dal piano ma ancora asse
 printf '%s\n' "it(\"b\", () => { expect(a).toContain('Bozza'); expect(b).not.toContain('Bozza') })" > "$R/modules/app/apps/admin/tests/both.test.ts"
 strrow '| toglie | stringa | `Bozza` |' > "$T/f2-both.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: stringa Bozza tolto dal piano ma ancora asserito da modules/app/apps/admin/tests/both.test.ts:1" "lint2: toContain e .not.toContain sulla stessa riga = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-both.md"
-# i casi positivi: tutti VIOLAZIONE
+# the positive cases: all VIOLAZIONE
 printf '%s\n' "  screen.getByText('Pos1')" "  expect(w).toHaveText('Pos2')" "  await findByTestId('pos-3')" \
   "  expect(w.find('[data-test=\"pos-4\"]').exists()).toBe(true)" "  expect(w.find('[data-test=\"pos-5\"]')).toBeTruthy()" > "$R/modules/app/apps/admin/tests/positives.test.ts"
 printf '%s\n' '    assert "Pos6" in body' > "$R/modules/api/tests/test_positives.py"
@@ -418,17 +418,17 @@ expect 1 "VIOLAZIONE: riga [0-9]+: stringa Scaduto tolto dal piano ma ancora ass
 sed 's/`modules\/app\/apps\/admin\/tests\/pos.test.ts` — riscritto/`modules\/app\/apps\/admin\/tests\/nessuno.test.ts` — riscritto/' "$T/f2-ver.md" > "$T/f2-ver-unused.md"
 expect 1 "AVVISO: riga [0-9]+: deroga verificato inutilizzata: modules/app/apps/admin/tests/nessuno.test.ts" "lint2: deroga su un file senza match = AVVISO deroga inutilizzata" -- bash "$PC" lint2 "$T/f2-ver-unused.md"
 refute "deroga verificato inutilizzata" "lint2: controprova, la deroga usata non e' inutilizzata" -- bash "$PC" lint2 "$T/f2-ver.md"
-# mutazione malformata, e fra moduli diversi
+# malformed mutation, and across different modules
 sed 's/ · rosso se: `assert 200 == 403` |$/ |/' "$T/f2.md" > "$T/f2-badmut.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T1: mutazione illeggibile" "lint2: mutazione senza rosso se = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-badmut.md"
 sed 's/^| T2 | RF2 | \(.*\) | — |$/| T2 | RF2 | \1 | `modules\/api\/app\/routers\/goals.py` · `update_goal` · `raise Forbidden()` → (vuoto) · rosso se: `expected` |/' "$T/f2.md" > "$T/f2-cross.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2: file e test in moduli diversi" "lint2: mutazione backend osservata da un test frontend = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-cross.md"
-# pk04b-2: il Python di plan-check.sh usa DAVVERO il lettore (MAAT_CONFIG_PY), non una copia delle regole: con un
-# maat-config.py il cui modulo_di mette ogni file in fe, la mutazione backend osservata dal test frontend non e' piu'
-# fra moduli diversi. Controprova: runner() di nuovo con ADMIN/API cablati => la violazione resta, il caso e' rosso.
+# pk04b-2: the Python of plan-check.sh REALLY uses the reader (MAAT_CONFIG_PY), not a copy of the rules: with a
+# maat-config.py whose modulo_di puts every file in fe, the backend mutation observed by the frontend test is no longer
+# across different modules. Counterproof: runner() again with hard-wired ADMIN/API => the violation stays, the case is red.
 mkdir -p "$T/mcx/scripts"; cp -r "$HERE/../schemas" "$HERE/../profiles" "$T/mcx/"
 sed 's/^    return instrada(r, percorso)$/    return ("fe", "radice")/' "$HERE/maat-config.py" > "$T/mcx/scripts/maat-config.py"
-lettore_ok() { local o   # l'uscita prima, poi grep: con pipefail l'uscita 1 di lint2 rovescerebbe il risultato
+lettore_ok() { local o   # the exit code first, then grep: with pipefail the exit 1 of lint2 would invert the result
   ! cmp -s "$HERE/maat-config.py" "$T/mcx/scripts/maat-config.py" || return 1
   o=$(MAAT_CONFIG_PY="$T/mcx/scripts/maat-config.py" "$@" lint2 "$T/f2-cross.md" 2>&1)
   ! printf '%s\n' "$o" | grep -q "moduli diversi"; }
@@ -436,25 +436,25 @@ lettore_ok bash "$PC" && pass=$((pass+1)) || { echo "FAIL [lint2: il Python legg
 mutpc cablato '/^def runner(f, tp):$/a\    return "x" if (f.startswith("modules/app/") and tp.startswith("modules/app/apps/admin/")) or (f.startswith("modules/api/") and tp.startswith("modules/api/")) else None' &&
   ! lettore_ok env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-cablato/plan-check.sh" && pass=$((pass+1)) ||
   { echo "FAIL [controprova: con ADMIN/API cablati in runner() il lettore alterato non cambia nulla, il caso deve essere rosso]"; fail=$((fail+1)); }
-# rischio aperto: deve nominare un test della tabella
+# open risk: it must name a test of the table
 sed 's/^- \[pavimento: permessi\] T1$/&\n- ⚠️ Rischio aperto: la barra lampeggia/' "$T/f2.md" > "$T/f2-risk.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: rischio aperto senza un test assegnato" "lint2: rischio aperto senza test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-risk.md"
 sed 's/^- ⚠️ Rischio aperto: la barra lampeggia$/& — T2/' "$T/f2-risk.md" > "$T/f2-risk-ok.md"
 expect 0 "^lint2: OK$" "lint2: rischio aperto con il suo test = pulito" -- bash "$PC" lint2 "$T/f2-risk-ok.md"
-# contract: il formato e le righe di rischio aperto; formato 1 invariato
+# contract: the format and the open risk lines; format 1 unchanged
 expect 0 "^Plan format: 2$" "contract: formato 2 dichiarato in coda" -- bash "$PC" contract "$T/f2.md"
 expect 0 "^Rischio: riga [0-9]+ — ⚠️ Rischio aperto: la barra lampeggia — T2$" "contract: il rischio aperto e' un focus di rischio" -- bash "$PC" contract "$T/f2-risk-ok.md"
 refute "Plan format" "contract: formato 1, nessuna riga nuova" -- bash "$PC" contract "$T/base.md"
 
-# gen: procedura e mutations.json nella run directory, mai nel piano
+# gen: procedure and mutations.json in the run directory, never in the plan
 expect 0 "^mutazioni: 1$" "gen: una mutazione dalla tabella" -- bash "$PC" gen "$T/f2.md"
 P2="$T/f2.run/gen/procedura.txt"; MJ="$T/f2.run/counterproof/mutations.json"
 expect 0 "^Test level: std$" "gen: livello" -- cat "$P2"
 expect 0 "^vitest: tests/bar.test.ts$" "gen: percorsi di vitest-fast.sh relativi ad apps/admin" -- cat "$P2"
 expect 0 "^pytest: tests/test_goals.py$" "gen: selettori pytest relativi a modules/api" -- cat "$P2"
-# pk04b-2: i comandi da comandi.test del modulo (comando() di maat-config.py), nella cartella del comando, dentro WSL
-# per i moduli ambiente wsl (su Windows), quotati per bash. pk08: fuori da Windows (Linux) le stesse righe senza WSL,
-# nella forma nativa (cd relativo alla radice, nessun export di MAAT_CONFIG: la riga eredita l'ambiente)
+# pk04b-2: the commands from the module comandi.test (comando() of maat-config.py), in the command folder, inside WSL
+# for the ambiente wsl modules (on Windows), quoted for bash. pk08: outside Windows (Linux) the same lines without WSL,
+# in the native form (cd relative to the root, no export of MAAT_CONFIG: the line inherits the environment)
 PCWIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) PCWIN=1 ;; esac
 if [ $PCWIN -eq 1 ]; then
 expect 0 "^cmd vitest: wsl -- bash -lc 'cd [^ ]*/modules/app/apps/admin && bash '\\\\''[^']*'\\\\''/scripts/test-fast.sh '\\\\''tests/bar.test.ts'\\\\'''$" "gen: comando di test di fe (test-fast.sh del plugin, dalla radice)" -- cat "$P2"
@@ -466,9 +466,9 @@ expect 0 "^cmd pytest: cd modules/api && /[^ ]*/modules/api/.venv/bin/python -m 
 expect 0 "^cmd counterproof: PROJECT_ROOT=[^ ]* bash /[^ ]*/scripts/counterproof.sh /[^ ]*/f2.run/counterproof/mutations.json$" "gen: comando della controprova, nativo (counterproof.sh del plugin, PROJECT_ROOT)" -- cat "$P2"
 refute "^cmd .*wsl" "gen: fuori da Windows nessuna riga passa da WSL" -- cat "$P2"
 fi
-# review pk04b-2, minor 1: MAAT_CONFIG impostata arriva DENTRO WSL anche nelle righe cmd di test (come in_wsl di
-# gates.sh e come riga_cp), in forma di WSL (un percorso che comincia con /, non C:/). Controprova: senza l'aggiunta
-# (mutante) la riga parte dal cd, senza export
+# review pk04b-2, minor 1: a set MAAT_CONFIG reaches INSIDE WSL also in the test cmd lines (like in_wsl of
+# gates.sh and like riga_cp), in WSL form (a path starting with /, not C:/). Counterproof: without the addition
+# (mutant) the line starts from the cd, without export
 MCR="export MAAT_CONFIG=/[^ ;]*/\\.claude/maat\\.json; cd "
 refute "^cmd (vitest|pytest): .*MAAT_CONFIG" "gen: senza MAAT_CONFIG nessun export nelle righe di test" -- cat "$P2"
 if [ $PCWIN -eq 0 ]; then
@@ -477,17 +477,17 @@ if [ $PCWIN -eq 0 ]; then
 else
 expect 0 "^cmd vitest: wsl -- bash -lc '$MCR" "gen: MAAT_CONFIG dentro WSL nella riga vitest" -- env MAAT_CONFIG="$R/.claude/maat.json" bash "$PC" gen "$T/f2.md" --run-dir "$T/mc.run"
 expect 0 "^cmd pytest: wsl -- bash -lc '$MCR" "gen: MAAT_CONFIG dentro WSL nella riga pytest" -- cat "$T/mc.run/gen/procedura.txt"
-if mutpc mcfg 's/^    if wsl and os.environ.get("MAAT_CONFIG"):   # fuori/    if False:   # MUTANTE fuori/'; then
+if mutpc mcfg 's/^    if wsl and os.environ.get("MAAT_CONFIG"):   # outside/    if False:   # MUTANTE outside/'; then
   expect 0 "^cmd vitest: wsl -- bash -lc 'cd " "controprova: senza l'aggiunta di MAAT_CONFIG (mutante) la riga vitest non la porta in WSL" -- env MAAT_ROOT="$PLUGIN_DIR" MAAT_CONFIG="$R/.claude/maat.json" bash "$T/pcm-mcfg/plan-check.sh" gen "$T/f2.md" --run-dir "$T/mc-mut.run"
   refute "^cmd vitest: .*MAAT_CONFIG" "controprova: la riga vitest del mutante non ha MAAT_CONFIG" -- cat "$T/mc-mut.run/gen/procedura.txt"
 else echo "FAIL [controprova MAAT_CONFIG: la mutazione non si applica]"; fail=$((fail+1)); fi
 fi
-# pk08, blocco A: MAAT_CONFIG relativo alla cartella di lavoro (e con spazi) diventa assoluto all'ingresso, in bash, mai
-# con os.path.abspath di Python Windows: la riga cp (e su Windows la riga cmd, dentro WSL) porta il percorso assoluto,
-# non quello relativo, che dopo il cd o dentro WSL non sarebbe piu' il file. Controprova: senza la normalizzazione
-# (mutante) la riga cp porta il percorso relativo
+# pk08, block A: MAAT_CONFIG relative to the working directory (and with spaces) becomes absolute on entry, in bash, never
+# with os.path.abspath of Windows Python: the cp line (and on Windows the cmd line, inside WSL) carries the absolute path,
+# not the relative one, which after the cd or inside WSL would no longer be the file. Counterproof: without the normalization
+# (mutant) the cp line carries the relative path
 mkdir -p "$T/conf con spazi"; cp "$R/.claude/maat.json" "$T/conf con spazi/maat.json"
-gen_rel() { # <plan-check.sh> <run dir> [MAAT_ROOT]: gen dalla cartella $T, con MAAT_CONFIG relativo
+gen_rel() { # <plan-check.sh> <run dir> [MAAT_ROOT]: gen from the $T folder, with a relative MAAT_CONFIG
   (cd "$T" && export MAAT_CONFIG="conf con spazi/maat.json" && { [ -z "${3:-}" ] || export MAAT_ROOT=$3; } &&
     bash "$1" gen "$T/f2.md" --run-dir "$2" >/dev/null 2>&1); cat "$2/gen/procedura.txt"; }
 MCA="MAAT_CONFIG=('\\\\''|')?/[^;']*/conf con spazi/maat\\.json"
@@ -500,9 +500,9 @@ esac
 if mutpc mcrel 's/^    \/\*|\[A-Za-z\]:\[\/\\\\\]\*) ;;$/    *) ;;   # MUTANTE: nessuna normalizzazione/'; then
   expect 0 "^cmd counterproof: .*MAAT_CONFIG=('\\\\''|')?conf con spazi/maat\\.json" "controprova: senza la normalizzazione (mutante) la riga cp porta il percorso relativo" -- gen_rel "$T/pcm-mcrel/plan-check.sh" "$T/rel-mut.run" "$PLUGIN_DIR"
 else echo "FAIL [controprova MAAT_CONFIG relativo: la mutazione non si applica]"; fail=$((fail+1)); fi
-# review pk04b-2, minor 7: un {python} per nome (python3, primo candidato senza /) non si verifica in WSL da qui
-# (gates.sh lo cerca nel PATH di WSL): la riga lo dichiara in un commento in coda. Controprova: col nome dato per
-# verificato (mutante) il commento sparisce e la riga finisce con l'apice
+# review pk04b-2, minor 7: a {python} by name (python3, first candidate without /) cannot be verified in WSL from here
+# (gates.sh looks for it in the WSL PATH): the line declares it in a trailing comment. Counterproof: with the name taken as
+# verified (mutant) the comment disappears and the line ends with the quote
 "$FIC_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))
 for m in c["moduli"]:
@@ -511,7 +511,7 @@ for m in c["moduli"]:
 json.dump(c, open(sys.argv[2], "w", encoding="utf-8"), indent=1)' "$R/.claude/maat.json" "$T/conf-py3.json"
 NV="'  # non verificato: python3 cercato nel PATH di WSL solo da gates\\.sh$"
 refute "non verificato" "gen: python trovato come file (.venv/bin/python): nessuna dichiarazione" -- cat "$P2"
-if [ $PCWIN -eq 0 ]; then   # pk08: senza WSL il nome si cerca nel PATH di qui, quindi e' verificato (percorso assoluto)
+if [ $PCWIN -eq 0 ]; then   # pk08: without WSL the name is searched in the local PATH, so it is verified (absolute path)
   echo "SALTATO [python per nome «non verificato», e la sua controprova]: fuori da Windows il nome si verifica nel PATH locale"
   expect 0 "^cmd pytest: cd modules/api && /[^ ]*python3 -m pytest .*'$" "gen: python per nome, nativo: risolto a percorso assoluto" -- env MAAT_CONFIG="$T/conf-py3.json" bash "$PC" gen "$T/f2.md" --run-dir "$T/py3.run"
   refute "non verificato" "gen: python per nome, nativo: nessuna dichiarazione" -- cat "$T/py3.run/gen/procedura.txt"
@@ -526,25 +526,25 @@ expect 0 "^blocco B2: scrive=modules/app/apps/admin/components/Bar.vue,modules/a
 fpcur=$(bash "$PC" basis "$T/f2.md" | sed -n 's/.*plan \([0-9a-f]*\).*/\1/p')
 expect 0 "^Impronta piano: $fpcur$" "gen: impronta del piano" -- cat "$P2"
 refute "cmd lint" "gen: lint solo a full" -- cat "$P2"
-# mutations.json valido per counterproof.sh: lo convalida la sua stessa funzione prep (pt05)
+# mutations.json valid for counterproof.sh: validated by its own prep function (pt05)
 CPS="$HERE/counterproof.sh"
 awk "/^PY='\$/{f=1;next} f&&/^'\$/{exit} f" "$CPS" > "$T/cp.py"
 mkdir -p "$T/cptmp" "$T/cpout"
-# riepilogo del prep (pk04b-2, blocco A): gruppi, voci eseguibili, assorbite, NOT RUN; i moduli in <tmp>/mods
+# prep summary (pk04b-2, block A): groups, runnable entries, absorbed, NOT RUN; the modules in <tmp>/mods
 expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
 expect 0 "^be$" "gen: la mutazione e' del modulo be (pytest)" -- cat "$T/cptmp/mods"
 expect 0 '"test_id": "modules/api/tests/test_goals.py::test_update_denied"' "gen: test_id pytest = node id" -- cat "$MJ"
 expect 0 '"superficie": "permessi"' "gen: la riga [pavimento:] che nomina il test da' la superficie" -- cat "$MJ"
-# controprova del convalidatore: una lista senza rosso_se e' rifiutata (exit 64)
+# counterproof of the validator: a list without rosso_se is rejected (exit 64)
 printf '%s\n' '[{"id": "T1", "file": "modules/api/app/routers/goals.py", "simbolo": "x", "mutazione": {"cerca": "a", "sostituisci": "b"}, "test": {"percorso": "modules/api/tests/test_goals.py"}}]' > "$T/cpout/bad.json"
 expect 64 "rosso_se" "gen: controprova, prep rifiuta una lista malformata" -- "$FIC_PY" "$T/cp.py" prep "$T/cpout/bad.json" "$R" "$T/cptmp2" "$T/cpout"
-# una mutazione frontend: test_id = nome vitest, runner vitest
+# a frontend mutation: test_id = vitest name, vitest runner
 sed 's/^| T2 | RF2 | \(.*\) | — |$/| T2 | RF2 | \1 | `modules\/app\/apps\/admin\/components\/Bar.vue` · `Bar` · `goals-company-bar` → `x` · rosso se: `expected false to be true` |/' "$T/f2.md" > "$T/f2-fe.md"
 expect 0 "^mutazioni: 2$" "gen: due mutazioni" -- bash "$PC" gen "$T/f2-fe.md"
 expect 0 "^2 2 0 0$" "gen: mutations.json con vitest e pytest accettato da prep" -- "$FIC_PY" "$T/cp.py" prep "$T/f2-fe.run/counterproof/mutations.json" "$R" "$T/cptmp3" "$T/cpout"
 expect 0 "^fe be $" "gen: le due mutazioni sono dei moduli fe e be" -- bash -c 'tr "\n" " " < "$1"; echo' _ "$T/cptmp3/mods"
 expect 0 '"test_id": "bar"' "gen: test_id vitest = nome del test" -- cat "$T/f2-fe.run/counterproof/mutations.json"
-# nessuna mutazione: il mutations.json generato prima sparisce
+# no mutation: the mutations.json generated earlier disappears
 sed 's/^\(| T1 | RF1 | .* | rosso se: il venditore aggiorna | \).*$/\1— |/' "$T/f2.md" > "$T/f2-nomut.md"
 mkdir -p "$T/f2-nomut.run/counterproof"; cp "$MJ" "$T/f2-nomut.run/counterproof/mutations.json"
 expect 0 "^mutazioni: 0$" "gen: nessuna mutazione" -- bash "$PC" gen "$T/f2-nomut.md"
@@ -560,13 +560,13 @@ expect 0 "^cmd lint: wsl -- bash -lc 'cd [^ ]*/repo && bash .*/scripts/test-fast
 else
 expect 0 "^cmd lint: bash '[^']*'/scripts/test-fast.sh --lint 'modules/app/apps/admin/components/Bar.vue' 'modules/app/apps/admin/tests/bar.test.ts'$" "gen: a full anche il lint dei file toccati del modulo, nativo (comandi.lint di fe)" -- bash "$PC" gen "$T/f2-full.md"
 fi
-# pk04b-2 (decisione del maintainer, strada a): EQUIVALENZA con il harness di prima (plan-check.sh a 0eed7b6, ADMIN/API
-# cablati): stesse liste vitest:/pytest:/altri:, stesso mutations.json e, per ogni riga cmd, stesso tipo, stessa
-# cartella di lavoro (quindi lo stesso modulo) e stessi file nello stesso ordine. Differenze ammesse: l'interprete,
-# --junitxml, la forma delle virgolette (e il cd esplicito: prima vitest-fast.sh partiva da apps/admin da se').
+# pk04b-2 (maintainer decision, option a): EQUIVALENCE with the previous harness (plan-check.sh at 0eed7b6, hard-wired
+# ADMIN/API): same vitest:/pytest:/altri: lists, same mutations.json and, for each cmd line, same type, same
+# working directory (hence the same module) and same files in the same order. Allowed differences: the interpreter,
+# --junitxml, the quoting style (and the explicit cd: before, vitest-fast.sh started from apps/admin by itself).
 OLDPC="$T/pc-old/plan-check.sh"; mkdir -p "$T/pc-old/lib"; cp "$HERE/lib/maat-paths.sh" "$T/pc-old/lib/"
-# una copia senza .git, o con una storia senza 0eed7b6, non ha il riferimento: SKIP motivato, non FAIL (review
-# pk04b-2, minor 6). Con il commit presente, un'estrazione vuota resta un FAIL (sotto)
+# a copy without .git, or with a history lacking 0eed7b6, has no reference: motivated SKIP, not FAIL (review
+# pk04b-2, minor 6). With the commit present, an empty extraction is still a FAIL (below)
 EQ_SKIP=0
 if ! git -c safe.directory='*' -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
   EQ_SKIP=1; echo "SKIP [gen: equivalenza col harness di prima — $HERE non e' in un repository git: nessun riferimento 0eed7b6]"
@@ -580,7 +580,7 @@ import re, shlex, sys
 proc, root = sys.argv[1], sys.argv[2].replace("\\", "/").rstrip("/")
 m = re.match(r"^([A-Za-z]):/(.*)$", root)
 radici = [root] + (["/mnt/%s/%s" % (m.group(1).lower(), m.group(2))] if m else [])
-PRIMA = {"vitest": "modules/app/apps/admin", "lint": "", "counterproof": ""}   # cartella implicita di vitest-fast.sh
+PRIMA = {"vitest": "modules/app/apps/admin", "lint": "", "counterproof": ""}   # implicit directory of vitest-fast.sh
 def rel(d):
     for r in radici:
         if d == r or d.startswith(r + "/"):
@@ -598,16 +598,16 @@ for l in open(proc, encoding="utf-8").read().splitlines():
     wd = PRIMA.get(k)
     if t[:1] == ["cd"]:
         wd, t = rel(t[1]), t[3:]
-    # si tengono solo i token .py/.ts/.vue/.json: i selettori di test, i file dei piani di prova (f2, f2-fe, f2-full
-    # toccano solo .py, .ts e .vue) e mutations.json; restano fuori interprete, opzioni e script del plugin. La lista
-    # di lint NON e' confrontata per estensione e la sua differenza e' voluta: prima erano i soli lintabili di
-    # modules/app/ (.ts/.tsx/.js/.mjs/.cjs/.vue), ora ogni file del piano del modulo con comandi.lint (come gates.sh),
-    # e le estensioni non lintabili le dichiara SKIPPED test-fast.sh --lint. Sui piani di prova le due liste coincidono
+    # only the .py/.ts/.vue/.json tokens are kept: the test selectors, the files of the test plans (f2, f2-fe, f2-full
+    # touch only .py, .ts and .vue) and mutations.json; interpreter, options and plugin scripts are left out. The lint
+    # list is NOT compared by extension and its difference is intended: before it held only the lintable files of
+    # modules/app/ (.ts/.tsx/.js/.mjs/.cjs/.vue), now every file of the plan of the module with comandi.lint (as gates.sh does),
+    # and test-fast.sh --lint declares the non-lintable extensions SKIPPED. On the test plans the two lists coincide
     f = [x[x.rfind("counterproof/"):] if x.endswith("mutations.json") else x for x in t
          if re.search(r"\.(py|ts|vue|json)$", x) and "/scripts/" not in x and "/script/" not in x]
     print("%s | %s | %s" % (k, wd, " ".join(f)))
 EOF
-equiv() { # <plan-check.sh nuovo> <spec>: righe che differiscono dal harness di prima (vuoto = equivalenti)
+equiv() { # <new plan-check.sh> <spec>: lines that differ from the previous harness (empty = equivalent)
   local s=$2 n a b; n=$(basename "$2" .md)
   env MAAT_ROOT="$PLUGIN_DIR" bash "$OLDPC" gen "$s" --run-dir "$T/eq-old-$n.run" >/dev/null 2>&1 || { echo "harness di prima: gen fallito"; return; }
   env MAAT_ROOT="$PLUGIN_DIR" bash "$1" gen "$s" --run-dir "$T/eq-new-$n.run" >/dev/null 2>&1 || { echo "gen fallito"; return; }
@@ -617,21 +617,21 @@ equiv() { # <plan-check.sh nuovo> <spec>: righe che differiscono dal harness di 
   cmp -s "$T/eq-old-$n.run/counterproof/mutations.json" "$T/eq-new-$n.run/counterproof/mutations.json" || echo "mutations.json diverso"
 }
 if [ "$EQ_SKIP" = 1 ]; then
-  :   # SKIP dichiarato sopra
+  :   # SKIP declared above
 elif [ -s "$OLDPC" ]; then
   for s in f2 f2-fe f2-full; do
     d=$(equiv "$PC" "$T/$s.md")
     [ -z "$d" ] && pass=$((pass+1)) || { echo "FAIL [gen: equivalenza col harness di prima su $s.md]"; printf '%s\n' "$d" | sed 's/^/    /'; fail=$((fail+1)); }
   done
-  # controprova: un modulo sbagliato per i test (tutti nel modulo fe, come con ADMIN cablato per ogni percorso) =>
-  # il test pytest finisce in una riga cmd vitest da apps/admin, l'equivalenza fallisce
+  # counterproof: a wrong module for the tests (all in the fe module, as with ADMIN hard-wired for every path) =>
+  # the pytest test ends up in a vitest cmd line from apps/admin, the equivalence fails
   if mutpc modsbagliato 's/^        mt, kt = modulo(p)$/        mt, kt = modulo("modules\/app\/apps\/admin\/x.ts")/'; then
     d=$(equiv "$T/pcm-modsbagliato/plan-check.sh" "$T/f2.md")
     [ -n "$d" ] && pass=$((pass+1)) || { echo "FAIL [controprova: col modulo sbagliato l'equivalenza deve fallire]"; fail=$((fail+1)); }
   else echo "FAIL [controprova equivalenza: la mutazione non si applica]"; fail=$((fail+1)); fi
 else echo "FAIL [gen: harness di prima (0eed7b6) non estraibile da git]"; fail=$((fail+1)); fi
-# quoting: una run dir con spazi resta UN argomento dentro wsl -- bash -lc '…' (apici di espandi ri-quotati). La
-# riga si analizza con bash -n e si esegue con wsl, bash e cd finti che stampano gli argomenti finali.
+# quoting: a run dir with spaces stays ONE argument inside wsl -- bash -lc '…' (quotes of espandi re-quoted). The
+# line is analysed with bash -n and executed with fake wsl, bash and cd that print the final arguments.
 bash "$PC" gen "$T/f2.md" --run-dir "$T/run con spazi" >/dev/null 2>&1
 riga_di() { sed -n "s/^cmd $1: //p" "$T/run con spazi/gen/procedura.txt"; }
 prova() { ( wsl() { [ "$1" = -- ] && shift; "$@"; }; bash() { if [ "$1" = -lc ]; then eval "$2"; else printf '[%s]\n' "$@"; fi; }
@@ -643,7 +643,7 @@ o=$(prova "$(riga_di vitest)")
 command bash -n -c "$(riga_di vitest)" && printf '%s\n' "$o" | grep -qxE "CD\[(.*/)?modules/app/apps/admin\]" && printf '%s\n' "$o" | grep -qx "\[tests/bar.test.ts\]" && pass=$((pass+1)) ||
   { echo "FAIL [gen: riga vitest: cd e argomenti integri dopo la ri-quotatura]"; printf '%s\n' "$o" | sed 's/^/    /'; fail=$((fail+1)); }
 
-# route (L5): superfici dai percorsi, discordanza = percorso pieno
+# route (L5): surfaces from the paths, disagreement = full path
 expect 0 "^Superfici rilevate: permessi, contratto-api$" "route: un file sotto routers/ = permessi e contratto-api" -- bash "$PC" route "$T/f2.md"
 expect 0 "^Percorso: pieno — .*superfici rilevate: permessi, contratto-api" "route: superfici rilevate = percorso pieno" -- bash "$PC" route "$T/f2.md"
 refute "^Discordanza" "route: dichiarazione concorde, nessuna discordanza" -- bash "$PC" route "$T/f2.md"
@@ -667,9 +667,9 @@ head -6 "$T/light.md" > "$T/light2.md"
 expect 0 "^Superfici rilevate: distruttiva, contratto-api$" "route: --diff aggiunge percorsi e parole chiave" -- bash "$PC" route "$T/light2.md" --diff "$T/d.diff"
 { head -5 "$T/light2.md"; for i in $(seq 1 150); do echo "riga $i"; done; } > "$T/long.md"
 expect 0 "^Percorso: pieno — piano di 1[0-9][0-9] righe \(oltre 150\)" "route: piano oltre 150 righe = pieno" -- bash "$PC" route "$T/long.md"
-# pk04b-2: superfici e migrazioni da piano.superfici_critiche e piano.migrazioni di maat.json. Equivalenza con le
-# regole cablate di prima (surf_of e is_mig del harness, copiate qui come riferimento): per ogni percorso del corpus
-# (uno per regola, le eccezioni, un percorso neutro) le stesse superfici e la stessa migrazione.
+# pk04b-2: surfaces and migrations from piano.superfici_critiche and piano.migrazioni of maat.json. Equivalence with the
+# previous hard-wired rules (surf_of and is_mig of the harness, copied here as reference): for every path of the corpus
+# (one per rule, the exceptions, a neutral path) the same surfaces and the same migration.
 "$FIC_PY" -c '
 import re, sys
 API = "modules/api/"
@@ -703,7 +703,7 @@ for p in sys.argv[1:]:
   modules/db/prisma/schema.prisma modules/db/prisma/migrations/2026_x/migration.sql script/migrations/x.md \
   modules/api/app/services/database.py modules/api/app/models/goal.py modules/app/apps/admin/models/x.ts \
   modules/app/packages/ui/Bar.vue packages/x/y.ts docs/guida/nota.md | tr -d '\r' > "$T/sup-rif.txt"
-sup_eq() { # [MAAT_CONFIG=…] → le righe del corpus su cui plan-check.sh route differisce dal riferimento
+sup_eq() { # [MAAT_CONFIG=…] → the corpus lines on which plan-check.sh route differs from the reference
   local p s m e
   while IFS='|' read -r p s m; do
     printf '%s\n' "# T" "## Piano di implementazione" "Plan status: DRAFT" "Superfici a rischio: nessuna" "- \`$p\`" > "$T/sup1.md"
@@ -713,16 +713,16 @@ sup_eq() { # [MAAT_CONFIG=…] → le righe del corpus su cui plan-check.sh rout
 }
 [ "$(wc -l < "$T/sup-rif.txt")" -eq 20 ] && d=$(sup_eq) && [ -z "$d" ] && pass=$((pass+1)) ||
   { echo "FAIL [route: superfici e migrazioni di maat.json = le regole di prima, percorso per percorso]"; printf '%s\n' "$d" | sed 's/^/    /'; fail=$((fail+1)); }
-# controprova: senza la regola di useRole nell'esempio il caso composables/useRole/x.ts perde permessi
+# counterproof: without the useRole rule in the example the case composables/useRole/x.ts loses permessi
 sed 's#|composables/useRole/|#|#' "$R/.claude/maat.json" > "$T/senza-userole.json"
 d=$(MAAT_CONFIG="$T/senza-userole.json" sup_eq)
 if ! cmp -s "$R/.claude/maat.json" "$T/senza-userole.json" && [ "$d" = "modules/app/apps/admin/composables/useRole/x.ts: atteso «permessi» e migrazione «no»" ]; then pass=$((pass+1))
 else echo "FAIL [controprova: senza la regola useRole l'equivalenza delle superfici deve fallire su composables/useRole/x.ts]"; printf '%s\n' "$d" | sed 's/^/    /'; fail=$((fail+1)); fi
-# progetto senza maat.json: nessuna superficie dai percorsi (default vuoto)
+# project without maat.json: no surface from the paths (empty default)
 printf '%s\n' "# T" "## Piano di implementazione" "Plan status: DRAFT" "Superfici a rischio: nessuna" "- \`modules/api/app/routers/goals.py\`" > "$T/sup1.md"
 expect 0 "^Superfici rilevate: nessuna$" "route: progetto senza maat.json = nessuna superficie dai percorsi" -- env PLAN_CHECK_ROOT="$T/nessun-progetto" bash "$PC" route "$T/sup1.md"
 
-# s2: delta e occhi freschi sulla stessa impronta, puliti; un respinto non e' pulito
+# s2: delta and fresh eyes on the same fingerprint, clean; a rejected finding is not clean
 rv() { printf '%s\n' "Impronta piano: $1" "Decision: $2" "Coverage statement: tutto" "Blocking findings:"; [ "$3" = 0 ] || printf '%s\n' "1. Severity: major" "   Claim: x"; printf '%s\n' "Optional findings:" "1. Severity: minor"; }
 rv "$fpcur" APPROVED 0 > "$T/d-ok"; rv "$fpcur" APPROVED 0 > "$T/g-ok"; rv "$fpcur" NEEDS_CHANGES 1 > "$T/d-one"
 expect 0 "^S2: APPROVA" "s2: delta e gate puliti sulla stessa impronta = APPROVA" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-ok" --gate "$T/g-ok"
@@ -739,7 +739,7 @@ rv "$fpcur" STOP_HUMAN_DECISION_REQUIRED 0 > "$T/g-stop"
 expect 0 "^S2: STOP" "s2: decisione umana = STOP" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-ok" --gate "$T/g-stop"
 expect 2 "respinti" "s2: piu' respinti che finding = errore d'uso" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-ok" --gate "$T/g-ok" --respinti 1
 
-# ── skeleton (harness-pt12): scheletro sotto o sopra il tetto, e il piano completo entro 400 righe ──────────────
+# ── skeleton (harness-pt12): skeleton below or above the cap, and the full plan within 400 lines ──────────────
 expect 0 "^Scheletro: SOTTO IL TETTO" "skeleton: 3 passi, 4 file = sotto il tetto (uscita 0)" -- bash "$PC" skeleton "$T/f2.md"
 expect 0 "^Passi: 3 \(tetto 15\)$" "skeleton: conta i passi" -- bash "$PC" skeleton "$T/f2.md"
 expect 0 "^File: 4 \(tetto 40\)$" "skeleton: conta i file (File toccati + passi)" -- bash "$PC" skeleton "$T/f2.md"
@@ -759,11 +759,11 @@ expect 0 "^Taglio: rifiutato — 2026-09-29, piano unico$" "skeleton: la decisio
 sed 's/^# Titolo$/&\n```text\nTaglio: rifiutato — esempio\n```/' "$T/sk-passi.md" > "$T/sk-rif-fence.md"
 expect 1 "SOPRA IL TETTO — passi 16 > 15: proposta di taglio" "skeleton: controprova, la riga dentro un recinto non vale" -- bash "$PC" skeleton "$T/sk-rif-fence.md"
 
-# ── split (harness-pt12): ogni RF e CA della madre in una e una sola figlia ──────────────────────────────────────
+# ── split (harness-pt12): every RF and CA of the parent in one and only one child ──────────────────────────────────────
 C="$T/catena"; mkdir -p "$C"
 printf '%s\n' "# Madre" "## Contesto" "Grande." "## 2. Requisiti funzionali" "### RF1 — uno" "Testo." "### RF2 — due" "- **RF2.1** dettaglio" \
   "### RF3 — tre" "## Criteri di accettazione" "- CA1 — si vede" "- CA2 — si salva" "## Fuori scope" "- RF9 non e' un requisito qui" > "$C/spec-m.md"
-kid() { # $1 file, $2 Dipende da, $3 Interfaccia per, poi gli ID (RF… o CA…)
+kid() { # $1 file, $2 Dipende da, $3 Interfaccia per, then the IDs (RF… or CA…)
   local f=$1 dep=$2 itf=$3 i; shift 3
   { printf '%s\n' "# Figlia" "Dipende da: $dep" "Interfaccia per: $itf" "## Requisiti funzionali"
     for i in "$@"; do case $i in RF*) printf '1. %s — testo\n' "$i" ;; esac; done
@@ -787,7 +787,7 @@ expect 1 "almeno due figlie" "split: madre senza riga Figlie: e senza argomenti 
 sed -i 's/^# Madre$/&\nFiglie: spec-m-1-a, spec-m-2-b/' "$C/spec-m.md"
 expect 0 "^split: OK" "split: le figlie dalla riga Figlie: della madre" -- bash "$PC" split "$C/spec-m.md"
 
-# ── basis di una figlia (harness-pt12, L6): madre, anello precedente, interfaccia, touched ───────────────────────
+# ── basis of a child (harness-pt12, L6): parent, previous ring, interface, touched ───────────────────────
 G="$T/catrepo"; mkdir -p "$G/src" "$G/wf"
 (cd "$G" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false \
   && printf 'x1\n' > src/x.py && printf 'y1\n' > src/y.py && git add -A && git commit -qm init)
@@ -809,7 +809,7 @@ sed -i 's/^1\. Cambia `src\/x.py`\.$/1. Cambia `src\/x.py` e `src\/y.py`./' "$G/
 expect 0 "^Status: STALE \(prec\)$" "basis: il piano dell'anello precedente riaperto = STALE" -- bash "$PC" basis "$B2"
 sed -i 's/^1\. Cambia `src\/x.py` e `src\/y.py`\.$/1. Cambia `src\/x.py`./' "$G/wf/spec-m-1-a.md"
 expect 0 "^Status: FRESH$" "basis: controprova, piano precedente ripristinato = FRESH" -- bash "$PC" basis "$B2"
-# anello 1 chiuso: review APPROVED + IMPLEMENTED, touched.txt e .post-tree misurati
+# ring 1 closed: review APPROVED + IMPLEMENTED, touched.txt and .post-tree measured
 R1="$G/wf/spec-m-1-a.run"; mkdir -p "$R1/log"
 printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$G/wf/spec-m-1-a.md"
 expect 1 "^Anello: APERTO — nessuna riga Finalize: IMPLEMENTED$" "closed: APPROVED+IMPLEMENTED senza Finalize = aperto (nessun ripiego legacy)" -- bash "$PC" closed "$G/wf/spec-m-1-a.md"
@@ -832,10 +832,10 @@ expect 0 "^Status: FRESH$" "L6: riapprovata dopo il giro delta (interfaccia regi
 printf 'x3\n' > "$G/src/x.py"; (cd "$G" && git add -A && git write-tree) > "$R1/log/05-fix.post-tree"
 expect 0 "^Status: STALE \(interfaccia\)$" "L6: interfaccia reale diversa da quella registrata = STALE" -- bash "$PC" basis "$B2"
 export PLAN_CHECK_ROOT="$R"
-# ── fase test-red (harness-pt11): scope, impronta dei test nella basis, verifica dei rossi, stub e L2 ──────────
-# Controprove per mutazione (eseguite a mano con PC=<variante>): senza CLASSIFICAZIONE-IMPORT il caso import diventa
-# «dimostrato» (rosso qui); senza CONFRONTO-TESTS la basis resta FRESH con un test cambiato; senza SIMBOLI-TESTATI
-# un simbolo esportato non testato viene assorbito.
+# ── test-red phase (harness-pt11): scope, test fingerprint in the basis, verification of the reds, stubs and L2 ──────────
+# Counterproofs by mutation (run by hand with PC=<variant>): without CLASSIFICAZIONE-IMPORT the import case becomes
+# «dimostrato» (red here); without CONFRONTO-TESTS the basis stays FRESH with a changed test; without SIMBOLI-TESTATI
+# an exported symbol that is not tested is absorbed.
 mkdir -p "$R/modules/api/app/services" "$R/modules/app/apps/admin/utils"
 printf 'def somma(a, b):\n    return 0\n' > "$R/modules/api/app/services/calc.py"
 printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert somma(1, 2) == 3\n' > "$R/modules/api/tests/test_calc.py"
@@ -899,8 +899,8 @@ expect 0 "^ok$" "basis --write-tests: nessuna riga senza CR" -- crlf_ok "$T/f2t.
 printf '\n# commento\n' >> "$R/modules/api/tests/test_calc.py"
 expect 0 "^Status: STALE \(tests\)$" "basis: un test di accettazione cambiato = STALE (tests)" -- bash "$PC" basis "$T/f2t.md"
 printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert somma(1, 2) == 3\n' > "$R/modules/api/tests/test_calc.py"
-# verifica dei rossi: evidenza sintetica come la scrive gates.sh (JUnit per tests-be, output del reporter per tests-fe)
-mkev() { # $1 cartella, $2 testcase JUnit, $3 esito be, $4 log vitest, $5 esito fe
+# verification of the reds: synthetic evidence as gates.sh writes it (JUnit for tests-be, reporter output for tests-fe)
+mkev() { # $1 folder, $2 JUnit testcase, $3 be outcome, $4 vitest log, $5 fe outcome
   mkdir -p "$1"
   printf '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' "$2" > "$1/tests-be.junit.xml"
   printf '{"gate":"tests-be","esito":"%s","report":"tests-be.junit.xml","motivo":""}\n' "$3" > "$1/tests-be.json"
@@ -924,8 +924,8 @@ expect 0 "^rossi: esito=OK" "rossi: tutti rossi sulla loro asserzione = OK" -- b
 expect 0 "^rosso T1: dimostrato modules/api/tests/test_calc.py:4" "rossi: ID e posizione del rosso (pytest)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok"
 expect 0 "^rosso T2: dimostrato modules/app/apps/admin/tests/fmt.test.ts:2" "rossi: ID e posizione del rosso (vitest)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok"
 expect 0 '"esito": "OK"' "rossi: test-red/rossi.json scritto nella run dir" -- cat "$T/f2t.run/test-red/rossi.json"
-# goals-ux-12: il piano nomina il test "describe > it", come lo stampa vitest. Controprova: con i segmenti uniti
-# solo da " " il rosso di T2 torna «verde» e il suo blocco FAIL un «conflitto» con la suite esistente.
+# goals-ux-12: the plan names the test "describe > it", as vitest prints it. Counterproof: with the segments joined
+# only by " " the red of T2 goes back to «verde» and its FAIL block to a «conflitto» with the existing suite.
 sed 's/fmt\.test\.ts::fmt formatta`/fmt.test.ts::fmt > formatta`/' "$T/f2t.md" > "$T/f2t-desc.md"
 mkev "$T/ev-desc" "$JU_RED" FAIL "${FE_RED/ FAIL  tests\/fmt.test.ts > fmt formatta/ FAIL  tests/fmt.test.ts > fmt > formatta}" FAIL
 expect 0 "^rosso T2: dimostrato modules/app/apps/admin/tests/fmt.test.ts:2" "rossi: nome «describe > it» nel piano abbinato al blocco FAIL di vitest" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
@@ -936,8 +936,8 @@ sed 's/^\(| T1 | RF1 | .* | rosso se: la somma e. sbagliata | \).*$/\1— |/' "$
 mkev "$T/ev-imp" "$JU_IMP" FAIL "$FE_RED" FAIL
 expect 1 "^rosso T1: rosso_import" "rossi: rosso da import = STOP «non dimostrato» (controprova: senza la classificazione diventa dimostrato)" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
 expect 1 "^rossi: esito=STOP — non dimostrato: T1 rosso_import" "rossi: il riassunto nomina il caso" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
-# MAJOR 1 (review giro 1): senza testo dell'asserzione (niente backtick, niente mutazione) un rosso qualunque
-# (NotImplementedError dello stub) non e' dimostrato. Controprova: senza CONTROLLO-ASSERZIONE torna «dimostrato».
+# MAJOR 1 (review round 1): without an assertion text (no backticks, no mutation) any red
+# (NotImplementedError of the stub) is not proven. Counterproof: without CONTROLLO-ASSERZIONE it goes back to «dimostrato».
 JU_NIE='<testcase classname="tests.test_calc" name="test_somma"><failure message="NotImplementedError">E  NotImplementedError
 tests/test_calc.py:4: NotImplementedError</failure></testcase>'
 mkev "$T/ev-nie" "$JU_NIE" FAIL "$FE_RED" FAIL
@@ -968,17 +968,17 @@ expect 1 "^conflitto: modules/app/apps/admin/tests/tred-guard.test.ts:1 asserisc
 rm -f "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
 mkdir -p "$T/ev-blk"; printf '{"gate":"tests-be","esito":"BLOCKED","motivo":"venv assente"}\n' > "$T/ev-blk/tests-be.json"; cp "$T/ev-ok/tests-fe.json" "$T/ev-ok/tests-fe.log" "$T/ev-blk/"
 expect 3 "^rossi: esito=BLOCKED — .*tests-be: esito BLOCKED \(venv assente\)" "rossi: gate BLOCKED = BLOCKED (mai OK)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-blk" --run-dir "$T/rr.run"
-# pk04b-2: NOT RUN (con lo spazio, phase-result.schema.json) come SKIPPED: i test del modulo sono non_eseguito con
-# il motivo del gate, mai bloccati (uscita diversa da 3). NOT_RUN col trattino basso resta sconosciuto: bloccato.
+# pk04b-2: NOT RUN (with the space, phase-result.schema.json) as SKIPPED: the module tests are non_eseguito with
+# the gate reason, never blocked (exit other than 3). NOT_RUN with the underscore stays unknown: blocked.
 mkdir -p "$T/ev-nr"; printf '{"gate":"tests-be","esito":"NOT RUN","motivo":"nessun comando di test dichiarato"}\n' > "$T/ev-nr/tests-be.json"; cp "$T/ev-ok/tests-fe.json" "$T/ev-ok/tests-fe.log" "$T/ev-nr/"
 expect 1 "^rosso T1: non_eseguito — gate tests-be NOT RUN: nessun comando di test dichiarato$" "rossi: gate NOT RUN = test non_eseguito con il motivo del gate, uscita 1 (non 3)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-nr" --run-dir "$T/rr.run"
 sed 's/"NOT RUN"/"NOT_RUN"/' "$T/ev-nr/tests-be.json" > "$T/ev-nr/x" && mkdir -p "$T/ev-nr2" && mv "$T/ev-nr/x" "$T/ev-nr2/tests-be.json" && cp "$T/ev-ok/tests-fe.json" "$T/ev-ok/tests-fe.log" "$T/ev-nr2/"
 expect 3 "^rossi: esito=BLOCKED — .*tests-be: esito NOT_RUN" "rossi: gate NOT_RUN (trattino basso) = sconosciuto, BLOCKED" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-nr2" --run-dir "$T/rr.run"
-# controprova: senza NOT RUN nell'elenco degli esiti letti il gate finisce fra i bloccati (uscita 3)
+# counterproof: without NOT RUN in the list of the outcomes read, the gate ends up among the blocked ones (exit 3)
 if mutpc nr 's/("PASS", "FAIL", "SKIPPED", "NOT RUN")/("PASS", "FAIL", "SKIPPED")/'; then
   expect 3 "^rossi: esito=BLOCKED — .*tests-be: esito NOT RUN" "controprova: senza NOT RUN fra gli esiti letti il gate e' bloccato" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nr/plan-check.sh" rossi "$T/f2t.md" --evidence "$T/ev-nr" --run-dir "$T/rr.run"
 else echo "FAIL [controprova NOT RUN: la mutazione non si applica]"; fail=$((fail+1)); fi
-# stub, controprove assorbite (L2) e ricontrollo per finalize
+# stubs, absorbed counterproofs (L2) and recheck for finalize
 expect 0 "^stub modules/app/apps/admin/utils/fmt.ts: fmt$" "stubs: simboli degli stub registrati" -- bash "$PC" stubs "$T/f2t.md"
 expect 0 "^gen: mutazione T1 assorbita \(L2\)$" "gen: file nuovo con rosso dimostrato e simboli testati = assorbita" -- bash "$PC" gen "$T/f2t.md"
 expect 0 '"assorbita": true' "gen: mutations.json con assorbita" -- cat "$T/f2t.run/counterproof/mutations.json"
@@ -993,8 +993,8 @@ expect 0 "^mutazioni: 1$" "L2: simbolo esportato non testato, gen" -- bash "$PC"
 refute "assorbita" "L2: file nuovo con un simbolo esportato non testato = controprova non assorbita" -- cat "$T/f2t-b.run/counterproof/mutations.json"
 expect 0 "^L2 T1: NO — simbolo esportato non testato .*aiuto" "l2: il motivo" -- bash "$PC" l2 "$T/f2t.md" --run-dir "$T/f2t-b.run"
 expect 0 "^L2 T1: NO — gli stub non coprono tutti e soli i simboli nuovi" "l2: un export aggiunto dopo test-red = non piu' assorbita" -- bash "$PC" l2 "$T/f2t.md"
-# harness-pt15: gen decide L2 con il criterio di finalize (stub = simboli esportati ORA). Controprova: con
-# l2_eval(..., False) in gen (com'era) qui T1 torna assorbita, e finalize poi la rifiuta (l2 NO sopra).
+# harness-pt15: gen decides L2 with the finalize criterion (stub = symbols exported NOW). Counterproof: with
+# l2_eval(..., False) in gen (as it was) here T1 goes back to absorbed, and finalize then rejects it (l2 NO above).
 cp -r "$T/f2t.run" "$T/f2t-c.run"
 expect 0 "^mutazioni: 1$" "L2 in gen dopo l'implementazione: gen" -- bash "$PC" gen "$T/f2t.md" --run-dir "$T/f2t-c.run"
 refute "assorbita" "gen: stub che non coprono un export aggiunto dopo test-red = non assorbita (come l2 per finalize)" -- cat "$T/f2t-c.run/counterproof/mutations.json"
@@ -1004,7 +1004,7 @@ expect 0 "^L2 T1: NO — impronta dei test di accettazione cambiata" "l2: test d
 printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert somma(1, 2) == 3\n' > "$R/modules/api/tests/test_calc.py"
 unset PLAN_CHECK_ROOT FIC_PY
 
-# ── uso ────────────────────────────────────────────────────────────────────────────────────────
+# ── usage ────────────────────────────────────────────────────────────────────────────────────────
 expect 2 "uso:" "argomenti sbagliati = uscita 2" -- bash "$PC" boh
 
 echo "plan-check.test.sh: $pass passati, $fail falliti"

@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
-# spazi.test.sh — percorsi con SPAZI e un carattere non ASCII («à») (pk08, passo 6, A6). Il plugin (una copia in
-# «…/plugin con spazi à/maat», usata senza MAAT_ROOT: la radice si ricava dalla posizione degli script), il progetto
-# («progetto con spazi à», un repo git sintetico), la run dir, la HOME delle copie, la configurazione esterna e il
-# worktree hanno tutti spazi; dentro il progetto anche il modulo («modulo uno») e i file. Tutto in una cartella
-# temporanea, cancellata alla fine. Casi:
-#   1. risolutore: MAAT_ROOT e PROJECT_ROOT con spazi (lib/maat-paths.sh);
-#   2. impronta del harness (run-phase.sh --harness-fp / --harness-paths / --harness-fp-confronta): tre righe, UGUALE,
-#      un file del plugin con spazi nel nome entra nell'elenco e porta a CAMBIATO;
-#   3. lock delle fasi di codice (run-phase.sh, claude finto): nella git dir del progetto con spazi, --lock-status
-#      libero/occupato, fase concorrente 4, rilascio; impronta cambiata -> exit 6 e il RIMEDIO stampato, eseguito
-#      com'e', riallinea; lock di ripiego fic_lock_dir/fic_unlock_dir (fic-mirror.sh) su una cartella con spazi;
-#   4. gate (gates.sh, modulo nativo): controlli `bash -n {file}` e test `cat {test}` su file con spazi -> PASS,
-#      evidenza nella run dir con spazi;
-#   5. controprova (counterproof.sh, runner comando, HOME con spazi): copia di ripiego (PATH senza rsync e flock) e,
-#      se c'e', rsync: rosso_generico e verde veri, copia ripristinata, lock rilasciato;
-#   6. ciclo-worktree.sh crea | rimuovi: worktree «progetto con spazi à-fic-uno», collegamento di una dipendenza
-#      (junction su Windows, symlink altrove), lock del worktree occupato -> STOP, rimozione con la fonte intatta;
-#   7. plan-check.sh gen con MAAT_CONFIG con spazi (un modulo che c'e' solo li'): la riga cp di procedura.txt,
-#      ESEGUITA com'e', fa girare le controprove con quella configurazione;
-#   8. watch-phase.sh dal plugin con spazi su una run dir con spazi.
-# Controprove per mutazione (copie del plugin con UNA virgoletta tolta; ognuna deve far diventare rosso il suo caso):
-#   M1 run-phase.sh `hfp_win hfp_r $MAAT_ROOT` (piano, Test: «togliere le virgolette su un $MAAT_ROOT») -> caso 2;
-#   M2 run-phase.sh `mkdir $L` in take_lock -> caso 3 (lock); M3 fic-mirror.sh `mkdir $d` in fic_lock_dir -> caso 3
-#   (ripiego); M4 maat-config.py {file}/{test} senza sq -> caso 4; M5 counterproof.sh `cd $cwd` nel runner -> caso 5;
-#   M6 fic-mirror.sh `cd $dst` nel tar del ripiego -> caso 5 (ripiego); M7 ciclo-worktree.sh `$WT` senza virgolette
-#   in `git worktree add` -> caso 6; M8 plan-check.sh MAAT_CONFIG senza sq_se_serve nella riga cp -> caso 7;
-#   M9 fic-mirror.sh pid scritto senza noclobber in fic_lock_dir -> caso 3 (lock ripreso da un altro, review giro 2).
-#   bash plugins/maat/scripts/spazi.test.sh          (Git Bash o Linux)
+# spazi.test.sh — paths with SPACES and a non-ASCII character («à») (pk08, step 6, A6). The plugin (a copy in
+# «…/plugin con spazi à/maat», used without MAAT_ROOT: the root is derived from the scripts' location), the project
+# («progetto con spazi à», a synthetic git repo), the run dir, the HOME of the copies, the external configuration and the
+# worktree all have spaces; inside the project the module («modulo uno») and the files too. All in a temporary
+# directory, deleted at the end. Cases:
+#   1. resolver: MAAT_ROOT and PROJECT_ROOT with spaces (lib/maat-paths.sh);
+#   2. harness fingerprint (run-phase.sh --harness-fp / --harness-paths / --harness-fp-confronta): three lines, UGUALE,
+#      a plugin file with spaces in its name enters the list and leads to CAMBIATO;
+#   3. code-phase lock (run-phase.sh, fake claude): in the git dir of the project with spaces, --lock-status
+#      free/busy, concurrent phase 4, release; changed fingerprint -> exit 6 and the printed REMEDY, run
+#      as is, realigns; fallback lock fic_lock_dir/fic_unlock_dir (fic-mirror.sh) on a directory with spaces;
+#   4. gates (gates.sh, native module): checks `bash -n {file}` and test `cat {test}` on files with spaces -> PASS,
+#      evidence in the run dir with spaces;
+#   5. counterproof (counterproof.sh, command runner, HOME with spaces): fallback copy (PATH without rsync and flock) and,
+#      if present, rsync: real rosso_generico and verde, copy restored, lock released;
+#   6. ciclo-worktree.sh crea | rimuovi: worktree «progetto con spazi à-fic-uno», link of a dependency
+#      (junction on Windows, symlink elsewhere), worktree lock busy -> STOP, removal with the source intact;
+#   7. plan-check.sh gen with MAAT_CONFIG with spaces (a module that exists only there): the cp line of procedura.txt,
+#      RUN as is, runs the counterproofs with that configuration;
+#   8. watch-phase.sh from the plugin with spaces on a run dir with spaces.
+# Mutation counterproofs (copies of the plugin with ONE quote removed; each must turn its case red):
+#   M1 run-phase.sh `hfp_win hfp_r $MAAT_ROOT` (plan, Test: «togliere le virgolette su un $MAAT_ROOT») -> case 2;
+#   M2 run-phase.sh `mkdir $L` in take_lock -> case 3 (lock); M3 fic-mirror.sh `mkdir $d` in fic_lock_dir -> case 3
+#   (fallback); M4 maat-config.py {file}/{test} without sq -> case 4; M5 counterproof.sh `cd $cwd` in the runner -> case 5;
+#   M6 fic-mirror.sh `cd $dst` in the fallback tar -> case 5 (fallback); M7 ciclo-worktree.sh `$WT` without quotes
+#   in `git worktree add` -> case 6; M8 plan-check.sh MAAT_CONFIG without sq_se_serve in the cp line -> case 7;
+#   M9 fic-mirror.sh pid written without noclobber in fic_lock_dir -> case 3 (lock taken over by another, review round 2).
+#   bash plugins/maat/scripts/spazi.test.sh          (Git Bash or Linux)
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
@@ -40,7 +40,7 @@ pass=0 fail=0
 T0=$(mktemp -d) || exit 2
 T="$T0/tmp con spazi à"
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
-unlink_all() { # i collegamenti rimasti sotto $T0, tolti SENZA seguirli (prima di rm -rf)
+unlink_all() { # the links left under $T0, removed WITHOUT following them (before rm -rf)
   local l
   find "$T0" -type l 2>/dev/null | while IFS= read -r l; do
     [ $WIN -eq 1 ] && MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rmdir "$(cygpath -w "$l")" >/dev/null 2>&1; [ -L "$l" ] && rm -f "$l"; done
@@ -51,12 +51,12 @@ check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "
 canon() { (cd "$1" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); }
 : > "$T/out"
 
-# --- il plugin con spazi (copia senza __pycache__) e le sue copie mutanti ------------------------------------------------
+# --- the plugin with spaces (copy without __pycache__) and its mutant copies ------------------------------------------------
 PL="$T/plugin con spazi à/maat"; S="$PL/scripts"
 mkdir -p "$(dirname "$PL")" && cp -r "$PLUGIN" "$PL" && find "$PL" -name __pycache__ -type d -prune -exec rm -rf {} + || exit 2
-mutante() { # <nome> <file relativo al plugin> <espressione sed>: copia del plugin con la mutazione; stampa la radice.
-  # Uscita 1 se la mutazione non cambia il file: la controprova non proverebbe niente. Gira in una sostituzione di
-  # comando: il FAIL lo conta il chiamante, nella shell principale (`else non_applicabile`), mai qui
+mutante() { # <name> <file relative to the plugin> <sed expression>: copy of the plugin with the mutation; prints the root.
+  # Exit 1 if the mutation does not change the file: the counterproof would prove nothing. Runs in a command
+  # substitution: the FAIL is counted by the caller, in the main shell (`else non_applicabile`), never here
   local d="$T/mutanti con spazi/$1/maat"
   mkdir -p "$(dirname "$d")" && cp -r "$PL" "$d" || return 1
   sed "$3" "$PL/$2" > "$d/$2.mut" && mv "$d/$2.mut" "$d/$2" || return 1
@@ -65,7 +65,7 @@ mutante() { # <nome> <file relativo al plugin> <espressione sed>: copia del plug
 }
 non_applicabile() { fail=$((fail + 1)); echo "FAIL: controprova $1 non applicabile (la mutazione non cambia il file o la copia non riesce)"; }
 
-# --- il progetto con spazi: due moduli nativi, file con spazi nel nome -----------------------------------------------------
+# --- the project with spaces: two native modules, files with spaces in the name -----------------------------------------------------
 P="$T/progetto con spazi à"; AIW="$P/.claude/.ai-workflow"
 mkdir -p "$AIW" "$P/modulo uno/dipendenze" "$P/modulo uno/generati con spazi" "$P/mod-due" || exit 2
 CMDC='"controprova": {"runner": "comando", "comando": "bash {test}"}'
@@ -82,23 +82,23 @@ printf 'echo ciao\n' > "$P/modulo uno/script con spazi à.sh"
 printf '// un test con spazi nel nome\n' > "$P/modulo uno/calcolo con spazi.test.js"
 printf 'UNO=1\n' > "$P/modulo uno/core con spazi.txt"
 printf 'grep -q ROSSO "core con spazi.txt" && { echo "rosso: ROSSO in core con spazi.txt"; exit 1; }\nexit 0\n' > "$P/modulo uno/prova con spazi.sh"
-printf 'DUE=1\n' > "$P/mod-due/core.txt"   # i percorsi DENTRO un piano non hanno spazi (plan-check, rel_ok)
+printf 'DUE=1\n' > "$P/mod-due/core.txt"   # the paths INSIDE a plan have no spaces (plan-check, rel_ok)
 printf 'grep -q ROSSO core.txt && { echo "rosso: ROSSO in core.txt"; exit 1; }\nexit 0\n' > "$P/mod-due/prova.sh"
 printf 'dipendenza installata\n' > "$P/modulo uno/dipendenze/dentro.txt"
 printf 'preparato\n' > "$P/modulo uno/generati con spazi/guida.txt"
-printf '.claude/.ai-workflow/spec-*\ndipendenze\ngenerati con spazi/\n' > "$P/.gitignore"   # senza barra: su Linux il collegamento e' un symlink
+printf '.claude/.ai-workflow/spec-*\ndipendenze\ngenerati con spazi/\n' > "$P/.gitignore"   # no slash: on Linux the link is a symlink
 printf '# spec uno\n## Requisiti\n' > "$AIW/spec-uno.md"
 (cd "$P" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false &&
   git config core.quotePath false && git add -A && git commit -qm init) || { echo "repo sintetico non creato: $P" >&2; exit 2; }
 PC_=$(canon "$P") PLC=$(canon "$PL")
 RD="$AIW/spec-uno.run"; mkdir -p "$RD"
 
-# --- 1. risolutore ----------------------------------------------------------------------------------------------------------
+# --- 1. resolver ----------------------------------------------------------------------------------------------------------
 (cd "$P" && bash "$S/lib/maat-paths.sh") > "$T/out" 2>&1
 check "1. maat-paths.sh dal plugin con spazi, nel progetto con spazi: MAAT_ROOT e PROJECT_ROOT interi" 'grep -qxF "MAAT_ROOT=$PLC" "$T/out" && grep -qxF "PROJECT_ROOT=$PC_" "$T/out"'
 
-# --- 2. impronta del harness ------------------------------------------------------------------------------------------------
-impronta() { # <plugin>: harness.fp in $RD2, poi «UGUALE» atteso, un file nuovo con spazi -> CAMBIATO, tolto -> UGUALE
+# --- 2. harness fingerprint ------------------------------------------------------------------------------------------------
+impronta() { # <plugin>: harness.fp in $RD2, then «UGUALE» expected, a new file with spaces -> CAMBIATO, removed -> UGUALE
   local rp="$1/scripts/run-phase.sh" nf="$1/scripts/nota con spazi à.txt" a b c
   (cd "$P" && bash "$rp" --harness-fp) > "$T/hfp" 2>"$T/out" || return 1
   a=$(cd "$P" && bash "$rp" --harness-fp-confronta "$T/hfp")
@@ -116,7 +116,7 @@ if M1=$(mutante m1-hfp scripts/run-phase.sh 's/hfp_win hfp_r "\$MAAT_ROOT"/hfp_w
   check "controprova M1: \$MAAT_ROOT senza virgolette nell'impronta -> il caso 2 e' rosso" '! impronta "$M1"'
 else non_applicabile M1; fi
 
-# --- 3. lock delle fasi di codice (run-phase.sh con claude, gates.sh e finalize.sh finti) -----------------------------------
+# --- 3. code-phase lock (run-phase.sh with claude, fake gates.sh and finalize.sh) -----------------------------------
 cat > "$T/claude" <<'EOF'
 #!/usr/bin/env bash
 cat > /dev/null
@@ -127,7 +127,7 @@ printf '#!/usr/bin/env bash\necho "gates: esito=PASS chiave=k0 evidence=-"\n' > 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$T/fin"
 chmod +x "$T/claude" "$T/gates" "$T/fin"
 PR="$T/prompt con spazi.md"; echo "/full-implementation-cycle --worker=probe x" > "$PR"
-fase() { # <plugin> <run dir> <etichetta> [cartella]: una fase dalla cartella del progetto (default $P)
+fase() { # <plugin> <run dir> <label> [directory]: a phase from the project directory (default $P)
   (cd "${4:-$P}" && CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" FIC_FINALIZE="$T/fin" bash "$1/scripts/run-phase.sh" "$2" "$3" "$PR") </dev/null
 }
 LK="$P/.git/full-implementation-cycle.lock"
@@ -155,7 +155,7 @@ if M2=$(mutante m2-lock scripts/run-phase.sh 's/^  until mkdir "\$L" 2>\/dev\/nu
   fase "$M2" "$P2/spec-m.run" 06-implement "$P2" > "$T/out" 2>&1; rc=$?
   check "controprova M2: mkdir \$L senza virgolette -> la fase di codice non prende il lock (exit $rc, non 0)" '[ "$rc" != 0 ]'
 else non_applicabile M2; fi
-lockdir() { # <fic-mirror.sh>: lock di ripiego su una cartella con spazi: preso col pid, occupato, rilasciato, orfano ripreso
+lockdir() { # <fic-mirror.sh>: fallback lock on a directory with spaces: taken with the pid, busy, released, orphan taken over
   local L="$T/lock con spazi à/m.lock.d"
   rm -rf "$T/lock con spazi à"; mkdir -p "$T/lock con spazi à" "$T/cwd lock"
   (cd "$T/cwd lock" && . "$1" || exit 9
@@ -166,16 +166,16 @@ lockdir() { # <fic-mirror.sh>: lock di ripiego su una cartella con spazi: preso 
    sleep 0 & m=$!; wait "$m"; mkdir "$L" && echo "$m" > "$L/pid"
    fic_lock_dir "$L" 3 || exit 5
    fic_unlock_dir "$L"; [ ! -e "$L" ] && [ ! -e "$L.rec" ] || exit 6
-   mkdir "$L"; ( fic_lock_dir "$L" 1 ) && exit 7          # senza pid e recente (meno di 10 s): non si riprende
+   mkdir "$L"; ( fic_lock_dir "$L" 1 ) && exit 7          # no pid and recent (less than 10 s): not taken over
    [ -d "$L" ] && [ ! -e "$L/pid" ] || exit 8
-   s=$(( $(date +%s) - 30 ))                              # 30 s fa, in forma touch -t: BSD (date -r), poi GNU (date -d @)
+   s=$(( $(date +%s) - 30 ))                              # 30 s ago, in touch -t form: BSD (date -r), then GNU (date -d @)
    v=$(date -r "$s" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$s" +%Y%m%d%H%M.%S) || exit 13
-   touch -t "$v" "$L" || exit 13                          # senza pid da 30 s: orfano, ripreso (review di pk08)
+   touch -t "$v" "$L" || exit 13                          # no pid for 30 s: orphan, taken over (pk08 review)
    fic_lock_dir "$L" 3 || exit 10
    [ "$(cat "$L/pid")" = "${BASHPID:-$$}" ] || exit 11
    fic_unlock_dir "$L"; [ ! -e "$L" ] && [ ! -e "$L.rec" ] || exit 12
-   # ripreso da un altro fra il mkdir e la scrittura del pid (review giro 2): il mkdir finto scrive subito il pid di
-   # un processo vivo ($$, la shell del test); chi ha fatto il mkdir non deve credersi padrone del lock
+   # taken over by another between the mkdir and the pid write (review round 2): the fake mkdir immediately writes the pid of
+   # a live process ($$, the test shell); whoever did the mkdir must not believe it owns the lock
    mkdir() { command mkdir "$@" || return; [ "$1" = "$L" ] && [ ! -e "$L/pid" ] && echo "$$" > "$L/pid"; return 0; }
    ( fic_lock_dir "$L" 1 ) && exit 14
    unset -f mkdir
@@ -190,7 +190,7 @@ if M9=$(mutante m9-pid scripts/fic-mirror.sh 's/if ! (set -C; echo "\$me" > "\$d
   check "controprova M9: pid scritto sovrascrivendo in fic_lock_dir -> il caso del lock ripreso da un altro e' rosso" '! lockdir "$M9/scripts/fic-mirror.sh"'
 else non_applicabile M9; fi
 
-# --- 4. gate su un modulo nativo ----------------------------------------------------------------------------------------------
+# --- 4. gates on a native module ----------------------------------------------------------------------------------------------
 GF=("modulo uno/script con spazi à.sh" "modulo uno/calcolo con spazi.test.js")
 gate() { (cd "$P" && bash "$1/scripts/gates.sh" --run-dir "$2" std "${GF[@]}") > "$T/out" 2>&1; }
 gate "$PL" "$RD"; rc=$?
@@ -202,9 +202,9 @@ if M4=$(mutante m4-sq scripts/maat-config.py 's/            return " ".join(sq(x
   check "controprova M4: {file}/{test} senza quotatura -> i gate del caso 4 non sono PASS" '! grep -q "^controlli-uno: PASS" "$T/out" && ! grep -q "^gates: esito=PASS " "$T/out"'
 else non_applicabile M4; fi
 
-# --- 5. controprova, runner comando, HOME con spazi -----------------------------------------------------------------------------
-path_senza() { # <cartella> <nome…>: il PATH con le cartelle che contengono uno dei <nome> sostituite da <cartella>, che
-               # ne collega ogni file tranne quelli (come counterproof.test.sh)
+# --- 5. counterproof, command runner, HOME with spaces -----------------------------------------------------------------------------
+path_senza() { # <directory> <name…>: the PATH with the directories containing one of the <name> replaced by <directory>, which
+               # links each of its files except those (as in counterproof.test.sh)
   local dst=$1 d f b x hit out="" messa=0 skip; shift; skip=" $* "
   mkdir -p "$dst"
   local IFS=:
@@ -228,7 +228,7 @@ def e(i, s):
             "test": {"percorso": "modulo uno/prova con spazi.sh", "nome": "prova"}, "rosso_se": {"test_id": "prova", "asserzione": "rosso"},
             "superficie": "S"}
 json.dump([e("S1", "UNO=1 ROSSO"), e("V1", "UNO=2")], open(sys.argv[1], "w", encoding="utf-8"))' "$RD/counterproof/mutations.json"
-cpx() { # <plugin> <HOME> [<PATH>]: counterproof.sh sulle due mutazioni; 0 = esiti veri, copia ripristinata, lock rilasciato
+cpx() { # <plugin> <HOME> [<PATH>]: counterproof.sh on the two mutations; 0 = real outcomes, copy restored, lock released
   local h=$2
   rm -f "$RD/counterproof/S1.json" "$RD/counterproof/V1.json"; mkdir -p "$h"
   (cd "$P" && HOME=$h PATH=${3:-$PATH} PROJECT_ROOT=$P bash "$1/scripts/counterproof.sh" "$RD/counterproof/mutations.json") > "$T/out" 2>&1
@@ -254,8 +254,8 @@ if M6=$(mutante m6-tar scripts/fic-mirror.sh 's/| (cd "\$dst" && tar -xpf -)$/| 
   check "controprova M6: cd \$dst senza virgolette nel tar del ripiego -> il caso del ripiego e' rosso" '! cpx "$M6" "$T/casa m6 à" "$PX"'
 else non_applicabile M6; fi
 
-pulisci() { # <fic-mirror.sh>: fic_mirror_pulisci con un glob dei preparati con spazi: via la cartella giusta della copia e
-  # nient'altro (divisa sugli spazi, `rm -rf` riceverebbe «gen», «con» e «spazi», gli ultimi relativi alla cartella corrente)
+pulisci() { # <fic-mirror.sh>: fic_mirror_pulisci with a glob of the `preparati` with spaces: the right directory of the copy goes, and
+  # nothing else (split on spaces, `rm -rf` would receive «gen», «con» and «spazi», the last ones relative to the current directory)
   local C="$T/copia con spazi à" W="$T/cwd pulisci"
   rm -rf "$C" "$W"; mkdir -p "$C/modulo uno/gen con spazi" "$C/modulo uno/gen" "$W/con" "$W/spazi"
   echo g > "$C/modulo uno/gen con spazi/a.txt"; echo t > "$C/modulo uno/gen/tieni.txt"; echo x > "$W/con/x"; echo x > "$W/spazi/x"
@@ -263,7 +263,7 @@ pulisci() { # <fic-mirror.sh>: fic_mirror_pulisci con un glob dei preparati con 
   [ ! -e "$C/modulo uno/gen con spazi" ] && [ -f "$C/modulo uno/gen/tieni.txt" ] && [ -f "$W/con/x" ] && [ -f "$W/spazi/x" ]
 }
 check "  fic_mirror_pulisci, glob dei preparati con spazi -> via solo quella cartella della copia" 'pulisci "$S/fic-mirror.sh"'
-if M11=$(mutante m11-pulisci scripts/fic-mirror.sh 's/ g v IFS=   # pk08: IFS vuoto, una voce con spazi non si divide nel rm$/ g v/'); then
+if M11=$(mutante m11-pulisci scripts/fic-mirror.sh 's/ g v IFS=   # pk08: .*$/ g v/'); then
   check "controprova M11: fic_mirror_pulisci senza IFS vuoto -> rm tocca la cartella sbagliata della copia e «con»/«spazi» della cartella corrente" '! pulisci "$M11/scripts/fic-mirror.sh"'
 else non_applicabile M11; fi
 
@@ -289,7 +289,7 @@ if M7=$(mutante m7-wt scripts/ciclo-worktree.sh 's/git -C "\$MAIN" worktree add 
   check "controprova M7: \$WT senza virgolette in git worktree add -> crea non riesce (exit $rc)" '[ "$rc" != 0 ] && [ ! -e "$WT" ]'
   git -C "$P" worktree prune 2>/dev/null; git -C "$P" branch -q -D fic/uno 2>/dev/null
 else non_applicabile M7; fi
-cw_mut() { # <plugin mutante>: crea (l'uscita resta in $T/out), poi rimuovi --forza --branch col plugin vero
+cw_mut() { # <mutant plugin>: crea (the output stays in $T/out), then rimuovi --forza --branch with the real plugin
   cw "$1" crea .claude/.ai-workflow/spec-uno.md; cp "$T/out" "$T/out.crea"
   cw "$PL" rimuovi uno --forza --branch; cp "$T/out" "$T/out.rimuovi"; cp "$T/out.crea" "$T/out"
 }
@@ -302,7 +302,7 @@ if M10=$(mutante m10-prep scripts/ciclo-worktree.sh 's/^        oifs=\$IFS; IFS=
   check "controprova M10: preparati senza IFS vuoto -> il preparato nella cartella con spazi non si copia" '! grep -q "preparati copiati in modulo uno: 1 file" "$T/out" && [ ! -e "$WT" ]'
 else non_applicabile M10; fi
 
-# --- 7. plan-check.sh gen con MAAT_CONFIG con spazi ---------------------------------------------------------------------------
+# --- 7. plan-check.sh gen with MAAT_CONFIG with spaces ---------------------------------------------------------------------------
 CF="$T/config con spazi à/maat.json"; mkdir -p "$(dirname "$CF")"
 cat > "$CF" <<EOF
 {"versione_schema": 1,
@@ -316,7 +316,7 @@ printf '%s\n' "# P" "## Requisiti funzionali" "1. RF1 — A." "## Piano di imple
   "| RF1 | P1 | T1 |" "### Piano di test" "| ID | requisito | file | asserzione | mutazione |" "|---|---|---|---|---|" \
   '| T1 | RF1 | `mod-due/prova.sh::prova` | rosso se: rosso | `mod-due/core.txt` · `DUE` · `DUE=1` → `DUE=1 ROSSO` · rosso se: `rosso` |' > "$SP"
 RCP=""
-pcx() { # <plugin> <HOME>: gen con MAAT_CONFIG con spazi, poi la riga cp ESEGUITA com'e' -> la controprova di T1 gira
+pcx() { # <plugin> <HOME>: gen with MAAT_CONFIG with spaces, then the cp line RUN as is -> the T1 counterproof runs
   local rp=${SP%.md}.run
   rm -rf "$rp"; mkdir -p "$2"
   (cd "$P" && MAAT_CONFIG=$CF bash "$1/scripts/plan-check.sh" gen "$SP") > "$T/out" 2>&1 || return 1
@@ -332,7 +332,7 @@ if M8=$(mutante m8-mc scripts/plan-check.sh 's/        env += " MAAT_CONFIG=" + 
   check "controprova M8: MAAT_CONFIG senza quotatura nella riga cp -> il caso 7 e' rosso" '! pcx "$M8" "$T/casa m8 à"'
 else non_applicabile M8; fi
 
-# --- 8. watch-phase.sh dal plugin con spazi, run dir con spazi -----------------------------------------------------------------
+# --- 8. watch-phase.sh from the plugin with spaces, run dir with spaces -----------------------------------------------------------------
 WR="$T/run con spazi à.run"; mkdir -p "$WR/log"
 { printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"text","text":"▶ lavoro"}]}}'
   printf '%s\n' '{"type":"result","is_error":false,"result":"ESITO FASE 1: OK","duration_ms":1000,"num_turns":1}'; } > "$WR/log/f.jsonl"

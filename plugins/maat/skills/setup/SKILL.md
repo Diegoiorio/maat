@@ -1,8 +1,8 @@
 ---
 name: setup
-description: Configurazione guidata di Maat in un progetto (/maat:setup). Riconosce lo stack in sola lettura, propone moduli e profili, chiede solo ciò che non si deduce (produzione, rilascio, involucri, verifica remota, percorsi da non toccare), scrive .claude/maat.json dopo la conferma, prova la guardia e lancia maat-doctor.sh.
+description: Guided setup of Maat in a project (/maat:setup). Detects the stack read-only, proposes modules and profiles, asks only what cannot be inferred (production, release, wrappers, remote verification, paths not to touch), writes .claude/maat.json after confirmation, tests the guard and runs maat-doctor.sh.
 allowed-tools: Read, Write, Glob, Grep, Bash
-argument-hint: "(nessun argomento: lanciala dalla radice del progetto)"
+argument-hint: "(no arguments: run it from the project root)"
 ---
 
 # /maat:setup
@@ -11,123 +11,123 @@ Radice del plugin: `${CLAUDE_PLUGIN_ROOT}`. Nei file di questa skill che leggi c
 
 Prima di ogni comando Bash o PowerShell, scrivi `description` secondo `${CLAUDE_PLUGIN_ROOT}/docs/descrizione-comandi.md`.
 
-Gira nella **sessione principale**, con l'utente. Obiettivo (R5): dopo i due comandi d'installazione, un
-`.claude/maat.json` valido e `maat-doctor.sh` senza MANCA, senza modifiche a mano.
+Runs in the **main session**, with the user. Goal (R5): after the two install commands, a valid
+`.claude/maat.json` and `maat-doctor.sh` with no MANCA, with no manual edits.
 
-Regole ferme:
-- **Nessun file del progetto si scrive prima della conferma** del passo 4. I passi 1–3 sono in sola lettura
-  (Read, Glob, Grep, comandi che non scrivono).
-- Una domanda alla volta, con una proposta già pronta: l'utente conferma o corregge.
-- Il Python del plugin si trova con `python.sh` (`bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" …'`),
-  come nei comandi sotto: mai un `python` del PATH scelto a caso.
+Hard rules:
+- **No project file is written before the confirmation** of step 4. Steps 1–3 are read-only
+  (Read, Glob, Grep, commands that do not write).
+- One question at a time, with a ready proposal: the user confirms or corrects.
+- The plugin's Python is found with `python.sh` (`bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" …'`),
+  as in the commands below: never a `python` picked at random from the PATH.
 
-## 1. Riconoscimento dello stack (sola lettura)
+## 1. Stack detection (read-only)
 
-Cerca, dalla radice del repo (escludi `node_modules`, `.venv`, `.git` e le cartelle generate):
-- `package.json`: dipendenze `nuxt`, `vitest`, `jest`, lo script `test`;
-- `pyproject.toml`, `requirements*.txt`, `pytest.ini`/`conftest.py`, `pytest` fra le dipendenze;
-- cartelle `tests/`, file `*.test.*` e `*.spec.*`, script `*.sh`;
-- workspace: `turbo.json`, `pnpm-workspace.yaml`, `workspaces` in un `package.json`. Il workspace dà le radici dei
-  moduli candidate (le sue app e i suoi pacchetti) e la **cartella del workspace** (dove stanno `node_modules` e il
-  `package.json` col campo `workspaces`), che serve al passo 2 come `radice_pacchetti`.
+Look, from the repo root (exclude `node_modules`, `.venv`, `.git` and generated folders), for:
+- `package.json`: dependencies `nuxt`, `vitest`, `jest`, the `test` script;
+- `pyproject.toml`, `requirements*.txt`, `pytest.ini`/`conftest.py`, `pytest` among the dependencies;
+- `tests/` folders, `*.test.*` and `*.spec.*` files, `*.sh` scripts;
+- workspace: `turbo.json`, `pnpm-workspace.yaml`, `workspaces` in a `package.json`. The workspace gives the candidate
+  module roots (its apps and packages) and the **workspace folder** (where `node_modules` and the
+  `package.json` with the `workspaces` field live), which step 2 uses as `radice_pacchetti`.
 
-Poi la piattaforma, che decide l'ambiente dei moduli:
+Then the platform, which decides the modules' environment:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/maat-doctor.sh --piattaforma
 ```
 
-Stampa `windows-wsl`, `windows-senza-wsl` o `altro` (Windows lo decide `uname`, non la presenza di `wsl.exe`; WSL
-assente = `wsl.exe` fuori dal PATH oppure `wsl -- true` che fallisce). Solo con `windows-wsl` i profili restano come
-sono; altrimenti il passo 2 usa `--nativo`.
+It prints `windows-wsl`, `windows-senza-wsl` or `altro` (Windows is decided by `uname`, not by the presence of `wsl.exe`; WSL
+absent = `wsl.exe` not in the PATH, or `wsl -- true` failing). Only with `windows-wsl` do the profiles stay as
+they are; otherwise step 2 uses `--nativo`.
 
-## 2. Proposta: moduli e profili
+## 2. Proposal: modules and profiles
 
-Profili del plugin (`${CLAUDE_PLUGIN_ROOT}/profiles/`):
+The plugin's profiles (`${CLAUDE_PLUGIN_ROOT}/profiles/`):
 
-| Segnale trovato al passo 1 | Profilo |
+| Signal found in step 1 | Profile |
 |---|---|
-| `package.json` con `nuxt` e `vitest` | `nuxt-vitest` |
-| Python con `pytest` (`requirements*.txt` o `pyproject.toml`) | `fastapi-pytest` |
-| `package.json` senza framework (eventuali `*.test.js` con `node --test`) | `node-semplice` |
-| nessuna suite (solo script, JSON, configurazioni) | `generico-senza-test` |
+| `package.json` with `nuxt` and `vitest` | `nuxt-vitest` |
+| Python with `pytest` (`requirements*.txt` or `pyproject.toml`) | `fastapi-pytest` |
+| `package.json` with no framework (possibly `*.test.js` with `node --test`) | `node-semplice` |
+| no suite (only scripts, JSON, configuration) | `generico-senza-test` |
 
-Componi la proposta (un `--radice <modulo>=<percorso>` per profilo, nello stesso ordine):
+Build the proposal (one `--radice <module>=<path>` per profile, in the same order):
 
 ```bash
 bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "$@"' _ ${CLAUDE_PLUGIN_ROOT}/scripts/maat-config.py componi <profilo>… --radice <modulo>=<percorso>… [--nativo]
 ```
 
-- **`--nativo`** se il passo 1 non ha dato `windows-wsl`: `componi` mette `ambiente: nativo` a ogni modulo, toglie
-  `copia`, pone `piattaforma.copia_wsl: no` e fa girare nel repo i comandi che prima passavano dalla copia WSL. Dillo
-  all'utente con il motivo («WSL non raggiungibile» oppure «piattaforma non Windows»).
-- **Lint con alternative (`copia.lint` come lista):** con `--nativo` `componi` sceglie la prima alternativa senza
-  `se_esiste` o il cui file `se_esiste` esiste nel progetto (relativo alla sua cartella), quindi lancia `componi`
-  dalla radice del progetto. Nella tabella di conferma controlla tu: se nella radice del modulo esiste il file di un
-  `se_esiste` del profilo (es. `lint-baseline.mjs` di `nuxt-vitest`) e il lint proposto non è quello della sua
-  alternativa, proponi all'utente il comando di quell'alternativa (senza `{cache?…}`).
-- `componi` stampa il JSON e non scrive niente.
+- **`--nativo`** if step 1 did not give `windows-wsl`: `componi` sets `ambiente: nativo` on every module, removes
+  `copia`, sets `piattaforma.copia_wsl: no` and runs in the repo the commands that used to go through the WSL copy. Tell
+  the user, with the reason («WSL not reachable» or «platform is not Windows»).
+- **Lint with alternatives (`copia.lint` as a list):** with `--nativo` `componi` picks the first alternative without
+  `se_esiste`, or whose `se_esiste` file exists in the project (relative to its folder), so run `componi`
+  from the project root. In the confirmation table check it yourself: if the module root contains the file of one of the
+  profile's `se_esiste` (e.g. `lint-baseline.mjs` of `nuxt-vitest`) and the proposed lint is not that
+  alternative's, propose to the user the command of that alternative (without `{cache?…}`).
+- `componi` prints the JSON and writes nothing.
 
-Mostra la **tabella di conferma**, una riga per modulo:
+Show the **confirmation table**, one row per module:
 
-| Modulo | Radice | radice_pacchetti | Profilo | Ambiente | Comando di test |
+| Module | Root | radice_pacchetti | Profile | Environment | Test command |
 |---|---|---|---|---|---|
 
-- **`radice_pacchetti`:** `componi` la pone uguale a `radice`. Chiedila per ogni modulo, proponendo la cartella del
-  workspace trovata al passo 1 (es. `frontend` per il modulo `frontend/apps/web`); senza workspace resta `radice`.
-- **Ambiente:** `wsl` solo se il passo 1 ha dato `windows-wsl` e il profilo lo chiede; altrimenti `nativo`, con
+- **`radice_pacchetti`:** `componi` sets it equal to `radice`. Ask for it for each module, proposing the workspace
+  folder found in step 1 (e.g. `frontend` for the module `frontend/apps/web`); with no workspace it stays `radice`.
+- **Environment:** `wsl` only if step 1 gave `windows-wsl` and the profile asks for it; otherwise `nativo`, with
   `piattaforma.copia_wsl: no`.
-- L'utente conferma o corregge (nomi, radici, profili, comandi). Una correzione si applica al JSON in memoria e la
-  tabella si rimostra.
+- The user confirms or corrects (names, roots, profiles, commands). A correction is applied to the in-memory JSON and the
+  table is shown again.
 
-## 3. Domande solo su ciò che non si deduce
+## 3. Questions only about what cannot be inferred
 
-Una alla volta, ognuna con «nessuno» come risposta ammessa:
+One at a time, each with «none» as an accepted answer:
 
-1. **Host e domini di produzione.** Dalla stessa risposta scrivi:
-   - in `guardia.produzione` una regex per voce, con i punti protetti (`www\.esempio\.it`) e senza distinzione di
-     maiuscole (la applica la guardia);
-   - in `guardia.sonde` gli host **letterali** (`www.esempio.it`): sono le sonde che provano la guardia. Ogni sonda
-     deve corrispondere ad almeno una regex, e ogni regex di host deve avere la sua sonda.
-2. **Script di rilascio** (`guardia.rilascio`): percorsi relativi al repo, sempre negati.
-3. **Involucri di accesso remoto** (`guardia.involucri`): script che incapsulano ssh o la copia remota, con le
-   eventuali opzioni da negare (`{script, opzioni_negate}`).
-4. **Script di suite del progetto** (`guardia.suite`): script che lanciano l'intera suite (es. `run_tests.sh`), con
-   le regole di selezione `pytest` o `vitest`.
-5. **Verifica remota** (`verifica_remota`): sì/no e il comando. Senza, il ciclo usa `--no-dev`.
-6. **Percorsi da non toccare** (`da_non_toccare`): glob.
+1. **Production hosts and domains.** From the same answer write:
+   - in `guardia.produzione` one regex per entry, with escaped dots (`www\.example\.com`) and case-insensitive
+     (the guard applies it so);
+   - in `guardia.sonde` the **literal** hosts (`www.example.com`): they are the probes that test the guard. Every probe
+     must match at least one regex, and every host regex must have its probe.
+2. **Release scripts** (`guardia.rilascio`): paths relative to the repo, always denied.
+3. **Remote access wrappers** (`guardia.involucri`): scripts that wrap ssh or the remote copy, with the
+   options to deny, if any (`{script, opzioni_negate}`).
+4. **Project suite scripts** (`guardia.suite`): scripts that launch the whole suite (e.g. `run_tests.sh`), with
+   the `pytest` or `vitest` selection rules.
+5. **Remote verification** (`verifica_remota`): yes/no and the command. Without it, the cycle uses `--no-dev`.
+6. **Paths not to touch** (`da_non_toccare`): globs.
 
-## 4. Scrittura di `.claude/maat.json`
+## 4. Writing `.claude/maat.json`
 
-- Se il file **non esiste**: mostra il JSON completo e chiedi conferma.
-- Se **esiste già**: scrivi la proposta in un file temporaneo **fuori dal repo** e mostra il diff
-  (`git diff --no-index -- .claude/maat.json <file temporaneo>`); chiedi conferma prima di sovrascrivere.
-- Solo dopo il «sì»: scrivi `.claude/maat.json`, crea la cartella di lavoro (`cartelle.lavoro`, default
-  `.claude/.ai-workflow`) se manca, poi valida:
+- If the file **does not exist**: show the full JSON and ask for confirmation.
+- If it **already exists**: write the proposal to a temporary file **outside the repo** and show the diff
+  (`git diff --no-index -- .claude/maat.json <temporary file>`); ask for confirmation before overwriting.
+- Only after the «yes»: write `.claude/maat.json`, create the work folder (`cartelle.lavoro`, default
+  `.claude/.ai-workflow`) if missing, then validate:
 
 ```bash
 bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "$@"' _ ${CLAUDE_PLUGIN_ROOT}/scripts/maat-config.py valida
 ```
 
-Un errore di `valida` si corregge nel file (mostrando la correzione all'utente) e si rivalida: non si va avanti con
-un file non valido.
+A `valida` error is fixed in the file (showing the fix to the user) and validated again: never go on with
+an invalid file.
 
-## 5. Prova delle regole di guardia
+## 5. Testing the guard rules
 
-Per **ogni** host di `guardia.sonde`: il comando finto `curl -s https://<host>/` deve dare **ask** dalla guardia di
-sessione. Il JSON della prova va in un file temporaneo **fuori dal repo**, scritto con Write (così l'host non compare
-nel comando, che altrimenti la guardia vera ti chiederebbe di confermare):
+For **every** host of `guardia.sonde`: the fake command `curl -s https://<host>/` must get **ask** from the session
+guard. The test JSON goes in a temporary file **outside the repo**, written with Write (so the host does not appear
+in the command, which the real guard would otherwise ask you to confirm):
 
 ```json
 {"tool_name": "Bash", "tool_input": {"command": "curl -s https://<host>/"}}
 ```
 
 ```bash
-bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && MAAT_CONFIG="$(pwd -W 2>/dev/null || pwd)/.claude/maat.json" "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/guard.py" --universal < "$1"' _ <file temporaneo>
+bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && MAAT_CONFIG="$(pwd -W 2>/dev/null || pwd)/.claude/maat.json" "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/guard.py" --universal < "$1"' _ <temporary file>
 ```
 
-L'uscita deve contenere `"permissionDecision": "ask"`. Un host che passa senza ask vuol dire una regex che non lo
-copre: correggi `guardia.produzione` (passo 4) e riprova.
+The output must contain `"permissionDecision": "ask"`. A host that passes without ask means a regex that does not
+cover it: fix `guardia.produzione` (step 4) and try again.
 
 ## 6. `maat-doctor.sh`
 
@@ -135,20 +135,20 @@ copre: correggi `guardia.produzione` (passo 4) e riprova.
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/maat-doctor.sh
 ```
 
-In sola lettura. Ogni MANCA ha il suo rimedio dopo « — »: applicalo con l'utente (o spiegalo, se è un'installazione
-che fa lui) e rilancia il doctor. Le ATTENZIONE si riferiscono, non bloccano. `--prova-test` lancia anche un test per
-modulo, ma esce dalla sola lettura (cache e coverage): proponilo, non lanciarlo senza il sì dell'utente.
+Read-only. Every MANCA has its remedy after « — »: apply it with the user (or explain it, if it is an install
+the user does) and run the doctor again. The ATTENZIONE lines are reported, they do not block. `--prova-test` also runs one test per
+module, but leaves read-only mode (cache and coverage): propose it, never run it without the user's yes.
 
-## 7. Riassunto da incollare in `CLAUDE.md`
+## 7. Summary to paste into `CLAUDE.md`
 
-Cinque righe, **mostrate e non scritte** (le incolla l'utente, se vuole):
+Five lines, **shown and not written** (the user pastes them, if they want):
 
 ```text
-Maat <versione del plugin> — configurazione: .claude/maat.json (moduli: <nomi>; guardia: <n> regole di produzione).
-Diagnosi in sola lettura: bash <radice del plugin>/scripts/maat-doctor.sh
-Piano e revisione: /maat:plan-review-cycle (o -light) su una spec in <cartella di lavoro>.
-Implementazione e firma: /maat:full-implementation-cycle <spec>.
-Revisione di un'implementazione: /maat:implementation-review-cycle <spec>.
+Maat <plugin version> — configuration: .claude/maat.json (modules: <names>; guard: <n> production rules).
+Read-only diagnosis: bash <plugin root>/scripts/maat-doctor.sh
+Plan and review: /maat:plan-review-cycle (or -light) on a spec in <work folder>.
+Implementation and sign-off: /maat:full-implementation-cycle <spec>.
+Review of an implementation: /maat:implementation-review-cycle <spec>.
 ```
 
-La versione viene da `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
+The version comes from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.

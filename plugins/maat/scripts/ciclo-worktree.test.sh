@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
-# ciclo-worktree.test.sh — test di script/fic/ciclo-worktree.sh in un repository git FINTO in una cartella
-# temporanea, con HOME finta e senza WSL (FIC_WT_WSL=0): nessun worktree, branch o collegamento nel repository vero.
+# ciclo-worktree.test.sh — tests of script/fic/ciclo-worktree.sh in a FAKE git repository in a temporary
+# folder, with a fake HOME and without WSL (FIC_WT_WSL=0): no worktree, branch or link in the real repository.
 #   bash script/fic/ciclo-worktree.test.sh
-#   CW=/percorso/variante.sh bash script/fic/ciclo-worktree.test.sh   # la variante sta accanto a worktree-lib.sh
-# Casi: crea (worktree, spec e run dir copiate, collegamenti, nessuna copia fisica di node_modules, .nuxt), ripresa
-# (anche con un file di dipendenze non tracciato), worktree altrui, dipendenze diverse, riporta (allineamento della
-# run dir, STOP se spec o run dir del tree principale sono cambiate), rimuovi con modifiche / con spec o run dir non
-# riportate / con lock, plan.lock vivo o fase in corso / con un collegamento NON registrato (sentinella intatta) /
-# pulito (node_modules della fonte INTATTO: voci e contenuto), lock per worktree (run-phase.sh --lock-status),
-# --forza --branch, copie WSL del worktree e delle corsie cancellate davvero (forget_mirror, HOME finta).
-# Controprove per mutazione, SOLO nei repo finti: (1) rimuovi senza scollega_e_verifica ⇒ il node_modules della fonte
-# si svuota (git worktree remove segue le junction), il controllo «intatto» va rosso; (2) links_left() { return 0; }
-# ⇒ un collegamento non registrato non ferma piu' la rimozione e la sentinella si svuota.
-# ⚠️ Pensato per WINDOWS (Git Bash): collegamenti = junction (mklink /J), come nel repository vero; le controprove
-# misurano che `git worktree remove` segue le junction. Altrove (Linux, pk08) i collegamenti sono symlink, che git
-# non segue: la controprova 1 si dichiara SALTATO, la 2 misura che la rimozione non si ferma piu'. Limite dichiarato: un symlink TRACCIATO dal repository sarebbe
-# un collegamento rimasto per `rimuovi` (falso positivo, STOP: direzione sicura); il repository oggi non ne ha.
+#   CW=/path/variant.sh bash script/fic/ciclo-worktree.test.sh   # the variant sits next to worktree-lib.sh
+# Cases: crea (worktree, spec and run dir copied, links, no physical copy of node_modules, .nuxt), resume
+# (also with an untracked dependency file), someone else's worktree, different dependencies, riporta (run dir
+# sync, STOP if the main tree's spec or run dir changed), rimuovi with changes / with spec or run dir not
+# synced back / with lock, live plan.lock or running phase / with an UNREGISTERED link (sentinel intact) /
+# clean (the source's node_modules INTACT: entries and content), per-worktree lock (run-phase.sh --lock-status),
+# --forza --branch, WSL copies of the worktree and of the lanes really deleted (forget_mirror, fake HOME).
+# Counterproofs by mutation, ONLY in the fake repos: (1) rimuovi without scollega_e_verifica ⇒ the source's
+# node_modules is emptied (git worktree remove follows junctions), the «intact» check turns red; (2) links_left() { return 0; }
+# ⇒ an unregistered link no longer stops the removal and the sentinel is emptied.
+# ⚠️ Designed for WINDOWS (Git Bash): links = junctions (mklink /J), as in the real repository; the counterproofs
+# measure that `git worktree remove` follows junctions. Elsewhere (Linux, pk08) links are symlinks, which git
+# does not follow: counterproof 1 declares itself SALTATO, 2 measures that the removal no longer stops. Declared limit: a symlink TRACKED by the repository would be
+# a leftover link for `rimuovi` (false positive, STOP: the safe direction); the repository has none today.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)   # radice del plugin
+ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 CW=${CW:-$HERE/ciclo-worktree.sh}
 RPS=$ROOT/scripts/run-phase.sh
-# ciclo-worktree.sh chiama run-phase.sh e cycle-state.sh del plugin (MAAT_SCRIPTS), non del worktree (pk04a-1,
-# schema H): il repo finto non ne ha copie. I mutanti in $T trovano il plugin da MAAT_ROOT
+# ciclo-worktree.sh calls the plugin's run-phase.sh and cycle-state.sh (MAAT_SCRIPTS), not the worktree's (pk04a-1,
+# schema H): the fake repo has no copies of them. The mutants in $T find the plugin via MAAT_ROOT
 export MAAT_ROOT=$ROOT
 T=$(mktemp -d)
-# pk08: fuori da Windows (Linux) i collegamenti sono symlink, come in worktree-lib.sh: niente cmd.exe ne' cygpath
+# pk08: outside Windows (Linux) links are symlinks, as in worktree-lib.sh: no cmd.exe or cygpath
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) TWIN=1 ;; *) TWIN=0 ;; esac
-unlink_all() { # i collegamenti rimasti sotto $T, tolti SENZA seguirli (prima di rm -rf)
+unlink_all() { # the links left under $T, removed WITHOUT following them (before rm -rf)
   local l
   find "$T" -type l 2>/dev/null | while IFS= read -r l; do
     [ $TWIN -eq 1 ] && MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rmdir "$(cygpath -w "$l")" >/dev/null 2>&1; [ -L "$l" ] && rm -f "$l"; done
@@ -40,8 +40,8 @@ fail=0 n=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
 canon() { (cd "$1" 2>/dev/null && { pwd -W 2>/dev/null || pwd; }); }
 
-mkrepo() { # $1 cartella, $2 maat.json (default l'esempio nuxt-fastapi): repository finto con dipendenze
-  # installate finte e una spec; collegamenti, file delle dipendenze e preparati li dichiara la sua maat.json
+mkrepo() { # $1 folder, $2 maat.json (default: the nuxt-fastapi example): fake repository with fake installed
+  # dependencies and a spec; its maat.json declares the links, dependency files and preparati
   local M=$1 C=${2:-$ROOT/examples/nuxt-fastapi.maat.json}
   mkdir -p "$M" && cd "$M" || return 1
   git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false
@@ -56,7 +56,7 @@ mkrepo() { # $1 cartella, $2 maat.json (default l'esempio nuxt-fastapi): reposit
   printf 'codice\n' > a.txt; printf '# note\n' > .claude/.ai-workflow/README.md
   cp "$C" .claude/maat.json || return 1
   git add -A && git commit -qm init || return 1
-  # dipendenze installate (gitignorate): quelle che il worktree deve COLLEGARE
+  # installed dependencies (gitignored): the ones the worktree must LINK
   mkdir -p node_modules/r1 modules/app/node_modules/p1/lib modules/app/node_modules/p2 modules/app/node_modules/p3 \
            modules/app/apps/admin/node_modules/q1 modules/api/.venv/Scripts modules/app/apps/admin/.nuxt
   echo r > node_modules/r1/index.js; echo p > modules/app/node_modules/p1/lib/index.js; echo p2 > modules/app/node_modules/p2/x.js
@@ -68,20 +68,20 @@ mkrepo() { # $1 cartella, $2 maat.json (default l'esempio nuxt-fastapi): reposit
   mkdir -p .claude/.ai-workflow/spec-uno.run/log && echo 0 > .claude/.ai-workflow/spec-uno.run/log/01-plan.exit
   for s in due tre quattro cinque sei sette otto; do printf '# spec %s\n' "$s" > ".claude/.ai-workflow/spec-$s.md"; done
 }
-mkjunction() { # junction su Windows, symlink altrove (la variante di link_dep in worktree-lib.sh)
+mkjunction() { # junction on Windows, symlink elsewhere (the variant of link_dep in worktree-lib.sh)
   if [ $TWIN -eq 1 ]; then MSYS2_ARG_CONV_EXCL='*' cmd.exe /c mklink /J "$(cygpath -w "$2")" "$(cygpath -w "$1")" >/dev/null
   else ln -s "$1" "$2"; fi
 }
 rmjunction() { if [ $TWIN -eq 1 ]; then MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rmdir "$(cygpath -w "$1")" >/dev/null 2>&1; else rm -f "$1"; fi; }
 nm_count() { find "$1/modules/app/node_modules" "$1/node_modules" "$1/modules/app/apps/admin/node_modules" "$1/modules/api/.venv" | wc -l; }
 nm_sum() { find "$1/modules/app/node_modules" "$1/node_modules" "$1/modules/app/apps/admin/node_modules" "$1/modules/api/.venv" -type f -exec cksum {} + | sort; }
-cw() { (cd "$M" && bash "$CW" "$@"); }   # dal tree principale finto
+cw() { (cd "$M" && bash "$CW" "$@"); }   # from the fake main tree
 
 M="$T/proj"; mkrepo "$M" >/dev/null 2>&1 || { echo "FAIL: repo finto non creato"; exit 1; }
 MC=$(canon "$M"); PAR=$(dirname "$MC"); W1="$PAR/proj-fic-uno"
 cnt0=$(nm_count "$M") sum0=$(nm_sum "$M") ls0=$(ls "$M/modules/app/node_modules" | wc -l)
 
-# 1. crea: worktree sul branch fic/uno, spec e run dir copiate, collegamenti, nessuna copia fisica
+# 1. crea: worktree on branch fic/uno, spec and run dir copied, links, no physical copy
 out=$(cw crea .claude/.ai-workflow/spec-uno.md 2>&1); rc=$?
 check "crea esce 0" '[ $rc -eq 0 ]' || printf '%s\n' "$out"
 check "  ultima riga = percorso del worktree" '[ "$(printf "%s\n" "$out" | tail -1)" = "$W1" ]'
@@ -98,23 +98,23 @@ check "  .nuxt: tsconfig e dichiarazioni copiati, il resto no" '[ -f "$W1/module
 check "  worktree pulito per git (marcatore, spec, collegamenti gitignorati)" '[ -z "$(git -C "$W1" status --porcelain --untracked-files=all)" ]'
 check "  tree principale intatto" '[ -z "$(git -C "$M" status --porcelain)" ] && [ "$(nm_count "$M")" = "$cnt0" ]'
 
-# 2. crea di nuovo: ripresa, la spec del worktree vince
+# 2. crea again: resume, the worktree's spec wins
 echo "## Piano (dal ciclo)" >> "$W1/.claude/.ai-workflow/spec-uno.md"
 out=$(cw crea .claude/.ai-workflow/spec-uno.md 2>&1); rc=$?
 check "crea due volte → ripresa (0)" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -q "ripresa"' || printf '%s\n' "$out"
 check "  la spec del worktree non e' sovrascritta" 'grep -q "Piano (dal ciclo)" "$W1/.claude/.ai-workflow/spec-uno.md"'
 check "  collegamenti ancora collegamenti" '[ -L "$W1/modules/app/node_modules" ]'
-printf '{"name":"nuovo"}\n' > "$W1/modules/app/packages/ui/package-lock.json"   # dipendenza aggiunta, non tracciata
+printf '{"name":"nuovo"}\n' > "$W1/modules/app/packages/ui/package-lock.json"   # dependency added, untracked
 out=$(cw crea .claude/.ai-workflow/spec-uno.md 2>&1); rc=$?
 check "ripresa con un file di dipendenze non tracciato nel worktree → STOP (3)" '[ $rc -eq 3 ] && printf "%s" "$out" | grep -q "packages/ui/package-lock.json"' || printf '%s\n' "$out"
 rm "$W1/modules/app/packages/ui/package-lock.json"
 
-# 2b. pk09 (pilota su un secondo progetto): lanciato da DENTRO un worktree collegato (git dir ≠ git common dir) ⇒ rifiuto (3) per
-# ogni sottocomando, col messaggio, nulla creato. Prima di pk09 risaliva al tree principale (--git-common-dir) e ne
-# prendeva base, maat.json e spec: qui crea riprendeva il worktree (0) e stato rispondeva (0). Controprova: dal tree
-# principale gli stessi comandi passano (i casi qui intorno e l'ultimo check sotto).
+# 2b. pk09 (pilot on a second project): launched from INSIDE a linked worktree (git dir ≠ git common dir) ⇒ refusal (3) for
+# every subcommand, with the message, nothing created. Before pk09 it climbed to the main tree (--git-common-dir) and
+# took its base, maat.json and spec: here crea resumed the worktree (0) and stato answered (0). Counterproof: from the
+# main tree the same commands pass (the cases around here and the last check below).
 nwt0=$(git -C "$M" worktree list | wc -l)
-# .claude/.ai-workflow e' gitignorata: git status non la vede, quindi se ne confronta l'elenco prima e dopo
+# .claude/.ai-workflow is gitignored: git status does not see it, so its listing is compared before and after
 aiw() { (cd "$W1" && find .claude/.ai-workflow 2>/dev/null | LC_ALL=C sort); }
 aiw0=$(aiw)
 out=$( (cd "$W1" && bash "$CW" crea .claude/.ai-workflow/spec-uno.md) 2>&1); rc=$?
@@ -126,7 +126,7 @@ check "  stato: .claude/.ai-workflow del worktree invariata" '[ "$(aiw)" = "$aiw
 out=$(cw stato uno 2>&1); rc=$?
 check "  controprova: stato dal tree principale → 0" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -qx "percorso: $W1"' || printf '%s\n' "$out"
 
-# 3. worktree altrui con lo stesso nome ⇒ STOP, nulla toccato
+# 3. someone else's worktree with the same name ⇒ STOP, nothing touched
 W2="$PAR/proj-fic-due"
 git -C "$M" worktree add -q -b fic/due "$W2" HEAD 2>/dev/null
 out=$(cw crea .claude/.ai-workflow/spec-due.md 2>&1); rc=$?
@@ -135,12 +135,12 @@ check "  nessun collegamento ne' spec nel worktree altrui" '[ ! -e "$W2/node_mod
 out=$(cw rimuovi due 2>&1); rc=$?
 check "  rimuovi del worktree altrui → STOP, resta" '[ $rc -eq 3 ] && [ -d "$W2" ]'
 git -C "$M" worktree remove "$W2" && git -C "$M" branch -q -D fic/due
-mkdir -p "$PAR/proj-fic-due"   # una cartella qualunque con quel nome
+mkdir -p "$PAR/proj-fic-due"   # any folder with that name
 out=$(cw crea .claude/.ai-workflow/spec-due.md 2>&1); rc=$?
 check "cartella non-worktree con lo stesso nome → STOP (3)" '[ $rc -eq 3 ]'
 rmdir "$PAR/proj-fic-due"
 
-# 4. dipendenze diverse ⇒ STOP, nessun worktree, nessun branch
+# 4. different dependencies ⇒ STOP, no worktree, no branch
 printf '{"lock":2}\n' > "$M/modules/app/package-lock.json"
 out=$(cw crea .claude/.ai-workflow/spec-tre.md 2>&1); rc=$?
 check "dipendenze diverse → STOP (3)" '[ $rc -eq 3 ] && printf "%s" "$out" | grep -q "modules/app/package-lock.json"' || printf '%s\n' "$out"
@@ -148,11 +148,11 @@ check "  nessun worktree, nessun branch" '[ ! -e "$PAR/proj-fic-tre" ] && ! git 
 printf '{"lock":1}\n' > "$M/modules/app/package-lock.json"
 check "  (ripristino: tree principale di nuovo pulito)" '[ -z "$(git -C "$M" status --porcelain)" ]'
 
-# 5. riporta: spec e run dir nel tree principale; mai il codice
+# 5. riporta: spec and run dir into the main tree; never the code
 echo "Review status: APPROVED" >> "$W1/.claude/.ai-workflow/spec-uno.md"
 echo 0 > "$W1/.claude/.ai-workflow/spec-uno.run/log/02-implement.exit"
 echo "modifica del ciclo" >> "$W1/a.txt"
-echo "# nota dell'utente" >> "$M/.claude/.ai-workflow/spec-uno.md"   # spec del tree principale cambiata dopo la copia
+echo "# nota dell'utente" >> "$M/.claude/.ai-workflow/spec-uno.md"   # main tree spec changed after the copy
 out=$(cw riporta uno 2>&1); rc=$?
 check "riporta con la spec principale cambiata → STOP (3)" '[ $rc -eq 3 ] && grep -q "nota dell" "$M/.claude/.ai-workflow/spec-uno.md"'
 out=$(cw riporta uno --forza 2>&1); rc=$?
@@ -166,12 +166,12 @@ check "riporta di nuovo (principale = ultima riportata) → 0 senza --forza" '[ 
 out=$(cw stato uno 2>&1); rc=$?
 check "stato: percorso, branch, file modificati" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -qx "percorso: $W1" && printf "%s" "$out" | grep -q "^branch: fic/uno" && printf "%s" "$out" | grep -qx "file modificati: 1"' || printf '%s\n' "$out"
 
-# 6. rimuovi con modifiche ⇒ rifiuto, niente toccato
+# 6. rimuovi with changes ⇒ refusal, nothing touched
 out=$(cw rimuovi uno 2>&1); rc=$?
 check "rimuovi con modifiche → rifiuto (3)" '[ $rc -eq 3 ] && [ -d "$W1" ] && [ -L "$W1/modules/app/node_modules" ]' || printf '%s\n' "$out"
 git -C "$W1" checkout -q -- a.txt
 
-# 6b. spec o run dir non riportate ⇒ STOP (salvo --forza); riporta ALLINEA la run dir; fasi vive ⇒ STOP
+# 6b. spec or run dir not synced back ⇒ STOP (unless --forza); riporta SYNCS the run dir; live phases ⇒ STOP
 RD1="$W1/.claude/.ai-workflow/spec-uno.run" RDM="$M/.claude/.ai-workflow/spec-uno.run"
 echo "## Review (dopo il riporta)" >> "$W1/.claude/.ai-workflow/spec-uno.md"
 out=$(cw rimuovi uno 2>&1); rc=$?
@@ -184,7 +184,7 @@ rm "$RD1/log/02-implement.exit"
 out=$(cw riporta uno 2>&1); rc=$?
 check "riporta allinea la run dir: file nuovo arrivato, file tolto sparito" '[ $rc -eq 0 ] && [ -f "$RDM/log/03-review.exit" ] && [ ! -e "$RDM/log/02-implement.exit" ] && diff -rq "$RD1" "$RDM" >/dev/null' || printf '%s\n' "$out"
 check "  nessuna cartella temporanea lasciata" '[ -z "$(ls -d "$RDM".* 2>/dev/null)" ]'
-echo altro > "$RDM/log/99-altro.txt"; echo 0 > "$RD1/log/04-fix.exit"   # run dir principale cambiata dopo il riporta
+echo altro > "$RDM/log/99-altro.txt"; echo 0 > "$RD1/log/04-fix.exit"   # main run dir changed after riporta
 out=$(cw riporta uno 2>&1); rc=$?
 check "riporta con la run dir principale cambiata → STOP (3), nulla toccato" '[ $rc -eq 3 ] && [ -f "$RDM/log/99-altro.txt" ] && [ ! -e "$RDM/log/04-fix.exit" ]' || printf '%s\n' "$out"
 rm "$RDM/log/99-altro.txt"
@@ -198,8 +198,8 @@ date > "$RD1/log/05-review.running"
 out=$(cw rimuovi uno 2>&1); rc=$?
 check "rimuovi con una fase in corso (.running senza .exit) → STOP (3)" '[ $rc -eq 3 ] && printf "%s" "$out" | grep -q "05-review" && [ -d "$W1" ]' || printf '%s\n' "$out"
 rm "$RD1/log/05-review.running"
-# scambio della run dir fallito e ripristino fallito (mv finto che fallisce solo su *.nuova.* e *.vecchia.*):
-# il messaggio nomina la vecchia, la nuova e' cancellata, nulla va perso
+# failed run dir swap and failed restore (fake mv that fails only on *.nuova.* and *.vecchia.*):
+# the message names the old one, the new one is deleted, nothing is lost
 FMV="$T/fakemv"; mkdir -p "$FMV"
 printf '#!/bin/bash\ncase "$1" in *.nuova.*|*.vecchia.*) echo "mv finto: fallisce $1" >&2; exit 1 ;; esac\nexec /usr/bin/mv "$@"\n' > "$FMV/mv"; chmod +x "$FMV/mv"
 echo 0 > "$RD1/log/06-review.exit"
@@ -211,12 +211,12 @@ check "  copia nuova cancellata, precedente conservata" '[ -z "$(ls -d "$RDM".nu
 out=$(cw riporta uno 2>&1); rc=$?
 check "  rimessa a mano la precedente, riporta esce 0" '[ $rc -eq 0 ] && [ -f "$RDM/log/06-review.exit" ] && diff -rq "$RD1" "$RDM" >/dev/null' || printf '%s\n' "$out"
 
-# 7. lock: ogni worktree ha il suo (git dir del worktree); due cicli non si bloccano a vicenda
+# 7. lock: each worktree has its own (the worktree's git dir); two cycles do not block each other
 W4="$PAR/proj-fic-quattro"
 out=$(cw crea .claude/.ai-workflow/spec-quattro.md 2>&1); rc=$?
 check "crea di un secondo worktree esce 0" '[ $rc -eq 0 ] && [ -d "$W4" ]' || printf '%s\n' "$out"
 L1="$(git -C "$W1" rev-parse --absolute-git-dir)/full-implementation-cycle.lock"
-mkdir -p "$L1" && printf 'pid=%s\ncpid=\nrun=x\nlabel=02-implement\n' "$$" > "$L1/owner"   # fase di codice viva nel worktree 1
+mkdir -p "$L1" && printf 'pid=%s\ncpid=\nrun=x\nlabel=02-implement\n' "$$" > "$L1/owner"   # live code phase in worktree 1
 ls1=$( (cd "$W1" && bash "$RPS" --lock-status) ); r1=$?
 ls4=$( (cd "$W4" && bash "$RPS" --lock-status) ); r4=$?
 lsm=$( (cd "$M" && bash "$RPS" --lock-status) ); rm_=$?
@@ -228,7 +228,7 @@ out=$(cw rimuovi uno 2>&1); rc=$?
 check "rimuovi con il lock del worktree occupato → rifiuto (3)" '[ $rc -eq 3 ] && [ -L "$W1/modules/app/node_modules" ]' || printf '%s\n' "$out"
 rm -rf "$L1"
 
-# 8. rimuovi pulito: collegamenti tolti, node_modules della fonte INTATTO, worktree sparito, branch lasciato
+# 8. clean rimuovi: links removed, the source's node_modules INTACT, worktree gone, branch kept
 out=$(cw rimuovi uno 2>&1); rc=$?
 check "rimuovi esce 0" '[ $rc -eq 0 ]' || printf '%s\n' "$out"
 check "  worktree sparito (cartella e git worktree list)" '[ ! -e "$W1" ] && ! git -C "$M" worktree list | grep -q "proj-fic-uno"'
@@ -238,7 +238,7 @@ check "  branch fic/uno lasciato (senza --branch)" 'git -C "$M" show-ref -q --ve
 out=$(cw rimuovi quattro --branch 2>&1); rc=$?
 check "rimuovi --branch: worktree e branch spariti" '[ $rc -eq 0 ] && [ ! -e "$W4" ] && ! git -C "$M" show-ref -q --verify refs/heads/fic/quattro' || printf '%s\n' "$out"
 
-# 9. --forza: modifiche scartate, fonte intatta
+# 9. --forza: changes discarded, source intact
 W5="$PAR/proj-fic-cinque"
 cw crea .claude/.ai-workflow/spec-cinque.md >/dev/null 2>&1
 echo sporco >> "$W5/a.txt"; echo nuovo > "$W5/nuovo.txt"
@@ -248,7 +248,7 @@ check "rimuovi --forza con modifiche esce 0" '[ $rc -eq 0 ] && [ ! -e "$W5" ]' |
 check "  e avvisa della fase in corso ignorata, con l'etichetta" 'printf "%s" "$out" | grep -q "AVVISO.*07-fix"'
 check "  fonte ancora intatta" '[ "$(nm_count "$M")" = "$cnt0" ] && [ "$(nm_sum "$M")" = "$sum0" ]'
 
-# 9b. collegamento residuo NON registrato (fuori da dep_links) ⇒ STOP, worktree resta, sentinella intatta
+# 9b. leftover UNREGISTERED link (outside dep_links) ⇒ STOP, worktree stays, sentinel intact
 W6="$PAR/proj-fic-sei" SEN="$T/sentinella"
 mkdir -p "$SEN/a/b" && echo s1 > "$SEN/a/b/f.txt" && echo s2 > "$SEN/g.txt"
 sen_n() { find "$1" | wc -l; }; sen_s() { find "$1" -type f -exec cksum {} + | sort; }
@@ -265,8 +265,8 @@ rmjunction "$W6/modules/x/node_modules"; rmdir "$W6/modules/x"
 out=$(cw rimuovi sei --branch 2>&1); rc=$?
 check "  tolta la junction estranea, rimuovi esce 0 e la sentinella resta intatta" '[ $rc -eq 0 ] && [ ! -e "$W6" ] && [ "$(sen_s "$SEN")" = "$ss0" ]' || printf '%s\n' "$out"
 
-# 9c. copie WSL del worktree cancellate DAVVERO, corsie comprese (forget_mirror della lib, script su stdin; qui bash
-# locale con la HOME finta), mai ~/fic-mirror. Prima del 2026-09-30 le corsie restavano ($k espanso a vuoto).
+# 9c. the worktree's WSL copies REALLY deleted, lanes included (the lib's forget_mirror, script on stdin; here local
+# bash with the fake HOME), never ~/fic-mirror. Before 2026-09-30 the lanes stayed ($k expanded to empty).
 W7="$PAR/proj-fic-sette"
 cw crea .claude/.ai-workflow/spec-sette.md >/dev/null 2>&1
 fm=$( ( WT_TAG=test DEP_LINKS_EXTRA=(); . "$HERE/worktree-lib.sh" || { echo "worktree-lib.sh non caricata"; exit 0; }
@@ -284,7 +284,7 @@ check "forget_mirror: copia e corsie 1 e 2 del worktree cancellate, ~/fic-mirror
 cw rimuovi sette --branch >/dev/null 2>&1
 check "tree principale pulito alla fine" '[ -z "$(git -C "$M" status --porcelain)" ]'
 
-# 10. CONTROPROVA per mutazione (solo nel repo finto): rimuovi senza scollega_e_verifica ⇒ fonte svuotata
+# 10. COUNTERPROOF by mutation (only in the fake repo): rimuovi without scollega_e_verifica ⇒ source emptied
 MU="$T/mut"; mkdir -p "$MU/scripts/lib"
 cp "$HERE/worktree-lib.sh" "$ROOT/scripts/fic-mirror.sh" "$ROOT/scripts/python.sh" "$MU/scripts/"
 cp "$ROOT/scripts/lib/maat-paths.sh" "$MU/scripts/lib/"
@@ -297,12 +297,12 @@ c0=$(nm_count "$MM")
 c1=$(nm_count "$MM" 2>/dev/null)
 if [ $TWIN -eq 1 ]; then
   check "controprova: senza lo scollegamento il node_modules della fonte NON e' intatto ($c0 → $c1 voci)" '[ "$c1" != "$c0" ]'
-else   # pk08: git worktree remove toglie un symlink senza seguirlo, la fonte resta intatta anche col mutante
+else   # pk08: git worktree remove removes a symlink without following it, the source stays intact even with the mutant
   echo "SALTATO [controprova 1]: con i symlink (non Windows) git worktree remove non segue il collegamento ($c0 → $c1 voci): nessun effetto da misurare"
 fi
 
-# 11. CONTROPROVA per mutazione (solo nel repo finto): links_left() { return 0; } ⇒ il collegamento non registrato non
-# ferma piu' la rimozione e git worktree remove svuota la sentinella
+# 11. COUNTERPROOF by mutation (only in the fake repo): links_left() { return 0; } ⇒ the unregistered link no longer
+# stops the removal and git worktree remove empties the sentinel
 sed '/^scollega_e_verifica() {/i links_left() { return 0; }  # MUTANTE' "$CW" > "$MU/scripts/ciclo-worktree.sh"
 check "premessa: mutazione 2 applicata" 'grep -q "^links_left() { return 0; }  # MUTANTE" "$MU/scripts/ciclo-worktree.sh"'
 MM2="$T/cp2/proj"; mkrepo "$MM2" >/dev/null 2>&1
@@ -314,20 +314,20 @@ mkdir -p "$W2M/modules/x" && mkjunction "$SEN2" "$W2M/modules/x/node_modules"
 (cd "$MM2" && bash "$MU/scripts/ciclo-worktree.sh" rimuovi uno >/dev/null 2>&1)
 if [ $TWIN -eq 1 ]; then
   check "controprova 2: senza links_left la sentinella NON e' intatta" '[ "$(sen_s "$SEN2")" != "$s0" ]'
-else   # pk08: col symlink la sentinella resta; l'effetto del mutante e' che la rimozione non si ferma piu' (caso 9b)
+else   # pk08: with a symlink the sentinel stays; the mutant's effect is that the removal no longer stops (case 9b)
   check "controprova 2 (symlink): senza links_left il collegamento non registrato non ferma la rimozione" '[ ! -e "$W2M" ]'
 fi
 
-# 12. pk04b-2: collegamenti e preparati da maat.json, non da elenchi cablati. Una maat.json senza collega_nel_worktree
-# e senza preparati: nessun collegamento e nessun file di .nuxt copiato, anche se il tree principale ha
-# modules/api/.venv e modules/app/apps/admin/.nuxt/tsconfig.json; nessun avviso di preparazione.
+# 12. pk04b-2: links and preparati from maat.json, not from hardcoded lists. A maat.json without collega_nel_worktree
+# and without preparati: no link and no .nuxt file copied, even though the main tree has
+# modules/api/.venv and modules/app/apps/admin/.nuxt/tsconfig.json; no preparazione warning.
 . "$HERE/python.sh"
 "$FIC_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))
 for m in c["moduli"]:
     m.pop("collega_nel_worktree", None); m.pop("preparati", None)
 json.dump(c, open(sys.argv[2], "w", encoding="utf-8"), indent=1)' "$ROOT/examples/nuxt-fastapi.maat.json" "$T/conf-vuota.json"
-caso_vuota() { # $1 script ciclo-worktree, $2 cartella del repo → 0 se nessun collegamento, nessuna copia, nessun avviso
+caso_vuota() { # $1 ciclo-worktree script, $2 repo folder → 0 if no link, no copy, no warning
   local MV=$2 out rc W
   mkrepo "$MV" "$T/conf-vuota.json" >/dev/null 2>&1 || { echo "repo finto non creato"; return 2; }
   out=$( (cd "$MV" && bash "$1" crea .claude/.ai-workflow/spec-uno.md) 2>&1); rc=$?
@@ -337,13 +337,13 @@ caso_vuota() { # $1 script ciclo-worktree, $2 cartella del repo → 0 se nessun 
     [ ! -e "$W/modules/app/apps/admin/.nuxt/tsconfig.json" ] && ! printf '%s' "$out" | grep -q "AVVISO.*preparazione\|nuxi"
 }
 check "maat.json senza collega_nel_worktree e preparati: nessun collegamento, nessun preparato copiato, nessun avviso" 'caso_vuota "$CW" "$T/v1/proj"'
-# l'esempio: i preparati del tree principale mancano => l'avviso nomina la preparazione dichiarata
+# the example: the main tree's preparati are missing => the warning names the declared preparazione
 MP="$T/v2/proj"; mkrepo "$MP" >/dev/null 2>&1; rm -f "$MP/modules/app/apps/admin/.nuxt/tsconfig.json"
 out=$( (cd "$MP" && bash "$CW" crea .claude/.ai-workflow/spec-uno.md) 2>&1); rc=$?
 check "preparati assenti nel tree principale: avviso con la preparazione del modulo, nessuna copia" \
   '[ $rc -eq 0 ] && printf "%s" "$out" | grep -qF "AVVISO — il tree principale non ha modules/app/apps/admin/.nuxt/tsconfig.json: lancia '"'"'npx nuxi prepare'"'"' in modules/app/apps/admin del tree principale, poi crea di nuovo" && [ ! -e "$(dirname "$(canon "$MP")")/proj-fic-uno/modules/app/apps/admin/.nuxt/components.d.ts" ]' || printf '%s\n' "$out"
-# controprove per mutazione: (3) dep_links con modules/api/.venv cablato => nel caso «vuota» compare un collegamento;
-# (4) la copia di .nuxt cablata di prima => compare il tsconfig nel worktree. Entrambe: il caso «vuota» rosso
+# counterproofs by mutation: (3) dep_links with modules/api/.venv hardcoded => in the «vuota» case a link appears;
+# (4) the old hardcoded .nuxt copy => the tsconfig appears in the worktree. Both: the «vuota» case red
 cp "$HERE/worktree-lib.sh" "$MU/scripts/worktree-lib.sh"; cp "$CW" "$MU/scripts/ciclo-worktree.sh"
 sed -i '/^  local r=\$1 k g p$/a\  { [ -e "$r/modules/api/.venv" ] || [ -L "$r/modules/api/.venv" ]; } \&\& printf "%s\\n" modules/api/.venv   # MUTANTE' "$MU/scripts/worktree-lib.sh"
 check "premessa: mutazione 3 applicata" 'grep -q "# MUTANTE" "$MU/scripts/worktree-lib.sh"'
@@ -353,16 +353,16 @@ sed -i '/^  deps_fp_check "\$MAINC" "\$WT"/i\  NUXT=modules/app/apps/admin/.nuxt
 check "premessa: mutazione 4 applicata" 'grep -q "# MUTANTE" "$MU/scripts/ciclo-worktree.sh"'
 check "controprova 4: con la copia di .nuxt cablata il caso «vuota» e' rosso" '! caso_vuota "$MU/scripts/ciclo-worktree.sh" "$T/v4/proj"'
 
-# 13. review pk04b-2, minor 3: preparati TUTTI con jolly => file guida vuoto. Il campo vuoto viaggia come «-» (con
-# IFS=$'\t' due tab di fila sono un solo separatore): il modulo si salta, nessun avviso e nessun preparato copiato.
-# Senza segnaposto la preparazione diventerebbe il file guida («il tree principale non ha …/npx nuxi prepare»).
+# 13. review pk04b-2, minor 3: ALL preparati with wildcards => empty guide file. The empty field travels as «-» (with
+# IFS=$'\t' two tabs in a row are a single separator): the module is skipped, no warning and no preparato copied.
+# Without the placeholder the preparazione would become the guide file («il tree principale non ha …/npx nuxi prepare»).
 "$FIC_PY" -c 'import json, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))
 for m in c["moduli"]:
     if m.get("preparati"):
         m["preparati"] = [".nuxt/*.d.ts"]
 json.dump(c, open(sys.argv[2], "w", encoding="utf-8"), indent=1)' "$ROOT/examples/nuxt-fastapi.maat.json" "$T/conf-jolly.json"
-caso_jolly() { # $1 script ciclo-worktree, $2 cartella del repo → 0 se nessun avviso di preparazione e nessuna copia
+caso_jolly() { # $1 ciclo-worktree script, $2 repo folder → 0 if no preparazione warning and no copy
   local MV=$2 out rc W
   mkrepo "$MV" "$T/conf-jolly.json" >/dev/null 2>&1 || { echo "repo finto non creato"; return 2; }
   out=$( (cd "$MV" && bash "$1" crea .claude/.ai-workflow/spec-uno.md) 2>&1); rc=$?
@@ -371,7 +371,7 @@ caso_jolly() { # $1 script ciclo-worktree, $2 cartella del repo → 0 se nessun 
   ! printf '%s' "$out" | grep -q "il tree principale non ha" && [ ! -e "$W/modules/app/apps/admin/.nuxt/components.d.ts" ]
 }
 check "preparati tutti con jolly: file guida vuoto, modulo saltato senza avvisi ne' copie" 'caso_jolly "$CW" "$T/v5/proj"'
-# controprova 5: senza segnaposto (v(x) restituisce il campo com'e') i campi slittano e il caso e' rosso
+# counterproof 5: without the placeholder (v(x) returns the field as is) the fields shift and the case is red
 cp "$CW" "$MU/scripts/ciclo-worktree.sh"
 sed 's/^    return x or "-"$/    return x   # MUTANTE/' "$HERE/worktree-lib.sh" > "$MU/scripts/worktree-lib.sh"
 check "premessa: mutazione 5 applicata" 'grep -q "# MUTANTE" "$MU/scripts/worktree-lib.sh"'

@@ -1,203 +1,212 @@
-# Test del harness
+# Harness tests
 
-Vale per il plugin `plugins/maat` di questo repo: come si lanciano le suite su Windows e su Linux, il test di
-genericità e il certificato del driver.
+Applies to the `plugins/maat` plugin of this repo: how to run the suites on Windows and on Linux, the genericity
+test and the driver certificate.
 
-## Le due radici
+## The two roots
 
-| variabile | cos'è | come si risolve |
+| variable | what it is | how it is resolved |
 |---|---|---|
-| `MAAT_ROOT` | la radice del plugin (`scripts/`, `skills/`, `agents/`, `schemas/`) | `MAAT_ROOT` dell'ambiente, altrimenti due livelli sopra `scripts/lib/maat-paths.sh`; deve contenere `.claude-plugin/plugin.json`, altrimenti uscita 4 |
-| `PROJECT_ROOT` | la radice del progetto su cui lavora il ciclo | `FIC_REPO`, altrimenti `git rev-parse --show-toplevel` dalla **cartella di lavoro** (mai dalla posizione dello script); fuori da un repo git: errore chiaro, uscita 4 |
-| `MAAT_SCRIPTS`, `MAAT_SKILLS`, `MAAT_AGENTS`, `MAAT_SCHEMAS` | sotto `MAAT_ROOT` | — |
-| `MAAT_WORK` | la cartella di lavoro del progetto | `PROJECT_ROOT/<cartelle.lavoro>` di `.claude/maat.json` (default `.claude/.ai-workflow`) |
+| `MAAT_ROOT` | the plugin root (`scripts/`, `skills/`, `agents/`, `schemas/`) | `MAAT_ROOT` from the environment, otherwise two levels above `scripts/lib/maat-paths.sh`; it must contain `.claude-plugin/plugin.json`, otherwise exit 4 |
+| `PROJECT_ROOT` | the root of the project the cycle works on | `FIC_REPO`, otherwise `git rev-parse --show-toplevel` from the **working directory** (never from the script's location); outside a git repo: clear error, exit 4 |
+| `MAAT_SCRIPTS`, `MAAT_SKILLS`, `MAAT_AGENTS`, `MAAT_SCHEMAS` | under `MAAT_ROOT` | — |
+| `MAAT_WORK` | the project's working folder | `PROJECT_ROOT/<cartelle.lavoro>` from `.claude/maat.json` (default `.claude/.ai-workflow`) |
 
-Il risolutore è uno solo: `scripts/lib/maat-paths.sh` (bash, incluso con `.`) e `scripts/maat_paths.py` (Python, stesse
-regole). Lanciato direttamente, ciascuno stampa le variabili una per riga, nella forma `NOME=valore`:
+There is a single resolver: `scripts/lib/maat-paths.sh` (bash, sourced with `.`) and `scripts/maat_paths.py` (Python,
+same rules). Run directly, each prints the variables one per line, in the form `NAME=value`:
 
 ```bash
-cd <progetto> && bash <plugin>/scripts/lib/maat-paths.sh
+cd <project> && bash <plugin>/scripts/lib/maat-paths.sh
 ```
 
-Il lock delle fasi di codice **non** usa `PROJECT_ROOT`: `run-phase.sh` lo calcola con `git rev-parse --absolute-git-dir`
-dalla cartella di lavoro (in un worktree collegato è quello del worktree). `FIC_LOCK` lo sostituisce.
+The lock of the code phases does **not** use `PROJECT_ROOT`: `run-phase.sh` computes it with
+`git rev-parse --absolute-git-dir` from the working directory (in a linked worktree it is the worktree's).
+`FIC_LOCK` overrides it.
 
-## Variabili d'ambiente di override
+## Override environment variables
 
-Restano i nomi di prima; cambia solo il default.
+The names are the same as before; only the default changes.
 
-| gruppo | variabili | default |
+| group | variables | default |
 |---|---|---|
-| radice del harness | `FIC_GATES_HARNESS` (gates.sh, finalize.sh), `CONTEXT_PACK_HARNESS`, `HARNESS_MERGE_HARNESS`, `FIC_DRIVER_ROOT` | `MAAT_ROOT` |
-| repository da leggere | `FIC_GATES_ROOT`, `CONTEXT_PACK_ROOT` | `PROJECT_ROOT` |
-| plugin nella sotto-sessione | `MAAT_PLUGIN_DIR` | assente: nessun `--plugin-dir` (il plugin è abilitato nel progetto); `replay.sh` la imposta sempre |
-| repo e lock | `FIC_REPO`, `FIC_LOCK` | toplevel della cartella di lavoro · git dir della cartella di lavoro |
-| componenti del ciclo | `FIC_RUN_PHASE`, `FIC_CONTEXT_PACK`, `FIC_GATES`, `FIC_FINALIZE`, `FIC_DRIVER_PY`, `FIC_DRIVER_CERT`, … | gli script del plugin |
-| altro | `PLAN_CHECK_ROOT`, `CLAUDE_BIN`, `FIC_PYTHON`, `MAAT_CONFIG` | — |
+| harness root | `FIC_GATES_HARNESS` (gates.sh, finalize.sh), `CONTEXT_PACK_HARNESS`, `HARNESS_MERGE_HARNESS`, `FIC_DRIVER_ROOT` | `MAAT_ROOT` |
+| repository to read | `FIC_GATES_ROOT`, `CONTEXT_PACK_ROOT` | `PROJECT_ROOT` |
+| plugin in the subsession | `MAAT_PLUGIN_DIR` | unset: no `--plugin-dir` (the plugin is enabled in the project); `replay.sh` always sets it |
+| repo and lock | `FIC_REPO`, `FIC_LOCK` | toplevel of the working directory · git dir of the working directory |
+| cycle components | `FIC_RUN_PHASE`, `FIC_CONTEXT_PACK`, `FIC_GATES`, `FIC_FINALIZE`, `FIC_DRIVER_PY`, `FIC_DRIVER_CERT`, … | the plugin's scripts |
+| other | `PLAN_CHECK_ROOT`, `CLAUDE_BIN`, `FIC_PYTHON`, `MAAT_CONFIG` | — |
 
-Sotto una radice del harness sostituita vale la struttura del plugin: una copia mutata del plugin (controprove dei
-test) si passa intera, non solo uno script.
+Under an overridden harness root the plugin structure applies: a mutated copy of the plugin (test counterproofs) is
+passed whole, not just one script.
 
-## Come lanciare le suite dal plugin
+## How to run the suites from the plugin
 
-Ogni suite crea i propri repo sintetici in una cartella temporanea e non tocca né il repo del plugin né un progetto
-vero. Da Git Bash:
+Each suite creates its own synthetic repos in a temporary folder and touches neither the plugin repo nor a real
+project. From Git Bash:
 
 ```bash
-bash plugins/maat/scripts/<nome>.test.sh
+bash plugins/maat/scripts/<name>.test.sh
 ```
 
-- Brevi: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
-  `harness-merge`, `guard`, `stop-hook`, `blocks-independent`, `phase-events`, `test-review-surface.sh`, `plan-check`,
-  `senza-wsl` (pk08: Windows senza WSL, PATH senza `wsl`/`wsl.exe`; circa 5 minuti, due fasi di `run-phase.sh`),
-  `spazi` (pk08: plugin, progetto, run dir e worktree con spazi e «à»; circa 5 minuti su Windows, 1 su Linux; anche su
-  Linux, dal clone in WSL con `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin FIC_WT_WSL=0`).
-- Lunghe (da lanciare insieme, in background): `cycle-state`, `run-phase`, `driver` (la sezione 9 di `driver.test.sh`
-  porta tutto `cycle-state.test.sh`; `DRIVER_TEST_RAPIDO=1` la salta).
+- Short: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
+  `harness-merge`, `guard`, `stop-hook`, `session-start`, `blocks-independent`, `phase-events`,
+  `test-review-surface.sh`, `plan-check`,
+  `senza-wsl` (pk08: Windows without WSL, PATH without `wsl`/`wsl.exe`; about 5 minutes, two `run-phase.sh` phases),
+  `spazi` (pk08: plugin, project, run dir and worktree with spaces and «à»; about 5 minutes on Windows, 1 on Linux;
+  also on Linux, from the clone in WSL with `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin FIC_WT_WSL=0`).
+- Long (run them together, in the background): `cycle-state`, `run-phase`, `driver` (section 9 of `driver.test.sh`
+  runs all of `cycle-state.test.sh`; `DRIVER_TEST_RAPIDO=1` skips it).
 - In WSL: `test-fast.test.sh`, `vitest-classify.test.sh`, `counterproof.test.sh`. `comandi-equivalenza.test.sh`
-  usa git dentro WSL: da un worktree creato da Windows non gira (il suo `.git` punta a `C:/`, che il git di Linux non
-  risolve); si lancia da un clone in WSL (`git clone -b <ramo> /mnt/c/…/maat ~/maat-linux`).
-- Saltate con motivo dichiarato (specifiche del progetto guida): la parte 2 di `vitest-classify.test.sh`.
-  `guard.test.sh` (pk05) prova l'hook del plugin (`guard-hook.sh`) e l'equivalenza con la guardia del progetto guida
-  sulla fixture `tests/guard-esempio.cases`.
-- `maat-paths.test.sh` contiene anche la **ricerca anti-struttura**: nessun riferimento alla struttura del progetto guida
-  (`.claude/skills/`, `script/fic`, `script/test`, `$HERE/../..`, `/../test`, `/../../../script/`) fuori da commenti e
-  test, con le esclusioni dichiarate nel test (comandi di progetto dei wrapper WSL fino a pk04b; quella
-  dell'impronta l'ha chiusa pk04a-2).
+  uses git inside WSL: it does not run from a worktree created from Windows (its `.git` points to `C:/`, which Linux
+  git cannot resolve); run it from a clone in WSL (`git clone -b <branch> /mnt/c/…/maat ~/maat-linux`).
+- Skipped with a declared reason (specific to the guide project): part 2 of `vitest-classify.test.sh`.
+  `guard.test.sh` (pk05) tests the plugin hook (`guard-hook.sh`) and its equivalence with the guide project's guard
+  on the fixture `tests/guard-esempio.cases`.
+- `maat-paths.test.sh` also contains the **anti-structure search**: no reference to the guide project's structure
+  (`.claude/skills/`, `script/fic`, `script/test`, `$HERE/../..`, `/../test`, `/../../../script/`) outside comments and
+  tests, with the exclusions declared in the test (project commands of the WSL wrappers until pk04b; the fingerprint
+  one was closed by pk04a-2).
 
-## Windows e Linux
+## Windows and Linux
 
-**Windows** (Git Bash, dal worktree o dal clone su `C:`): `bash plugins/maat/scripts/<nome>.test.sh`, una suite alla
-volta. Le tre suite di WSL (`test-fast`, `counterproof`, `vitest-classify`) si lanciano da WSL sulla stessa cartella:
+**Windows** (Git Bash, from the worktree or from the clone on `C:`): `bash plugins/maat/scripts/<name>.test.sh`, one
+suite at a time. The three WSL suites (`test-fast`, `counterproof`, `vitest-classify`) are run from WSL on the same
+folder:
 
 ```bash
 wsl -- bash -lc 'cd /mnt/c/<…>/maat && bash plugins/maat/scripts/test-fast.test.sh'
 ```
 
-**Linux.** Non c'è una macchina Linux dedicata: si usa un **clone dentro WSL** con un PATH Linux puro, così nessuno
-strumento di Windows (`cmd.exe`, `wsl.exe`, `py.exe`, il Python dello Store) entra nel test.
+**Linux.** There is no dedicated Linux machine: a **clone inside WSL** is used with a pure Linux PATH, so that no
+Windows tool (`cmd.exe`, `wsl.exe`, `py.exe`, the Store Python) gets into the test.
 
 ```bash
-wsl -- bash -lc 'git clone -b <ramo> /mnt/c/<…>/maat ~/maat-linux'      # una volta; poi git fetch e reset sul ramo
+wsl -- bash -lc 'git clone -b <branch> /mnt/c/<…>/maat ~/maat-linux'      # once; then git fetch and reset on the branch
 wsl -- bash -lc 'cd ~/maat-linux && PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin FIC_WT_WSL=0 \
-  timeout 5400 bash plugins/maat/scripts/<nome>.test.sh'
+  timeout 5400 bash plugins/maat/scripts/<name>.test.sh'
 ```
 
-- `FIC_WT_WSL=0` dice ai test dei worktree di non passare da WSL: su Linux sono già a casa loro.
-- Il clone va riallineato al ramo prima di ogni giro (le copie a mano di file spariscono): niente modifiche dentro il
+- `FIC_WT_WSL=0` tells the worktree tests not to go through WSL: on Linux they are already at home.
+- The clone must be realigned to the branch before every run (files copied by hand disappear): no changes inside the
   clone.
-- `comandi-equivalenza.test.sh` gira **solo** dal clone Linux: il `.git` di un worktree creato da Windows punta a `C:/`.
+- `comandi-equivalenza.test.sh` runs **only** from the Linux clone: the `.git` of a worktree created from Windows
+  points to `C:/`.
 
-**Il giro completo** (tutte le suite, prima Linux poi Windows, una alla volta, con un riepilogo per piattaforma):
-`bash tools/giro-completo.sh <cartella esiti> <worktree> <ramo>`, da Git Bash. `<worktree>` è la cartella Windows
-del ramo da provare, in forma `/c/…`; `<ramo>` è il ramo su cui si riallinea il clone Linux, che è sempre
-`~/maat-linux` (un altro con `MAAT_LINUX_CLONE`). Per esempio: `bash tools/giro-completo.sh /tmp/esiti /c/<…>/maat-lavoro wip/lavoro`. Ogni suite scrive
-`<cartella>/<linux|windows>/<nome>.log` e una riga in `riepilogo.txt` (codice d'uscita, secondi, ultima riga). Durata:
-alcune ore, per le suite lunghe.
+**The full run** (all suites, Linux first then Windows, one at a time, with a summary per platform):
+`bash tools/giro-completo.sh <results folder> <worktree> <branch>`, from Git Bash. `<worktree>` is the Windows folder
+of the branch to test, in the form `/c/…`; `<branch>` is the branch the Linux clone is realigned to; the clone is
+always `~/maat-linux` (another one with `MAAT_LINUX_CLONE`). For example:
+`bash tools/giro-completo.sh /tmp/esiti /c/<…>/maat-lavoro wip/lavoro`. Each suite writes
+`<folder>/<linux|windows>/<name>.log` and one line in `riepilogo.txt` (exit code, seconds, last line). Duration: a few
+hours, because of the long suites.
 
-## Genericità
+## Genericity
 
-`genericita.test.sh` (Git Bash o WSL) controlla che il plugin non porti con sé il progetto guida.
+`genericita.test.sh` (Git Bash or WSL) checks that the plugin does not carry the guide project along with it.
 
-1. **Nucleo** (`scripts/`, `skills/`, `agents/`, `hooks/`, `schemas/`): nessuno dei nomi del progetto guida (percorsi,
-   servizi, `.nuxt`, …), fuori dalle fixture dei test e dalle eccezioni dichiarate nel test, ognuna con il suo motivo.
-   Un'eccezione che non copre più nessuna riga è un FAIL. Le righe dei runner (`junitxml`, `--reporter=json`) stanno
-   solo nei profili e negli esempi.
-2. **Documentazione** (`docs/` del repo, tranne `docs/piani/`; `README.md` del repo e del plugin): nessun nome del
-   progetto guida. Eccezione: i nomi di file veri del plugin (`guard-esempio.cases`, `nuxt-fastapi.maat.json`).
-   I nomi propri del tuo progetto guida (nome, host, servizi) non stanno nel repo: mettili, uno per riga come
-   alternative regex, nel file locale `.genericita-nomi` alla radice del repo (ignorato da git), o indica un altro
-   file con `MAAT_NOMI_RISERVATI`. Senza il file il test controlla solo i nomi generici e un nome finto, usato dalle
-   controprove.
-3. **Link della guida:** ogni `href` interno di `docs/GUIDA-FLUSSI.html` porta a un'ancora (`id`) che esiste nella
-   pagina o a un file che esiste accanto alla guida. `http(s):`, `mailto:` e `data:` non si controllano. Solo grep e
-   test di esistenza: nessun link-checker da installare.
-4. **Controprove per mutazione**, su copie: un nome del progetto guida in un commento di `gates.sh` ⇒ rosso; un nome in
-   una copia della guida ⇒ rosso; un `href` verso un file inesistente o un'ancora inesistente ⇒ rosso; la copia
-   ripristinata torna verde.
+1. **Core** (`scripts/`, `skills/`, `agents/`, `hooks/`, `schemas/`): none of the guide project's names (paths,
+   services, `.nuxt`, …), outside the test fixtures and the exceptions declared in the test, each with its reason.
+   An exception that no longer covers any line is a FAIL. The runner lines (`junitxml`, `--reporter=json`) live only
+   in the profiles and the examples.
+2. **Documentation** (the repo's `docs/`, except `docs/piani/`; the `README.md` of the repo and of the plugin): no
+   name of the guide project. Exception: the real file names of the plugin (`guard-esempio.cases`,
+   `nuxt-fastapi.maat.json`). The proper names of your guide project (name, host, services) are not in the repo: put
+   them, one per line as regex alternatives, in the local file `.genericita-nomi` at the repo root (ignored by git),
+   or point to another file with `MAAT_NOMI_RISERVATI`. Without the file the test checks only the generic names and a
+   fake name, used by the counterproofs.
+3. **Guide links:** every internal `href` of `docs/GUIDA-FLUSSI.html` leads to an anchor (`id`) that exists in the
+   page or to a file that exists next to the guide. `http(s):`, `mailto:` and `data:` are not checked. Only grep and
+   existence tests: no link checker to install.
+4. **Mutation counterproofs**, on copies: a guide project name in a comment of `gates.sh` ⇒ red; a name in a copy of
+   the guide ⇒ red; an `href` to a nonexistent file or a nonexistent anchor ⇒ red; the restored copy turns green
+   again.
 
-## L'istantanea di `MAAT_ROOT`
+## The `MAAT_ROOT` snapshot
 
-Il plugin non deve mai ricevere file del progetto. `maat-paths.test.sh` (sezione 8) lavora su una **copia** del plugin e
-ne prende un'istantanea prima e dopo (ogni file con il suo sha256, compresi i file nuovi e quelli cancellati): una
-differenza fa fallire la suite. Si usa l'istantanea e non `chmod -R a-w`, che su Windows/MSYS non impedisce di creare
-file. I sorgenti Python impostano `sys.dont_write_bytecode = True` prima di importare `maat_paths`, così sotto il
-plugin non nasce `__pycache__`.
+The plugin must never receive project files. `maat-paths.test.sh` (section 8) works on a **copy** of the plugin and
+takes a snapshot of it before and after (every file with its sha256, including new and deleted files): any
+difference makes the suite fail. The snapshot is used instead of `chmod -R a-w`, which on Windows/MSYS does not
+prevent creating files. The Python sources set `sys.dont_write_bytecode = True` before importing `maat_paths`, so
+no `__pycache__` appears under the plugin.
 
 ```bash
 snap() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum); }
 ```
 
-## L'impronta del harness (pk04a-2)
+## The harness fingerprint (pk04a-2)
 
-Al primo lancio di un ciclo `run-phase.sh` scrive `<run-dir>/harness.fp`, tre righe:
+On a cycle's first launch `run-phase.sh` writes `<run-dir>/harness.fp`, three lines:
 
 ```text
-impronta=<64 esadecimali>
-versione=<version di .claude-plugin/plugin.json>
-radice=<MAAT_ROOT, forma C:/…>
+impronta=<64 hex digits>
+versione=<version from .claude-plugin/plugin.json>
+radice=<MAAT_ROOT, in the form C:/…>
 ```
 
-- **Cosa entra:** ogni file sotto `MAAT_ROOT` (percorso relativo, ordine `LC_ALL=C`, sha256 del contenuto senza CR)
-  tranne l'elenco unico `HARNESS_EXCLUDE` di `run-phase.sh` — `__pycache__`, `assets`, `*.swp`, `*.orig`,
-  `.DS_Store`, `*~`, confrontati con ogni componente del percorso — più `<progetto>/.claude/maat.json` (assente: una
-  riga fissa, così crearlo o cancellarlo cambia l'impronta). Niente git e niente `.gitignore`: un file estraneo
-  lasciato nella cartella del plugin (per esempio un `.bak`) ferma i cicli. Le skill del **progetto** (per esempio
-  `dev-verify`) non ne fanno parte: una loro modifica non ferma un ciclo.
-- **Chi decide:** una funzione sola, `run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]`, usata da
-  `run-phase.sh` (exit 6), `cycle-state.sh` e `driver.py next` (`Next: STOP — …`). Stampa una riga: `UGUALE`,
-  `CAMBIATO <reg> <att>`, `FORMATO-PRECEDENTE <reg> <att>` (una riga sola di 64 esadecimali: ciclo iniziato col
-  harness interno), `ILLEGGIBILE <att>` (vuoto, troncato, senza impronta) o `NON-CALCOLABILE`. Solo `UGUALE` lascia
-  andare avanti; `versione=` e `radice=` non contano (lo stesso plugin da un'altra cartella dà `UGUALE`).
-- **Diagnosi:** `run-phase.sh --harness-paths` elenca i file che entrano nell'impronta.
+(`impronta` = fingerprint, `versione` = version, `radice` = root.)
 
-**Confermare un cambio voluto.** Il messaggio di STOP stampa il rimedio a percorso assoluto; lanciato dalla cartella
-del progetto riscrive il file nel formato nuovo:
+- **What goes in:** every file under `MAAT_ROOT` (relative path, `LC_ALL=C` order, sha256 of the content without CR)
+  except the single `HARNESS_EXCLUDE` list of `run-phase.sh` — `__pycache__`, `assets`, `*.swp`, `*.orig`,
+  `.DS_Store`, `*~`, matched against every path component — plus `<project>/.claude/maat.json` (absent: a fixed
+  line, so creating or deleting it changes the fingerprint). No git and no `.gitignore`: a stray file left in the
+  plugin folder (for example a `.bak`) stops the cycles. The **project's** skills (for example `dev-verify`) are not
+  part of it: changing one does not stop a cycle.
+- **Who decides:** a single function, `run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]`, used by
+  `run-phase.sh` (exit 6), `cycle-state.sh` and `driver.py next` (`Next: STOP — …`). It prints one line: `UGUALE`
+  (equal), `CAMBIATO <reg> <att>` (changed), `FORMATO-PRECEDENTE <reg> <att>` (previous format: a single line of 64
+  hex digits, cycle started with the internal harness), `ILLEGGIBILE <att>` (unreadable: empty, truncated, no
+  fingerprint) or `NON-CALCOLABILE` (cannot be computed). Only `UGUALE` lets the cycle go on; `versione=` and
+  `radice=` do not count (the same plugin from another folder gives `UGUALE`).
+- **Diagnostics:** `run-phase.sh --harness-paths` lists the files that go into the fingerprint.
+
+**Confirming an intended change.** The STOP message prints the remedy with an absolute path; run from the project
+folder, it rewrites the file in the new format:
 
 ```bash
 bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > "<run-dir>/harness.fp"
 ```
 
-Fuori da un repository il comando esce con 1 e lascia il file **vuoto**: il ciclo resta fermo (`ILLEGGIBILE`).
+Outside a repository the command exits with 1 and leaves the file **empty**: the cycle stays stopped (`ILLEGGIBILE`).
 
-## Ricertificare il driver (`driver.equiv`)
+## Recertifying the driver (`driver.equiv`)
 
-`driver.equiv` porta l'hash di `driver.py`, `cycle-state.sh` e `run-phase.sh`: se uno dei tre cambia, il certificato
-è scaduto e gli involucri ripiegano sul codice bash (funziona, è solo più lento). Si ricertifica sulle run dir vere di
-un progetto, dalla sua cartella principale e **in sola lettura**:
+`driver.equiv` carries the hash of `driver.py`, `cycle-state.sh` and `run-phase.sh`: if one of the three changes,
+the certificate has expired and the wrappers fall back to the bash code (it works, it is just slower). It is
+recertified on the real run dirs of a project, from its main folder and **read-only**:
 
 ```bash
-cd <progetto>
-O=<cartella temporanea>; mkdir -p "$O/info" "$O/pack"   # oggetti git scritti da review-surface.sh tree
+cd <project>
+O=<temporary folder>; mkdir -p "$O/info" "$O/pack"   # git objects written by review-surface.sh tree
 PYTHONDONTWRITEBYTECODE=1 GIT_OPTIONAL_LOCKS=0 GIT_OBJECT_DIRECTORY="$O" \
-  GIT_ALTERNATE_OBJECT_DIRECTORIES="<progetto>/.git/objects" FIC_DRIVER_CERT=<file temporaneo> \
-  "$FIC_PY" "<MAAT_ROOT>/scripts/driver.py" equiv --certifica .claude/.ai-workflow   # FIC_REPO non impostata
+  GIT_ALTERNATE_OBJECT_DIRECTORIES="<project>/.git/objects" FIC_DRIVER_CERT=<temporary file> \
+  "$FIC_PY" "<MAAT_ROOT>/scripts/driver.py" equiv --certifica .claude/.ai-workflow   # FIC_REPO not set
 ```
 
-`review-surface.sh tree` fa `git add -A` e `write-tree` su un indice temporaneo: senza `GIT_OBJECT_DIRECTORY` gli
-oggetti finirebbero nel `.git` del progetto; `GIT_OPTIONAL_LOCKS=0` evita che git aggiorni l'indice vero.
+`review-surface.sh tree` runs `git add -A` and `write-tree` on a temporary index: without `GIT_OBJECT_DIRECTORY` the
+objects would end up in the project's `.git`; `GIT_OPTIONAL_LOCKS=0` keeps git from updating the real index.
 
-- Esito richiesto `diverse=0 · diversi=0`; un `DIVERSO` è uno STOP con il diff, non si ricertifica a mano.
-- Prima e dopo, un'istantanea (elenco e sha256) di `.claude/.ai-workflow/spec-*.md` e `.claude/.ai-workflow/*.run/`:
-  deve essere identica.
-- Poi il file si copia in `scripts/driver.equiv` e `driver.py certificato` deve dire VALIDO. `driver.equiv` è sotto
-  `MAAT_ROOT`: ricertificare cambia l'impronta del harness.
+- Required outcome `diverse=0 · diversi=0`; a `DIVERSO` (different) is a STOP with the diff, it is not recertified by
+  hand.
+- Before and after, a snapshot (list and sha256) of `.claude/.ai-workflow/spec-*.md` and `.claude/.ai-workflow/*.run/`:
+  it must be identical.
+- Then the file is copied to `scripts/driver.equiv` and `driver.py certificato` must say VALIDO (valid).
+  `driver.equiv` is under `MAAT_ROOT`: recertifying changes the harness fingerprint.
 
-### Variante: certificare su una copia del progetto
+### Variant: certifying on a copy of the project
 
-È la forma usata il 2026-10-29 (certificato della 0.3.0): il progetto vero resta del tutto fuori, nemmeno in lettura
-con le variabili sopra.
+This is the form used on 2026-10-29 (certificate of 0.3.0): the real project stays completely out, not even read
+with the variables above.
 
-1. **La copia:** un clone del ramo del progetto in una cartella temporanea, con `git -c core.longpaths=true clone …`
-   (su Windows i percorsi delle run dir superano i 260 caratteri), più le spec e le run dir di cicli **chiusi**
-   (`.claude/.ai-workflow/spec-*.md` e `*.run/`), copiate dal progetto. Il 2026-10-29: 15 cicli chiusi (catene, cicli
-   singoli, un ciclo in STOP, tre del regime vecchio).
-2. **Prima:** istantanea (elenco e sha256) delle spec e delle run dir del progetto vero.
-3. **La certificazione:** il comando sopra, lanciato dalla radice della **copia** (oggetti git nella cartella temporanea
-   come sopra). Esito richiesto `diverse=0 · diversi=0`; il 2026-10-29: `spec=15 diverse=0 · jsonl=83 diversi=0`.
-4. **Dopo:** stessa istantanea del progetto vero, identica a quella di prima.
-5. Il certificato si copia in `scripts/driver.equiv` e `driver.py certificato` deve dire VALIDO.
+1. **The copy:** a clone of the project branch in a temporary folder, with `git -c core.longpaths=true clone …`
+   (on Windows the run dir paths exceed 260 characters), plus the specs and run dirs of **closed** cycles
+   (`.claude/.ai-workflow/spec-*.md` and `*.run/`), copied from the project. On 2026-10-29: 15 closed cycles (chains,
+   single cycles, one cycle in STOP, three from the old regime).
+2. **Before:** snapshot (list and sha256) of the specs and run dirs of the real project.
+3. **The certification:** the command above, run from the root of the **copy** (git objects in the temporary folder
+   as above). Required outcome `diverse=0 · diversi=0`; on 2026-10-29: `spec=15 diverse=0 · jsonl=83 diversi=0`.
+4. **After:** the same snapshot of the real project, identical to the one taken before.
+5. The certificate is copied to `scripts/driver.equiv` and `driver.py certificato` must say VALIDO.
 
-Durata: circa **3 ore su Windows**, quasi tutte nei controlli di `review-surface.sh check` in bash. La copia si può
-tenere per la certificazione successiva (cambia solo il plugin); se la cartella temporanea è stata svuotata si rifà,
-mai sul tree del progetto.
+Duration: about **3 hours on Windows**, almost all of it in the `review-surface.sh check` controls in bash. The copy
+can be kept for the next certification (only the plugin changes); if the temporary folder has been emptied, it is
+redone, never on the project's tree.

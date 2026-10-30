@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# guard-hook.sh — hook PreToolUse (Bash|PowerShell) del plugin: la guardia di sessione di ogni progetto che installa
-# Maat (hooks/hooks.json). Trova Python (python.sh) e lancia `guard.py --universal`, che legge le regole del progetto
-# da MAAT_CONFIG o da <CLAUDE_PROJECT_DIR>/.claude/maat.json.
+# guard-hook.sh — the plugin's PreToolUse hook (Bash|PowerShell): the session guard of every project that installs
+# Maat (hooks/hooks.json). It finds Python (python.sh) and runs `guard.py --universal`, which reads the project rules
+# from MAAT_CONFIG or from <CLAUDE_PROJECT_DIR>/.claude/maat.json.
 #
-# Mai fail-open. Senza Python, o con guard.py uscito con un codice diverso da 0 e da 2 (crash):
-#   - in sessione (FIC_PHASE vuota)      → «ask» su OGNI comando, con il motivo in tre parti (R11);
-#   - in sotto-sessione (FIC_PHASE)      → exit 2 con il motivo su stderr: li' «ask» non e' un diniego.
-# I due motivi sono testi fissi, in it: in questi casi ne' la tabella di guard.py ne' maat.json sono leggibili.
-# Guardia ridotta: FIC_SESSION_GUARD=prod, applicata da guard.py.
+# Never fail-open. Without Python, or when guard.py exits with a code other than 0 and 2 (crash):
+#   - in the session (FIC_PHASE empty)   → "ask" on EVERY command, with the three-part reason (R11);
+#   - in a sub-session (FIC_PHASE)       → exit 2 with the reason on stderr: there "ask" is not a denial.
+# The two reasons are fixed texts, in Italian: in these cases neither guard.py's table nor maat.json can be read.
+# Reduced guard: FIC_SESSION_GUARD=prod, applied by guard.py.
 HERE=$(cd "$(dirname "$0")" && pwd)
 input=$(cat)
 if . "$HERE/python.sh" >/dev/null 2>&1 && [ -n "${FIC_PY:-}" ]; then

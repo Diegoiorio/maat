@@ -1,5 +1,5 @@
-"""Maat (Multi-Agent Assurance Toolkit): marchio in stile app. Geometria su griglia 64, un solo colore con i vuoti
-ritagliati da una maschera, così funziona a colori, in monocromo e su qualunque sfondo."""
+"""Maat (Multi-Agent Assurance Toolkit): app-style brand mark. Geometry on a 64 grid, a single colour with the gaps
+cut out by a mask, so it works in colour, in monochrome and on any background."""
 import math
 import os
 
@@ -16,7 +16,7 @@ TESTA = (21.5, 30 + DY, 21, 16.5, 5.2)        # x, y, w, h, rx
 VISORE = (24.8, 34.6 + DY, 14.4, 7.2, 3.6)
 OCCHI = [(29.0, 38.0 + DY, -1), (35.0, 38.0 + DY, 1)]
 PIUMA_X, PIUMA_W, PIUMA_BASE, PIUMA_TOP = 29.4, 5.2, 30 + DY, 5.5 + DY
-# ala egizia: banda delle copritrici in alto e una fila di remiganti lunghe che scendono a ventaglio
+# Egyptian wing: band of coverts at the top and a row of long flight feathers fanning downwards
 ALA_U = ((24, 31.5 + DY), (14, 24 + DY), (2.5, 21.5 + DY))
 ALA_B = ((24, 36.8 + DY), (14.5, 29.8 + DY), (4.6, 26.8 + DY))
 N_REMIGANTI = 6
@@ -36,7 +36,7 @@ def ala_sinistra(n=N_REMIGANTI):
         a = 0.04 + 0.94 * i / n + g
         b = 0.04 + 0.94 * (i + 1) / n - g
         k = i / (n - 1)
-        ang = math.radians(98 + 26 * k)            # da quasi verticale (vicino al corpo) a obliqua (verso la punta)
+        ang = math.radians(98 + 26 * k)            # from almost vertical (near the body) to oblique (towards the tip)
         d = (math.cos(ang), math.sin(ang))
         lun = 13.5 - 4.5 * k
         b1, b2 = bz(*ALA_B, a), bz(*ALA_B, b)
@@ -51,7 +51,7 @@ def poligono(pts):
 
 
 def piuma_path():
-    """Piuma di Maat (geroglifico H6): fusto dritto, cima che si ripiega in avanti e ricade a uncino."""
+    """Feather of Maat (hieroglyph H6): straight shaft, tip that bends forward and falls back as a hook."""
     x0, w, b, t = PIUMA_X, PIUMA_W, PIUMA_BASE, PIUMA_TOP
     return (f"M{x0} {b} V{t + 1.1*w:.2f} "
             f"C{x0} {t - 0.1*w:.2f} {x0 + 1.1*w:.2f} {t - 0.35*w:.2f} {x0 + 1.65*w:.2f} {t + 0.45*w:.2f} "
@@ -61,13 +61,13 @@ def piuma_path():
 
 
 def marchio(col, mid, remiganti=N_REMIGANTI, bande=3, passo_bande=3.6, alto_banda="1.3"):
-    """Il marchio. I parametri servono alla variante piccola (16-24 px); i default danno il marchio grande."""
+    """The brand mark. The parameters serve the small variant (16-24 px); the defaults give the large mark."""
     x, y, w, h, rx = TESTA
     vx, vy, vw, vh, vr = VISORE
     m = [f'<mask id="{mid}" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">',
          '<rect width="64" height="64" fill="#fff"/>',
          f'<rect x="{vx}" y="{vy}" width="{vw}" height="{vh}" rx="{vr}" fill="#000"/>',
-         # stacco fra ali e testa, così la testa si stacca dalle ali
+         # gap between wings and head, so the head stands out from the wings
          f'<rect x="{x - 1.4}" y="{y - 1.4}" width="{w + 2.8}" height="{h + 2.8}" rx="{rx + 1.4}" fill="#000"/>',
          f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="#fff"/>',
          f'<rect x="{vx}" y="{vy}" width="{vw}" height="{vh}" rx="{vr}" fill="#000"/>']
@@ -104,13 +104,13 @@ def app(mark=None):
 
 
 def app_piccola():
-    """Icona per 16-24 px: tre remiganti per ala invece di sei (a quella misura si fondono), piuma con due bande."""
+    """Icon for 16-24 px: three flight feathers per wing instead of six (at that size they merge), feather with two bands."""
     return app(marchio(ORO, "m", remiganti=3, bande=2, passo_bande=4.6, alto_banda="1.8"))
 
 
-# Logo orizzontale: marchio a sinistra, «maat» in Manrope 800 minuscolo, sottotitolo in maiuscoletto spaziato.
-# Il testo resta in <text> (non in tracciati): la conversione richiede fontTools e il file di Manrope, assenti.
-# textLength fissa la larghezza del sottotitolo, così l'impaginazione regge anche con il carattere di ripiego.
+# Horizontal logo: mark on the left, «maat» in lowercase Manrope 800, subtitle in spaced small caps.
+# The text stays in <text> (not in paths): converting needs fontTools and the Manrope file, which are missing.
+# textLength fixes the subtitle width, so the layout holds even with the fallback font.
 FONT = "Manrope, 'Segoe UI', Arial, sans-serif"
 LOGO_W, TESTO_X = 240, 72
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         "maat-logo-orizzontale-chiaro.svg": logo_orizzontale(INCHIOSTRO, sfondo=False),
     }
     for name, content in files.items():
-        # newline="\n": fine riga LF anche su Windows, così la rigenerazione è identica byte per byte
+        # newline="\n": LF line endings on Windows too, so regeneration is byte-for-byte identical
         with open(os.path.join(OUT, name), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(content)
     print("scritti:", ", ".join(files))

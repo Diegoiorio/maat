@@ -1,6 +1,6 @@
 {
   "profilo": "node-semplice",
-  "descrizione": "Node senza framework: node --check su ogni .js; node --test solo se il modulo ha file *.test.js.",
+  "descrizione": "Node without a framework: node --check on every .js; node --test only if the module has *.test.js files.",
   "modulo": {
     "comandi": {
       "test": { "comando": "node --test {test}", "cartella": "radice", "se_presente": "**/*.test.js" }

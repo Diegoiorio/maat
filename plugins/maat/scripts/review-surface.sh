@@ -1,49 +1,49 @@
 #!/usr/bin/env bash
-# review-surface.sh — superficie di review DETERMINISTICA per /implementation-review-cycle.
+# review-surface.sh — DETERMINISTIC review surface for /implementation-review-cycle.
 #
-# Perche' esiste: `git diff` da solo NON e' l'implementazione. Esclude lo staged, gli untracked
-# (file nuovi), e dopo un commit e' vuoto. E un'approvazione non legata a uno snapshot resta
-# "valida" anche se il codice cambia dopo. Questo script risponde a tre domande senza LLM:
-#   1. che cosa e' cambiato davvero rispetto alla base?        → snapshot
-#   2. quello che era stato approvato e' ancora quello che c'e'? → check
-#   3. i test cambiati sono stati indeboliti?                   → test-signals
+# Why it exists: `git diff` alone is NOT the implementation. It leaves out staged changes, untracked
+# (new) files, and after a commit it is empty. And an approval not bound to a snapshot stays
+# "valid" even if the code changes afterwards. This script answers three questions without an LLM:
+#   1. what has really changed relative to the base?            → snapshot
+#   2. is what was approved still what is there?                → check
+#   3. have the changed tests been weakened?                    → test-signals
 #
-# Sola lettura sul working tree e sull'indice reale. Scrive soltanto oggetti git non referenziati
-# (blob/tree) tramite un indice TEMPORANEO: nessun effetto visibile, `git gc` li potera' fra ~2
-# settimane (per questo `check` ha un ripiego sull'impronta).
+# Read-only on the working tree and on the real index. It only writes unreferenced git objects
+# (blobs/trees) through a TEMPORARY index: no visible effect, `git gc` will prune them after ~2
+# weeks (that is why `check` has a fallback on the fingerprint).
 #
-# Sottocomandi:
+# Subcommands:
 #   snapshot [--base <ref>]
-#       Base:  <sha>   (default HEAD; con --base <ref> → merge-base <ref> HEAD)
-#       Tree:  <sha>   tree del working tree COMPLETO (tracked + staged + untracked non ignorati)
-#       Changes:       name-status base..tree (A/M/D/R/T), rinomine comprese
-#       Origin:        git status --porcelain (chi e' staged, chi unstaged, chi untracked)
+#       Base:  <sha>   (default HEAD; with --base <ref> → merge-base <ref> HEAD)
+#       Tree:  <sha>   tree of the COMPLETE working tree (tracked + staged + non-ignored untracked)
+#       Changes:       name-status base..tree (A/M/D/R/T), renames included
+#       Origin:        git status --porcelain (which are staged, which unstaged, which untracked)
 #   fingerprint --tree <tree> --paths-file <f>
-#       sha256 (12 car.) del contenuto dei path elencati nel tree: path + blob, oppure ABSENT.
+#       sha256 (12 chars) of the content of the listed paths in the tree: path + blob, or ABSENT.
 #   check --base <sha> --tree <old-tree> --paths-file <f> [--fingerprint <fp>] [--exclude-file <f>]
-#       --paths-file = SCOPE approvato; --exclude-file = path esclusi dallo scope (altro flusso).
-#       Ricalcola lo snapshot sulla base REGISTRATA (mai HEAD: un commit dopo l'approvazione non
-#       e' una modifica) e dice FRESH | STALE | UNKNOWN, il delta, e se il delta e' "solo test,
-#       senza infrastruttura di test e senza segnali di indebolimento; nei test gia' esistenti solo
-#       aggiunte pure, senza setup condiviso ne' flusso di controllo" (Gate-only eligible: yes, oppure
-#       no — <motivo>).
-#       Un file escluso che cambia NON rende stale, ma viene riportato come EXCLUDED-CHANGED:
-#       chi orchestra deve guardarlo (un file misto puo' portare codice della feature).
+#       --paths-file = approved SCOPE; --exclude-file = paths excluded from the scope (another flow).
+#       Recomputes the snapshot on the RECORDED base (never HEAD: a commit after the approval is not
+#       a change) and reports FRESH | STALE | UNKNOWN, the delta, and whether the delta is "tests only,
+#       without test infrastructure and without weakening signals; in already existing tests only
+#       pure additions, with no shared setup and no control flow" (Gate-only eligible: yes, or
+#       no — <reason>).
+#       An excluded file that changes does NOT make it stale, but is reported as EXCLUDED-CHANGED:
+#       the orchestrator must look at it (a mixed file can carry feature code).
 #   test-signals --from <tree-ish> --to <tree-ish> [--paths-file <f>]
-#       Segnali di test indeboliti fra due tree-ish, eventualmente limitati ai path del file.
+#       Weakened-test signals between two tree-ishes, optionally limited to the paths in the file.
 #   tree
-#       Solo lo sha del tree del working tree completo (come "Tree" di snapshot). Lo usa run-phase.sh
-#       prima e dopo le fasi implement/fix per sapere quali path ha cambiato la fase (touched.txt).
+#       Only the sha of the complete working tree's tree (like snapshot's "Tree"). run-phase.sh uses it
+#       before and after the implement/fix phases to know which paths the phase changed (touched.txt).
 #   diff --from <tree-ish> --to <tree-ish> --paths-file <f> --out <file>
-#       Scrive in <file> il diff dei path elencati (file nuovi non tracciati compresi, perche' --to e' un
-#       tree) e stampa l'indice "<path><TAB>offset=N limit=M" per leggerlo a pezzi con Read. E' il modo in
-#       cui l'implementation-reviewer vede la superficie senza avere Bash. Una rinomina appare come tale
-#       solo se entrambi i path sono nell'elenco; altrimenti come A + D.
+#       Writes to <file> the diff of the listed paths (untracked new files included, because --to is a
+#       tree) and prints the index "<path><TAB>offset=N limit=M" to read it in chunks with Read. It is how
+#       the implementation-reviewer sees the surface without having Bash. A rename shows up as such
+#       only if both paths are in the list; otherwise as A + D.
 #
-# I path sono stampati SENZA quoting di git (core.quotePath=false): un nome non ASCII tra
-# virgolette ottali non combacerebbe piu' con se stesso fra manifest, pathspec e confronti.
+# Paths are printed WITHOUT git quoting (core.quotePath=false): a non-ASCII name in octal
+# quotes would no longer match itself across manifest, pathspecs and comparisons.
 #
-# Exit: 0 ok · 2 uso errato · 3 check UNKNOWN (tree potato e nessuna impronta per il ripiego).
+# Exit: 0 ok · 2 wrong usage · 3 check UNKNOWN (tree pruned and no fingerprint for the fallback).
 
 set -uo pipefail
 set -f
@@ -55,37 +55,37 @@ g rev-parse --git-dir >/dev/null 2>&1 || die "non e' un repository git"
 TOP=$(g rev-parse --show-toplevel)
 cd "$TOP" || die "impossibile entrare in $TOP"
 
-# File di test: il perimetro dei "test-signals" e del percorso gate-only. `script/` escluso di
-# proposito: script/e2e/ e' infrastruttura dello stack, non un test.
+# Test files: the perimeter of "test-signals" and of the gate-only path. `script/` excluded on
+# purpose: script/e2e/ is stack infrastructure, not a test.
 TEST_RE='(^|/)(tests?|__tests__|e2e)/|\.(test|spec)\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(^|/)conftest\.py$|__snapshots__/|\.snap$'
 NOT_TEST_RE='^script/'
-# Infrastruttura di test: cambiarla puo' far passare tutto senza toccare una sola asserzione.
-# Ammessa nel diff, mai nel percorso gate-only (richiede sempre un giro di review).
+# Test infrastructure: changing it can make everything pass without touching a single assertion.
+# Allowed in the diff, never on the gate-only path (it always requires a review round).
 TEST_INFRA_RE='(^|/)conftest\.py$|(^|/)(fixtures?|mocks?|__mocks__|fakes?|helpers?|support|utils?)/|(^|/)(setup|global-setup|vitest\.setup)[^/]*\.[cm]?[jt]s$|\.(fixture|mock|fake)s?\.[cm]?[jt]sx?$'
-# Il percorso gate-only ammette SOLO file di test veri e propri. Tutto il resto sotto tests/,
-# __tests__/, e2e/ (un fake, un helper, una factory: tests/goals_fakes.py) e' infrastruttura.
+# The gate-only path admits ONLY actual test files. Everything else under tests/,
+# __tests__/, e2e/ (a fake, a helper, a factory: tests/goals_fakes.py) is infrastructure.
 TEST_FILE_RE='\.(test|spec)\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$'
-# Asserzioni: `expect(` e i matcher anche quando prettier li manda a capo senza `expect(` sulla
-# riga (`).toStrictEqual(`), `expect.soft(`, unittest (`self.assertEqual(`), mock (`.assert_called_with(`).
+# Assertions: `expect(` and the matchers even when prettier wraps them with no `expect(` on the
+# line (`).toStrictEqual(`), `expect.soft(`, unittest (`self.assertEqual(`), mock (`.assert_called_with(`).
 ASSERT_RE='expect\(|expect\.[A-Za-z_]+\(|\bassert\b|pytest\.raises|\.to(Be|Equal|StrictEqual|Have|Contain|Match|Throw|Satisfy)[A-Za-z_]*\(|\.(resolves|rejects)\b|\.assert(_[A-Za-z_]+|[A-Z][A-Za-z_]*)\('
 SKIP_RE='\b(it|test|describe)\.(skip|only|todo|fixme|skipIf|runIf)\b|\bx(it|describe|test)\(|pytest\.mark\.(skip|skipif|xfail)|pytest\.skip\(|@unittest\.skip|test\.fail\('
 SNAP_RE='__snapshots__/|\.snap$|(^|/)(golden|snapshots?)/'
-# Percorso gate-only, file di test GIA' esistenti nel tree approvato: solo aggiunte pure. Una riga
-# tolta o cambiata (il valore atteso su una riga di continuazione, un input, il ruolo usato) cambia la
-# forza di un test che un revisore ha gia' visto; e alcune aggiunte cambiano i test esistenti senza
-# una sola riga `-`: setup condiviso (vi.mock e' hoisted su tutto il file, un beforeEach, un autouse)
-# e flusso di controllo (un `return` in testa, un `if`/`try` attorno ad asserzioni esistenti).
-# Ai file NUOVI non si applica: non hanno test preesistenti da alterare.
+# Gate-only path, test files ALREADY existing in the approved tree: pure additions only. A line
+# removed or changed (the expected value on a continuation line, an input, the role used) changes the
+# strength of a test a reviewer has already seen; and some additions change existing tests without
+# a single `-` line: shared setup (vi.mock is hoisted over the whole file, a beforeEach, an autouse)
+# and control flow (a `return` at the top, an `if`/`try` around existing assertions).
+# It does not apply to NEW files: they have no pre-existing tests to alter.
 SHARED_SETUP_RE='\b(vi|jest)\.(mock|doMock|stubGlobal|stubEnv)\(|\b(before|after)(Each|All)\(|autouse[[:space:]]*=[[:space:]]*True'
 CONTROL_RE='^\+[[:space:]]*(return[[:space:]]*;?[[:space:]]*$|if\b|for\b|while\b|with\b|try\b|except\b|catch\b|continue\b|break\b|else\b|pass[[:space:]]*$)'
 
 is_test() { printf '%s\n' "$1" | grep -Ev "$NOT_TEST_RE" | grep -Eq "$TEST_RE"; }
 
-# Tree del working tree completo. L'indice temporaneo e' SEMINATO con una copia di quello reale:
-# con core.autocrlf=true un indice vuoto farebbe ri-hashare ogni file e produrrebbe centinaia di
-# cambi fittizi (misurato: 392 su questo repo, piu' la perdita del bit eseguibile).
-# `cp -p` conserva l'mtime dell'indice: con un mtime nuovo git perderebbe la rilevazione dei file
-# "racy" (modificati nello stesso secondo dell'ultimo add) e ometterebbe un cambio vero.
+# Tree of the complete working tree. The temporary index is SEEDED with a copy of the real one:
+# with core.autocrlf=true an empty index would re-hash every file and produce hundreds of
+# spurious changes (measured: 392 on this repo, plus the loss of the executable bit).
+# `cp -p` keeps the index mtime: with a new mtime git would lose detection of "racy" files
+# (modified in the same second as the last add) and would miss a real change.
 snapshot_tree() {
   local tmp idx tree
   idx=$(g rev-parse --git-path index)
@@ -104,12 +104,13 @@ resolve_base() {
   g merge-base "$ref" HEAD 2>/dev/null || g rev-parse "$ref^{commit}"
 }
 
-read_paths() { # stampa i path del file, senza righe vuote, ordinati e unici
+read_paths() { # prints the paths in the file, without blank lines, sorted and unique
   [ -f "$1" ] || die "paths-file '$1' inesistente"
-  tr -d '\r' < "$1" | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u
+  # a line may carry a note after « — » (Excluded: «<path> — stessa catena, anello precedente (…)»): the path is what counts
+  tr -d '\r' < "$1" | sed 's/ — .*//' | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u
 }
 
-pathspecs() { # $1 paths-file → array globale SPECS di pathspec letterali
+pathspecs() { # $1 paths-file → global array SPECS of literal pathspecs
   SPECS=()
   [ -n "${1:-}" ] || return 0
   mapfile -t SPECS < <(read_paths "$1" | sed 's/^/:(literal)/')
@@ -129,9 +130,9 @@ signals() { # $1 from, $2 to, [$3 paths-file]
   local from=$1 to=$2 pf=${3:-} out="" f st old keep
   keep=""
   [ -n "$pf" ] && keep=$(read_paths "$pf")
-  # Rinomine: si confronta il contenuto VECCHIO col NUOVO (`from:old` vs `to:new`). Con il solo
-  # path nuovo un test rinominato e svuotato nello stesso passo non darebbe alcun segnale; con
-  # --no-renames una rinomina pura darebbe un falso DELETED-TEST.
+  # Renames: the OLD content is compared with the NEW one (`from:old` vs `to:new`). With only the
+  # new path, a test renamed and emptied in the same step would give no signal; with
+  # --no-renames a pure rename would give a false DELETED-TEST.
   while IFS=$'\t' read -r st old f; do
     [ -z "${f:-}" ] && f=$old
     if [ -n "$pf" ]; then
@@ -193,7 +194,7 @@ case "$cmd" in
     g rev-parse --verify -q "$BASE^{commit}" >/dev/null || die "base $BASE non presente"
     new=$(snapshot_tree) || exit 2
     echo "Current tree: $new"
-    # Path nuovi rispetto alla base REGISTRATA che non erano nel manifest approvato.
+    # New paths relative to the RECORDED base that were not in the approved manifest.
     known=$( { read_paths "$PF"; [ -n "$XF" ] && read_paths "$XF"; } | LC_ALL=C sort -u)
     added=$(comm -13 <(printf '%s\n' "$known") <(g diff --name-only --no-renames "$BASE" "$new" | LC_ALL=C sort -u) | grep -v '^$')
     if g cat-file -e "$TREE^{tree}" 2>/dev/null; then
@@ -215,23 +216,23 @@ case "$cmd" in
       [ -n "$delta" ] && printf '%s\n' "$delta" | sed 's/^/  /'
       [ -n "$added" ] && printf '%s\n' "$added" | sed 's/^/  NEW-SURFACE\t/'
       [ -n "$excl" ] && printf '%s\n' "$excl" | sed 's/^/  EXCLUDED-CHANGED\t/'
-      # Percorso gate-only: TUTTI i path del delta sono test (non infrastruttura di test), e i
-      # test del delta non mostrano segnali di indebolimento.
+      # Gate-only path: ALL paths of the delta are tests (not test infrastructure), and the
+      # tests of the delta show no weakening signals.
       all=$( { printf '%s\n' "$delta" | cut -f2-; printf '%s\n' "$added"; } | grep -v '^$')
       dfile=$(mktemp) || die "mktemp fallito"
       printf '%s\n' "$all" > "$dfile"
       sig=$(signals "$TREE" "$new" "$dfile")
       rm -f "$dfile"
       printf '%s\n' "$sig"
-      # Lo stato A/M di ogni path si decide contro il tree APPROVATO, non da `$delta`: i NEW-SURFACE
-      # (fuori manifest) non hanno uno stato, e un test preesistente fuori manifest a cui si aggiunge
-      # un vi.mock e' un file MODIFICATO. Senza `-w`: in Python l'indentazione e' semantica.
+      # The A/M status of each path is decided against the APPROVED tree, not from `$delta`: NEW-SURFACE
+      # paths (outside the manifest) have no status, and a pre-existing test outside the manifest that gets
+      # a vi.mock added is a MODIFIED file. Without `-w`: in Python indentation is semantic.
       eligible=yes why=""
       while IFS= read -r p; do
         [ -z "$p" ] && continue
         if ! is_test "$p" || ! printf '%s\n' "$p" | grep -Eq "$TEST_FILE_RE"; then eligible=no; why="non e' un file di test: $p"; break; fi
         if printf '%s\n' "$p" | grep -Eq "$TEST_INFRA_RE"; then eligible=no; why="infrastruttura di test: $p"; break; fi
-        g cat-file -e "$TREE:$p" 2>/dev/null || continue   # file nuovo: nessun test preesistente
+        g cat-file -e "$TREE:$p" 2>/dev/null || continue   # new file: no pre-existing test
         d=$(g diff --no-color --no-ext-diff -U0 --ignore-blank-lines --ignore-space-at-eol "$TREE" "$new" -- ":(literal)$p" | grep -Ev '^(\+\+\+|---) ')
         if printf '%s\n' "$d" | grep -Eq '^-.*[^[:space:]]'; then eligible=no; why="righe tolte o modificate in un test esistente: $p"; break; fi
         if printf '%s\n' "$d" | grep -E '^\+' | grep -Eq "$SHARED_SETUP_RE"; then eligible=no; why="setup condiviso aggiunto a un test esistente: $p"; break; fi
@@ -261,7 +262,7 @@ case "$cmd" in
     [ ${#SPECS[@]} -gt 0 ] || die "paths-file vuoto: nessun path da mostrare"
     g diff --no-color --no-ext-diff -M "$FROM" "$TO" -- "${SPECS[@]}" > "$OUT" || die "git diff fallito"
     [ -s "$OUT" ] || { echo "(nessuna differenza)"; exit 0; }
-    # "diff --git a/P b/P": P = meta' di cio' che segue "a/", tolto " b/"; le rinomine lo dicono esplicito.
+    # "diff --git a/P b/P": P = half of what follows "a/", minus " b/"; renames state it explicitly.
     awk '
       function emit(e) { if (s) printf "%s\toffset=%d limit=%d\n", name, s, e - s + 1 }
       /^diff --git a\// { emit(NR - 1); s = NR; r = substr($0, 12); name = substr(r, 3, (length(r) - 5) / 2); old = ""; next }

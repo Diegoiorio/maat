@@ -1,163 +1,163 @@
 #!/usr/bin/env bash
-# test-fast.sh — test e lint di un modulo su una COPIA LOCALE dei suoi pacchetti, nel filesystem Linux di WSL.
+# test-fast.sh — tests and lint of a module on a LOCAL COPY of its packages, in the Linux filesystem of WSL.
 #
-# Perche': da WSL su /mnt/c ogni lettura attraversa il confine della VM e un runner JavaScript e' fino a ~100x
-# piu' lento del filesystem nativo. La copia toglie quel costo senza cambiare cosa si esegue: stessi file, stesse
-# dipendenze, stesso comando.
+# Why: from WSL on /mnt/c every read crosses the VM boundary and a JavaScript runner is up to ~100x
+# slower than on the native filesystem. The copy removes that cost without changing what runs: same files, same
+# dependencies, same command.
 #
-# COSA ESEGUE lo dice .claude/maat.json del progetto (lettore unico: maat-config.py), mai questo script:
-# - il modulo: MAAT_MODULO dall'ambiente (gates.sh lo mette nell'ambiente del comando, non nella riga), altrimenti
-#   l'unico modulo che dichiara `copia`; piu' moduli con copia e nessun MAAT_MODULO -> exit 64;
-# - la copia contiene `radice_pacchetti` del modulo (<copia> = <copia della radice del repo>/<radice_pacchetti>);
-#   la radice del modulo vi sta allo stesso percorso relativo;
-# - il comando DENTRO la copia e' il campo `copia` del modulo (test, lint con le sue alternative, lint_messaggi),
-#   mai `comandi`: `comandi.test`/`comandi.lint` sono il comando che gates.sh esegue nel repo, cioe' questo script.
-#   Un `copia` che chiamasse test-fast.sh lo rifiuta `maat-config.py valida` (S6): niente autorichiamo.
-# La radice del progetto: FIC_REPO, altrimenti la prima cartella sopra quella di lavoro che contiene `.git` o
-# `.claude/maat.json` (git di WSL non legge sempre un worktree creato da Windows: fic-mirror.sh lo traduce dopo).
+# WHAT RUNS is decided by the project's .claude/maat.json (single reader: maat-config.py), never by this script:
+# - the module: MAAT_MODULO from the environment (gates.sh sets it in the command's environment, not in the command line), otherwise
+#   the only module that declares `copia`; several modules with copia and no MAAT_MODULO -> exit 64;
+# - the copy contains the module's `radice_pacchetti` (<copy> = <copy of the repo root>/<radice_pacchetti>);
+#   the module root sits in it at the same relative path;
+# - the command INSIDE the copy is the module's `copia` field (test, lint with its alternatives, lint_messaggi),
+#   never `comandi`: `comandi.test`/`comandi.lint` are the command that gates.sh runs in the repo, i.e. this script.
+#   A `copia` that called test-fast.sh is rejected by `maat-config.py valida` (S6): no self-invocation.
+# The project root: FIC_REPO, otherwise the first directory above the working one that contains `.git` or
+# `.claude/maat.json` (the WSL git does not always read a worktree created from Windows: fic-mirror.sh translates it later).
 #
-# Uso (da Git Bash o da una sottosessione; lo script gira DENTRO WSL, da una cartella del progetto):
-#   wsl -- bash -lc 'cd <radice del modulo> && bash <maat>/scripts/test-fast.sh <file di test…>'
-#       test. I file sono relativi alla RADICE del modulo, come per il runner lanciato da li'.
-#   wsl -- bash -lc 'cd <repo> && bash <maat>/scripts/test-fast.sh --lint [--cache] [--base <ref>] <file…>'
-#       lint. I file sono relativi al REPOSITORY.
-#       ⚠️ DUE CONVENZIONI DI PERCORSO nello stesso script, ed e' voluto: i test arrivano relativi alla radice del
-#       modulo, il lint relativo al repo.
+# Usage (from Git Bash or from a sub-session; the script runs INSIDE WSL, from a project directory):
+#   wsl -- bash -lc 'cd <module root> && bash <maat>/scripts/test-fast.sh <test files…>'
+#       tests. Files are relative to the module ROOT, as for the runner launched from there.
+#   wsl -- bash -lc 'cd <repo> && bash <maat>/scripts/test-fast.sh --lint [--cache] [--base <ref>] <files…>'
+#       lint. Files are relative to the REPOSITORY.
+#       ⚠️ TWO PATH CONVENTIONS in the same script, on purpose: tests come relative to the module
+#       root, lint relative to the repo.
 #   wsl -- bash -lc 'cd <repo> && bash <maat>/scripts/test-fast.sh --setup'
-#       UNA TANTUM, a mano e fuori dalle sottosessioni (e di nuovo quando cambiano le dipendenze):
-#       copia anche node_modules e registra l'impronta delle dipendenze. Prepara la copia della radice
-#       CORRENTE: va rifatto una volta per ogni worktree (ognuno ha la sua, vedi Garanzie).
-# vitest-fast.sh, accanto, e' l'involucro deprecato di una riga: stessi argomenti, stesso comportamento.
+#       ONE-OFF, by hand and outside the sub-sessions (and again when the dependencies change):
+#       also copies node_modules and records the dependency fingerprint. It prepares the copy of the CURRENT
+#       root: it must be redone once for every worktree (each has its own, see Guarantees).
+# vitest-fast.sh, next to it, is the deprecated one-line wrapper: same arguments, same behaviour.
 #
-# SOLO PATH, MAI OPZIONI. Gli argomenti finiscono testualmente nella riga di comando del runner: una
-# opzione arbitraria cambierebbe cio' che il gate significa (`--passWithNoTests` renderebbe PASS una
-# selezione vuota, `--fix` riscriverebbe il codice) e un path assoluto o con `..` uscirebbe dal
-# perimetro. Qualunque argomento che inizia per `-`, assoluto o con un segmento `..` -> exit 64.
+# PATHS ONLY, NEVER OPTIONS. The arguments end up verbatim in the runner's command line: an
+# arbitrary option would change what the gate means (`--passWithNoTests` would make an empty selection
+# PASS, `--fix` would rewrite the code) and an absolute path or one with `..` would leave the
+# perimeter. Any argument that starts with `-`, is absolute or has a `..` segment -> exit 64.
 #
-# LINT — perimetro, classificazione fuori perimetro, cache:
-# - un path sotto radice_pacchetti che NON esiste nel working tree (file eliminato dalla modifica) non arriva
-#   al linter: e' dichiarato "eliminato, non lintato". Passato al linter lo farebbe uscire 2 e il gate sarebbe
-#   BLOCKED su codice sano. Che il file sia davvero sparito lo verificano i test della feature, non il lint;
-# - il GATE e' la RADICE del modulo. Un'estensione non lintabile (.ts/.tsx/.vue/.js) e' SKIPPED, deciso PRIMA
-#   di eseguire: il linter uscirebbe >=2 e il gate sarebbe BLOCKED su codice sano;
-# - i file lintabili sotto radice_pacchetti FUORI dalla radice, nei due segmenti apps/<x> o packages/<x>, non
-#   sono pero' "innocui per definizione". Con `lint_base: true` nel modulo e `--base <ref>` vengono CLASSIFICATI
-#   (vedi sotto); senza `--base` restano SKIPPED, dichiarati. Senza `lint_base` e fuori da radice_pacchetti
-#   sono SKIPPED: non sono nel gate;
-# - la cwd e' la `cartella` del comando di `copia` (default la radice del modulo), mai fissata altrove: una cwd
-#   sbagliata risolverebbe la configurazione di un altro pacchetto e farebbe passare il gate a vuoto;
-# - la cache e' OPT-IN (`--lint --cache`) e serve all'inner loop: il gate richiesto si invoca senza,
-#   cosi' un PASS non puo' venire da voci di cache che nessuno ha rivalidato. Il file sta nella
-#   RADICE della copia (`.fic-eslintcache-<radice relativa, / -> ->`), segnaposto {cache?…} del comando: un
-#   percorso relativo finirebbe nella cartella del gruppo, dove `rsync --delete` lo cancella a ogni run. Nel
-#   RIPIEGO la cache non si usa mai: la scriverebbe dentro il repository, dove non e' ignorata da git, e da li'
-#   in poi ogni run vedrebbe "copia non allineata";
-# - servono i `preparati` del modulo (file scritti dalla sua `preparazione`, glob relativi alla radice; per esempio
-#   il tsconfig generato dal framework): le loro cartelle sono escluse dal sync perche' generate. Lo script copia
-#   nella copia i file che corrispondono; se nell'origine manca il «file guida» (il primo glob senza caratteri
-#   jolly, la stessa regola di ciclo-worktree.sh) l'esito e' BLOCKED (exit 2) con il rimedio (`preparazione` del
-#   modulo), e NON si ripiega: su /mnt/c manca allo stesso modo e il lint inventerebbe errori su ogni import, cioe'
-#   un FAIL su codice sano. Un modulo senza `preparati` non ha questo requisito;
+# LINT — perimeter, classification outside the perimeter, cache:
+# - a path under radice_pacchetti that does NOT exist in the working tree (file deleted by the change) does not reach
+#   the linter: it is declared "eliminato, non lintato". Passed to the linter it would make it exit 2 and the gate would be
+#   BLOCKED on sound code. That the file is really gone is verified by the feature's tests, not by lint;
+# - the GATE is the module ROOT. A non-lintable extension (not .ts/.tsx/.vue/.js) is SKIPPED, decided BEFORE
+#   running: the linter would exit >=2 and the gate would be BLOCKED on sound code;
+# - the lintable files under radice_pacchetti OUTSIDE the root, in the two segments apps/<x> or packages/<x>, are
+#   however not "harmless by definition". With `lint_base: true` in the module and `--base <ref>` they are CLASSIFIED
+#   (see below); without `--base` they stay SKIPPED, declared. Without `lint_base` and outside radice_pacchetti
+#   they are SKIPPED: they are not in the gate;
+# - the cwd is the `cartella` of the `copia` command (default the module root), never fixed elsewhere: a wrong
+#   cwd would resolve the configuration of another package and would let the gate pass on nothing;
+# - the cache is OPT-IN (`--lint --cache`) and serves the inner loop: the required gate is invoked without it,
+#   so a PASS cannot come from cache entries that nobody revalidated. The file sits in the
+#   ROOT of the copy (`.fic-eslintcache-<relative root, / -> ->`), placeholder {cache?…} of the command: a
+#   relative path would end up in the group directory, where `rsync --delete` deletes it at every run. In the
+#   FALLBACK the cache is never used: it would be written inside the repository, where git does not ignore it, and from then
+#   on every run would see "copia non allineata";
+# - the module's `preparati` are needed (files written by its `preparazione`, globs relative to the root; for example
+#   the tsconfig generated by the framework): their directories are excluded from the sync because they are generated. The script copies
+#   the matching files into the copy; if the «guide file» is missing in the source (the first glob without wildcard
+#   characters, the same rule as ciclo-worktree.sh) the outcome is BLOCKED (exit 2) with the remedy (the module's
+#   `preparazione`), and it does NOT fall back: on /mnt/c it is missing in the same way and lint would invent errors on every import, i.e.
+#   a FAIL on sound code. A module without `preparati` has no such requirement;
 #
-# LINT FUORI DALLA RADICE — PREEXISTING / INTRODUCED / UNRESOLVED (serve `lint_base: true` e `--base <ref>`):
-# - un pacchetto SENZA configurazione eslint non e' lintabile: SKIPPED e' vero, non e' "superficie non
-#   verificata";
-# - un pacchetto CON configurazione viene lintato due volte (comando `copia.lint_messaggi`, dalla radice del
-#   pacchetto): il contenuto attuale, e il contenuto della BASE scritto nella COPIA allo stesso path (stessa
-#   cartella = stessa configurazione risolta; scriverlo altrove cambierebbe la risoluzione degli import e
-#   inventerebbe differenze). I due insiemi di messaggi si confrontano su `<file> + <testo> (<regola>)`, SENZA
-#   riga e colonna: uno spostamento di riga non e' un errore nuovo. Solo nell'attuale = INTRODUCED (bloccante,
-#   exit 1) · in entrambi = PREEXISTING (informativo: e' debito che il gate non guarda) · file assente nella
-#   base = tutto INTRODUCED;
-# - la prova della base si fa PRIMA dello stamp e il file si ripristina subito (anche via trap): cosi'
-#   la rilevazione delle scritture del run resta intatta. Se lo script muore nel mezzo, la copia resta
-#   disallineata e il run successivo la risincronizza (o, se non ci riesce, esce BLOCKED) — mai un falso PASS;
-# - NEL RIPIEGO non si classifica: la prova della base richiederebbe di scrivere dentro il REPOSITORY.
-#   Quei path diventano UNRESOLVED (exit 3), che per chi chiama e' "non conclusivo", mai PASS.
+# LINT OUTSIDE THE ROOT — PREEXISTING / INTRODUCED / UNRESOLVED (needs `lint_base: true` and `--base <ref>`):
+# - a package WITHOUT an eslint configuration is not lintable: SKIPPED is true, it is not "unverified
+#   surface";
+# - a package WITH a configuration is linted twice (command `copia.lint_messaggi`, from the package
+#   root): the current content, and the BASE content written in the COPY at the same path (same
+#   directory = same resolved configuration; writing it elsewhere would change the import resolution and
+#   invent differences). The two sets of messages are compared on `<file> + <text> (<rule>)`, WITHOUT
+#   line and column: a line shift is not a new error. Only in the current one = INTRODUCED (blocking,
+#   exit 1) · in both = PREEXISTING (informative: it is debt the gate does not look at) · file missing in the
+#   base = all INTRODUCED;
+# - the base trial is done BEFORE the stamp and the file is restored immediately (also via trap): so
+#   the detection of the run's writes stays intact. If the script dies halfway, the copy stays
+#   misaligned and the next run resyncs it (or, if it cannot, exits BLOCKED) — never a false PASS;
+# - IN THE FALLBACK there is no classification: the base trial would require writing inside the REPOSITORY.
+#   Those paths become UNRESOLVED (exit 3), which for the caller means "inconclusive", never PASS.
 #
-# Garanzie (le da' lo script, non la guardia: guard.py non legge dentro gli script):
-# - destinazione locale DERIVATA DALLA RADICE del repository (`git rev-parse --show-toplevel`):
-#   $HOME/fic-mirror/<radice_pacchetti> dal tree principale, $HOME/fic-mirror-<primi 12 caratteri dello sha256
-#   della radice>/<radice_pacchetti> da un worktree collegato (git-dir diverso da git-common-dir). Cosi' un
-#   harness sviluppato in un worktree non tocca la copia dei cicli del tree principale. Nessun argomento
-#   la cambia, nessun host remoto: l'unico rsync e' fra due directory di questa macchina. Radice non
-#   determinabile (git inutilizzabile) -> nessuna destinazione: BLOCKED come "manifest non calcolabile",
-#   mai ~/fic-mirror per ripiego, che sarebbe la copia di un ALTRO tree. La regola sta in fic-mirror.sh,
-#   condiviso con counterproof.sh: vale anche per un worktree creato da Git per Windows (il suo "gitdir: C:/…"
-#   si traduce in /mnt/c/… per git di WSL, destinazione e manifest);
-# - copia di un worktree senza node_modules (primo uso o --setup di un worktree che non li ha installati):
-#   node_modules SEMINATI dalla copia del tree principale in hardlink, solo se quella e' valida e le
-#   dipendenze del worktree coincidono con le sue (impronta normalizzata); altrimenti "copia assente" col motivo;
-# - prima di ogni run, dentro il lock: sync INCREMENTALE sul manifest (harness-pt06). Il manifest (path +
-#   sha256 dei file tracciati e non tracciati non ignorati di radice_pacchetti, piu' i .env* ignorati: TUTTO
-#   cio' che il runner puo' caricare) si calcola sui due lati; i file da allineare sono il DIFF fra i due
-#   (copiati se diversi, cancellati se assenti nell'origine), mai un elenco del chiamante. I file della copia
-#   fuori dal manifest e assenti nell'origine (non tracciati cancellati, scritture di un run) si cancellano,
-#   come faceva `rsync --delete`. Stato PER COPIA (<copia>/.fic-sync-src): la stat dell'origine (dimensione,
-#   mtime, ctime, inode) con lo sha256 letto l'ultima volta, cosi' attraverso /mnt/c si rilegge solo cio'
-#   che e' cambiato; la copia invece si rilegge sempre per intero (filesystem nativo), quindi nessuna
-#   scrittura nella copia (counterproof.sh, un run interrotto) sfugge al confronto. Senza stato (primo run,
-#   copia nuova) il sync e' COMPLETO: rsync -a --delete --checksum (esclusioni: l'elenco unico del nucleo,
-#   FIC_MIRROR_EXCL di fic-mirror.sh), com'era prima. I file ignorati da git (fuori dal manifest) li porta solo il sync
-#   completo: il runner non li carica;
-# - PREMESSA della cache: ogni scrittura nell'origine cambia la stat (almeno la ctime), anche su drvfs e
-#   anche da Windows — provata da test-fast.test.sh (sonda drvfs), non garantita. Rete di sicurezza: ogni
-#   FIC_SYNC_AUDIT_RUNS run (default 20) o dopo FIC_SYNC_AUDIT_SECS secondi dall'ultimo controllo completo
-#   (default 1800) l'origine si rilegge tutta, senza cache (stato in <copia>/.fic-sync-audit). Se la cache
-#   aveva torto: "vitest-fast: cache stat incompleta, resync completo", cache buttata, sync completo;
-# - le cartelle dei `preparati` del modulo e (con controprova.runner vitest) le cache di vite/vitest della copia
-#   (fic_mirror_pulisci di fic-mirror.sh, la stessa pulizia di counterproof.sh) si ripuliscono SOLO quando cambia l'impronta delle
-#   dipendenze (.fic-deps) o il file guida dei preparati nell'origine (stato in <copia>/.fic-sync-gen), non a ogni
-#   run: il framework rigenera comunque i suoi file generati a ogni avvio;
-# - poi la verifica di sempre: manifest della copia identico a quello dell'origine;
-# - guardia di equivalenza, INTERNA ai test (non e' un'opzione del chiamante): con FIC_SYNC_EQUIV=1
-#   nell'ambiente, dopo il run incrementale si rifa' il sync COMPLETO sulla stessa copia e si riesegue:
-#   esito e manifest della copia devono coincidere, altrimenti esito=BLOCKED (equivalenza violata), exit 3;
-# - node_modules non e' nel manifest: vale l'impronta di tutti i package.json (fuori da node_modules) e
-#   di package-lock.json presa al --setup; se e' cambiata, dipendenze stantie, e la copia si RIALLINEA DA SOLA
-#   dentro il lock (fic-mirror.sh, fic_deps_autorefresh): origine con node_modules -> la stessa operazione del
-#   --setup (rsync, node_modules compresi, poi l'impronta); worktree o corsia senza node_modules -> fonte della
-#   semina riallineata se stantia, poi semina di nuovo in hardlink. Riga "vitest-fast: dipendenze cambiate
-#   (impronta <vecchia> -> <nuova>): copia riallineata dall'origine" (o "…riseminata da …"), poi deps_ok di
-#   nuovo e i generati ripuliti (l'impronta e' in .fic-sync-gen). Mai npm install, mai la rete. Nessuna fonte
-#   con node_modules, o rsync fallito -> BLOCKED col motivo, exit 3, mai un ripiego silenzioso. L'impronta e' sul
-#   contenuto NORMALIZZATO (senza CR): due checkout dello stesso commit con fine riga diverse danno la stessa
-#   impronta. Un .fic-deps scritto prima di questa regola (impronta dei byte) resta valido finche' i byte
-#   non cambiano;
-# - il runner gira con CI=true (nel comando di `copia`), nella copia E nel ripiego: una snapshot mancante
-#   FALLISCE invece di essere scritta. Dopo il run la copia si riconfronta col manifest e si cercano file nuovi:
-#   qualunque scrittura (snapshot in __snapshots__ o inline in un file di test) -> esito BLOCKED, exit 4: le
-#   snapshot si generano su /mnt/c, dove entrano nel diff che la review vede. Una snapshot MANCANTE invece da'
-#   FAIL (CI=true): stesso rimedio, generarla su /mnt/c;
-# - copia occupata da un altro run -> si ATTENDE il lock (flock -w, tetto FIC_LOCK_WAIT secondi,
-#   default 900); oltre il tetto -> BLOCKED, exit 3. Mai un ripiego silenzioso: su /mnt/c il run e'
-#   3-17x piu' lento, e ripiegare perche' la copia e' occupata costava piu' che aspettarla;
-# - copia non allineata dopo il sync -> UNA risincronizzazione (rsync completo) e nuovo confronto; se
-#   resta disallineata -> BLOCKED, exit 3;
-# - copia assente, dipendenze stantie non riallineabili, sync fallito, manifest non calcolabile (git) -> BLOCKED, exit 3,
-#   con il motivo e il rimedio;
-# - RIPIEGO su /mnt/c (lo stesso comando, lento ma valido) SOLO con FIC_ALLOW_MNT_C=1 esplicito
-#   nell'ambiente: al posto di ognuno dei BLOCKED qui sopra, dichiarato nella prima riga e nella riga
-#   d'esito ("luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)").
+# Guarantees (given by the script, not by the guard: guard.py does not read inside scripts):
+# - local destination DERIVED FROM THE ROOT of the repository (`git rev-parse --show-toplevel`):
+#   $HOME/fic-mirror/<radice_pacchetti> from the main tree, $HOME/fic-mirror-<first 12 characters of the sha256
+#   of the root>/<radice_pacchetti> from a linked worktree (git-dir different from git-common-dir). So a
+#   harness developed in a worktree does not touch the copy used by the main tree's cycles. No argument
+#   changes it, no remote host: the only rsync is between two directories of this machine. Root not
+#   determinable (git unusable) -> no destination: BLOCKED as "manifest non calcolabile",
+#   never ~/fic-mirror as a fallback, which would be the copy of ANOTHER tree. The rule lives in fic-mirror.sh,
+#   shared with counterproof.sh: it also holds for a worktree created by Git for Windows (its "gitdir: C:/…"
+#   is translated to /mnt/c/… for the WSL git, destination and manifest);
+# - copy of a worktree without node_modules (first use or --setup of a worktree that has not installed them):
+#   node_modules SEEDED from the copy of the main tree as hardlinks, only if that copy is valid and the
+#   worktree dependencies match its own (normalised fingerprint); otherwise "copia assente" with the reason;
+# - before every run, inside the lock: INCREMENTAL sync on the manifest (harness-pt06). The manifest (path +
+#   sha256 of the tracked and untracked-not-ignored files of radice_pacchetti, plus the ignored .env* files: EVERYTHING
+#   the runner can load) is computed on both sides; the files to align are the DIFF between the two
+#   (copied if different, deleted if missing in the source), never a list from the caller. The copy's files
+#   outside the manifest and missing in the source (deleted untracked files, writes of a run) are deleted,
+#   as `rsync --delete` did. State PER COPY (<copy>/.fic-sync-src): the stat of the source (size,
+#   mtime, ctime, inode) with the sha256 read last time, so that across /mnt/c only what has
+#   changed is reread; the copy instead is always reread in full (native filesystem), so no
+#   write into the copy (counterproof.sh, an interrupted run) escapes the comparison. Without state (first run,
+#   new copy) the sync is FULL: rsync -a --delete --checksum (exclusions: the single core list,
+#   FIC_MIRROR_EXCL of fic-mirror.sh), as it was before. Files ignored by git (outside the manifest) are brought only by the full
+#   sync: the runner does not load them;
+# - PREMISE of the cache: every write in the source changes the stat (at least the ctime), also on drvfs and
+#   also from Windows — tested by test-fast.test.sh (drvfs probe), not guaranteed. Safety net: every
+#   FIC_SYNC_AUDIT_RUNS runs (default 20) or after FIC_SYNC_AUDIT_SECS seconds since the last full check
+#   (default 1800) the source is reread entirely, without cache (state in <copy>/.fic-sync-audit). If the cache
+#   was wrong: "vitest-fast: cache stat incompleta, resync completo", cache discarded, full sync;
+# - the directories of the module's `preparati` and (with controprova.runner vitest) the vite/vitest caches of the copy
+#   (fic_mirror_pulisci of fic-mirror.sh, the same cleanup as counterproof.sh) are cleaned ONLY when the dependency fingerprint
+#   (.fic-deps) or the guide file of the preparati in the source changes (state in <copy>/.fic-sync-gen), not at every
+#   run: the framework regenerates its generated files at every start anyway;
+# - then the usual check: manifest of the copy identical to that of the source;
+# - equivalence guard, INTERNAL to the tests (it is not a caller option): with FIC_SYNC_EQUIV=1
+#   in the environment, after the incremental run the FULL sync is redone on the same copy and the run repeated:
+#   outcome and manifest of the copy must match, otherwise esito=BLOCKED (equivalence violated), exit 3;
+# - node_modules is not in the manifest: what counts is the fingerprint of all package.json files (outside node_modules) and
+#   of package-lock.json taken at --setup; if it changed, the dependencies are stale, and the copy REALIGNS ITSELF
+#   inside the lock (fic-mirror.sh, fic_deps_autorefresh): source with node_modules -> the same operation as
+#   --setup (rsync, node_modules included, then the fingerprint); worktree or lane without node_modules -> seed
+#   source realigned if stale, then seeded again as hardlinks. Line "vitest-fast: dipendenze cambiate
+#   (impronta <vecchia> -> <nuova>): copia riallineata dall'origine" (or "…riseminata da …"), then deps_ok
+#   again and the generated files cleaned (the fingerprint is in .fic-sync-gen). Never npm install, never the network. No source
+#   with node_modules, or rsync failed -> BLOCKED with the reason, exit 3, never a silent fallback. The fingerprint is on the
+#   NORMALISED content (without CR): two checkouts of the same commit with different line endings give the same
+#   fingerprint. A .fic-deps written before this rule (fingerprint of the bytes) stays valid as long as the bytes
+#   do not change;
+# - the runner runs with CI=true (in the `copia` command), in the copy AND in the fallback: a missing snapshot
+#   FAILS instead of being written. After the run the copy is compared with the manifest again and new files are looked for:
+#   any write (snapshot in __snapshots__ or inline in a test file) -> esito BLOCKED, exit 4: the
+#   snapshots are generated on /mnt/c, where they enter the diff that the review sees. A MISSING snapshot instead gives
+#   FAIL (CI=true): same remedy, generate it on /mnt/c;
+# - copy busy with another run -> it WAITS for the lock (flock -w, limit FIC_LOCK_WAIT seconds,
+#   default 900); beyond the limit -> BLOCKED, exit 3. Never a silent fallback: on /mnt/c the run is
+#   3-17x slower, and falling back because the copy was busy cost more than waiting for it;
+# - copy not aligned after the sync -> ONE resync (full rsync) and a new comparison; if it
+#   stays misaligned -> BLOCKED, exit 3;
+# - copy missing, stale dependencies that cannot be realigned, sync failed, manifest not computable (git) -> BLOCKED, exit 3,
+#   with the reason and the remedy;
+# - FALLBACK to /mnt/c (the same command, slow but valid) ONLY with an explicit FIC_ALLOW_MNT_C=1
+#   in the environment: in place of each of the BLOCKED cases above, declared in the first line and in the
+#   outcome line ("luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)").
 #
-# Output: le righe hanno il prefisso `vitest-fast:`, invariato (lo leggono gates.sh, finalize.sh e
-# plan-check.sh). Prima riga "vitest-fast: luogo=copia" o "vitest-fast: luogo=mnt-c (ripiego: <motivo>; …)";
-# nella copia la segue "vitest-fast: sync=completo" o "vitest-fast: sync=incrementale (<n> file allineati)";
-# ultima riga "vitest-fast: esito=<PASS|FAIL|BLOCKED|SKIPPED|UNRESOLVED …> luogo=<copia|mnt-c|->".
-# Exit: 0/1 = esito del runner (1 anche per un INTRODUCED fuori dalla radice) · 2 = BLOCKED di configurazione
-#       (del lint: eslint, oppure tsconfig generato assente; di maat.json: comando di `copia` non risolto) ·
-#       3 = UNRESOLVED (lint fuori dalla radice non classificabile: senza --base utilizzabile, o nel ripiego)
-#       oppure BLOCKED (copia non utilizzabile: occupata oltre il tetto, assente, stantia non riallineabile,
-#       disallineata) · 4 = BLOCKED (snapshot da generare su /mnt/c) ·
-#       64 = uso errato, opzione al posto di un path, path non ancorati al repo, non in WSL, progetto o modulo
-#       non determinabile (maat.json assente o non valido, piu' moduli con copia senza MAAT_MODULO)
-#       (convenzione sysexits: NON 2, che per eslint significa "errore di configurazione" e deve
-#       restare distinguibile → BLOCKED, mai FAIL).
+# Output: the lines have the `vitest-fast:` prefix, unchanged (gates.sh, finalize.sh and
+# plan-check.sh read it). First line "vitest-fast: luogo=copia" or "vitest-fast: luogo=mnt-c (ripiego: <motivo>; …)";
+# in the copy it is followed by "vitest-fast: sync=completo" or "vitest-fast: sync=incrementale (<n> file allineati)";
+# last line "vitest-fast: esito=<PASS|FAIL|BLOCKED|SKIPPED|UNRESOLVED …> luogo=<copia|mnt-c|->".
+# Exit: 0/1 = runner outcome (1 also for an INTRODUCED outside the root) · 2 = configuration BLOCKED
+#       (of lint: eslint, or generated tsconfig missing; of maat.json: `copia` command not resolved) ·
+#       3 = UNRESOLVED (lint outside the root not classifiable: without a usable --base, or in the fallback)
+#       or BLOCKED (copy not usable: busy beyond the limit, missing, stale and not realignable,
+#       misaligned) · 4 = BLOCKED (snapshot to generate on /mnt/c) ·
+#       64 = wrong usage, option instead of a path, paths not anchored to the repo, not in WSL, project or module
+#       not determinable (maat.json missing or invalid, several modules with copia and no MAAT_MODULO)
+#       (sysexits convention: NOT 2, which for eslint means "configuration error" and must
+#       stay distinguishable → BLOCKED, never FAIL).
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-DST=""   # derivata dalla radice del repository, dopo il controllo degli strumenti (vedi mirror_dir)
-EXCL=()   # le esclusioni del sync: l'elenco unico del nucleo, FIC_MIRROR_EXCL di fic-mirror.sh (piu' sotto)
+DST=""   # derived from the repository root, after the tools check (see mirror_dir)
+EXCL=()   # the sync exclusions: the single core list, FIC_MIRROR_EXCL of fic-mirror.sh (further below)
 
 MODE=test
 CACHE=0
@@ -171,9 +171,9 @@ case "${1:-}" in
               --cache) CACHE=1; shift ;;
               --base)  BASE=${2:-}
                        [ -n "$BASE" ] || { echo "vitest-fast: --base richiede un riferimento git" >&2; exit 64; }
-                       # Se il valore e' un file esistente il chiamante ha scordato il riferimento: senza
-                       # questo controllo quel path sparirebbe dalla lista e il gate linterebbe meta'
-                       # superficie uscendo 0.
+                       # If the value is an existing file the caller forgot the ref: without
+                       # this check that path would disappear from the list and the gate would lint half the
+                       # surface and exit 0.
                        [ -e "$BASE" ] && { echo "vitest-fast: --base vuole un riferimento git, non un path: $BASE" >&2; exit 64; }
                        shift 2 ;;
               *) break ;;
@@ -184,8 +184,8 @@ esac
 command -v rsync >/dev/null && command -v flock >/dev/null && command -v sha256sum >/dev/null ||
   { echo "vitest-fast: servono rsync, flock e sha256sum (va eseguito in WSL)" >&2; exit 64; }
 
-# Radice del progetto: FIC_REPO, altrimenti la prima cartella sopra quella di lavoro con `.git` (cartella o file
-# di un worktree) o `.claude/maat.json`. Non dipende dalla posizione di questo script, che sta nel plugin.
+# Project root: FIC_REPO, otherwise the first directory above the working one with `.git` (directory or file
+# of a worktree) or `.claude/maat.json`. It does not depend on the location of this script, which lives in the plugin.
 trova_radice() {
   local d; d=$(pwd)
   while :; do
@@ -199,48 +199,48 @@ else ROOT=$(trova_radice) || { echo "vitest-fast: progetto non trovato sopra $(p
 fi
 ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || { echo "vitest-fast: radice del progetto non accessibile: $ROOT" >&2; exit 64; }
 
-# Modulo e comandi da maat.json, con il lettore unico (sempre lo stesso interprete del harness).
+# Module and commands from maat.json, with the single reader (always the same interpreter as the harness).
 . "$HERE/python.sh" 2>/dev/null || true
 [ -n "${FIC_PY:-}" ] || { echo "vitest-fast: nessun Python per leggere maat.json (python.sh)" >&2; exit 64; }
 mc() { PROJECT_ROOT=$ROOT "$FIC_PY" "$HERE/maat-config.py" "$@"; }
 MOD_OUT=$(mc copia-modulo) || { echo "vitest-fast: modulo della copia non determinabile da maat.json (maat-config.py copia-modulo, uscita $?)" >&2; exit 64; }
 { read -r MODULO; read -r RAD; read -r PKG; read -r LINT_BASE; read -r PREP; } <<< "$MOD_OUT"
 [ -n "$PKG" ] || { echo "vitest-fast: radice_pacchetti del modulo $MODULO e' la radice del repository: la copia vuole una cartella" >&2; exit 64; }
-if [ "$RAD" = "$PKG" ]; then GROUP=""; else GROUP=${RAD#"$PKG"/}; fi   # la radice, relativa a radice_pacchetti
-G=${GROUP:+/$GROUP}                                                  # "$DST$G" = la radice del modulo nella copia
+if [ "$RAD" = "$PKG" ]; then GROUP=""; else GROUP=${RAD#"$PKG"/}; fi   # the root, relative to radice_pacchetti
+G=${GROUP:+/$GROUP}                                                  # "$DST$G" = the module root in the copy
 SRC=$(cd "$ROOT/$PKG" 2>/dev/null && pwd) || { echo "vitest-fast: $PKG non trovato in $ROOT" >&2; exit 64; }
-export MAAT_MODULO=$MODULO   # i comandi di copia e una chiamata annidata del lettore vedono lo stesso modulo
+export MAAT_MODULO=$MODULO   # the copia commands and a nested call of the reader see the same module
 
-# Destinazione, impronta delle dipendenze e semina: fic-mirror.sh, condiviso con counterproof.sh (stessa copia,
-# stesso lock). Copia della RADICE del repository: ~/fic-mirror per il tree principale, ~/fic-mirror-<hash> per un
-# worktree collegato, anche creato da Git per Windows (gitdir C:/… tradotto). Mai da un argomento. Radice non
-# determinabile -> MIRROR vuoto.
+# Destination, dependency fingerprint and seeding: fic-mirror.sh, shared with counterproof.sh (same copy,
+# same lock). Copy of the repository ROOT: ~/fic-mirror for the main tree, ~/fic-mirror-<hash> for a
+# linked worktree, also one created by Git for Windows (gitdir C:/… translated). Never from an argument. Root not
+# determinable -> MIRROR empty.
 . "$HERE/fic-mirror.sh" || { echo "vitest-fast: fic-mirror.sh non trovato accanto a test-fast.sh" >&2; exit 64; }
 EXCL=("${FIC_MIRROR_EXCL[@]}")
 if fic_mirror_init "$ROOT"; then MIRROR=$FIC_MIRROR; else MIRROR=""; fi
-# CORSIA (harness-pt13): FIC_LANE=k (1..9, dall'ambiente, mai da un argomento; la passa run-phase.sh alle corsie
-# con WSLENV) -> la copia della corsia, <copia della radice>-<k>: suo lock, sue cache vite/vitest, node_modules
-# seminati in hardlink dalla copia della radice. Senza FIC_LANE la copia di sempre.
+# LANE (harness-pt13): FIC_LANE=k (1..9, from the environment, never from an argument; run-phase.sh passes it to the lanes
+# with WSLENV) -> the lane copy, <copy of the root>-<k>: its own lock, its own vite/vitest caches, node_modules
+# seeded as hardlinks from the copy of the root. Without FIC_LANE, the usual copy.
 if [ -n "${FIC_LANE:-}" ]; then
   case "$FIC_LANE" in [1-9]) ;; *) echo "vitest-fast: FIC_LANE deve essere una cifra da 1 a 9: $FIC_LANE" >&2; exit 64 ;; esac
   [ -n "$MIRROR" ] && fic_lane_init "$FIC_LANE" && MIRROR=$FIC_MIRROR
 fi
 DST=${MIRROR:+$MIRROR/$PKG}
 deps_fp() { fic_deps_fp "$@"; }
-deps_ok() { fic_deps_ok "$SRC" "$DST"; }   # le dipendenze dell'origine sono quelle registrate al --setup
+deps_ok() { fic_deps_ok "$SRC" "$DST"; }   # the source dependencies are those recorded at --setup
 
-manifest_list() {  # tracciati + non tracciati non ignorati + .env* (anche ignorati), relativi a SRC
+manifest_list() {  # tracked + untracked not ignored + .env* (also ignored), relative to SRC
   { git -c safe.directory='*' -C "$SRC" ls-files -co --exclude-standard -z . | tr '\0' '\n'
     (cd "$SRC" && find . \( -name node_modules -o -name .nuxt -o -name .output \) -prune -o -name '.env*' -type f -print | sed 's|^\./||')
   } | LC_ALL=C sort -u
 }
 
-hashes() {  # <dir> <lista ordinata>: "sha  path" per ogni path della lista, nel suo ordine; ABSENT se manca
-  # Un solo sha256sum per tutti i file (harness-pt06: uno per file costava ~5,7 s sui 1031 file della copia).
-  # Stesso output di prima: sha256sum stampa "sha  path" come la riga scritta a mano, e l'ordine si
-  # ripristina ordinando sul path (le liste sono in ordine LC_ALL=C). Un path con `\` farebbe scrivere a
-  # sha256sum una riga con escape: quello si hasha da solo, come prima.
-  local nul; nul=$(mktemp) || return 1   # fuori dalle due radici: mai un file nel repository o nella copia
+hashes() {  # <dir> <sorted list>: "sha  path" for every path of the list, in its order; ABSENT if missing
+  # A single sha256sum for all files (harness-pt06: one per file cost ~5.7 s on the 1031 files of the copy).
+  # Same output as before: sha256sum prints "sha  path" like the hand-written line, and the order is
+  # restored by sorting on the path (the lists are in LC_ALL=C order). A path with `\` would make
+  # sha256sum write an escaped line: that one is hashed on its own, as before.
+  local nul; nul=$(mktemp) || return 1   # outside both roots: never a file in the repository or in the copy
   (cd "$1" && {
      while IFS= read -r f; do
        [ -n "$f" ] || continue
@@ -254,25 +254,25 @@ hashes() {  # <dir> <lista ordinata>: "sha  path" per ogni path della lista, nel
   rm -f "$nul"
 }
 
-# Il comando di `copia` del modulo (maat-config.py comando-copia): CMD_DIR = cartella assoluta d'esecuzione,
-# CMD_LINE = comando espanso, con i file gia' quotati. Le opzioni --file/--test sono relative alla copia di
-# radice_pacchetti (o all'origine, nel ripiego); il lettore le rende relative alla cartella del comando.
-copia_cmd() {  # <tipo> --copia <dir> [opzioni del lettore…]
+# The module's `copia` command (maat-config.py comando-copia): CMD_DIR = absolute execution directory,
+# CMD_LINE = expanded command, with the files already quoted. The --file/--test options are relative to the copy of
+# radice_pacchetti (or to the source, in the fallback); the reader makes them relative to the command directory.
+copia_cmd() {  # <type> --copia <dir> [reader options…]
   local out
   out=$(mc comando-copia "$MODULO" "$@") || return $?
   CMD_DIR=${out%%$'\n'*}; CMD_LINE=${out#*$'\n'}
 }
-cmd_non_risolto() {  # <tipo> <uscita del lettore>: maat.json non da' un comando eseguibile -> BLOCKED, mai FAIL
+cmd_non_risolto() {  # <type> <reader exit code>: maat.json does not give a runnable command -> BLOCKED, never FAIL
   echo "vitest-fast: esito=BLOCKED (copia.$1 del modulo $MODULO non risolto da maat.json: maat-config.py comando-copia, uscita $2) luogo=-"
   exit 2
 }
 
-run_cmd() {  # <radice dei pacchetti: copia o origine> <file…>  — test relativi alla radice, lint a radice_pacchetti
+run_cmd() {  # <packages root: copy or source> <files…>  — tests relative to the root, lint to radice_pacchetti
   local base=$1 a=() f rc; shift
   if [ "$MODE" = lint ]; then
     for f in "$@"; do a+=(--file "$f"); done
-    # {cache?…}: solo con --cache, alla radice della copia. harness-pt15: con lint-baseline.mjs il gate e' lo
-    # script `lint` di package.json (come la CI) — e' la prima alternativa di copia.lint nel profilo.
+    # {cache?…}: only with --cache, at the root of the copy. harness-pt15: with lint-baseline.mjs the gate is the
+    # `lint` script of package.json (as in CI) — it is the first alternative of copia.lint in the profile.
     [ "$CACHE" -eq 1 ] && a+=(--cache "$base/.fic-eslintcache-${GROUP//\//-}")
     copia_cmd lint --copia "$base" ${a[@]+"${a[@]}"} || cmd_non_risolto lint $?
   else
@@ -283,8 +283,8 @@ run_cmd() {  # <radice dei pacchetti: copia o origine> <file…>  — test relat
   return $rc
 }
 
-# Esito dal codice d'uscita del runner. Per eslint: 0 verde, 1 errori di lint, >=2 guasto di
-# configurazione o d'ambiente -> BLOCKED, mai FAIL (accuserebbe codice sano).
+# Outcome from the runner's exit code. For eslint: 0 green, 1 lint errors, >=2 configuration or
+# environment fault -> BLOCKED, never FAIL (it would blame sound code).
 esito_di() {
   local rc=$1
   if [ "$rc" -eq 0 ]; then echo PASS
@@ -293,8 +293,8 @@ esito_di() {
   fi
 }
 
-# `--setup` vale solo da solo: `--lint --setup <file>` altrimenti eseguirebbe il setup e uscirebbe 0
-# senza lintare niente, cioe' un exit 0 che somiglia a un PASS su una verifica mai fatta.
+# `--setup` only counts on its own: `--lint --setup <file>` would otherwise run the setup and exit 0
+# without linting anything, i.e. an exit 0 that looks like a PASS on a check never made.
 case " $* " in
   *" --setup "*) [ "$1" = --setup ] && [ $# -eq 1 ] ||
     { echo "vitest-fast: --setup va usato da solo" >&2; exit 64; } ;;
@@ -303,8 +303,8 @@ if [ "$1" = --setup ]; then
   [ -n "$DST" ] || { echo "vitest-fast: radice del repository non determinabile (git): nessuna copia preparata" >&2; exit 1; }
   mkdir -p "$DST"
   if [ ! -d "$SRC/node_modules" ]; then
-    # Worktree senza dipendenze installate: node_modules dalla copia del tree principale, in hardlink
-    # (fic-mirror.sh, SEMINA), poi i sorgenti. Mai un'installazione.
+    # Worktree without installed dependencies: node_modules from the copy of the main tree, as hardlinks
+    # (fic-mirror.sh, SEEDING), then the sources. Never an install.
     rm -f "$DST/.fic-deps"
     why=$(fic_seed_node_modules "$SRC" "$DST") ||
       { echo "vitest-fast: $SRC non ha node_modules e la semina non e' possibile: $why" >&2; exit 1; }
@@ -319,10 +319,10 @@ if [ "$1" = --setup ]; then
   exit 0
 fi
 
-# Solo path, mai opzioni: gli argomenti finiscono testualmente nella riga di comando del runner, dove
-# un'opzione cambierebbe cio' che il gate significa (`--passWithNoTests` -> PASS su una selezione vuota,
-# `--fix` -> riscrittura del codice) e un path assoluto o con `..` uscirebbe dal perimetro. `--setup`,
-# `--lint`, `--cache` e `--base` sono gia' stati consumati sopra.
+# Paths only, never options: the arguments end up verbatim in the runner's command line, where
+# an option would change what the gate means (`--passWithNoTests` -> PASS on an empty selection,
+# `--fix` -> code rewrite) and an absolute path or one with `..` would leave the perimeter. `--setup`,
+# `--lint`, `--cache` and `--base` have already been consumed above.
 for p in "$@"; do
   case "$p" in
     -*) echo "vitest-fast: solo path, niente opzioni per il runner: $p" >&2; exit 64 ;;
@@ -331,14 +331,14 @@ for p in "$@"; do
   esac
 done
 
-# Messaggi di eslint normalizzati: "<file>	<testo> (<regola>)", SENZA riga e colonna — uno stesso
-# errore spostato di una riga non e' un errore nuovo. ⚠️ Il NOME DEL FILE resta, ed e' essenziale: senza,
-# un errore introdotto in b.ts verrebbe assolto come preesistente solo perche' lo stesso testo esisteva
-# nella base in a.ts — e i testi si ripetono identici fra file (`no-unused-vars`, `no-explicit-any`).
-# Il path e' reso relativo alla radice della copia: le due passate girano nella stessa cwd, quindi
-# combaciano, e la riga stampata dice in quale file sta l'errore. Torna il codice d'uscita del comando
-# `copia.lint_messaggi` (2 se maat.json non lo da').
-lint_msgs() {  # <radice dei pacchetti nella copia> <gruppo> <file relativi al gruppo…>
+# Normalised eslint messages: "<file>	<text> (<rule>)", WITHOUT line and column — the same
+# error moved by one line is not a new error. ⚠️ The FILE NAME stays, and it is essential: without it,
+# an error introduced in b.ts would be acquitted as preexisting just because the same text existed
+# in the base in a.ts — and texts repeat identically across files (`no-unused-vars`, `no-explicit-any`).
+# The path is made relative to the copy root: the two passes run in the same cwd, so they
+# match, and the printed line says which file the error is in. Returns the exit code of the
+# `copia.lint_messaggi` command (2 if maat.json does not give it).
+lint_msgs() {  # <packages root in the copy> <group> <files relative to the group…>
   local base=$1 grp=$2 a=() f; shift 2
   local out rc
   for f in "$@"; do a+=(--file "$grp/$f"); done
@@ -351,8 +351,8 @@ lint_msgs() {  # <radice dei pacchetti nella copia> <gruppo> <file relativi al g
   return $rc
 }
 
-# PREEXISTING / INTRODUCED / UNRESOLVED per i file lintabili sotto radice_pacchetti fuori dalla radice.
-# Torna 0 (niente di nuovo), 1 (INTRODUCED: bloccante) o 3 (UNRESOLVED: non conclusivo).
+# PREEXISTING / INTRODUCED / UNRESOLVED for the lintable files under radice_pacchetti outside the root.
+# Returns 0 (nothing new), 1 (INTRODUCED: blocking) or 3 (UNRESOLVED: inconclusive).
 CLASSIFICATI=0
 classify_extra() {
   local has_intro=0 has_unres=0 grp e i q
@@ -373,13 +373,13 @@ classify_extra() {
       [ "${e%%|*}" = "$grp" ] || continue
       r=${e#*|}; rels+=("${r%%|*}"); paths+=("${e##*|}")
     done
-    # Un pacchetto senza configurazione eslint non e' lintabile: qui SKIPPED e' vero. Un glob che non
-    # combacia resta letterale, quindi il test e' su ogni candidato: `ls` con due pattern uscirebbe
-    # non-zero anche quando il primo esiste, e ogni pacchetto sembrerebbe senza configurazione.
+    # A package without an eslint configuration is not lintable: here SKIPPED is true. A glob that does not
+    # match stays literal, so the test is on each candidate: `ls` with two patterns would exit
+    # non-zero even when the first exists, and every package would look unconfigured.
     cfg=0
     for r in "$DST/$grp"/.eslintrc* "$DST/$grp"/eslint.config.*; do [ -f "$r" ] && { cfg=1; break; }; done
-    # anche la forma `"eslintConfig": {…}` dentro package.json: senza, un pacchetto davvero lintabile
-    # verrebbe dichiarato "non lintabile", cioe' assolto
+    # also the `"eslintConfig": {…}` form inside package.json: without it, a really lintable package
+    # would be declared "non lintabile", i.e. acquitted
     [ "$cfg" -eq 0 ] && [ -f "$DST/$grp/package.json" ] &&
       grep -q '"eslintConfig"' "$DST/$grp/package.json" && cfg=1
     if [ "$cfg" -eq 0 ]; then
@@ -393,21 +393,21 @@ classify_extra() {
       printf '  UNRESOLVED  %s\n' "${paths[@]}"
       has_unres=1; continue
     fi
-    # Contenuto della base allo STESSO path della copia: e' l'unico posto che risolve la stessa
-    # configurazione e gli stessi import. Ripristino subito dopo, e via trap se si muore qui.
+    # Base content at the SAME path of the copy: it is the only place that resolves the same
+    # configuration and the same imports. Restored right after, and via trap if we die here.
     : > "$TMPD/swapped"
     for i in "${!rels[@]}"; do
       git -c safe.directory='*' -C "$SRC" show "$BASE:${paths[$i]}" > "$TMPD/base-content" 2>/dev/null || continue
-      # Registrato PRIMA di scrivere: un `cp` che fallisce dopo aver troncato la destinazione lascerebbe
-      # un file monco che il trap non saprebbe di dover ripristinare.
+      # Recorded BEFORE writing: a `cp` that fails after truncating the destination would leave
+      # a truncated file that the trap would not know it has to restore.
       echo "$grp/${rels[$i]}" >> "$TMPD/swapped"
       cp "$TMPD/base-content" "$DST/$grp/${rels[$i]}" || continue
       olds+=("${rels[$i]}")
     done
     base_msgs=""; rcc=0
     [ ${#olds[@]} -gt 0 ] && { base_msgs=$(lint_msgs "$DST" "$grp" "${olds[@]}"); rcc=$?; }
-    # Ripristino verificato: l'elenco si svuota solo se ogni copia e' tornata a posto; altrimenti resta
-    # al trap e il guasto si dichiara (una copia disallineata fa ripiegare il run successivo).
+    # Verified restore: the list empties only if every copy is back in place; otherwise it stays
+    # with the trap and the fault is declared (a misaligned copy makes the next run fall back).
     rst=0
     while IFS= read -r q; do [ -n "$q" ] && { cp "$SRC/$q" "$DST/$q" || rst=1; }; done < "$TMPD/swapped"
     if [ "$rst" -ne 0 ]; then
@@ -441,30 +441,30 @@ classify_extra() {
     [ -n "$pre$intro" ] || echo "vitest-fast: $grp pulito contro la base: ${paths[*]}"
   done <<< "$(printf '%s
 ' "${EXTRA[@]}" | cut -d'|' -f1 | LC_ALL=C sort -u)"
-  # Un INTRODUCED non va mascherato da un UNRESOLVED di un altro gruppo: bloccante vince.
+  # An INTRODUCED must not be masked by an UNRESOLVED of another group: blocking wins.
   [ "$has_intro" -eq 1 ] && return 1
   [ "$has_unres" -eq 1 ] && return 3
   return 0
 }
 
-fallback() {  # <motivo> <file…>
+fallback() {  # <reason> <files…>
   local why=$1 e; shift
-  # ⚠️ Mai la cache nel ripiego: la scriverebbe DENTRO il repository (<radice_pacchetti>/.fic-eslintcache-*),
-  # dove non e' ignorata da git. Entrerebbe nel manifest, e da li' in poi ogni run vedrebbe "copia non
-  # allineata" e ripiegherebbe su /mnt/c per sempre — l'ottimizzazione annullata in silenzio. Il ripiego
-  # non e' il percorso veloce dell'inner loop.
+  # ⚠️ Never the cache in the fallback: it would be written INSIDE the repository (<radice_pacchetti>/.fic-eslintcache-*),
+  # where git does not ignore it. It would enter the manifest, and from then on every run would see "copia non
+  # allineata" and would fall back to /mnt/c forever — the optimisation silently cancelled. The fallback
+  # is not the fast path of the inner loop.
   CACHE=0
   echo "vitest-fast: luogo=mnt-c (ripiego: $why; dichiarato da FIC_ALLOW_MNT_C=1)"
   local rc=0 dich="luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)"
-  # Con solo file fuori dalla radice la lista del gate e' vuota: niente da eseguire qui.
+  # With only files outside the root the gate list is empty: nothing to run here.
   if [ "$MODE" != lint ] || [ $# -gt 0 ]; then
     run_cmd "$SRC" "$@"; rc=$?
   fi
-  # ⚠️ Fuori dalla radice, nel ripiego, NON si classifica: la prova della base scriverebbe il contenuto
-  # vecchio dentro il REPOSITORY. Non conclusivo -> UNRESOLVED, mai un PASS silenzioso.
-  # Solo se una classificazione era stata CHIESTA: senza --base non si sarebbe classificato comunque, e
-  # quei path restano SKIPPED come sul percorso della copia. Altrimenti l'inner loop, che --base non lo
-  # passa, prenderebbe un BLOCKED ogni volta che la copia e' occupata, cioe' a ogni evento ordinario.
+  # ⚠️ Outside the root, in the fallback, there is NO classification: the base trial would write the old
+  # content inside the REPOSITORY. Inconclusive -> UNRESOLVED, never a silent PASS.
+  # Only if a classification had been REQUESTED: without --base there would have been no classification anyway, and
+  # those paths stay SKIPPED as on the copy path. Otherwise the inner loop, which does not pass --base,
+  # would get a BLOCKED every time the copy is busy, i.e. at every ordinary event.
   if [ "$MODE" = lint ] && [ ${#EXTRA[@]} -gt 0 ]; then
     if [ -z "$BASE" ]; then
       echo "vitest-fast: fuori da $RAD, non classificati (manca --base):"
@@ -486,33 +486,33 @@ fallback() {  # <motivo> <file…>
   exit $rc
 }
 
-# Copia non utilizzabile: BLOCKED (exit 3), mai un ripiego silenzioso su /mnt/c. Il ripiego resta
-# possibile solo se chi chiama lo chiede esplicitamente con FIC_ALLOW_MNT_C=1, e allora e' dichiarato
-# nella prima riga e nella riga d'esito.
-non_disponibile() {  # <motivo> <file…>
+# Copy not usable: BLOCKED (exit 3), never a silent fallback to /mnt/c. The fallback stays
+# possible only if the caller asks for it explicitly with FIC_ALLOW_MNT_C=1, and then it is declared
+# in the first line and in the outcome line.
+non_disponibile() {  # <reason> <files…>
   [ "${FIC_ALLOW_MNT_C:-}" = 1 ] && fallback "$@"
   echo "vitest-fast: esito=BLOCKED (copia non utilizzabile: $1; ripiego su /mnt/c solo con FIC_ALLOW_MNT_C=1) luogo=-"
   exit 3
 }
 
-risincronizza() {  # sync COMPLETO con cancellazione (il sync di prima di pt06; primo run e ripiego del ripiego)
+risincronizza() {  # FULL sync with deletion (the sync before pt06; first run and fallback of the fallback)
   rsync -a --delete --checksum "${EXCL[@]}" "$SRC/" "$DST/"
 }
 
-# ─── Sync incrementale (harness-pt06) ──────────────────────────────────────────────────────────────────
-# Stato PER COPIA, nella radice della copia (escluso dal sync e dalla rilevazione delle scritture: `.fic-*`).
-SYNC_SRC_CACHE=${DST:+$DST/.fic-sync-src}   # "<dim> <mtime> <ctime> <inode>\t<sha256>\t<path>" dell'origine
-SYNC_GEN=${DST:+$DST/.fic-sync-gen}         # impronta dipendenze + tsconfig generato all'ultima pulizia
+# ─── Incremental sync (harness-pt06) ──────────────────────────────────────────────────────────────────
+# State PER COPY, in the root of the copy (excluded from the sync and from the write detection: `.fic-*`).
+SYNC_SRC_CACHE=${DST:+$DST/.fic-sync-src}   # "<size> <mtime> <ctime> <inode>\t<sha256>\t<path>" of the source
+SYNC_GEN=${DST:+$DST/.fic-sync-gen}         # dependency fingerprint + generated tsconfig at the last cleanup
 
-# Preparati e cache ripuliti solo quando cambia cio' da cui dipendono: le dipendenze (l'impronta registrata dal
-# --setup, gia' verificata da deps_ok) o il file guida dei preparati nell'origine. Prima di pt06 lo si faceva a
-# ogni run, e ogni run pagava la rigenerazione da zero. Nel modulo senza preparati conta solo l'impronta.
+# Preparati and caches cleaned only when what they depend on changes: the dependencies (the fingerprint recorded by
+# --setup, already checked by deps_ok) or the guide file of the preparati in the source. Before pt06 it was done at
+# every run, and every run paid for regeneration from scratch. In a module without preparati only the fingerprint counts.
 gen_key() {
   local t=assente
   [ -n "$GUIDA" ] && [ -f "$SRC$G/$GUIDA" ] && t=$(sha256sum < "$SRC$G/$GUIDA" | cut -c1-64)
   printf 'deps=%s preparati=%s\n' "$(cat "$DST/.fic-deps" 2>/dev/null)" "$t"
 }
-pulizia_del_modulo() { # PUL_RUN (controprova.runner) e PUL_PREP (preparati) del modulo della copia, da maat.json
+pulizia_del_modulo() { # PUL_RUN (controprova.runner) and PUL_PREP (preparati) of the copy's module, from maat.json
   local out i
   PUL_RUN=""; PUL_PREP=()
   out=$(mc leggi --tutto | tr -d '\r') || return 1
@@ -521,8 +521,8 @@ pulizia_del_modulo() { # PUL_RUN (controprova.runner) e PUL_PREP (preparati) del
   PUL_RUN=$(printf '%s\n' "$out" | awk -F'\t' -v k="moduli.$i.controprova.runner" '$1 == k { print $2; exit }')
   mapfile -t PUL_PREP < <(printf '%s\n' "$out" | awk -F'\t' -v p="moduli.$i.preparati." 'index($1, p) == 1 && substr($1, length(p) + 1) ~ /^[0-9]+$/ { print $2 }')
 }
-# letti una volta (PREP_OK): i preparati, il loro file guida (GUIDA: il primo glob senza caratteri jolly, come
-# ciclo-worktree.sh) e il runner; 1 se maat.json non si legge
+# read once (PREP_OK): the preparati, their guide file (GUIDA: the first glob without wildcard characters, as in
+# ciclo-worktree.sh) and the runner; 1 if maat.json cannot be read
 PREP_OK="" GUIDA=""
 preparati_carica() {
   local g
@@ -531,7 +531,7 @@ preparati_carica() {
   for g in ${PUL_PREP[@]+"${PUL_PREP[@]}"}; do case $g in *[*?[]*) ;; *) GUIDA=$g; break ;; esac; done
   PREP_OK=1
 }
-pulisci_generati() {   # la pulizia del motore della copia (fic_mirror_pulisci), la stessa di counterproof.sh
+pulisci_generati() {   # the copy engine's cleanup (fic_mirror_pulisci), the same as counterproof.sh
   local k
   preparati_carica || return 1
   k=$(gen_key)
@@ -541,21 +541,21 @@ pulisci_generati() {   # la pulizia del motore della copia (fic_mirror_pulisci),
   echo "vitest-fast: generati della copia ripuliti (preparati e cache: impronta delle dipendenze o file guida dei preparati cambiati)"
 }
 
-# Hash dell'origine come `hashes "$SRC" <lista>` (stesso formato, stesso ordine), ma attraverso /mnt/c si
-# rileggono solo i file la cui stat (dimensione, mtime, ctime, inode, al nanosecondo) non e' quella registrata
-# in SYNC_SRC_CACHE. PREMESSA: una scrittura aggiorna sempre la ctime, anche su drvfs (/mnt/c) e anche
-# quando scrive Windows; provata da test-fast.test.sh (sonda drvfs, sezione 32) ma non garantita da nessuno.
-# Per questo la cache NON e' l'unica difesa: vedi l'audit completo qui sotto (SYNC_AUDIT).
-# La stat si prende PRIMA di leggere: se il file cambia nel mezzo, la stat registrata e' la vecchia e il run
-# successivo lo rilegge. `stat -L`: un symlink conta per il suo bersaglio, come `hashes` (che lo legge).
-# Aggiorna la cache (rinomina atomica).
-hashes_src() {  # <lista> -> stdout
+# Hashes of the source like `hashes "$SRC" <list>` (same format, same order), but across /mnt/c
+# only the files whose stat (size, mtime, ctime, inode, to the nanosecond) is not the recorded one are reread
+# from SYNC_SRC_CACHE. PREMISE: a write always updates the ctime, also on drvfs (/mnt/c) and also
+# when Windows writes; tested by test-fast.test.sh (drvfs probe, section 32) but guaranteed by nobody.
+# That is why the cache is NOT the only defence: see the full audit below (SYNC_AUDIT).
+# The stat is taken BEFORE reading: if the file changes halfway, the recorded stat is the old one and the next
+# run rereads it. `stat -L`: a symlink counts as its target, like `hashes` (which reads it).
+# Updates the cache (atomic rename).
+hashes_src() {  # <list> -> stdout
   local l=$1 cache=/dev/null
   [ -f "$SYNC_SRC_CACHE" ] && cache=$SYNC_SRC_CACHE
   (cd "$SRC" && tr '\n' '\0' < "$l" | xargs -0 -r stat -L --printf '%s %.9Y %.9Z %i\t%n\n' 2>/dev/null) > "$TMPD/stat"
   : > "$TMPD/todo"; : > "$TMPD/known"
-  # stat assente = file assente (ABSENT, come `hashes`) · stat uguale a quella registrata = sha registrato ·
-  # altrimenti il file si rilegge
+  # stat missing = file missing (ABSENT, like `hashes`) · stat equal to the recorded one = recorded sha ·
+  # otherwise the file is reread
   awk -F'\t' -v todo="$TMPD/todo" -v known="$TMPD/known" '
     FILENAME == ARGV[1] { ck[$3] = $1; ch[$3] = $2; next }
     FILENAME == ARGV[2] { s[$2] = $1; next }
@@ -566,7 +566,7 @@ hashes_src() {  # <lista> -> stdout
   ' "$cache" "$TMPD/stat" "$l"
   hashes "$SRC" "$TMPD/todo" > "$TMPD/fresh"
   LC_ALL=C sort -t ' ' -k3 "$TMPD/known" "$TMPD/fresh" > "$TMPD/src.new"
-  # nuova cache: stat presa sopra + sha di questo run, solo per i file presenti
+  # new cache: stat taken above + sha of this run, only for the files present
   awk -F'\t' 'FILENAME == ARGV[1] { s[$2] = $1; next }
     { i = index($0, "  "); h = substr($0, 1, i - 1); p = substr($0, i + 2) }
     h != "ABSENT" && (p in s) { print s[p] "\t" h "\t" p }' "$TMPD/stat" "$TMPD/src.new" > "$SYNC_SRC_CACHE.tmp" &&
@@ -575,16 +575,16 @@ hashes_src() {  # <lista> -> stdout
   cat "$TMPD/src.new"
 }
 
-# Rete di sicurezza della cache (SYNC_AUDIT): ogni FIC_SYNC_AUDIT_RUNS run (default 20) o quando l'ultimo
-# controllo completo ha piu' di FIC_SYNC_AUDIT_SECS secondi (default 1800), l'origine si rilegge TUTTA,
-# ignorando la cache, e si confronta con cio' che la cache ha detto. Una differenza vuol dire che la premessa
-# della stat non ha tenuto: cache buttata, sync completo, avviso esplicito. Stato: "<epoch> <run dall'ultimo>".
+# Safety net of the cache (SYNC_AUDIT): every FIC_SYNC_AUDIT_RUNS runs (default 20) or when the last
+# full check is older than FIC_SYNC_AUDIT_SECS seconds (default 1800), the source is reread ENTIRELY,
+# ignoring the cache, and compared with what the cache said. A difference means that the stat premise
+# did not hold: cache discarded, full sync, explicit warning. State: "<epoch> <runs since the last one>".
 SYNC_AUDIT=${DST:+$DST/.fic-sync-audit}
-# Lo stato si VALIDA prima di ogni aritmetica: con `set -u` un valore come `abc` farebbe morire lo script
-# senza riga d'esito, e `1.5` farebbe saltare l'audit per un errore aritmetico — a ogni run, perche' lo stato
-# non verrebbe mai riscritto. Stato assente o non valido = `0 0`, cioe' audit dovuto (e poi riscritto valido).
-# Le soglie non numeriche valgono il default.
-audit_leggi() {  # -> AUD_EP AUD_NR, interi
+# The state is VALIDATED before any arithmetic: with `set -u` a value like `abc` would kill the script
+# without an outcome line, and `1.5` would skip the audit through an arithmetic error — at every run, because the state
+# would never be rewritten. State missing or invalid = `0 0`, i.e. audit due (and then rewritten valid).
+# Non-numeric thresholds take the default.
+audit_leggi() {  # -> AUD_EP AUD_NR, integers
   local ep="" nr=""
   [ -f "$SYNC_AUDIT" ] && read -r ep nr _ < "$SYNC_AUDIT" 2>/dev/null
   if [[ $ep =~ ^[0-9]+$ ]] && [[ $nr =~ ^[0-9]+$ ]]; then AUD_EP=$((10#$ep)); AUD_NR=$((10#$nr)); else AUD_EP=0; AUD_NR=0; fi
@@ -597,18 +597,18 @@ audit_dovuto() {
   now=$(date +%s)
   [ $((AUD_NR + 1)) -ge "$((10#$runs))" ] || [ $((now - AUD_EP)) -ge "$((10#$secs))" ]
 }
-audit_registra() {  # <0 = controllo completo fatto | 1 = run con la sola cache>
+audit_registra() {  # <0 = full check done | 1 = run with the cache only>
   audit_leggi
   if [ "$1" = 0 ]; then printf '%s 0\n' "$(date +%s)" > "$SYNC_AUDIT"
   else printf '%s %s\n' "$AUD_EP" "$((AUD_NR + 1))" > "$SYNC_AUDIT"; fi
 }
 
-# Allinea la copia sul DIFF fra i due manifest: copiato se lo sha differisce, cancellato se assente
-# nell'origine. `--remove-destination`: il file della copia si sostituisce, non si riscrive sul posto (un
-# hardlink verso un'altra copia non verrebbe mai toccato). Poi i file della copia FUORI dal manifest che
-# nell'origine non esistono (non tracciati cancellati, scritture di un run precedente): via, come
-# `rsync --delete`. Torna il numero di file toccati su stdout.
-allinea_diff() {  # <hash origine> <hash copia>
+# Aligns the copy on the DIFF between the two manifests: copied if the sha differs, deleted if missing
+# in the source. `--remove-destination`: the copy's file is replaced, not rewritten in place (a
+# hardlink to another copy would never be touched). Then the copy's files OUTSIDE the manifest that
+# do not exist in the source (deleted untracked files, writes of a previous run): removed, like
+# `rsync --delete`. Prints the number of files touched on stdout.
+allinea_diff() {  # <source hashes> <copy hashes>
   local p n=0
   while IFS= read -r p; do
     [ -n "$p" ] || continue
@@ -628,13 +628,13 @@ allinea_diff() {  # <hash origine> <hash copia>
   echo "$n"
 }
 
-# Lint: perimetro deciso PRIMA di eseguire (solo la radice del modulo, solo estensioni lintabili).
-# Niente da lintare -> SKIPPED, senza toccare la copia. Il ciclo sta qui, non in una funzione: una
-# sottoshell perderebbe le due liste. LINT e EXTRA hanno i path relativi a radice_pacchetti.
+# Lint: perimeter decided BEFORE running (only the module root, only lintable extensions).
+# Nothing to lint -> SKIPPED, without touching the copy. The loop is here, not in a function: a
+# subshell would lose the two lists. LINT and EXTRA hold paths relative to radice_pacchetti.
 if [ "$MODE" = lint ]; then
   for p in "$@"; do
     p=${p#./}
-    # File eliminato dalla modifica: niente da lintare (eslint uscirebbe 2 -> BLOCKED su codice sano).
+    # File deleted by the change: nothing to lint (eslint would exit 2 -> BLOCKED on sound code).
     case "$p" in
       "$PKG"/*) if [ ! -e "$ROOT/$p" ]; then DELETED+=("$p"); continue; fi ;;
     esac
@@ -642,12 +642,12 @@ if [ "$MODE" = lint ]; then
       "$RAD"/*)
         case "$p" in
           *.ts|*.tsx|*.vue|*.js) LINT+=("${p#"$PKG"/}") ;;
-          *) SKIP+=("$p") ;;   # .md, .scss, immagini: eslint uscirebbe >=2 e il gate sarebbe BLOCKED
+          *) SKIP+=("$p") ;;   # .md, .scss, images: eslint would exit >=2 and the gate would be BLOCKED
         esac ;;
       "$PKG"/*)
-        # Altro pacchetto del workspace: non e' il gate, ma non e' nemmeno "innocuo per definizione" quando il
-        # modulo dichiara lint_base. Gruppo = i due segmenti dopo radice_pacchetti (apps/<x> o packages/<x>),
-        # cioe' la radice del pacchetto, cioe' la cwd che risolve la configurazione giusta.
+        # Another workspace package: it is not the gate, but it is not "harmless by definition" either when the
+        # module declares lint_base. Group = the two segments after radice_pacchetti (apps/<x> or packages/<x>),
+        # i.e. the package root, i.e. the cwd that resolves the right configuration.
         r=${p#"$PKG"/}; a=${r%%/*}; b=${r#*/}
         if [ "$LINT_BASE" = true ] && { [ "$a" = apps ] || [ "$a" = packages ]; } && [ "$b" != "${b#*/}" ]; then
           case "$p" in
@@ -658,9 +658,9 @@ if [ "$MODE" = lint ]; then
           SKIP+=("$p")
         fi ;;
       *)
-        # Un path che contiene la radice (o la sua parte sotto radice_pacchetti) ma non e' ancorato al repo
-        # (assoluto, o con un prefisso diverso) e' un errore del chiamante, non un file fuori perimetro:
-        # dichiararlo SKIPPED lascerebbe passare come "niente da lintare" un file che va lintato.
+        # A path that contains the root (or its part under radice_pacchetti) but is not anchored to the repo
+        # (absolute, or with a different prefix) is a caller error, not a file outside the perimeter:
+        # declaring it SKIPPED would let a file that must be linted pass as "nothing to lint".
         if [[ $p == */"$RAD"/* ]] || { [ -n "$GROUP" ] && [[ $p == */"$GROUP"/* ]]; }; then
           echo "vitest-fast: path non relativo al repository: $p" >&2; exit 64
         fi
@@ -683,10 +683,10 @@ if [ "$MODE" = lint ]; then
     fi
     exit 0
   fi
-  # ⚠️ I PREPARATI servono prima di qualunque ripiego (es. il tsconfig generato, che `<radice>/tsconfig.json`
-  # estende: senza, eslint sbaglia la risoluzione di OGNI import — misurato, 10 errori inventati contro 1 vero).
-  # Su /mnt/c mancano allo stesso modo, quindi ripiegare non aiuta: e' un guasto d'ambiente, cioe' BLOCKED (Step
-  # 2.5), mai FAIL su codice sano. Il rimedio e' la `preparazione` del modulo. Modulo senza preparati: nessun requisito.
+  # ⚠️ The PREPARATI are needed before any fallback (e.g. the generated tsconfig, which `<radice>/tsconfig.json`
+  # extends: without it, eslint gets the resolution of EVERY import wrong — measured, 10 invented errors against 1 real one).
+  # On /mnt/c they are missing in the same way, so falling back does not help: it is an environment fault, i.e. BLOCKED (Step
+  # 2.5), never FAIL on sound code. The remedy is the module's `preparazione`. Module without preparati: no requirement.
   if [ ${#LINT[@]} -gt 0 ]; then
     preparati_carica || { echo "vitest-fast: esito=BLOCKED (preparati del modulo $MODULO non leggibili da maat.json) luogo=-"; exit 2; }
     if [ -n "$GUIDA" ] && [ ! -f "$SRC$G/$GUIDA" ]; then
@@ -697,16 +697,16 @@ if [ "$MODE" = lint ]; then
   set -- ${LINT[@]+"${LINT[@]}"}
 fi
 
-# Lint: servono i PREPARATI della radice. Le loro cartelle sono escluse dal sync (generate, pesano), quindi qui si
-# portano i soli file dei glob di `preparati` (il file guida e' obbligatorio, gli altri se ci sono): per esempio
-# il tsconfig generato, autoconsistente (i suoi path puntano a node_modules, presente nella copia).
-# Va rifatto dopo ogni risincronizzazione, che ripulisce le cartelle dei preparati nella copia.
+# Lint: the PREPARATI of the root are needed. Their directories are excluded from the sync (generated, heavy), so here
+# only the files of the `preparati` globs are brought over (the guide file is mandatory, the others if present): for example
+# the generated tsconfig, self-consistent (its paths point to node_modules, present in the copy).
+# It must be redone after every resync, which cleans the preparati directories in the copy.
 tsconfig_lint() {
   local g f rel
   [ "$MODE" = lint ] || return 0
   preparati_carica || return 1
   for g in ${PUL_PREP[@]+"${PUL_PREP[@]}"}; do
-    for f in "$SRC$G/"$g; do   # $g senza virgolette: il * del glob si espande nell'origine
+    for f in "$SRC$G/"$g; do   # $g unquoted: the * of the glob expands in the source
       [ -f "$f" ] || { [ "$g" = "$GUIDA" ] && return 1; continue; }
       rel=${f#"$SRC$G/"}
       mkdir -p "$(dirname "$DST$G/$rel")" && cp "$f" "$DST$G/$rel" || return 1
@@ -714,10 +714,10 @@ tsconfig_lint() {
   done
 }
 
-# Senza radice non c'e' una copia associabile a questo tree (e nemmeno il manifest, che usa lo stesso git).
+# Without a root there is no copy that can be associated with this tree (nor the manifest, which uses the same git).
 [ -n "$DST" ] || non_disponibile "manifest non calcolabile (git: radice del repository non determinabile, nessuna copia associabile)" "$@"
-# Primo uso della copia di un worktree: node_modules seminati dalla copia del tree principale (hardlink),
-# se le dipendenze coincidono; altrimenti resta "copia assente", con il motivo.
+# First use of a worktree's copy: node_modules seeded from the copy of the main tree (hardlinks),
+# if the dependencies match; otherwise it stays "copia assente", with the reason.
 SEED_WHY=""
 if [ "$MIRROR" != "$HOME/fic-mirror" ] && ! { [ -d "$DST/node_modules" ] && [ -f "$DST/.fic-deps" ]; }; then
   if SEED_WHY=$(fic_seed_node_modules "$SRC" "$DST"); then
@@ -731,11 +731,11 @@ if [ "$MIRROR" != "$HOME/fic-mirror" ] && ! { [ -d "$DST/node_modules" ] && [ -f
 fi
 [ -d "$DST/node_modules" ] && [ -f "$DST/.fic-deps" ] || non_disponibile "copia assente: eseguire --setup$SEED_WHY" "$@"
 exec 9>"$DST/.fic-lock"
-# Copia occupata da un altro run: si ATTENDE (tetto FIC_LOCK_WAIT secondi), non si ripiega su /mnt/c.
+# Copy busy with another run: it WAITS (limit FIC_LOCK_WAIT seconds), it does not fall back to /mnt/c.
 LOCK_WAIT=${FIC_LOCK_WAIT:-900}
 flock -w "$LOCK_WAIT" 9 || non_disponibile "copia occupata da un altro run oltre ${LOCK_WAIT}s (FIC_LOCK_WAIT)" "$@"
-# Dipendenze stantie: riallineamento automatico dentro il lock (fic-mirror.sh, fic_deps_autorefresh), poi di nuovo
-# deps_ok. pulisci_generati qui sotto vede l'impronta nuova e ripulisce preparati e cache.
+# Stale dependencies: automatic realignment inside the lock (fic-mirror.sh, fic_deps_autorefresh), then deps_ok
+# again. pulisci_generati below sees the new fingerprint and cleans preparati and caches.
 if ! deps_ok; then
   DEPS_OUT=$(fic_deps_autorefresh "$SRC" "$DST") ||
     non_disponibile "dipendenze stantie, riallineamento automatico non riuscito: $DEPS_OUT" "$@"
@@ -745,19 +745,19 @@ fi
 pulisci_generati || non_disponibile "pulizia dei generati della copia fallita" "$@"
 
 TMPD=$(mktemp -d)
-# Il trap ripristina anche i file scambiati con la versione della base durante la classificazione: se si
-# muore li' in mezzo, la copia resta disallineata e il run successivo dovrebbe risincronizzarla.
-# Il segnale diventa un'uscita normale, cosi' il trap EXIT (e quindi il ripristino della copia) gira di
-# sicuro. ⚠️ Misurato il 2026-09-23: il bash di questa macchina esegue il trap EXIT anche su un TERM non
-# gestito, quindi la suite NON distingue la presenza di questa riga (la controprova per mutazione resta
-# verde). Resta perche' rende il comportamento indipendente da quel dettaglio di bash, non perche' un
-# test lo dimostri: e' dichiarato, non finto.
+# The trap also restores the files swapped with the base version during the classification: if we
+# die halfway through, the copy stays misaligned and the next run would have to resync it.
+# The signal becomes a normal exit, so that the EXIT trap (and therefore the restore of the copy) surely
+# runs. ⚠️ Measured on 2026-09-23: the bash of this machine runs the EXIT trap even on an unhandled
+# TERM, so the suite does NOT detect the presence of this line (the mutation counterproof stays
+# green). It stays because it makes the behaviour independent of that bash detail, not because a
+# test proves it: it is declared, not faked.
 trap 'exit 143' TERM INT HUP
 trap 'if [ -s "$TMPD/swapped" ]; then while IFS= read -r q; do [ -n "$q" ] && cp "$SRC/$q" "$DST/$q" 2>/dev/null; done < "$TMPD/swapped"; fi; rm -rf "$TMPD"' EXIT
 manifest_list > "$TMPD/list" && git -c safe.directory='*' -C "$SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
   [ -n "$(git -c safe.directory='*' -C "$SRC" ls-files . | head -1)" ] || non_disponibile "manifest non calcolabile (git)" "$@"
-# Sync: COMPLETO senza stato della copia (primo run, copia nuova), altrimenti INCREMENTALE sul diff dei due
-# manifest (vedi Garanzie). In entrambi i casi il confronto qui sotto e' quello di sempre.
+# Sync: FULL without copy state (first run, new copy), otherwise INCREMENTAL on the diff of the two
+# manifests (see Guarantees). In both cases the comparison below is the usual one.
 SYNC=incrementale; SYNC_N=0
 if [ ! -f "$SYNC_SRC_CACHE" ]; then
   SYNC=completo
@@ -765,7 +765,7 @@ if [ ! -f "$SYNC_SRC_CACHE" ]; then
 fi
 hashes_src "$TMPD/list" > "$TMPD/src"
 if [ "$SYNC" = completo ]; then
-  audit_registra 0          # senza cache hashes_src ha riletto tutto: vale come controllo completo
+  audit_registra 0          # without cache hashes_src reread everything: it counts as a full check
 elif audit_dovuto; then
   hashes "$SRC" "$TMPD/list" > "$TMPD/src.full"
   if cmp -s "$TMPD/src" "$TMPD/src.full"; then
@@ -775,7 +775,7 @@ elif audit_dovuto; then
     diff "$TMPD/src" "$TMPD/src.full" | head -5 | sed 's/^/  /'
     rm -f "$SYNC_SRC_CACHE"; SYNC=completo
     risincronizza || non_disponibile "sync fallito" "$@"
-    hashes_src "$TMPD/list" > "$TMPD/src"   # cache ricostruita da zero
+    hashes_src "$TMPD/list" > "$TMPD/src"   # cache rebuilt from scratch
     audit_registra 0
   fi
 else
@@ -787,9 +787,9 @@ if [ "$SYNC" = incrementale ]; then
   [ "$SYNC_N" -eq 0 ] || hashes "$DST" "$TMPD/list" > "$TMPD/dst"
 fi
 tsconfig_lint || non_disponibile "preparati del modulo non copiabili" "$@"
-# Copia disallineata: UNA risincronizzazione (sync COMPLETO, manifest ricalcolato, stato dell'origine
-# ricostruito da zero), poi nuovo confronto. L'impronta delle dipendenze non c'entra: quella e' gia' stata
-# verificata (e se serviva riallineata) sopra.
+# Misaligned copy: ONE resync (FULL sync, manifest recomputed, source state
+# rebuilt from scratch), then a new comparison. The dependency fingerprint has nothing to do with it: it was already
+# checked (and realigned if needed) above.
 if ! cmp -s "$TMPD/src" "$TMPD/dst"; then
   echo "vitest-fast: differenze fra origine e copia:"; diff "$TMPD/src" "$TMPD/dst" | head -5
   echo "vitest-fast: copia non allineata: risincronizzazione"
@@ -805,8 +805,8 @@ fi
 echo "vitest-fast: luogo=copia"
 if [ "$SYNC" = completo ]; then echo "vitest-fast: sync=completo"; else echo "vitest-fast: sync=incrementale ($SYNC_N file allineati)"; fi
 
-# La classificazione fuori perimetro scrive e ripristina file della copia: va fatta PRIMA dello stamp,
-# altrimenti la rilevazione delle scritture del run la vedrebbe come una scrittura del runner.
+# The classification outside the perimeter writes and restores files of the copy: it must be done BEFORE the stamp,
+# otherwise the detection of the run's writes would see it as a write by the runner.
 EXTRA_RC=0
 if [ "$MODE" = lint ] && [ ${#EXTRA[@]} -gt 0 ]; then
   classify_extra; EXTRA_RC=$?
@@ -818,8 +818,8 @@ if [ "$MODE" != lint ] || [ $# -gt 0 ]; then
   run_cmd "$DST" "$@"; rc=$?
 fi
 
-# Qualunque scrittura nella copia durante il run: file del manifest cambiati o file nuovi (esclusi
-# node_modules, .nuxt, .output, coverage e la cache).
+# Any write in the copy during the run: manifest files changed or new files (excluding
+# node_modules, .nuxt, .output, coverage and the cache).
 hashes "$DST" "$TMPD/list" > "$TMPD/after"
 written=$( { diff "$TMPD/dst" "$TMPD/after" | sed -n 's/^> [^ ]*  //p'
              (cd "$DST" && find . \( -name node_modules -o -name .nuxt -o -name .output -o -name coverage -o -name .turbo \) -prune \
@@ -830,11 +830,11 @@ if [ -n "$written" ]; then
   exit 4
 fi
 
-# Guardia di equivalenza (harness-pt06), INTERNA ai test: FIC_SYNC_EQUIV=1 nell'ambiente, mai un argomento.
-# Sulla stessa copia e sullo stesso stato dell'origine: manifest della copia (piu' i file della copia assenti
-# nell'origine) e codice d'uscita del runner dopo il sync appena fatto, poi sync COMPLETO e di nuovo. Devono
-# coincidere: un file cambiato che il sync incrementale non ha allineato qui diventa una differenza.
-stato_copia() {  # manifest della copia + file della copia fuori manifest e assenti nell'origine
+# Equivalence guard (harness-pt06), INTERNAL to the tests: FIC_SYNC_EQUIV=1 in the environment, never an argument.
+# On the same copy and the same source state: manifest of the copy (plus the copy's files missing
+# in the source) and exit code of the runner after the sync just done, then FULL sync and again. They must
+# match: a changed file that the incremental sync did not align becomes a difference here.
+stato_copia() {  # manifest of the copy + copy files outside the manifest and missing in the source
   local p
   hashes "$DST" "$TMPD/list"
   (cd "$DST" && find . \( -name node_modules -o -name .nuxt -o -name .output -o -name coverage -o -name .turbo \) -prune \
@@ -861,9 +861,9 @@ if [ "${FIC_SYNC_EQUIV:-}" = 1 ]; then
     exit 3
   fi
 fi
-# Esito finale del lint. Un guasto di configurazione (BLOCKED) vince su tutto: non si accusa il codice
-# quando l'ambiente non ha funzionato. Poi gli errori veri — del gate o INTRODUCED fuori perimetro —,
-# poi UNRESOLVED, che e' "non conclusivo" e non deve mai diventare un PASS.
+# Final lint outcome. A configuration fault (BLOCKED) wins over everything: the code is not blamed
+# when the environment did not work. Then the real errors — of the gate or INTRODUCED outside the perimeter —,
+# then UNRESOLVED, which is "inconclusive" and must never become a PASS.
 if [ "$MODE" = lint ]; then
   if [ "$rc" -ge 2 ]; then
     echo "vitest-fast: esito=BLOCKED (eslint: configurazione o ambiente, uscita $rc) luogo=copia"; exit 2

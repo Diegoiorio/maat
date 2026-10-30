@@ -12,16 +12,16 @@ Prima di ogni comando Bash o PowerShell, scrivi `description` secondo `${CLAUDE_
 2. **S0, before the first phase only** (no `log/*.exit` yet): ask the user now the critical ambiguities (a draft
    spec → the `maat:spec-author` agent in analysis only); say whether the feature needs a migration (a human STOP when
    the implement writes it) and whether the spec may be split into a chain (the plan phase proposes the cut,
-   once per feature). Nothing to ask → say so in one line. Always tell the user: «durante il ciclo non modificare
-   file in questo working tree: per lavorare in parallelo usa un altro worktree
+   once per feature). Nothing to ask → say so in one line. Always tell the user: «do not change files in this
+   working tree during the cycle: to work in parallel use another worktree
    (`git worktree add ../<repo>-lavoro -b <branch> develop`)». If the user (or other sessions) will keep working
    in this tree during the cycle and `--worktree` was not given, suggest it: the cycle then runs in its own worktree.
 3. **Launch the driver**, Bash with `run_in_background: true`:
    `. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/driver.py" run .claude/.ai-workflow/spec-<name>.md -- <flags>`.
    **`--worktree`** (never forwarded to the driver). The DEV stays shared (code sync, e2e context): the per-worktree
    lock protects only the local work, so another cycle or an e2e of the declared remote verification (`verifica_remota` in `.claude/maat.json`) could sync different code onto the
-   same DEV and give a false PASS. Therefore: `--with-e2e` given → refuse before creating anything («`--with-e2e` non
-   è ammesso con `--worktree`: il DEV è condiviso. Verifica su DEV dopo, dal tree principale, a codice integrato»);
+   same DEV and give a false PASS. Therefore: `--with-e2e` given → refuse before creating anything («`--with-e2e` is
+   not allowed with `--worktree`: the DEV is shared. Verify on DEV afterwards, from the main tree, on the integrated code»);
    `--no-dev` is **always added** to the driver's flags (say so: the cycle ends at best `NEEDS_VERIFICATION`). Then,
    in the foreground,
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ciclo-worktree.sh" crea .claude/.ai-workflow/spec-<name>.md [--base <ref>]` — it creates or resumes
@@ -61,18 +61,18 @@ Never read a sub-session's `.jsonl` into this chat.
 
 ```text
 Full implementation cycle — spec-<name>.md
-Esito: IMPLEMENTED | NEEDS_VERIFICATION | STOP (<fase>: <motivo>)
-Fasi:            <label → ESITO FASE line · minuti · costo> one per line (driver.log, phase-usage.py)
-Piano:           Plan status <…> · <metric line of the plan changelog>
+Outcome: IMPLEMENTED | NEEDS_VERIFICATION | STOP (<phase>: <reason>)
+Phases:          <label → ESITO FASE line · minutes · cost> one per line (driver.log, phase-usage.py)
+Plan:            Plan status <…> · <metric line of the plan changelog>
 Review:          Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3
-Evidenze:        <the review's evidence table, as written in the spec>
-Artefatti da accettare o rimuovere: <paths | none>
-Decisioni aperte: <none | list>
-Lavoro di altri nel working tree: <do-not-touch.txt — non toccati | none>
-File esclusi cambiati dopo la review: <EXCLUDED-CHANGED of cycle-state.sh | none>
-Log completi: .claude/.ai-workflow/spec-<name>.run/log/
-Worktree:        <none | <wt> · branch fic/<name> · integrazione e rimozione (step 7)>
-Nessun commit eseguito: rivedi il diff (git status / git diff) e committa tu.
+Evidence:        <the review's evidence table, as written in the spec>
+Artefacts to accept or remove: <paths | none>
+Open decisions: <none | list>
+Other work in the working tree: <do-not-touch.txt — not touched | none>
+Excluded files changed after the review: <EXCLUDED-CHANGED of cycle-state.sh | none>
+Full logs: .claude/.ai-workflow/spec-<name>.run/log/
+Worktree:        <none | <wt> · branch fic/<name> · integration and removal (step 7)>
+No commit made: review the diff (git status / git diff) and commit it yourself.
 ```
 
 On a STOP say exactly what the user must decide or run, and that re-invoking resumes from the right phase.

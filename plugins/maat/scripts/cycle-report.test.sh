@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# cycle-report.test.sh — cycle-report.py su una run directory sintetica con .jsonl noti: A, bucket,
-# riesecuzioni, B, STOP attesi al secondo; --append su un file temporaneo; controprove per mutazione
-# eseguite qui, su copie mutate dello script.
+# cycle-report.test.sh — cycle-report.py on a synthetic run directory with known .jsonl files: A, buckets,
+# reruns, B, STOPs expected to the second; --append on a temporary file; counterproofs by mutation
+# run here, on mutated copies of the script.
 #   bash script/fic/cycle-report.test.sh
-#   CR=/percorso/variante.py bash script/fic/cycle-report.test.sh   # la suite su una variante
+#   CR=/path/variant.py bash script/fic/cycle-report.test.sh   # the suite on a variant
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)   # radice del plugin
-SCRIPTS_DIR=$HERE   # HERE e ROOT li riassegna replay.sh quando lo si include (FIC_REPLAY_LIB=1)
+ROOT=$(cd "$HERE/.." && pwd)   # plugin root
+SCRIPTS_DIR=$HERE   # replay.sh reassigns HERE and ROOT when it is sourced (FIC_REPLAY_LIB=1)
 CR=${CR:-$HERE/cycle-report.py}
 . "$ROOT/scripts/python.sh" || { echo "interprete Python non trovato" >&2; exit 1; }
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
-WP=$(cygpath -m "$W" 2>/dev/null || printf '%s' "$W")   # percorso leggibile anche dal Python di Windows
+WP=$(cygpath -m "$W" 2>/dev/null || printf '%s' "$W")   # path readable by Windows Python too
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
 
-# --- generatori di eventi (ore 12 UTC del 15/01/2026; ts = MM:SS) ---
+# --- event generators (12:00 UTC on 15/01/2026; ts = MM:SS) ---
 T=2026-01-15T12
-A() { # $1 ts, $2 id messaggio, $3 blocchi di contenuto, [$4 parent_tool_use_id gia' quotato]
+A() { # $1 ts, $2 message id, $3 content blocks, [$4 parent_tool_use_id already quoted]
   printf '{"type":"assistant","session_id":"%s","timestamp":"%s:%sZ","parent_tool_use_id":%s,"message":{"id":"%s","content":[%s]}}\n' \
     "$SID" "$T" "$1" "${4:-null}" "$2" "$3"
 }
-U() { # $1 ts, $2 tool_use_id (vuoto = prompt), [$3 parent_tool_use_id gia' quotato]
+U() { # $1 ts, $2 tool_use_id (empty = prompt), [$3 parent_tool_use_id already quoted]
   local c='{"type":"text","text":"prompt"}'
   [ -n "$2" ] && c='{"type":"tool_result","tool_use_id":"'"$2"'","content":"ok"}'
   printf '{"type":"user","session_id":"%s","timestamp":"%s:%sZ","parent_tool_use_id":%s,"message":{"content":[%s]}}\n' \
@@ -32,18 +32,18 @@ U() { # $1 ts, $2 tool_use_id (vuoto = prompt), [$3 parent_tool_use_id gia' quot
 TOOL() { printf '{"type":"tool_use","id":"%s","name":"%s","input":%s}' "$1" "$2" "$3"; }
 SH() { TOOL "$1" Bash '{"command":"'"$2"'"}'; }
 TXT='{"type":"text","text":"x"}'
-RES() { # $1 duration_ms, $2 total_cost_usd, $3 cache letti (cumulativi), [$4 testo del result]
+RES() { # $1 duration_ms, $2 total_cost_usd, $3 cache read (cumulative), [$4 result text]
   printf '{"type":"result","session_id":"%s","duration_ms":%s,"total_cost_usd":%s,"result":"%s","modelUsage":{"m":{"cacheReadInputTokens":%s,"cacheCreationInputTokens":10,"outputTokens":5,"costUSD":%s}}}\n' \
     "$SID" "$1" "$2" "${4:-fine}" "$3" "$2"
 }
 RL() { printf '{"type":"rate_limit_event","session_id":"%s","rate_limit_info":{"unifiedWindows":{"five_hour":{"utilization":%s}}}}\n' "$SID" "$1"; }
-TR() { # transcript: $1 file, poi i ts
+TR() { # transcript: $1 file, then the ts values
   local f=$1; shift; mkdir -p "$(dirname "$f")"; : > "$f"
   for t in "$@"; do printf '{"type":"user","sessionId":"x","timestamp":"%s:%sZ"}\n' "$T" "$t" >> "$f"; done
 }
 VIT="bash script/test/vitest-fast.sh tests/a.test.ts"
 
-# --- ciclo sintetico: plan OK · implement STOP (deviazione) · implement OK · review OK ---
+# --- synthetic cycle: plan OK · implement STOP (deviation) · implement OK · review OK ---
 R="$W/runs/spec-syn.run"; L="$R/log"; P="$W/projects/proj"
 mkdir -p "$L" "$R/evidence/k1" "$R/counterproof"
 printf '{"durata": 30}\n' > "$R/evidence/k1/vitest.json"
@@ -53,7 +53,7 @@ printf '[]\n' > "$R/counterproof/mutations.json"
 SID=s1
 { RL 0.10
   A 00:00 m1 "$(TOOL r1 Read '{"file_path":"a.md"}')"; U 00:30 r1        # file 30
-  A 01:00 m2 "$TXT"                                                      # modello 30
+  A 01:00 m2 "$TXT"                                                      # model 30
   RL 0.12; RES 90000 1.5 1000
 } > "$L/01-plan.jsonl"
 printf 'ESITO FASE plan: OK — approvato\n' > "$L/01-plan.esito"
@@ -61,12 +61,12 @@ TR "$P/s1.jsonl" 00:00 02:00
 
 SID=s2
 { A 03:00 m1 "$(SH t1 "$VIT 2>&1 | tail -5")"; U 05:00 t1                # vitest 120
-  A 05:30 m2 "$(SH t2 "$VIT | tail -30")"; U 06:30 t2                     # modello 30 · vitest 60, RIESECUZIONE
-  A 07:00 m3 "$(TOOL t3 Edit '{"file_path":"C:/r/modules/x.ts"}')"; U 07:10 t3   # modello 30 · file 10: sorgente
-  A 07:40 m4 "$(SH t4 "$VIT")"; U 08:00 t4                                # modello 30 · vitest 20, dopo una scrittura
+  A 05:30 m2 "$(SH t2 "$VIT | tail -30")"; U 06:30 t2                     # model 30 · vitest 60, RERUN
+  A 07:00 m3 "$(TOOL t3 Edit '{"file_path":"C:/r/modules/x.ts"}')"; U 07:10 t3   # model 30 · file 10: source
+  A 07:40 m4 "$(SH t4 "$VIT")"; U 08:00 t4                                # model 30 · vitest 20, after a write
   A 08:10 m5 "$(TOOL t5 Edit '{"file_path":"C:/r/.claude/.ai-workflow/spec-syn.md"}')"; U 08:15 t5   # 10 · file 5
-  A 08:20 m6 "$(SH t6 "$VIT")"; U 08:50 t6                                # modello 5 · vitest 30, RIESECUZIONE
-  A 09:00 m7 "$TXT"                                                       # modello 10
+  A 08:20 m6 "$(SH t6 "$VIT")"; U 08:50 t6                                # model 5 · vitest 30, RERUN
+  A 09:00 m7 "$TXT"                                                       # model 10
   RES 360000 2.0 2000
 } > "$L/02-implement.jsonl"
 printf 'ESITO FASE implement: STOP — deviazione dal piano: il passo 3 contraddice un test\n' > "$L/02-implement.esito"
@@ -74,13 +74,13 @@ TR "$P/s2.jsonl" 03:00 09:00
 
 SID=s3
 { A 30:00 m1 "$(SH t1 "bash cp.sh CP1")"; U 32:00 t1                      # controprove 120
-  A 32:30 m2 "$(TOOL t2 Agent '{"subagent_type":"plan-implementer","prompt":"x"}')"   # modello 30
+  A 32:30 m2 "$(TOOL t2 Agent '{"subagent_type":"plan-implementer","prompt":"x"}')"   # model 30
   U 32:31 "" '"t2"'
-  A 32:40 sm1 "$(SH s1 "sleep 60; tail out.log")" '"t2"'; U 33:40 s1 '"t2"'   # modello 9 · polling 60
-  A 33:45 sm2 "$(SH s2 "$VIT")" '"t2"'; U 33:55 s2 '"t2"'                    # modello 5 · vitest 10: dopo uno STOP
-  A 33:58 sm3 "$TXT" '"t2"'                                                  # modello 3
+  A 32:40 sm1 "$(SH s1 "sleep 60; tail out.log")" '"t2"'; U 33:40 s1 '"t2"'   # model 9 · polling 60
+  A 33:45 sm2 "$(SH s2 "$VIT")" '"t2"'; U 33:55 s2 '"t2"'                    # model 5 · vitest 10: after a STOP
+  A 33:58 sm3 "$TXT" '"t2"'                                                  # model 3
   U 35:00 t2                                                                 # agenti 150
-  A 35:30 m3 "$TXT"                                                          # modello 30
+  A 35:30 m3 "$TXT"                                                          # model 30
   RES 330000 3.0 3000
 } > "$L/03-implement.jsonl"
 printf 'ESITO FASE implement: OK — fatto\n' > "$L/03-implement.esito"
@@ -88,51 +88,51 @@ TR "$P/s3.jsonl" 30:00 36:00
 
 SID=s4
 { A 40:00 m1 "$(SH t1 "git status")"; U 40:05 t1                          # git/harness 5
-  A 40:20 m2 "$TXT"                                                        # modello 15
+  A 40:20 m2 "$TXT"                                                        # model 15
   RES 25000 0.5 500
-  A 50:00 m3 "$TXT"                                                        # attesa passiva 580 (scavalca il result)
-  RL 0.30; RES 10000 0.7 800 "ESITO FASE review: OK — approvato"          # esito dal result: nessun .esito
+  A 50:00 m3 "$TXT"                                                        # passive wait 580 (spans the result)
+  RL 0.30; RES 10000 0.7 800 "ESITO FASE review: OK — approvato"          # outcome from the result: no .esito
 } > "$L/04-review.jsonl"
 TR "$P/s4.jsonl" 40:00 50:10
-TR "$P/s4/subagents/agent-a.jsonl" 51:00                                  # un sub-agente allunga la fase
+TR "$P/s4/subagents/agent-a.jsonl" 51:00                                  # a sub-agent lengthens the phase
 
-# ciclo senza transcript: B non misurabile
+# cycle without transcript: B not measurable
 N="$W/runs/spec-nb.run/log"; mkdir -p "$N"
 SID=s9; { A 00:00 m1 "$TXT"; RES 60000 0.1 10; } > "$N/01-plan.jsonl"
 
-# --- ciclo con fili paralleli e task in background (tempo di parete, mai contato due volte) ---
-UR() { # tool_result con testo: $1 ts, $2 tool_use_id, $3 testo
+# --- cycle with parallel threads and background tasks (wall-clock time, never counted twice) ---
+UR() { # tool_result with text: $1 ts, $2 tool_use_id, $3 text
   printf '{"type":"user","session_id":"%s","timestamp":"%s:%sZ","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}}\n' \
     "$SID" "$T" "$1" "$2" "$3"
 }
 INIT() { printf '{"type":"system","subtype":"init","session_id":"%s"}\n' "$SID"; }
 PL="$W/runs/spec-par.run/log"; mkdir -p "$PL"
-SID=p1   # result tutti in coda: la fine turno la da' l'init
+SID=p1   # all results at the end: the init marks the end of turn
 { INIT
   A 00:00 m1 "$(TOOL g1 Agent '{"subagent_type":"spec-plan-reviewer","run_in_background":true,"prompt":"x"}')"
   UR 00:01 g1 "Async agent launched successfully. agentId: agx1"          # agenti 1
   A 00:01 sa1 "$TXT" '"g1"'
-  A 00:11 m2 "$TXT"                        # orchestratore 10 in parallelo al reviewer: 5 e 5
+  A 00:11 m2 "$TXT"                        # orchestrator 10 in parallel with the reviewer: 5 and 5
   A 01:01 sa2 "$TXT" '"g1"'                # reviewer: 5 + 50
   A 02:01 sa3 "$TXT" '"g1"'                # reviewer 60
   INIT
-  A 02:31 m3 "$TXT"                        # fuori turno 00:11-02:31: lavoro del reviewer 110, attesa passiva 30
+  A 02:31 m3 "$TXT"                        # off-turn 00:11-02:31: reviewer work 110, passive wait 30
   RES 11000 0.1 100; RES 30000 0.2 200
 } > "$PL/01-plan.jsonl"
 SID=p2
 { A 10:00 m1 "$(TOOL t1 Bash '{"command":"'"$VIT"' > o1.txt","run_in_background":true}')"
   UR 10:01 t1 "Command running in background with ID: bgaa1"             # vitest 1
-  A 10:05 m2 "$(SH t2 "until grep -q done o1.txt; do sleep 5; done")"; U 11:05 t2   # modello 4 · attesa di t1 (file): vitest 60
+  A 10:05 m2 "$(SH t2 "until grep -q done o1.txt; do sleep 5; done")"; U 11:05 t2   # model 4 · wait on t1 (file): vitest 60
   A 11:10 m3 "$(TOOL t3 Bash '{"command":"'"$VIT"' > o2.txt","run_in_background":true}')"
-  UR 11:11 t3 "Command running in background with ID: bgbb2"             # modello 5 · vitest 1, RIESECUZIONE
-  A 11:15 m4 "$(TOOL t4 BashOutput '{"bash_id":"bgbb2"}')"; U 11:55 t4   # modello 4 · attesa di t3 (id): vitest 40
+  UR 11:11 t3 "Command running in background with ID: bgbb2"             # model 5 · vitest 1, RERUN
+  A 11:15 m4 "$(TOOL t4 BashOutput '{"bash_id":"bgbb2"}')"; U 11:55 t4   # model 4 · wait on t3 (id): vitest 40
   A 12:00 m5 "$(SH t5 'for i in $(seq 1 9); do grep -q x f.log && break; timeout 5 tail f.log; done')"; U 12:30 t5  # 5 · polling 30
-  A 12:35 m6 "$(SH t6 "cd modules/api; ./.venv/Scripts/pytest.exe -q tests/a.py")"; U 12:45 t6   # modello 5 · pytest 10
-  A 12:50 m7 "$(TOOL t7 Agent '{"subagent_type":"plan-implementer","prompt":"x"}')"   # modello 5
+  A 12:35 m6 "$(SH t6 "cd modules/api; ./.venv/Scripts/pytest.exe -q tests/a.py")"; U 12:45 t6   # model 5 · pytest 10
+  A 12:50 m7 "$(TOOL t7 Agent '{"subagent_type":"plan-implementer","prompt":"x"}')"   # model 5
   U 12:50 "" '"t7"'
-  A 13:00 sm1 "$(SH s1 "ping -n 11 127.0.0.1")" '"t7"'; U 13:10 s1 '"t7"'   # sub-agente: modello 10 · polling 10
-  U 13:40 t7                               # agenti 50; il messaggio finale del sub-agente: modello 30
-  A 13:50 m8 "$TXT"                        # modello 10
+  A 13:00 sm1 "$(SH s1 "ping -n 11 127.0.0.1")" '"t7"'; U 13:10 s1 '"t7"'   # sub-agent: model 10 · polling 10
+  U 13:40 t7                               # agenti 50; the sub-agent's final message: model 30
+  A 13:50 m8 "$TXT"                        # model 10
   RES 230000 0.3 300
 } > "$PL/02-implement.jsonl"
 
@@ -191,16 +191,16 @@ elif group == "par":
 print("\n".join(bad))
 sys.exit(1 if bad else 0)
 '
-report() { # $1 script -> JSON in $W/out.json
+report() { # $1 script -> JSON into $W/out.json
   "$FIC_PY" "$1" --json --projects "$WP/projects" "$WP/runs/spec-syn.run" "$WP/runs/spec-nb.run" "$WP/runs/spec-par.run" \
     > "$W/out.json" 2> "$W/err.txt"
 }
-group() { # $1 gruppo -> esito del confronto con gli attesi; dettagli in $W/why.txt
+group() { # $1 group -> outcome of the comparison with the expected values; details in $W/why.txt
   "$FIC_PY" -c "$CHECK" "$1" "$WP/out.json" > "$W/why.txt" 2>&1
 }
 tree_sum() { find "$W/runs" -type f -exec cksum {} + | sort; }
 
-# --- valori attesi ---
+# --- expected values ---
 before=$(tree_sum)
 if report "$CR"; then ok; else ko "cycle-report --json esce con errore" "$(cat "$W/err.txt")"; fi
 for g in base rerun B par; do
@@ -208,17 +208,17 @@ for g in base rerun B par; do
 done
 [ "$before" = "$(tree_sum)" ] && ok || ko "sola lettura: la run directory e' cambiata"
 
-# uscita leggibile
+# readable output
 out=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/runs/spec-syn.run" "$WP/runs/spec-nb.run" 2>&1)
 printf '%s\n' "$out" | grep -q "^== spec-syn .* A 15\.6 min .* B 30\.0 min" && ok || ko "tabella: riga del ciclo" "$out"
 printf '%s\n' "$out" | grep -q "STOP 02-implement \[deviazione\]" && ok || ko "tabella: STOP" "$out"
 printf '%s\n' "$out" | grep -q "^== spec-nb .* B non misurabile" && ok || ko "tabella: B non misurabile" "$out"
 printf '%s\n' "$out" | grep -q "^== TOTALE 2 cicli" && ok || ko "tabella: totale" "$out"
-# un solo .jsonl e' un ciclo di una fase
+# a single .jsonl is a one-phase cycle
 one=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/runs/spec-syn.run/log/02-implement.jsonl" 2>&1)
 printf '%s\n' "$one" | grep -q "A 6\.0 min" && ok || ko "un solo .jsonl" "$one"
 
-# --- --append: solo il file indicato, una riga per ciclo, intestazione una volta ---
+# --- --append: only the given file, one line per cycle, header once ---
 REAL="$ROOT/.claude/.ai-workflow/metrics.csv"
 real_before=$(cksum "$REAL" 2>/dev/null || echo assente)
 M="$W/m/metrics.csv"; mkdir -p "$W/m"
@@ -248,14 +248,14 @@ print("\n".join(bad))
 [ "$before" = "$(tree_sum)" ] && ok || ko "--append ha scritto nella run directory"
 "$FIC_PY" "$CR" --metrics "$WP/m/x.csv" "$WP/runs/spec-syn.run" >/dev/null 2>&1; rc=$?
 [ $rc -eq 2 ] && [ ! -e "$W/m/x.csv" ] && ok || ko "--metrics senza --append va rifiutato (rc=$rc)"
-# default di --metrics: la cartella di lavoro del PROGETTO della cartella corrente, non tre livelli sopra lo script
+# --metrics default: the work folder of the current folder's PROJECT, not three levels above the script
 # (pk04a-1, schema L)
 MR="$W/mr"; mkdir -p "$MR/.claude/.ai-workflow" && git -C "$MR" init -q . >/dev/null 2>&1
 (cd "$MR/.claude" && "$FIC_PY" "$CR" --append --projects "$WP/projects" "$WP/runs/spec-syn.run" >/dev/null 2>&1)
 [ -s "$MR/.claude/.ai-workflow/metrics.csv" ] && [ ! -e "$ROOT/.claude" ] && ok ||
   ko "--append senza --metrics: metrics.csv nella cartella di lavoro del progetto (e niente sotto il plugin)"
 
-# --- harness del ciclo (pk04a-2, A8): versione= e radice= di harness.fp nel rapporto e nella colonna harness ---
+# --- the cycle's harness (pk04a-2, A8): versione= and radice= of harness.fp in the report and in the harness column ---
 HV="$W/hv/spec-hv.run"; mkdir -p "$HV" && cp -r "$R/log" "$HV/"
 printf 'impronta=%064d\nversione=0.9.0\nradice=C:/plug/maat\n' 0 > "$HV/harness.fp"
 has09() { grep -q "Harness: maat 0\.9\.0 — C:/plug/maat" <<< "$1"; }
@@ -268,13 +268,13 @@ hi=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-hi.run" 2>&1)
 HE="$W/hv/spec-he.run"; mkdir -p "$HE" && cp -r "$R/log" "$HE/"; sed 's/^versione=.*/versione=/' "$HV/harness.fp" > "$HE/harness.fp"
 he=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-he.run" 2>&1)
 grep -q "Harness: maat versione ignota — C:/plug/maat" <<< "$he" && ok || ko "versione= vuota: «maat versione ignota», mai «maat »" "$he"
-mcols() { # $1 file csv → per riga: numero di campi e ultimo campo, "|" fra le righe
+mcols() { # $1 csv file → per row: number of fields and last field, "|" between rows
   "$FIC_PY" -c 'import csv, sys
 print("|".join("%d:%s" % (len(r), r[-1]) for r in csv.reader(open(sys.argv[1], encoding="utf-8", newline=""))))' "$1" | tr -d '\r'
 }
 "$FIC_PY" "$CR" --append --metrics "$WP/hv/m.csv" --projects "$WP/projects" "$WP/hv/spec-hv.run" >/dev/null 2>&1
 [ "$(mcols "$W/hv/m.csv")" = "17:harness|17:maat 0.9.0" ] && ok || ko "--append: colonna harness = maat 0.9.0" "$(mcols "$W/hv/m.csv")"
-# metrics.csv con l'intestazione di formato precedente (senza harness) e una riga → migrazione, poi la riga nuova
+# metrics.csv with the older-format header (no harness) and one row → migration, then the new row
 OLDH="data,spec,fasi,A_min,B_min,bucket_a_min,bucket_b_min,bucket_c_min,bucket_resto_min,costo_usd,token_cache_letti,token_cache_scritti,token_output,riesecuzioni,stop,stop_cause"
 vecchio() { printf '%s\r\n%s\r\n' "$OLDH" "2026-01-01,spec-v,01-plan,1.0,2.0,0.0,0.0,0.0,0.0,0.10,1,2,3,0,0," > "$1"; }
 vecchio "$W/hv/old.csv"
@@ -294,8 +294,8 @@ printf 'x,y\r\n1,2\r\n' > "$W/hv/ignota.csv"; cp "$W/hv/ignota.csv" "$W/hv/ignot
 [ $rc -eq 2 ] && cmp -s "$W/hv/ignota.csv" "$W/hv/ignota.prima" && grep -q "sconosciuta" "$W/hv/ignota.err" && ok ||
   ko "intestazione sconosciuta: exit 2 col motivo, file identico byte per byte (rc=$rc)" "$(cat "$W/hv/ignota.err")"
 
-# --- controprove per mutazione: su copie mutate dello script, i gruppi vanno ROSSI ---
-mutant() { # $1 nome, $2 espressione sed, $3 gruppo che deve diventare rosso
+# --- counterproofs by mutation: on mutated copies of the script, the groups turn RED ---
+mutant() { # $1 name, $2 sed expression, $3 group that must turn red
   local m="$W/mut-$1.py"
   sed "$2" "$CR" > "$m"
   if cmp -s "$CR" "$m"; then ko "controprova $1: la mutazione non si applica (lo script e' cambiato?)"; return; fi
@@ -307,12 +307,12 @@ mutant rerun 's/^            if key in seen:$/            if False:/' rerun
 [ "$(grep -c 'b_s = span - sum(x\["s"\] for x in pauses)' "$CR")" = 1 ] && ok || ko "controprova B: riga del calcolo non unica"
 mutant segno-B 's/b_s = span - sum(x\["s"\] for x in pauses)/b_s = span + sum(x["s"] for x in pauses)/' B
 
-# --- corpus: corpus.json e replay.sh --dry-run (stampa i comandi senza eseguirli; rifiuta i percorsi
-# di worktree che non ha creato), dal plugin contro un PROGETTO SINTETICO (pk04a-1: il progetto e' la cartella di
-# lavoro, il harness il plugin e non si copia nel worktree). Un solo rigioco vero, col claude finto (plugin esplicito). ---
+# --- corpus: corpus.json and replay.sh --dry-run (prints the commands without running them; refuses worktree
+# paths it did not create), from the plugin against a SYNTHETIC PROJECT (pk04a-1: the project is the work
+# folder, the harness is the plugin and is not copied into the worktree). One real replay, with the fake claude (explicit plugin). ---
 RP="$ROOT/scripts/corpus/replay.sh"
 
-# progetto sintetico: due commit (il lockfile del frontend cambia nel secondo), node_modules installato (gitignorato)
+# synthetic project: two commits (the frontend lockfile changes in the second), node_modules installed (gitignored)
 PJ="$W/p/proj"; mkdir -p "$PJ"
 (cd "$PJ" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false &&
   mkdir -p .claude/.ai-workflow modules/app && printf 'spec-*\n' > .claude/.ai-workflow/.gitignore && printf 'node_modules\n' > .gitignore &&
@@ -320,7 +320,7 @@ PJ="$W/p/proj"; mkdir -p "$PJ"
   printf '{"lock":2}\n' > modules/app/package-lock.json && git commit -qam due && mkdir -p modules/app/node_modules/x) >/dev/null 2>&1
 rp() { (cd "$PJ" && bash "$RP" "$@"); }
 SRCD="$W/src"; RS="$SRCD/spec-rp.run"; mkdir -p "$RS/log" "$RS/prompts"
-# Stato della fase = HEAD del tree PRINCIPALE (il progetto sintetico): dipendenze uguali a quelle del tree principale.
+# Phase state = HEAD of the MAIN tree (the synthetic project): dependencies equal to the main tree's.
 MAINREPO=$PJ
 HEAD_SHA=$(git -C "$MAINREPO" rev-parse HEAD); TREE=$(git -C "$MAINREPO" rev-parse 'HEAD^{tree}')
 printf '# spec\n' > "$SRCD/spec-rp.md"
@@ -350,13 +350,13 @@ n=$(printf '%s\n' "$out" | grep -cE '^\+ cp .*/src/spec-rp\.run/log/0[0-9]-[a-z]
 [ "$n" = 2 ] && ok || ko "replay --dry-run: copiati i log di $n etichette (attese 2: 01-plan, 02-implement)" "$out"
 [ "$st_before" = "$(state)" ] && ok || ko "replay --dry-run ha eseguito qualcosa (worktree, cartelle o file cambiati)"
 
-# un --worktree scelto a mano, nuovo e ben nominato, e' accettato (e non creato)
+# a hand-picked --worktree, new and well named, is accepted (and not created)
 out=$(rp rp review --source "$SRCD" --worktree "$W/fic-replay-nuovo" --dry-run 2>&1); rc=$?
 [ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q 'worktree add --detach .*fic-replay-nuovo' && [ ! -e "$W/fic-replay-nuovo" ] && ok ||
   ko "replay --worktree nuovo (rc=$rc)" "$out"
-# percorsi che replay.sh non ha creato: rifiutati (uscita 3), senza stampare alcun comando git
+# paths that replay.sh did not create: refused (exit 3), without printing any git command
 mkdir -p "$W/fic-replay-esiste"
-refused() { # $1 descrizione, poi il comando
+refused() { # $1 description, then the command
   local d=$1 o r; shift
   o=$("$@" 2>&1); r=$?
   [ $r -eq 3 ] && ! printf '%s\n' "$o" | grep -q '^+ ' && ok || ko "rifiuto atteso: $d (rc=$r)" "$o"
@@ -370,10 +370,10 @@ rp rp fix --source "$SRCD" --dry-run >/dev/null 2>&1; rc=$?
 [ $rc -eq 2 ] && ok || ko "fase assente nel ciclo: uscita attesa 2, ottenuta $rc"
 [ "$st_before" = "$(state)" ] && ok || ko "i rifiuti hanno lasciato tracce"
 
-# --- dipendenze: collegate dal tree principale solo se coincidono allo stato della fase, altrimenti rifiuto
-# prima di creare qualunque cosa; la rimozione toglie i collegamenti PRIMA e non tocca mai la sorgente ---
-# pk04b-2: cosa collegare e quali file decidono le dipendenze li dichiara maat.json (worktree-lib.sh): qui l'esempio
-# del progetto guida, che ricrea gli elenchi di prima; solo per questi casi (MAAT_CONFIG, poi tolta)
+# --- dependencies: linked from the main tree only if they match at the phase state, otherwise refusal
+# before creating anything; the removal takes the links away FIRST and never touches the source ---
+# pk04b-2: what to link and which files decide the dependencies is declared by maat.json (worktree-lib.sh): here the
+# guide project's example, which recreates the former lists; only for these cases (MAAT_CONFIG, then unset)
 MSS="$W/maat-ss.json"; cp "$ROOT/examples/nuxt-fastapi.maat.json" "$MSS"; export MAAT_CONFIG=$MSS
 MAINT=$(cd "$PJ" && pwd)
 out=$(rp rp review --source "$SRCD" --dry-run 2>&1); rc=$?
@@ -381,8 +381,8 @@ out=$(rp rp review --source "$SRCD" --dry-run 2>&1); rc=$?
 has "+ fic_relgit "
 has "+ deps_fp_check "
 if printf '%s\n' "$out" | grep -q '^+ deps_bytes '; then ko "replay --dry-run: deps_bytes non serve piu' (impronta normalizzata)" "$out"; else ok; fi
-# il harness NON si copia nel worktree (pk04a-1, passo 9): la fase parte con scripts/run-phase.sh del plugin e
-# MAAT_PLUGIN_DIR=<plugin>, anche quando il plugin e' quello di default (MAAT_ROOT)
+# the harness is NOT copied into the worktree (pk04a-1, step 9): the phase starts with the plugin's scripts/run-phase.sh
+# and MAAT_PLUGIN_DIR=<plugin>, even when the plugin is the default one (MAAT_ROOT)
 if printf '%s\n' "$out" | grep -qE '^\+ rm -rf .* && cp -r '; then ko "replay --dry-run: copia ancora il harness nel worktree" "$out"; else ok; fi
 has "MAAT_PLUGIN_DIR=$(printf '%q' "$ROOT") "
 has "bash $(printf '%q' "$ROOT/scripts/run-phase.sh") .claude/.ai-workflow/spec-rp.run 03-review "
@@ -397,11 +397,11 @@ done
 [ "$(printf '%s\n' "$out" | grep -c '^+ link_dep ')" = "$nd" ] && ok || ko "replay --dry-run: collegamenti attesi $nd" "$out"
 lu=$(printf '%s\n' "$out" | grep -n '^+ unlink_deps ' | cut -d: -f1); lr=$(printf '%s\n' "$out" | grep -n 'worktree remove --force' | cut -d: -f1)
 [ -n "$lu" ] && [ -n "$lr" ] && [ "$lu" -lt "$lr" ] && ok || ko "replay --dry-run: unlink_deps deve precedere worktree remove ($lu/$lr)" "$out"
-out=$(rp --remove "$W/fic-replay-esiste" --dry-run 2>&1)   # rifiutato prima: nessun unlink stampato
+out=$(rp --remove "$W/fic-replay-esiste" --dry-run 2>&1)   # refused earlier: no unlink printed
 if printf '%s\n' "$out" | grep -q 'unlink_deps'; then ko "--remove rifiutato ha stampato unlink_deps" "$out"; else ok; fi
 
-# dipendenze diverse: il genitore dell'ultimo commit che ha cambiato il lockfile del frontend (nel progetto
-# sintetico: il primo commit; prima era la storia del progetto guida)
+# different dependencies: the parent of the last commit that changed the frontend lockfile (in the synthetic
+# project: the first commit; it used to be the guide project's history)
 SRCX="$W/srcx"; RX="$SRCX/spec-rpx.run"; mkdir -p "$RX/log" "$RX/prompts"
 OLD=$(git -C "$PJ" rev-parse "$(git -C "$PJ" rev-list -1 HEAD -- modules/app/package-lock.json)^")
 printf '# spec\n' > "$SRCX/spec-rpx.md"; printf '%s\n' "$OLD" > "$RX/base.txt"
@@ -427,9 +427,9 @@ else
 fi
 unset MAAT_CONFIG
 
-# rigioco VERO col claude finto (pk04a-1, passo 9): senza --harness, nel worktree di un progetto SENZA enabledPlugins,
-# la fase riceve MAAT_PLUGIN_DIR=<MAAT_ROOT> e la sotto-sessione --plugin-dir <MAAT_ROOT>; il prompt usa la skill del
-# plugin. Controprova su una copia mutata del plugin: MAAT_PLUGIN_DIR solo se il plugin e' diverso da MAAT_ROOT ⇒ niente
+# REAL replay with the fake claude (pk04a-1, step 9): without --harness, in the worktree of a project WITHOUT enabledPlugins,
+# the phase gets MAAT_PLUGIN_DIR=<MAAT_ROOT> and the sub-session --plugin-dir <MAAT_ROOT>; the prompt uses the plugin's
+# skill. Counterproof on a mutated copy of the plugin: MAAT_PLUGIN_DIR only if the plugin differs from MAAT_ROOT ⇒ no
 # --plugin-dir.
 SRCQ="$W/srcq"; RQ="$SRCQ/spec-rq.run"; mkdir -p "$RQ/log" "$RQ/prompts"
 printf '# spec\n' > "$SRCQ/spec-rq.md"; printf '%s\n' "$HEAD_SHA" > "$RQ/base.txt"
@@ -440,7 +440,7 @@ printf '%s\n' "$@" > "$SPY.args"; cat > "$SPY.stdin"
 echo '{"type":"result","result":"ESITO FASE plan: OK — finto","structured_output":{"fase":"plan","esito":"OK","motivo":"finto","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}'
 EOF
 chmod +x "$W/claude-rq"
-rq() { # $1 replay.sh da usare, $2 spia
+rq() { # $1 replay.sh to use, $2 spy
   (cd "$PJ" && env -u MAAT_ROOT -u MAAT_PLUGIN_DIR -u FIC_REPO -u FIC_LOCK -u FIC_PHASE CLAUDE_BIN="$W/claude-rq" SPY="$2" \
     FIC_DRIVER=0 FIC_LANES=0 bash "$1" rq plan --source "$SRCQ" --out "$W/out-$(basename "$2")" </dev/null)
 }
@@ -465,7 +465,7 @@ rq "$PQ/scripts/corpus/replay.sh" "$W/spia-rq2" > "$W/rq2.out" 2>&1
 [ -f "$W/spia-rq2.args" ] && [ -z "$(pdir "$W/spia-rq2.args")" ] && ok ||
   ko "controprova: col mutante la fase deve partire senza --plugin-dir (il caso sopra sarebbe rosso)" "$(tail -15 "$W/rq2.out")"
 
-# corpus del PROGETTO (cartelle.corpus della sua maat.json), mai del plugin
+# the PROJECT's corpus (cartelle.corpus of its maat.json), never the plugin's
 out=$(rp --check --source "$SRCD" 2>&1); rc=$?
 [ $rc -eq 2 ] && printf '%s\n' "$out" | grep -q 'nessun corpus: cartelle.corpus' && ok || ko "--check senza cartelle.corpus: uscita 2 «nessun corpus» (rc=$rc)" "$out"
 mkdir -p "$PJ/corpus"
@@ -477,13 +477,13 @@ out=$(rp uno review --source "$SRCD" --dry-run 2>&1); rc=$?
 [ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q '^replay: ciclo spec-rp · fase 03-review' && ok || ko "id del corpus del progetto risolto (rc=$rc)" "$out"
 rm -rf "$PJ/corpus" "$PJ/.claude/maat.json"
 
-# collegamento e scollegamento su cartelle sintetiche (le funzioni vere di replay.sh, FIC_REPLAY_LIB=1)
+# linking and unlinking on synthetic folders (the real replay.sh functions, FIC_REPLAY_LIB=1)
 LK="$W/lk"; WTX="$LK/fic-replay-sint"
 mkdir -p "$LK/main/node_modules" "$LK/main/modules/app/node_modules/pkg" "$LK/main/modules/api/.venv/Scripts" \
          "$WTX/modules/app/apps/admin/node_modules"
 echo tieni > "$LK/main/node_modules/r.txt"; echo tieni > "$LK/main/modules/app/node_modules/pkg/index.js"
 echo tieni > "$LK/main/modules/api/.venv/Scripts/python.txt"
-echo del-worktree > "$WTX/modules/app/apps/admin/node_modules/mio.txt"   # cartella VERA del worktree
+echo del-worktree > "$WTX/modules/app/apps/admin/node_modules/mio.txt"   # REAL folder of the worktree
 src_sum() { find "$LK/main" -exec cksum {} + 2>/dev/null | sort; }
 src_before=$(src_sum)
 lk=$( ( FIC_REPLAY_LIB=1; export MAAT_CONFIG=$MSS; . "$RP" || { echo "sorgente di replay.sh fallito"; exit 0; }
@@ -500,20 +500,20 @@ lk=$( ( FIC_REPLAY_LIB=1; export MAAT_CONFIG=$MSS; . "$RP" || { echo "sorgente d
   for p in $ls; do { [ -L "$WTX/$p" ] || [ -e "$WTX/$p" ]; } && echo "$p resta dopo unlink_deps"; done
   [ "$(cat "$WTX/modules/app/apps/admin/node_modules/mio.txt" 2>/dev/null)" = del-worktree ] ||
     echo "unlink_deps ha toccato una cartella vera del worktree"
-  rm -rf "$WTX"   # cio' che fa git worktree remove --force: dopo lo scollegamento non raggiunge la sorgente
+  rm -rf "$WTX"   # what git worktree remove --force does: after unlinking it cannot reach the source
 ) 2>&1)
 [ -z "$lk" ] && ok || ko "collegamenti su cartelle sintetiche" "$lk"
 [ "$src_before" = "$(src_sum)" ] && ok || ko "la rimozione del worktree ha toccato la SORGENTE dei collegamenti" "$(diff <(echo "$src_before") <(src_sum))"
 
-# impronta delle dipendenze su cartelle sintetiche: stesso contenuto salvo CRLF/LF ⇒ stessa impronta, senza
-# copiare niente (la formula e' quella condivisa con vitest-fast.sh: fic_deps_fp di script/test/fic-mirror.sh)
+# dependency fingerprint on synthetic folders: same content except CRLF/LF ⇒ same fingerprint, without
+# copying anything (the formula is the one shared with vitest-fast.sh: fic_deps_fp of script/test/fic-mirror.sh)
 FB="$W/fb"; FM="$FB/main/modules/app" FW="$FB/fic-replay-fb/modules/app"
 for d in "$FM" "$FW"; do mkdir -p "$d/apps/admin" "$d/node_modules/x" "$d/.nuxt" "$d/.output"; done
 printf '{\n  "name": "app"\n}\n' > "$FM/package.json"; printf '{\r\n  "name": "app"\r\n}\r\n' > "$FW/package.json"
 printf '{"lock":1}\n' > "$FM/package-lock.json"; printf '{"lock":1}\r\n' > "$FW/package-lock.json"
 printf '{"n":"admin"}\n' > "$FM/apps/admin/package.json"; printf '{"n":"admin"}\n' > "$FW/apps/admin/package.json"
 for f in node_modules/x/package.json .nuxt/package.json .output/package.json tsconfig.json; do
-  printf 'main\n' > "$FM/$f"; printf 'wt\r\n' > "$FW/$f"   # fuori dalla selezione: non contano
+  printf 'main\n' > "$FM/$f"; printf 'wt\r\n' > "$FW/$f"   # outside the selection: they do not count
 done
 fbsum() { find "$FW" -type f -exec cksum {} + | sort; }
 fb=$( ( FIC_REPLAY_LIB=1; export MAAT_CONFIG=$MSS; . "$RP" || { echo "sorgente di replay.sh fallito"; exit 0; }

@@ -1,42 +1,42 @@
 {
   "title": "phase-result",
-  "description": "Esito strutturato di una fase di full-implementation-cycle (harness-pt08). Lo passa run-phase.sh con --json-schema e lo rivalida sul blocco estratto dall evento result; cycle-state.sh ne applica le regole. Solo le keyword type, enum, required, properties, additionalProperties, items, minLength, minimum: il validatore minimo di run-phase.sh rifiuta le altre. Niente barre nel testo: lo schema passa come argomento a claude.exe e MSYS le convertirebbe come percorsi.",
+  "description": "Structured outcome of a full-implementation-cycle phase (harness-pt08). run-phase.sh passes it with --json-schema and validates it again on the block extracted from the result event; cycle-state.sh applies its rules. Only the keywords type, enum, required, properties, additionalProperties, items, minLength, minimum: the minimal validator of run-phase.sh rejects the others. No slashes in the text: the schema is passed as an argument to claude.exe and MSYS would convert them as paths.",
   "type": "object",
   "additionalProperties": false,
   "required": ["fase", "esito", "motivo", "deviazioni", "bloccato_su", "file", "gate_interni", "finding"],
   "properties": {
     "fase": {
-      "description": "La fase che chiude: deve coincidere con quella dell etichetta di run-phase.sh.",
+      "description": "The phase being closed: it must match the one in the run-phase.sh label.",
       "type": "string",
       "enum": ["plan", "implement", "review", "fix", "probe", "test-red", "test-stage"]
     },
     "esito": {
-      "description": "OK o STOP. Con deviazioni non vuoto o bloccato_su diverso da nessuno la fase vale STOP comunque.",
+      "description": "OK or STOP. With a non-empty deviazioni or a bloccato_su other than nessuno the phase is STOP anyway.",
       "type": "string",
       "enum": ["OK", "STOP"]
     },
     "motivo": {
-      "description": "Il riassunto della riga ESITO FASE.",
+      "description": "The summary of the ESITO FASE line.",
       "type": "string",
       "minLength": 1
     },
     "deviazioni": {
-      "description": "Ogni passo del piano non eseguito come scritto (anche adattato o minore). Vuoto se nessuna. Una puramente difensiva comincia con \"difensiva: \": se lo fanno tutte la fase non si ferma per deviazione.",
+      "description": "Every plan step not carried out as written (adapted or minor ones too). Empty if none. A purely defensive one starts with \"difensiva: \": if all of them do, the phase does not stop for a deviation.",
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
     "bloccato_su": {
-      "description": "Il letterale nessuno, oppure il motivo del blocco (es. migrazione da applicare).",
+      "description": "The literal nessuno, or the reason for the block (e.g. migrazione da applicare).",
       "type": "string",
       "minLength": 1
     },
     "file": {
-      "description": "File toccati dalla fase, relativi al repository.",
+      "description": "Files touched by the phase, relative to the repository.",
       "type": "array",
       "items": {"type": "string", "minLength": 1}
     },
     "gate_interni": {
-      "description": "Gate eseguiti dentro la fase (ciclo interno dell implementer, controprove della review).",
+      "description": "Gates run inside the phase (inner loop of the implementer, counterproofs of the review).",
       "type": "array",
       "items": {
         "type": "object",
@@ -50,7 +50,7 @@
       }
     },
     "finding": {
-      "description": "Finding della review (o del fix che li chiude).",
+      "description": "Review findings (or those of the fix that closes them).",
       "type": "array",
       "items": {
         "type": "object",
@@ -65,7 +65,7 @@
       }
     },
     "copertura": {
-      "description": "Facoltativo, fase review (harness-pt09): per ogni requisito gli ID dei test che lo coprono (node id pytest, nome completo vitest o file di test, id di una controprova), MAI i risultati. finalize.sh li unisce ai risultati di VERIFY e compone la tabella Evidence; un ID senza risultato lascia il requisito non coperto.",
+      "description": "Optional, review phase (harness-pt09): for each requirement the IDs of the tests that cover it (pytest node id, vitest full name or test file, id of a counterproof), NEVER the results. finalize.sh joins them to the results of VERIFY and builds the Evidence table; an ID with no result leaves the requirement not covered.",
       "type": "array",
       "items": {
         "type": "object",

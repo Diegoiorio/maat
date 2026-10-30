@@ -19,7 +19,7 @@ Where the rest lives — read a file only when this one sends you there:
 - `revisori.md` — the reviewers' mandates: read by the reviewer agent itself;
 - `formato-1.md` — a re-opened plan with no `Plan format: 2` line: read it only then;
 - `plan-check.sh` — the code: structure, boundaries, differences, decisions (below). What moved out of this file
-  into code, with its test: `${CLAUDE_PLUGIN_ROOT}/skills/full-implementation-cycle/riferimento.md`, «Regole in codice».
+  into code, with its test: `${CLAUDE_PLUGIN_ROOT}/skills/full-implementation-cycle/riferimento.md`, «Rules in code».
 
 $ARGUMENTS
 

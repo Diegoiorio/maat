@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# lint-vue.sh <worktree> [--file <file .vue>]
-# Difetto: un errore di lint in un `.vue` — un confronto con `==`, che `eqeqeq` (livello error in
-# apps/admin/.eslintrc.cjs, quindi visibile anche con --quiet) segnala. Bersaglio: il primo `.vue` di
-# apps/admin in touched.txt, altrimenti components/goals/SummaryCard.vue (con <script setup> a tutte le
-# basi del corpus). Riga inserita subito dopo l'apertura di <script setup>.
-# Chi lo prende: il gate di lint (livello full) sul perimetro della feature.
+# lint-vue.sh <worktree> [--file <.vue file>]
+# Defect: a lint error in a `.vue` — a comparison with `==`, which `eqeqeq` (error level in
+# apps/admin/.eslintrc.cjs, hence visible even with --quiet) reports. Target: the first `.vue` of
+# apps/admin in touched.txt, otherwise components/goals/SummaryCard.vue (with <script setup> at all the
+# corpus bases). Line inserted right after the opening of <script setup>.
+# Who catches it: the lint gate (full level) on the feature perimeter.
 . "$(dirname "$0")/_lib.sh"
 F=""
 while [ $# -gt 0 ]; do

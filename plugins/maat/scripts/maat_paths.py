@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""maat_paths.py — risolutore unico delle due radici, lato Python (pk04a-1, passo 1).
+"""maat_paths.py — single resolver of the two roots, Python side (pk04a-1, step 1).
 
-Stesse regole di scripts/lib/maat-paths.sh:
-  MAAT_ROOT     MAAT_ROOT dell'ambiente se impostata, altrimenti la cartella sopra quella di questo file; deve
-                contenere .claude-plugin/plugin.json (altrimenti ErroreMaat, codice 4).
-  PROJECT_ROOT  FIC_REPO se impostata, altrimenti `git rev-parse --show-toplevel` dalla cartella di lavoro (mai
-                dalla posizione di questo file). Fuori da un repo git: ErroreMaat, codice 4.
-  MAAT_SCRIPTS, MAAT_SKILLS, MAAT_AGENTS, MAAT_SCHEMAS sotto MAAT_ROOT.
-  MAAT_WORK     PROJECT_ROOT/<cartelle.lavoro> (maat.json, letta con maat-config.py; default .claude/.ai-workflow).
+Same rules as scripts/lib/maat-paths.sh:
+  MAAT_ROOT     MAAT_ROOT from the environment if set, otherwise the folder above this file's folder; it must
+                contain .claude-plugin/plugin.json (otherwise ErroreMaat, code 4).
+  PROJECT_ROOT  FIC_REPO if set, otherwise `git rev-parse --show-toplevel` from the working directory (never
+                from this file's location). Outside a git repo: ErroreMaat, code 4.
+  MAAT_SCRIPTS, MAAT_SKILLS, MAAT_AGENTS, MAAT_SCHEMAS under MAAT_ROOT.
+  MAAT_WORK     PROJECT_ROOT/<cartelle.lavoro> (maat.json, read with maat-config.py; default .claude/.ai-workflow).
 
-Chi lo importa imposta `sys.dont_write_bytecode = True` PRIMA dell'import: nessun __pycache__ sotto MAAT_ROOT.
-Eseguito direttamente stampa «NOME=valore», una per riga, come `bash lib/maat-paths.sh`; exit 4 senza progetto.
-Percorsi con le barre in avanti (C:/… su Windows).
+Importers set `sys.dont_write_bytecode = True` BEFORE the import: no __pycache__ under MAAT_ROOT.
+Run directly it prints «NOME=valore», one per line, like `bash lib/maat-paths.sh`; exit 4 without a project.
+Paths with forward slashes (C:/… on Windows).
 """
 import os
 import subprocess
@@ -75,7 +75,7 @@ def maat_work(project, root=None):
 
 
 def risolvi(cwd=None):
-    """Tutte le variabili; ErroreMaat (codice 4) senza plugin o senza progetto."""
+    """All the variables; ErroreMaat (code 4) without a plugin or without a project."""
     root = maat_root()
     project = project_root(cwd)
     return {"MAAT_ROOT": root, "PROJECT_ROOT": project, "MAAT_SCRIPTS": root + "/scripts",

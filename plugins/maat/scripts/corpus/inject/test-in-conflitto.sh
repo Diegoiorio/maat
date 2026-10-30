@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# test-in-conflitto.sh <worktree> [--test <file di test>] [--component <file>] [--text <testo>]
-# Difetto: un test ESISTENTE in conflitto con il piano, nella forma di goals-ux-6 (04-implement:
+# test-in-conflitto.sh <worktree> [--test <test file>] [--component <file>] [--text <text>]
+# Defect: an EXISTING test in conflict with the plan, in the form of goals-ux-6 (04-implement:
 # «`tests/goals-page.test.ts:290` vieta «Modifica obiettivo», che il passo 6 impone in
-# `CompanyGoalBar.vue:77`»). In un file di test esistente si aggiunge un caso che vieta un testo che un
-# passo del piano impone. Default = la forma reale di ux-6; per un altro ciclo passare un testo e un
-# componente presi da un passo del suo piano. Il file di test NON e' attribuito alla feature: e' un test
-# preesistente. `--component` e' relativo a apps/admin (la cartella da cui gira vitest); il caso usa i
-# globali di vitest (`globals: true`) e legge il sorgente con node:fs, quindi non tocca gli import.
-# Chi lo prende: l'implementer (deviazione: un test esistente contraddice un passo), non un «fix» del test.
+# `CompanyGoalBar.vue:77`»). In an existing test file a case is added that forbids a text that a
+# plan step requires. Default = the real form of ux-6; for another cycle pass a text and a
+# component taken from a step of its plan. The test file is NOT attributed to the feature: it is a
+# pre-existing test. `--component` is relative to apps/admin (the directory vitest runs from); the case uses
+# the vitest globals (`globals: true`) and reads the source with node:fs, so it does not touch the imports.
+# Who catches it: the implementer (deviation: an existing test contradicts a step), not a «fix» of the test.
 . "$(dirname "$0")/_lib.sh"
 T=modules/app/apps/admin/tests/goals-page.test.ts
 C=components/goals/CompanyGoalBar.vue

@@ -5,7 +5,7 @@ live and nobody can answer a question.
   («Worker contract») and `workers/<phase>.md`, and the skills they invoke. Then end.
 - Never ask the user anything (no AskUserQuestion): a needed human decision is a STOP in your final line.
 - PROGRESS LINES. The user follows you through lines that start with "▶ " — one line (max ~200 characters),
-  in Italian, one per milestone (a reviewer and its verdict, a round with its blocker/major in a short phrase
+  in the language of `lingua` in `.claude/maat.json` (default English), one per milestone (a reviewer and its verdict, a round with its blocker/major in a short phrase
   each, a revision, a gate result, the outcome), as plain text, never for routine reads and searches.
 - BATCHING. Independent tool calls (reads, searches, read-only commands) go in one message by default; never
   two Edits on the same file, nor a write with what must see it. Never fewer checks to save turns.

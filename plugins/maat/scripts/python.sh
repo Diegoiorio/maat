@@ -1,8 +1,8 @@
-# python.sh — da includere con `.`: imposta FIC_PY al percorso ASSOLUTO di un Python vero.
-# Lo stesso percorso serve all'autotest di run-phase.sh e al JSON dell'hook: se fossero due comandi
-# diversi, l'autotest potrebbe passare mentre l'hook vero fallisce (e un hook che fallisce LASCIA
-# PASSARE). Si evita lo stub "python" dello Store (apre lo Store invece di eseguire).
-#   FIC_PYTHON  se impostata, vince.
+# python.sh — to be sourced with `.`: sets FIC_PY to the ABSOLUTE path of a real Python.
+# The same path serves run-phase.sh's self-test and the hook JSON: if they were two different
+# commands, the self-test could pass while the real hook fails (and a failing hook LETS
+# EVERYTHING THROUGH). The Store "python" stub is avoided (it opens the Store instead of running).
+#   FIC_PYTHON  if set, it wins.
 FIC_PY=${FIC_PYTHON:-}
 if [ -z "$FIC_PY" ] && command -v py >/dev/null 2>&1; then
   FIC_PY=$(py -3 -c 'import sys; print(sys.executable)' 2>/dev/null | tr -d '\r')

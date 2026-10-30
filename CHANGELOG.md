@@ -1,33 +1,58 @@
 # Changelog
 
-Formato: una sezione per versione (`MAJOR.MINOR.PATCH`), la più recente in alto.
+Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
-## 1.1.0 — prima versione pubblica
+## 1.2.0 — English, explained permission requests, chain rings no longer stale
 
-Prima versione pubblicata, con licenza MIT. Il codice del plugin è quello della 1.0.0, usata finora in privato; per la
-pubblicazione cambiano licenza, autore, esempi e dati di prova.
+- **English everywhere except the formats:** documentation (README, flows guide, testing guide), code comments,
+  agent and skill prompts, schema descriptions and help texts are now in English. Not yet translated, on purpose:
+  runtime messages and the formats Maat reads (spec and plan headings, `.claude/maat.json` keys). They change in
+  1.3.0, which will keep accepting the Italian forms.
+- **English is the default language.** `lingua` in `.claude/maat.json` now defaults to `en` (was `it`), for the
+  guard's reasons and for the explanations below. Set `"lingua": "it"` to keep Italian; `/maat:setup` writes `en`.
+  Progress lines of a cycle follow the same setting; new specs are written in the language of the request
+  (default English), with the parsed headings still in Italian.
+- **Every permission request is explained.** A new `SessionStart` hook (`scripts/session-start.sh`) loads the
+  command-description rule (`docs/descrizione-comandi.md`, now in English) into every session of the project, in
+  the configured language: Claude writes, under each Bash or PowerShell command it asks to run, one sentence on what
+  it does and where, the main commands, and a warning when the action cannot be undone or leaves the machine.
+  Before, the rule applied only inside the Maat flows. Test: `scripts/session-start.test.sh`.
+- **Fix: rings k>1 of a chain no longer stay STALE.** Reviewers write the files of previous rings in `Excluded:`
+  with a note (`<path> — stessa catena, anello precedente (<spec>)`); the note made the path match no file, so those
+  files counted as new surface, the ring stayed STALE and the driver stopped on its anti-loop even with an
+  APPROVED review. `cycle-state.sh` and `review-surface.sh` (`read_paths`, the single reader, also for manual
+  `/maat:implementation-review-cycle` runs) now drop the note after « — »; the reviewer instructions state the
+  format `<path> — <reason>`. Tests in `cycle-state.test.sh` and `test-review-surface.sh`, red without the fix.
+- The driver certificate (`scripts/driver.equiv`) is regenerated: `driver.py`, `cycle-state.sh` and
+  `run-phase.sh` changed (comments and the fix above).
 
-- **Licenza MIT**, autore Diego Iorio; nel README una sezione «Responsabilità».
-- **Esempi e test senza dati di progetti reali:** host, indirizzi IP e percorsi di prova sono finti (`example.com`,
-  `example.org`, `example.internal`, indirizzi della documentazione RFC 5737 e reti private). Gli esempi si chiamano
-  `examples/nuxt-fastapi.maat.json` e `examples/bash-node.maat.json`; la fixture della guardia
-  `tests/guard-esempio.cases`; la suite `scripts/bash-node.test.sh`.
-- **`genericita.test.sh`:** i nomi propri del progetto guida si leggono da un file locale non tracciato
-  (`.genericita-nomi`, o `MAAT_NOMI_RISERVATI`); le controprove usano un nome finto.
-- **`tools/giro-completo.sh`:** il giro completo delle suite (Linux, poi Windows), con worktree e ramo obbligatori.
+## 1.1.0 — first public release
 
-### Cosa contiene
+First published release, under the MIT license. The plugin code is that of 1.0.0, used privately until now; for
+publication the license, author, examples and test data change.
 
-- **Ciclo completo** `/maat:full-implementation-cycle <spec>`: piano rivisto fino all'approvazione, implementazione,
-  review indipendente, correzioni, firma (`IMPLEMENTED`, `NEEDS_VERIFICATION` o `STOP` con il motivo). Ogni fase in una
-  sotto-sessione separata; ripresa automatica rilanciando lo stesso comando; catene di spec; `--worktree`.
-- **Cicli singoli:** `/maat:plan-review-cycle`, `/maat:plan-review-cycle-light`, `/maat:implementation-review-cycle`.
-- **Setup guidato** `/maat:setup` e **diagnosi** `scripts/maat-doctor.sh`.
-- **Configurazione per progetto** in `.claude/maat.json` (moduli, comandi di test e lint, guardia, percorsi da non
-  toccare), con schema, profili pronti ed esempi.
-- **Guardia di sessione e di fase:** blocca produzione, git che cambia stato, installazioni, accesso remoto.
-- **Gate e controprove:** i test scelti per i file toccati, controprove per mutazione, firma con le prove.
-- **Driver in Python** certificato equivalente al codice bash su cicli reali (`scripts/driver.equiv`).
-- **Piattaforme:** Windows con e senza WSL, Linux; percorsi con spazi e lettere accentate.
-- **Documentazione:** README, guida ai flussi (`docs/GUIDA-FLUSSI.html`), guida ai test (`docs/TESTING-harness.md`),
-  flusso H per sviluppare Maat (`.claude/skills/flusso-h/`).
+- **MIT license**, author Diego Iorio; a «Disclaimer» section in the README.
+- **Examples and tests without data from real projects:** test hosts, IP addresses and paths are fake (`example.com`,
+  `example.org`, `example.internal`, RFC 5737 documentation addresses and private networks). The examples are named
+  `examples/nuxt-fastapi.maat.json` and `examples/bash-node.maat.json`; the guard fixture
+  `tests/guard-esempio.cases`; the suite `scripts/bash-node.test.sh`.
+- **`genericita.test.sh`:** the proper names of the guide project are read from an untracked local file
+  (`.genericita-nomi`, or `MAAT_NOMI_RISERVATI`); the counterproofs use a fake name.
+- **`tools/giro-completo.sh`:** the full run of the suites (Linux, then Windows), with mandatory worktree and branch.
+
+### What it contains
+
+- **Full cycle** `/maat:full-implementation-cycle <spec>`: plan reviewed until approved, implementation,
+  independent review, fixes, sign-off (`IMPLEMENTED`, `NEEDS_VERIFICATION` or `STOP` with the reason). Each phase in a
+  separate subsession; automatic resume by running the same command again; spec chains; `--worktree`.
+- **Single cycles:** `/maat:plan-review-cycle`, `/maat:plan-review-cycle-light`, `/maat:implementation-review-cycle`.
+- **Guided setup** `/maat:setup` and **diagnostics** `scripts/maat-doctor.sh`.
+- **Per-project configuration** in `.claude/maat.json` (modules, test and lint commands, guard, paths not to
+  touch), with a schema, ready-made profiles and examples.
+- **Session and phase guard:** blocks production, git that changes state, installations, remote access.
+- **Gates and counterproofs:** the tests chosen for the touched files, mutation counterproofs, sign-off with the
+  evidence.
+- **Python driver** certified equivalent to the bash code on real cycles (`scripts/driver.equiv`).
+- **Platforms:** Windows with and without WSL, Linux; paths with spaces and accented letters.
+- **Documentation:** README, flow guide (`docs/GUIDA-FLUSSI.html`), test guide (`docs/TESTING-harness.md`),
+  flow H for developing Maat (`.claude/skills/flusso-h/`).

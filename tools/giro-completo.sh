@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# giro-completo.sh — tutte le suite del plugin, una alla volta: prima Linux (clone ~/maat-linux in WSL, riallineato al
-# ramo), poi Windows (il worktree del ramo). Da Git Bash. Esiti in <cartella esiti>/<linux|windows>/riepilogo.txt.
-# Uso: bash tools/giro-completo.sh <cartella esiti> <worktree Windows, forma /c/…> <ramo del clone Linux>
-#   MAAT_LINUX_CLONE: il clone Linux, relativo alla home di WSL (default maat-linux); deve avere origin verso il repo.
+# giro-completo.sh — all the plugin suites, one at a time: first Linux (clone ~/maat-linux in WSL, realigned to the
+# branch), then Windows (the branch worktree). From Git Bash. Results in <results dir>/<linux|windows>/riepilogo.txt.
+# Usage: bash tools/giro-completo.sh <results dir> <Windows worktree, /c/… form> <Linux clone branch>
+#   MAAT_LINUX_CLONE: the Linux clone, relative to the WSL home (default maat-linux); it must have origin pointing to the repo.
 set -u
 OUT=${1:?cartella esiti}
 WT=${2:?worktree Windows (forma /c/…)}
@@ -12,9 +12,9 @@ SP=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT/linux" "$OUT/windows"
 TUTTE="maat-paths maat-config gates finalize ciclo-worktree context-pack cycle-report harness-merge guard stop-hook
   blocks-independent phase-events test-review-surface plan-check bash-node genericita maat-doctor senza-wsl spazi
-  test-fast counterproof comandi-equivalenza vitest-classify cycle-state run-phase driver"
+  session-start test-fast counterproof comandi-equivalenza vitest-classify cycle-state run-phase driver"
 
-# 1. Linux: clone usa e getta, riallineato al ramo (le copie a mano spariscono)
+# 1. Linux: throwaway clone, realigned to the branch (manual copies disappear)
 wsl -- bash -lc "cd ~/$LX && git fetch -q origin && git checkout -q -f $RAMO 2>/dev/null || git checkout -q -f -b $RAMO origin/$RAMO; git reset -q --hard origin/$RAMO && git clean -qfd && git log -1 --format='clone: %h %s'" > "$OUT/linux/clone.txt" 2>&1
 for s in $TUTTE; do
   f=plugins/maat/scripts/$s.test.sh; [ "$s" = test-review-surface ] && f=plugins/maat/scripts/test-review-surface.sh
@@ -25,7 +25,7 @@ for s in $TUTTE; do
 done
 echo FINE >> "$OUT/linux/riepilogo.txt"
 
-# 2. Windows: worktree (comandi-equivalenza solo dal clone Linux: il .git del worktree punta a C:/)
+# 2. Windows: worktree (comandi-equivalenza only from the Linux clone: the worktree's .git points to C:/)
 WSL_SUITE=" test-fast counterproof vitest-classify "
 MAAT_DIR=$WT MAAT_W=/mnt/c${WT#/c}
 for s in $TUTTE; do

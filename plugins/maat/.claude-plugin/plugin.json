@@ -1,7 +1,7 @@
 {
   "name": "maat",
-  "version": "1.1.0",
-  "description": "Maat — Multi-Agent Assurance Toolkit: ciclo di piano, implementazione, review e firma con prove, misure e guardia.",
+  "version": "1.2.0",
+  "description": "Maat — Multi-Agent Assurance Toolkit: plan, implementation, review and sign-off cycle, with evidence, metrics and a guard.",
   "author": {
     "name": "Diego Iorio",
     "url": "https://github.com/Diegoiorio"

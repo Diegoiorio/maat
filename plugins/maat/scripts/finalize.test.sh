@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
-# finalize.test.sh — finalize.sh su un repository sintetico (configurato con l'esempio nuxt-fastapi) con l'evidenza
-# VERA di gates.sh (WSL, test-fast.sh,
-# node, npm e il python del venv FINTI come in gates.test.sh; HOME temporanea, nessun contatto con la copia WSL):
-# tutti i gate PASS alla chiave attuale -> IMPLEMENTED; chiave vecchia -> NEEDS_VERIFICATION; review che dichiara
-# PASS senza file di evidenza -> mai IMPLEMENTED; gate FAIL, livello full senza lint, controprove (JSON di
-# counterproof.sh e tabella della review), niente da firmare, CRLF conservato. Controprova per mutazione eseguita
-# qui: senza il confronto della chiave il caso «chiave vecchia» diventa IMPLEMENTED. harness-pt09: verdetto = AND
-# (review APPROVED + gate FAIL o controprova non rossa -> FAIL; + gate BLOCKED -> NEEDS_VERIFICATION) e unione
-# requisito -> ID di test -> risultati (--copertura): un ID senza risultato -> requisito «non coperto».
+# finalize.test.sh — finalize.sh on a synthetic repository (configured with the nuxt-fastapi example) with the REAL
+# evidence of gates.sh (WSL, test-fast.sh,
+# node, npm and the venv python FAKE as in gates.test.sh; temporary HOME, no contact with the WSL copy):
+# all gates PASS at the current key -> IMPLEMENTED; old key -> NEEDS_VERIFICATION; review that declares
+# PASS without evidence files -> never IMPLEMENTED; gate FAIL, full level without lint, counterproofs (JSON of
+# counterproof.sh and review table), nothing to sign, CRLF preserved. Mutation counterproof run
+# here: without the key comparison the «chiave vecchia» case becomes IMPLEMENTED. harness-pt09: verdict = AND
+# (review APPROVED + gate FAIL or counterproof not red -> FAIL; + gate BLOCKED -> NEEDS_VERIFICATION) and merge
+# requirement -> test ID -> results (--copertura): an ID without result -> requirement «non coperto».
 #   bash script/fic/finalize.test.sh
-#   FZ=/percorso/variante.sh bash script/fic/finalize.test.sh   # la suite su una variante
+#   FZ=/path/variant.sh bash script/fic/finalize.test.sh   # the suite on a variant
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)   # radice del plugin
+ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 FZ=${FZ:-$HERE/finalize.sh}
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
-# i mutanti scritti in $W includono il risolutore accanto a se' ($W/lib) e trovano il plugin da MAAT_ROOT
+# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
 mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
 export HOME="$W/home"; mkdir -p "$HOME"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
 chk() { if eval "$2"; then ok; else ko "$1" "${3:-}"; fi; }
 
-# --- repository sintetico (come gates.test.sh) ---
+# --- synthetic repository (as in gates.test.sh) ---
 R="$W/repo"; A="$R/modules/app/apps/admin"; API="$R/modules/api"; FB="$W/bin"
-# test-fast.sh e' del harness (pk04b-1): il finto sta in una COPIA del plugin, data come FIC_GATES_HARNESS
+# test-fast.sh belongs to the harness (pk04b-1): the fake lives in a COPY of the plugin, given as FIC_GATES_HARNESS
 HP="$W/plugin"; cp -r "$ROOT" "$HP" && find "$HP" -name __pycache__ -type d -prune -exec rm -rf {} +
 mkdir -p "$A/utils" "$API/app/services" "$API/tests" "$FB" "$R/.claude"
 cp "$ROOT/examples/nuxt-fastapi.maat.json" "$R/.claude/maat.json"
@@ -67,10 +67,10 @@ export FIC_GATES_ROOT="$R" FIC_GATES_HARNESS="$HP" FIC_GATES_WSL="$FB/wsl" FIC_G
 export FIC_GATES="$ROOT/scripts/gates.sh"
 F_STD=(modules/api/app/services/goals.py modules/app/apps/admin/utils/goals.ts)
 
-# --- spec e run dir ---
+# --- spec and run dir ---
 WF="$W/wf"; SP="$WF/spec-x.md"; RUN="$WF/spec-x.run"
 mkdir -p "$RUN"; printf '%s\n' "${F_STD[@]}" > "$RUN/touched.txt"
-spec() { # $1 Review status, $2 Feature status, $3 esito della riga di controprova nella tabella
+spec() { # $1 Review status, $2 Feature status, $3 outcome of the counterproof row in the table
   printf '%s\n' "# X" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare A." \
     "## Piano di implementazione" "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" \
     "### Passi" "1. Modificare \`utils/goals.ts\`." \
@@ -86,7 +86,7 @@ fin() { out=$(bash "$FZ" "$@" "$RUN" 2>&1); rc=$?; }
 fstat() { tr -d '\r' < "$SP" | sed -n 's/^Feature status: //p'; }
 gates() { bash "$FIC_GATES" --run-dir "$RUN" std "${F_STD[@]}" >/dev/null 2>&1; }
 
-# --- 1. tutti i gate PASS alla chiave attuale => IMPLEMENTED confermato ---
+# --- 1. all gates PASS at the current key => IMPLEMENTED confirmed ---
 gates; spec APPROVED IMPLEMENTED
 fin --level std
 chk "gate PASS alla chiave attuale: uscita 0" '[ $rc -eq 0 ]' "$out"
@@ -97,7 +97,7 @@ chk "  la riga Finalize porta l'impronta del Reviewed snapshot (spazi compressi,
 fin
 chk "livello letto dal piano (Test level: std) senza --level" '[ $rc -eq 0 ] && [ "$(grep -c "^Finalize:" "$SP")" = 1 ]' "$out"
 
-# --- 2. chiave vecchia (un file nuovo nel tree dopo i gate) => NEEDS_VERIFICATION ---
+# --- 2. old key (a new file in the tree after the gates) => NEEDS_VERIFICATION ---
 spec APPROVED IMPLEMENTED
 printf 'nuovo\n' > "$R/nota.md"
 fin --level std
@@ -105,18 +105,18 @@ chk "chiave vecchia: uscita 1, NEEDS_VERIFICATION" '[ $rc -eq 1 ] && [ "$(fstat)
 chk "  Verification PARTIAL col gate mancante" 'grep -q "^Verification: PARTIAL (finalize.sh: nessuna evidenza del driver alla chiave attuale.*chiavi vecchie" "$SP"' "$(cat "$SP")"
 rm -f "$R/nota.md"
 
-# --- 3. la review dichiara PASS ma non c'e' nessun file di evidenza => mai IMPLEMENTED ---
+# --- 3. the review declares PASS but there is no evidence file => never IMPLEMENTED ---
 RUN0=$RUN; RUN="$WF/spec-y.run"; SP="$WF/spec-y.md"; mkdir -p "$RUN"; cp "$RUN0/touched.txt" "$RUN/"
 spec APPROVED IMPLEMENTED
 fin --level std
 chk "report senza file di evidenza: NEEDS_VERIFICATION" '[ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ]' "$out"
 RUN=$RUN0; SP="$WF/spec-x.md"
 
-# --- 4. gate FAIL alla chiave attuale ---
+# --- 4. gate FAIL at the current key ---
 printf 'x\n' > "$R/altro.md"
 FAKE_VF=fail gates; spec APPROVED IMPLEMENTED
 fin --level std
-# harness-pt09, verdetto = AND: review APPROVED + gate FAIL => FAIL (la riga «APPROVED + any FAIL» della review)
+# harness-pt09, verdict = AND: review APPROVED + gate FAIL => FAIL (the «APPROVED + any FAIL» row of the review)
 chk "review APPROVED + tests-fe FAIL alla chiave attuale: FAIL (uscita 3)" '[ $rc -eq 3 ] && grep -q "^Finalize: FAIL — " "$SP" && printf "%s\n" "$out" | tail -1 | grep -q "^finalize: esito=FAIL"' "$out"
 chk "  Review NEEDS_CHANGES, Feature PLANNED, Verification PARTIAL col gate" 'grep -qx "Review status: NEEDS_CHANGES" "$SP" && [ "$(fstat)" = PLANNED ] && grep -q "^Verification: PARTIAL (finalize.sh: tests-fe: FAIL" "$SP"' "$(cat "$SP")"
 chk "  cycle-state manda a FIX (budget 1/3)" 'bash "$ROOT/scripts/cycle-state.sh" "$SP" 2>/dev/null | grep -q "^Next: FIX"' "$(bash "$ROOT/scripts/cycle-state.sh" "$SP" 2>&1)"
@@ -124,19 +124,19 @@ fin --level std
 chk "  una seconda firma non tocca nulla (niente APPROVED da firmare): uscita 4" '[ $rc -eq 4 ]' "$out"
 rm -f "$R/altro.md"
 
-# --- 4b. review APPROVED + gate BLOCKED (venv assente) => NEEDS_VERIFICATION, non FAIL ---
+# --- 4b. review APPROVED + gate BLOCKED (venv missing) => NEEDS_VERIFICATION, not FAIL ---
 printf 'y\n' > "$R/altro.md"
 FIC_GATES_VENV_PY="$W/venv-assente.exe" gates; spec APPROVED IMPLEMENTED
 out=$(FIC_GATES_VENV_PY="$W/venv-assente.exe" bash "$FZ" --level std "$RUN" 2>&1); rc=$?
 chk "review APPROVED + tests-be BLOCKED: NEEDS_VERIFICATION (uscita 1)" '[ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ] && grep -qx "Review status: APPROVED" "$SP" && grep -q "^Verification: PARTIAL (finalize.sh: tests-be: BLOCKED" "$SP"' "$out"
 rm -f "$R/altro.md"
 
-# --- 5. livello full: lint richiesto, evidenza solo std => NEEDS_VERIFICATION ---
+# --- 5. full level: lint required, std evidence only => NEEDS_VERIFICATION ---
 spec APPROVED IMPLEMENTED
 fin --level full
 chk "full senza evidenza al livello full: NEEDS_VERIFICATION" '[ $rc -eq 1 ] && grep -q "livello full" "$SP"' "$out"
 
-# --- 6. controprove: JSON di counterproof.sh (verde, assente, rosso su asserzione) ---
+# --- 6. counterproofs: counterproof.sh JSON (green, absent, red on assertion) ---
 mkdir -p "$RUN/counterproof"; printf '[{"id":"CP-1"}]\n' > "$RUN/counterproof/mutations.json"
 spec APPROVED IMPLEMENTED; fin --level std
 chk "controprova senza risultato: NEEDS_VERIFICATION" '[ $rc -eq 1 ] && grep -q "controprova CP-1: risultato assente" "$SP"' "$out"
@@ -150,7 +150,7 @@ printf '{"id":"CP-1","esito":"rosso_asserzione","controprova":"PASS"}\n' > "$RUN
 spec APPROVED IMPLEMENTED NOT\ RUN; fin --level std
 chk "controprova rossa su asserzione: IMPLEMENTED (il JSON vince sulla tabella)" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ]' "$out"
 
-# --- 6b. unione requisito -> ID di test -> risultati (harness-pt09) ---
+# --- 6b. merge requirement -> test ID -> results (harness-pt09) ---
 printf '%s\n' '{"fase":"review","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],' \
   '"copertura":[{"requisito":"R1 somma","test":["modules/api/tests/test_goals.py::test_f"]},' \
   '{"requisito":"R2 vista","test":["utils/goals.test.ts"]},' \
@@ -174,8 +174,8 @@ chk "  riepilogo su stdout" 'printf "%s\n" "$out" | grep -q "Evidence composta �
 sed -i 's/^Review status: .*/Review status: APPROVED/; s/^Feature status: .*/Feature status: IMPLEMENTED/' "$SP"
 fin --level std --copertura "$W/review.result.json"
 chk "  una seconda firma sostituisce la tabella (una sola)" '[ "$(grep -c "^Requirement evidence (finalize.sh" "$SP")" = 1 ] && [ "$(grep -c "^| R1 somma |" "$SP")" = 1 ]' "$(cat "$SP")"
-# L2 (harness-pt11): una voce "assorbita" vale solo se plan-check.sh l2 la conferma sul codice attuale; questa spec
-# e' in formato 1, quindi l2 non conferma nulla -> la voce non basta (fail-closed); rossa su asserzione, si'.
+# L2 (harness-pt11): an "assorbita" entry counts only if plan-check.sh l2 confirms it on the current code; this spec
+# is in format 1, so l2 confirms nothing -> the entry is not enough (fail-closed); red on assertion, yes.
 printf '[{"id":"CP-1","assorbita":true,"motivo":"L2"}]\n' > "$RUN/counterproof/mutations.json"
 printf '{"id":"CP-1","esito":"assorbita","controprova":"ASSORBITA"}\n' > "$RUN/counterproof/CP-1.json"
 spec APPROVED IMPLEMENTED; fin --level std
@@ -183,30 +183,30 @@ chk "controprova assorbita non confermata da l2: NEEDS_VERIFICATION" '[ $rc -eq 
 printf '{"id":"CP-1","esito":"rosso_asserzione","controprova":"PASS"}\n' > "$RUN/counterproof/CP-1.json"
 spec APPROVED IMPLEMENTED; fin --level std
 chk "  assorbita ma comunque rossa su asserzione: IMPLEMENTED" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ]' "$out"
-# esiti nuovi di counterproof.sh (pk04b-2): rosso_generico (runner comando) = PASS ma prova DEBOLE, dichiarata;
-# non_eseguita (modulo senza controprova) = NOT RUN (dichiarato): NEEDS_VERIFICATION, mai FAIL
+# new counterproof.sh outcomes (pk04b-2): rosso_generico (command runner) = PASS but WEAK proof, declared;
+# non_eseguita (module without counterproof) = NOT RUN (declared): NEEDS_VERIFICATION, never FAIL
 printf '[{"id":"CP-1"}]\n' > "$RUN/counterproof/mutations.json"
 cp_generico() { printf '{"id":"CP-1","esito":"rosso_generico","controprova":"PASS","motivo":"il comando della controprova esce 1"}\n' > "$RUN/counterproof/CP-1.json"; }
 cp_non_eseguita() { printf '{"id":"CP-1","esito":"non_eseguita","controprova":"NOT RUN","motivo":"NOT RUN (dichiarato): modulo be senza controprova"}\n' > "$RUN/counterproof/CP-1.json"; }
-caso_generico() { # $1 script: IMPLEMENTED, prova debole nella riga Finalize e su stdout, nella tabella PASS debole
+caso_generico() { # $1 script: IMPLEMENTED, weak proof in the Finalize line and on stdout, weak PASS in the table
   cp_generico; spec APPROVED IMPLEMENTED; out=$(bash "$1" --level std --copertura "$W/review.result.json" "$RUN" 2>&1); rc=$?
   [ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && grep -q "^Finalize: IMPLEMENTED — .*prove deboli: controprova CP-1: rosso_generico, prova debole" "$SP" &&
     printf '%s\n' "$out" | grep -q "^prova debole: controprova CP-1: rosso_generico" &&
     row "R4 mutazione" | grep -q "CP-1 → PASS (controprova rosso_generico, prova debole) |$"
 }
-caso_non_eseguita() { # $1 script: NEEDS_VERIFICATION col motivo NOT RUN (dichiarato), mai FAIL
+caso_non_eseguita() { # $1 script: NEEDS_VERIFICATION with the reason NOT RUN (dichiarato), never FAIL
   cp_non_eseguita; spec APPROVED IMPLEMENTED; out=$(bash "$1" --level std "$RUN" 2>&1); rc=$?
   [ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ] && grep -q "^Verification: PARTIAL (finalize.sh: controprova CP-1: NOT RUN (dichiarato): modulo be senza controprova" "$SP"
 }
 chk "controprova rosso_generico: IMPLEMENTED, dichiarata prova debole (dettaglio, stdout, tabella)" 'caso_generico "$FZ"' "$out $(grep "^Finalize" "$SP") $(row "R4 mutazione")"
 chk "controprova non_eseguita: NOT RUN (dichiarato) -> NEEDS_VERIFICATION, non FAIL" 'caso_non_eseguita "$FZ"' "$out $(grep "^Verification" "$SP")"
-# controprove per mutazione: rosso_generico contato come FAIL; non_eseguita contata come FAIL
+# mutation counterproofs: rosso_generico counted as FAIL; non_eseguita counted as FAIL
 for mu in 'rosso_generico|s/^CP_DEBOLE = "rosso_generico"$/CP_DEBOLE = "nessuno"/; s/^CP_FAIL = (\(.*\)"verde")$/CP_FAIL = (\1"verde", "rosso_generico")/' \
           'non_eseguita|s/^CP_NON_ESEGUITA = "non_eseguita"$/CP_NON_ESEGUITA = "nessuno"/; s/^CP_FAIL = (\(.*\)"verde")$/CP_FAIL = (\1"verde", "non_eseguita")/'; do
   M="$W/mut-${mu%%|*}.sh"; sed "${mu#*|}" "$FZ" > "$M"
   if cmp -s "$FZ" "$M"; then ko "controprova (${mu%%|*} come FAIL): la mutazione non si applica"; continue; fi
   if [ "${mu%%|*}" = rosso_generico ]; then caso_generico "$M"; else caso_non_eseguita "$M"; fi; r=$?
-  if [ $r -ne 0 ]; then ok   # rosso atteso
+  if [ $r -ne 0 ]; then ok   # expected red
   else ko "controprova: con ${mu%%|*} contato come FAIL il caso resta verde (il test non discrimina)" "$out"; fi
 done
 rm -rf "$RUN/counterproof"
@@ -217,7 +217,7 @@ chk "senza JSON: riga di controprova della tabella non PASS => NEEDS_VERIFICATIO
 spec APPROVED IMPLEMENTED "FAIL"; fin --level std
 chk "senza JSON: riga di controprova della tabella FAIL => FAIL" '[ $rc -eq 3 ] && [ "$(fstat)" = PLANNED ]' "$out"
 
-# --- 6c. report per FORMATO, non per nome del gate (pk04b-1): il modulo pytest si chiama «api», report junit ---
+# --- 6c. report by FORMAT, not by gate name (pk04b-1): the pytest module is called «api», junit report ---
 RUNX=$RUN SPX=$SP
 RUN="$WF/spec-api.run"; SP="$WF/spec-api.md"; mkdir -p "$RUN"; cp "$RUNX/touched.txt" "$RUN/"
 sed 's/"nome": "be"/"nome": "api"/' "$R/.claude/maat.json" > "$W/api.maat.json"
@@ -228,41 +228,41 @@ M="$W/mut-nome.sh"
 sed 's/ for n, rep, rad in mods if rep == "junit"\]/ for n, rep, rad in mods if "tests-" + n == "tests-be"]/' "$FZ" > "$M"
 if cmp -s "$FZ" "$M"; then ko "controprova (formato dal nome del gate): la mutazione non si applica"; else
   spec APPROVED IMPLEMENTED; out=$(bash "$M" --level std --copertura "$W/review.result.json" "$RUN" 2>&1)
-  if row "R1 somma" | grep -q "| non coperto (senza risultato: modules/api/tests/test_goals.py::test_f) |$"; then ok   # rosso atteso
+  if row "R1 somma" | grep -q "| non coperto (senza risultato: modules/api/tests/test_goals.py::test_f) |$"; then ok   # expected red
   else ko "controprova: col formato scelto dal nome del gate la tabella ha ancora il risultato (il test non discrimina)" "$(row "R1 somma")"; fi
 fi
 unset MAAT_CONFIG; RUN=$RUNX SP=$SPX
 
-# --- 7. niente da firmare: spec intatta ---
+# --- 7. nothing to sign: spec untouched ---
 spec NEEDS_CHANGES PLANNED; cp "$SP" "$W/prima"
 fin --level std
 chk "Review NEEDS_CHANGES: uscita 4, spec intatta" '[ $rc -eq 4 ] && cmp -s "$SP" "$W/prima"' "$out"
 spec APPROVED NEEDS_VERIFICATION; cp "$SP" "$W/prima"; fin --level std
 chk "NEEDS_VERIFICATION non viene promosso" '[ $rc -eq 4 ] && cmp -s "$SP" "$W/prima"' "$out"
 
-# --- 8. CRLF conservato ---
+# --- 8. CRLF preserved ---
 spec APPROVED IMPLEMENTED; sed -i 's/$/\r/' "$SP"; printf 'nuovo\n' > "$R/nota.md"
 fin --level std
 chk "spec CRLF: ogni riga resta CRLF dopo la scrittura" '[ $rc -eq 1 ] && [ "$(grep -c $'"'"'\r$'"'"' "$SP")" = "$(wc -l < "$SP")" ]' "$(od -c "$SP" | tail -5)"
 rm -f "$R/nota.md"
 
-# --- 9. uso ---
+# --- 9. usage ---
 spec APPROVED IMPLEMENTED; bash "$FZ" --level boh "$RUN" >/dev/null 2>&1; r=$?; chk "livello sconosciuto: uscita 2" '[ $r -eq 2 ]'
 bash "$FZ" "$W/non-esiste.run" >/dev/null 2>&1; r=$?; chk "run dir assente: uscita 2" '[ $r -eq 2 ]'
 
-# --- controprova: senza il confronto della chiave, il caso «chiave vecchia» diventa IMPLEMENTED ---
+# --- counterproof: without the key comparison, the «chiave vecchia» case becomes IMPLEMENTED ---
 LINE='  if bash "$GATES" --verify "$d" >/dev/null 2>&1; then ev=$d; break; fi   # confronto della chiave'
 chk "controprova: riga del confronto unica" '[ "$(grep -cxF -- "$LINE" "$FZ")" = 1 ]'
 M="$W/mut-chiave.sh"
 sed 's|^  if bash "\$GATES" --verify "\$d" >/dev/null 2>&1; then|  if true; then|' "$FZ" > "$M"
 if cmp -s "$FZ" "$M"; then ko "controprova: la mutazione non si applica"; else
-  # run dir nuova con la sola evidenza PASS, poi il tree cambia: lo stesso stato del caso 2
+  # new run dir with only PASS evidence, then the tree changes: the same state as case 2
   RUN="$WF/spec-z.run"; SP="$WF/spec-z.md"; mkdir -p "$RUN"; cp "$RUN0/touched.txt" "$RUN/"; gates
   printf 'nuovo\n' > "$R/nota.md"
   spec APPROVED IMPLEMENTED; out=$(bash "$FZ" --level std "$RUN" 2>&1); r=$?
   chk "controprova: sull'originale lo stesso stato e' NEEDS_VERIFICATION" '[ $r -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ]' "$out"
   spec APPROVED IMPLEMENTED; out=$(bash "$M" --level std "$RUN" 2>&1); r=$?
-  if [ $r -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ]; then ok   # rosso atteso: il test «chiave vecchia» fallirebbe
+  if [ $r -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ]; then ok   # expected red: the «chiave vecchia» test would fail
   else ko "controprova: sul mutante la chiave vecchia non diventa IMPLEMENTED (il test non discrimina)" "$out"; fi
   rm -f "$R/nota.md"
 fi

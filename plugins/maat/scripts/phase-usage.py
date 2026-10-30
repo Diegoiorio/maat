@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""phase-usage.py — consumo di una fase del full cycle, letto dai log stream-json. SOLA LETTURA.
+"""phase-usage.py — consumption of a full-cycle phase, read from the stream-json logs. READ ONLY.
 
-Uso:  python phase-usage.py <spec-<name>.run | file .jsonl> [...] [--json]
+Usage:  python phase-usage.py <spec-<name>.run | .jsonl file> [...] [--json]
 
-Per ogni log di fase stampa:
-- costo equivalente API (`total_cost_usd`, il massimo: e' cumulativo), durata e turni (somma dei
-  `result`: con task in background il CLI chiude e riapre il turno, e riemette `system/init`),
-  quota 5h all'inizio e alla fine (`rate_limit_event`: la misura che conta per l'abbonamento),
-  tool e tool MCP caricati all'avvio;
-- per tipo di filo (orchestratore di fase; ogni tipo di sub-agente, con il numero di istanze):
-  chiamate al modello, contesto iniziale / medio / massimo, letture da cache, scritture in cache,
-  tool call e quante chiamate al modello ne portano piu' d'una (batching). L'output per chiamata
-  non e' affidabile nello stream: il totale di output sta nella riga della fase;
-- riletture ridondanti: lo stesso Read (file, offset, limit) ripetuto dalla STESSA istanza senza,
-  in mezzo, una scrittura su quel file o un'azione dalla superficie incerta (qualunque tool diverso
-  da Read/Grep/Glob). Stima prudente: conta solo lo spreco certo (un `cat` via Bash non si vede);
-- tool lenti (>= 60 s, dal battito di `tool_progress`): cosa aspettava la fase.
+For each phase log it prints:
+- API-equivalent cost (`total_cost_usd`, the maximum: it is cumulative), duration and turns (sum of the
+  `result` events: with background tasks the CLI closes and reopens the turn, and re-emits `system/init`),
+  5h quota at the start and at the end (`rate_limit_event`: the measure that matters for the subscription),
+  tools and MCP tools loaded at startup;
+- per thread type (phase orchestrator; each sub-agent type, with its number of instances):
+  model calls, initial / average / maximum context, cache reads, cache writes,
+  tool calls and how many model calls carry more than one (batching). Output per call
+  is not reliable in the stream: the output total is in the phase line;
+- redundant re-reads: the same Read (file, offset, limit) repeated by the SAME instance without,
+  in between, a write to that file or an action with an uncertain surface (any tool other
+  than Read/Grep/Glob). Conservative estimate: it counts only certain waste (a `cat` via Bash is not visible);
+- slow tools (>= 60 s, from the `tool_progress` heartbeat): what the phase was waiting for.
 
-Non decide nulla e non scrive nulla: misura l'efficienza, separata dalla qualita' (finding, gate,
-esiti), che si legge nelle spec e negli `.esito`.
+It decides nothing and writes nothing: it measures efficiency, kept separate from quality (findings, gates,
+outcomes), which is read in the specs and in the `.esito` files.
 """
 import glob
 import json
@@ -50,8 +50,8 @@ def new_inst():
 
 
 def analyse(path):
-    kind = {}        # tool_use_id di un Agent/Task -> tipo di sub-agente
-    inst = {}        # istanza (MAIN o tool_use_id del lancio) -> metriche
+    kind = {}        # tool_use_id of an Agent/Task -> sub-agent type
+    inst = {}        # instance (MAIN or tool_use_id of the launch) -> metrics
     seen_msg, uses_per_msg, tool_input, slow = set(), {}, {}, {}
     rl, results, init_tools = [], [], None
 
@@ -81,7 +81,7 @@ def analyse(path):
                 s["cache_read"] += u.get("cache_read_input_tokens") or 0
                 s["cache_write"] += u.get("cache_creation_input_tokens") or 0
             uses = [b for b in (m.get("content") or []) if isinstance(b, dict) and b.get("type") == "tool_use"]
-            # i blocchi di un messaggio arrivano in eventi separati con lo stesso id
+            # the blocks of a message arrive in separate events with the same id
             s["tools"] += len(uses)
             before = uses_per_msg.get(mid, 0)
             uses_per_msg[mid] = before + len(uses)
@@ -93,13 +93,13 @@ def analyse(path):
                 if name in ("Agent", "Task"):
                     kind[b.get("id")] = inp.get("subagent_type") or "general-purpose"
                 if name == "Read":
-                    continue  # valutato sul risultato (serve la lunghezza)
+                    continue  # evaluated on the result (needs the length)
                 if name in WRITERS:
                     fp = os.path.normcase(inp.get("file_path") or "")
                     for sig in [sig for sig in s["valid"] if sig[0] == fp]:
                         del s["valid"][sig]
                 elif name not in READ_ONLY:
-                    s["valid"].clear()  # superficie di scrittura incerta: tutto stantio
+                    s["valid"].clear()  # uncertain write surface: everything stale
         elif t == "user":
             for b in ((ev.get("message") or {}).get("content") or []):
                 if not isinstance(b, dict) or b.get("type") != "tool_result":

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # contraddizione-piano.sh <worktree>
-# Difetto: una contraddizione nel piano, nella forma di goals-ux-1 (03-implement: «T1 vuole 999,4 ⇒
-# «999,4%», mentre RF8, D3, il passo 4 … vogliono il moltiplicatore oltre 999»): un caso del piano di
-# test che contraddice una decisione. Nella spec copiata nel worktree si aggiungono, dentro il piano:
-# una decisione (la soglia della forma compatta e' INCLUSA, come fa oggi utils/goals.ts) subito prima
-# del titolo del piano di test, e un caso T-FIC che vuole il contrario subito dopo il titolo.
-# Chi lo prende: l'implementer (deve fermarsi con una deviazione, non «aggiustare» il piano nel codice)
-# o la revisione del piano.
+# Defect: a contradiction in the plan, in the form of goals-ux-1 (03-implement: «T1 vuole 999,4 ⇒
+# «999,4%», mentre RF8, D3, il passo 4 … vogliono il moltiplicatore oltre 999»): a case of the test
+# plan that contradicts a decision. In the spec copied into the worktree, inside the plan, we add:
+# a decision (the threshold of the compact form is INCLUSIVE, as utils/goals.ts does today) right before
+# the test plan heading, and a T-FIC case that wants the opposite right after the heading.
+# Who catches it: the implementer (it must stop with a deviation, not «fix» the plan in the code)
+# or the plan review.
 . "$(dirname "$0")/_lib.sh"
 [ $# -eq 0 ] || die "nessuna opzione prevista"
 [ -f "$SPEC" ] || die "spec assente nel worktree: $SPEC"

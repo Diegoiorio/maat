@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# gates.test.sh — gates.sh su un repository sintetico (cartella temporanea) configurato con l'esempio nuxt-fastapi
-# (.claude/maat.json), con WSL, test-fast.sh, node, npm e
-# il python del venv FINTI (nessun contatto con la copia WSL reale, HOME temporanea): derivazione dei comandi,
-# evidenza JSON, riuso a chiave identica, rilancio quando cambia un byte (anche di un file non tracciato), TZ
-# o la versione di node, gate senza report -> BLOCKED e mai PASS, BLOCKED mai riusato, --verify, albero
-# cambiato durante i gate; controprova per mutazione eseguita qui, su una copia mutata dello script.
+# gates.test.sh — gates.sh on a synthetic repository (temporary directory) configured with the nuxt-fastapi example
+# (.claude/maat.json), with WSL, test-fast.sh, node, npm and
+# the venv python all FAKE (no contact with the real WSL copy, temporary HOME): derivation of the commands,
+# JSON evidence, reuse on an identical key, rerun when a byte changes (also of an untracked file), TZ
+# or the node version, gate without report -> BLOCKED and never PASS, BLOCKED never reused, --verify, tree
+# changed during the gates; mutation counterproof run here, on a mutated copy of the script.
 #   bash script/fic/gates.test.sh
-#   GT=/percorso/variante.sh bash script/fic/gates.test.sh   # la suite su una variante
+#   GT=/path/variant.sh bash script/fic/gates.test.sh   # the suite on a variant
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-ROOT=$(cd "$HERE/.." && pwd)   # radice del plugin
+ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 GT=${GT:-$HERE/gates.sh}
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
-# i mutanti scritti in $W includono il risolutore accanto a se' ($W/lib) e trovano il plugin da MAAT_ROOT
+# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
 mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
 export HOME="$W/home"; mkdir -p "$HOME"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
 chk() { if eval "$2"; then ok; else ko "$1" "${3:-}"; fi; }
 
-# --- repository sintetico ---
+# --- synthetic repository ---
 R="$W/repo"; A="$R/modules/app/apps/admin"; API="$R/modules/api"; FB="$W/bin"
-# test-fast.sh e' del harness (pk04b-1): il finto sta in una COPIA del plugin, data come FIC_GATES_HARNESS
+# test-fast.sh belongs to the harness (pk04b-1): the fake lives in a COPY of the plugin, given as FIC_GATES_HARNESS
 HP="$W/plugin"; cp -r "$ROOT" "$HP" && find "$HP" -name __pycache__ -type d -prune -exec rm -rf {} +
 mkdir -p "$A/utils" "$A/components/goals" "$R/modules/app/packages/ui" "$API/app/services" "$API/tests" \
          "$FB" "$R/.claude"
@@ -36,7 +36,7 @@ printf '{"name":"app"}\n' > "$R/modules/app/package.json"
 printf 'def f():\n    return 1\n' > "$API/app/services/goals.py"
 printf 'def g():\n    return 2\n' > "$API/app/services/senza_test.py"
 printf 'def test_f():\n    assert True\n' > "$API/tests/test_goals.py"
-# test-fast.sh finto: registra la chiamata (e MAAT_MODULO); FAKE_VF=pass|fail|noreport|mute; FAKE_VF_TOUCH=file da cambiare
+# fake test-fast.sh: records the call (and MAAT_MODULO); FAKE_VF=pass|fail|noreport|mute; FAKE_VF_TOUCH=file to change
 cat > "$HP/scripts/test-fast.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "VF $*" >> "$GLOG"
@@ -54,18 +54,18 @@ esac
 EOF
 (cd "$R" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false &&
   git add -A && git commit -qm init)
-# WSL finto: riceve UN comando bash, riporta /mnt/c/ a /c/ (Git Bash) e lo esegue con node/npm finti nel PATH
-# Il suo stderr va altrove, come il secondo flusso di wsl.exe che nel log reale si sovrascrive: arriva al log
-# solo cio' che il comando unisce a stdout DENTRO WSL.
+# fake WSL: receives ONE bash command, maps /mnt/c/ back to /c/ (Git Bash) and runs it with fake node/npm in PATH
+# Its stderr goes elsewhere, like the second stream of wsl.exe that overwrites itself in the real log: only what
+# the command merges into stdout INSIDE WSL reaches the log.
 cat > "$FB/wsl" <<EOF
 #!/usr/bin/env bash
 c=\${1//\/mnt\//\/}
-# come wsl.exe, che passa a WSL solo le variabili di WSLENV: MAAT_CONFIG non arriva se il comando non la esporta
+# like wsl.exe, which passes to WSL only the variables in WSLENV: MAAT_CONFIG does not arrive unless the command exports it
 env -u MAAT_CONFIG PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
 EOF
 printf '#!/usr/bin/env bash\necho "${FAKE_NODE:-v18.19.0}"\n' > "$FB/node"
 printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
-# python del venv finto: --version, pip freeze, pytest (JUnit salvo FAKE_NOJUNIT)
+# fake venv python: --version, pip freeze, pytest (JUnit unless FAKE_NOJUNIT)
 cat > "$FB/venv-python" <<'EOF'
 #!/usr/bin/env bash
 [ "$1" = --version ] && { echo "Python 3.12.1"; exit 0; }
@@ -90,7 +90,7 @@ jget() { "$FIC_PY" -c 'import json,sys; print(json.load(open(sys.argv[1], encodi
 . "$ROOT/scripts/python.sh" || { echo "interprete Python non trovato" >&2; exit 2; }
 F_STD=(modules/api/app/services/goals.py modules/app/apps/admin/utils/goals.ts)
 
-# --- 1. primo giro: comandi derivati, evidenza, PASS col report ---
+# --- 1. first round: derived commands, evidence, PASS with the report ---
 gates std "${F_STD[@]}"; K1=$(key); EV="$RUN/evidence/$K1"
 chk "primo giro: uscita 0" '[ $rc -eq 0 ] && [ -n "$K1" ]' "$out"
 chk "  chiave sha256 (64 esadecimali)" '[ ${#K1} -eq 64 ]'
@@ -106,26 +106,26 @@ chk "  chiave.txt e argomenti.txt accanto" 'grep -q "^tree=" "$EV/chiave.txt" &&
 chk "  a livello std niente lint ne build" '[ ! -f "$EV/lint.json" ] && [ ! -f "$EV/build.json" ]'
 chk "  riga finale con esito, chiave ed evidence" 'printf "%s\n" "$out" | tail -1 | grep -q "^gates: esito=PASS chiave=$K1 evidence="'
 
-# --- 2. chiave identica => riuso, nessun runner lanciato ---
+# --- 2. identical key => reuse, no runner launched ---
 n_be=$(calls PYTEST) n_fe=$(calls VF)
 gates std "${F_STD[@]}"
 chk "chiave identica: stessa chiave" '[ "$(key)" = "$K1" ] && [ $rc -eq 0 ]' "$out"
 chk "  riuso: pytest e vitest NON rilanciati" '[ "$(calls PYTEST)" = "$n_be" ] && [ "$(calls VF)" = "$n_fe" ]'
 chk "  e dichiarato (riuso)" 'printf "%s\n" "$out" | grep -q "^tests-be: PASS (riuso)" && printf "%s\n" "$out" | grep -q "^tests-fe: PASS (riuso)"' "$out"
 
-# --- 3. un byte cambiato in packages/ui (fuori dai file toccati) => rilancio ---
+# --- 3. one byte changed in packages/ui (outside the touched files) => rerun ---
 printf ' ' >> "$R/modules/app/packages/ui/Button.vue"
 gates std "${F_STD[@]}"; K2=$(key)
 chk "byte cambiato in packages/ui: chiave nuova" '[ -n "$K2" ] && [ "$K2" != "$K1" ]'
 chk "  e i gate si rilanciano" '[ "$(calls VF)" -gt "$n_fe" ] && [ "$(calls PYTEST)" -gt "$n_be" ]'
 
-# --- 4. file NUOVO non tracciato (non ignorato) => rilancio (il caso della controprova) ---
+# --- 4. NEW untracked (not ignored) file => rerun (the counterproof case) ---
 n_fe=$(calls VF)
 printf '<template><i/></template>\n' > "$R/modules/app/packages/ui/Nuovo.vue"
 gates std "${F_STD[@]}"; K3=$(key)
 chk "file nuovo non tracciato: chiave nuova e rilancio" '[ -n "$K3" ] && [ "$K3" != "$K2" ] && [ "$(calls VF)" -gt "$n_fe" ]' "$out"
 
-# --- 5. TZ e versione di node => rilancio ---
+# --- 5. TZ and node version => rerun ---
 n_fe=$(calls VF)
 TZ=Asia/Tokyo gates std "${F_STD[@]}"; K4=$(key)
 chk "TZ cambiato: chiave nuova e rilancio" '[ -n "$K4" ] && [ "$K4" != "$K3" ] && [ "$(calls VF)" -gt "$n_fe" ]'
@@ -136,7 +136,7 @@ chk "  la versione e' nella chiave in chiaro" 'grep -qx "node=v20.11.1" "$RUN/ev
 gates std "${F_STD[@]}"
 chk "  tornati come prima: la chiave di prima, riusata" '[ "$(key)" = "$K3" ]'
 
-# --- 6. gate senza report => BLOCKED, mai PASS; un BLOCKED non si riusa ---
+# --- 6. gate without report => BLOCKED, never PASS; a BLOCKED gate is not reused ---
 printf 'x\n' > "$R/modules/app/packages/ui/altro.md"
 FAKE_NOJUNIT=1 gates std "${F_STD[@]}"; K6=$(key)
 chk "pytest senza JUnit: tests-be BLOCKED, uscita 3" '[ "$(jget "$RUN/evidence/$K6/tests-be.json" esito)" = BLOCKED ] && [ $rc -eq 3 ]' "$out"
@@ -157,7 +157,7 @@ n_fe=$(calls VF)
 gates std "${F_STD[@]}"
 chk "  un FAIL a chiave identica si riusa (non si rilancia)" '[ "$(calls VF)" = "$n_fe" ] && [ $rc -eq 1 ]'
 
-# --- 7. livello full: lint (anche .vue, --base da base.txt) e build; SKIPPED dichiarati ---
+# --- 7. full level: lint (also .vue, --base from base.txt) and build; declared SKIPPED ---
 echo abc123 > "$RUN/base.txt"
 gates full modules/app/apps/admin/components/goals/Riga.vue modules/api/app/services/senza_test.py; KF=$(key)
 chk "full: lint sul .vue con --base" 'grep -q "^VF --lint --base abc123 modules/app/apps/admin/components/goals/Riga.vue$" "$GLOG"' "$(tail -3 "$GLOG")"
@@ -174,32 +174,32 @@ printf 'v\n' >> "$R/modules/app/packages/ui/altro.md"
 o=$(bash "$GT" --verify "$RUN/evidence/$K9" 2>&1); r=$?
 chk "--verify dopo un byte cambiato: STALE (1)" '[ $r -eq 1 ] && printf "%s" "$o" | grep -q "^STALE"' "$o"
 
-# --- 9. albero cambiato mentre i gate girano => BLOCKED ---
+# --- 9. tree changed while the gates run => BLOCKED ---
 FAKE_VF_TOUCH="$R/modules/app/packages/ui/altro.md" gates std "${F_STD[@]}"; KT=$(key)
 chk "tree cambiato durante i gate: eseguiti => BLOCKED" '[ "$(jget "$RUN/evidence/$KT/tests-fe.json" esito)" = BLOCKED ] && jget "$RUN/evidence/$KT/tests-fe.json" motivo | grep -q "albero cambiato" && [ $rc -eq 3 ]' "$out"
 
-# --- 10. uso ---
+# --- 10. usage ---
 bash "$GT" --run-dir "$RUN" boh a.py >/dev/null 2>&1; r=$?; chk "livello sconosciuto: uscita 2" '[ $r -eq 2 ]'
 bash "$GT" std a.py >/dev/null 2>&1; r=$?; chk "senza --run-dir: uscita 2" '[ $r -eq 2 ]'
 
-# --- 11. --run-dir relativo (come lo passa run-phase.sh): il JUnit di pytest, lanciato dalla cartella del modulo,
-#     va nell'evidenza e non in modules/api/<run-dir>/ (che cambierebbe l'albero durante i gate). Da il progetto guida
-#     emerso con la prima feature con test backend. ---
+# --- 11. relative --run-dir (as run-phase.sh passes it): the pytest JUnit, run from the module directory,
+#     goes into the evidence and not into modules/api/<run-dir>/ (which would change the tree during the gates). From the
+#     guide project, it surfaced with the first feature with backend tests. ---
 out=$(cd "$W" && bash "$GT" --run-dir spec-rel.run std "${F_STD[@]}" 2>&1); rc=$?; Kr=$(key)
 chk "run dir relativa: uscita 0" '[ $rc -eq 0 ] && [ -n "$Kr" ]' "$out"
 chk "  JUnit nell'evidenza della run dir" '[ -f "$W/spec-rel.run/evidence/$Kr/tests-be.junit.xml" ] && [ "$(jget "$W/spec-rel.run/evidence/$Kr/tests-be.json" esito)" = PASS ]' "$out"
 chk "  niente sotto modules/api" '[ ! -e "$API/spec-rel.run" ]'
 
-# --- 12. lo stderr del runner (i blocchi FAIL di vitest) arriva nel log del gate: unito dentro WSL. Da il progetto guida
-#     Unito fuori, wsl.exe consegna due flussi che si sovrascrivono e un blocco FAIL si perde. ---
+# --- 12. the runner's stderr (the vitest FAIL blocks) reaches the gate log: merged inside WSL. From the guide project.
+#     Merged outside, wsl.exe delivers two streams that overwrite each other and a FAIL block is lost. ---
 RUN="$W/spec-stderr.run"; mkdir -p "$RUN"
 FAKE_VF_STDERR="FAIL  blocco su stderr" gates std "${F_STD[@]}"; Ks=$(key)
 chk "stderr del runner nel log: uscita 0" '[ $rc -eq 0 ] && [ -n "$Ks" ]' "$out"
 chk "  blocco FAIL di stderr presente in tests-fe.log" 'grep -q "FAIL  blocco su stderr" "$RUN/evidence/$Ks/tests-fe.log"' "$(cat "$RUN/evidence/$Ks/tests-fe.log" 2>/dev/null)"
 
-# --- 13. senza FIC_GATES_VENV_PY il {python} di un modulo wsl si cerca DENTRO WSL fra i candidati di moduli[].python
-#     (nell'esempio .venv312, poi .venv): percorso di WSL nel comando, versione di WSL nella chiave; nessun candidato ->
-#     tests-be BLOCKED, mai PASS. Dal progetto guida: il venv Windows derivato era passato verde. ---
+# --- 13. without FIC_GATES_VENV_PY the {python} of a wsl module is looked up INSIDE WSL among the candidates of moduli[].python
+#     (in the example .venv312, then .venv): WSL path in the command, WSL version in the key; no candidate ->
+#     tests-be BLOCKED, never PASS. From the guide project: the derived Windows venv had passed green. ---
 wp() { local w; w=$(cygpath -m "$1" 2>/dev/null || printf '%s' "$1")
   case $w in [A-Za-z]:/*) printf '/mnt/%s%s' "$(printf '%s' "${w:0:1}" | tr 'A-Z' 'a-z')" "${w:2}" ;; *) printf '%s' "$w" ;; esac; }
 mkdir -p "$API/.venv/bin" && cp "$FB/venv-python" "$API/.venv/bin/python" && chmod +x "$API/.venv/bin/python"
@@ -217,9 +217,9 @@ RUN="$W/spec-novenv.run"; mkdir -p "$RUN"
 out=$(FIC_GATES_VENV_PY= bash "$GT" --run-dir "$RUN" std "${F_STD[@]}" 2>&1); rc=$?
 chk "  senza venv WSL: tests-be BLOCKED, mai PASS" '[ $rc -eq 3 ] && printf "%s\n" "$out" | grep -q "^tests-be: BLOCKED.*python WSL assente"' "$out"
 
-# --- 14. {python} non risolvibile in un modulo NATIVO (uscita 3 del lettore, «python non trovato»): BLOCKED, mai
-#     NOT RUN «dichiarato» (decisione di pk04b-2, nota «Da pk04b-1»). Modulo be nativo con un interprete che non c'e'
-#     nel PATH, PATH senza python3 (il harness usa FIC_PY, assoluto, via FIC_PYTHON). Controprova: il ramo BLOCKED tolto => NOT RUN. ---
+# --- 14. unresolvable {python} in a NATIVE module (reader exit 3, «python non trovato»): BLOCKED, never
+#     NOT RUN «dichiarato» (decision of pk04b-2, note «Da pk04b-1»). Native be module with an interpreter that is not
+#     in PATH, PATH without python3 (the harness uses FIC_PY, absolute, via FIC_PYTHON). Counterproof: BLOCKED branch removed => NOT RUN. ---
 NOPYPATH=$(printf '%s' "$PATH" | tr ':' '\n' | while IFS= read -r d; do
   { [ -e "$d/python3" ] || [ -e "$d/python3.exe" ]; } && continue; printf '%s:' "$d"; done)
 "$FIC_PY" - "$R/.claude/maat.json" "$W/nopy.maat.json" <<'PYEOF'
@@ -241,15 +241,15 @@ if PATH="$NOPYPATH" command -v git >/dev/null 2>&1 && PATH="$NOPYPATH" command -
   if cmp -s "$GT" "$M"; then ko "14 controprova: la mutazione non si applica"
   else nopy mut "$M"
     if printf '%s
-' "$out" | grep -q "^tests-be: NOT RUN"; then ok   # rosso atteso: torna NOT RUN «dichiarato»
+' "$out" | grep -q "^tests-be: NOT RUN"; then ok   # expected red: it goes back to NOT RUN «dichiarato»
     else ko "14 controprova: senza il ramo BLOCKED l'esito non torna NOT RUN (il test non discrimina)" "$out"; fi
   fi
 else
   echo "SKIP [14: nessun PATH senza python3 che abbia ancora git e sed]"
 fi
 
-# --- 15. MAAT_CONFIG arriva a test-fast.sh dentro WSL (tradotta /mnt/<unita'>/…: nota «Da pk04b-1»). Controprova:
-#     senza l'export nel comando WSL test-fast.sh non la vede. ---
+# --- 15. MAAT_CONFIG reaches test-fast.sh inside WSL (translated to /mnt/<drive>/…: note «Da pk04b-1»). Counterproof:
+#     without the export in the WSL command, test-fast.sh does not see it. ---
 cp "$R/.claude/maat.json" "$W/conf15.maat.json"
 conf15() { RUN="$W/spec-conf15-$1.run"; rm -rf "$RUN"; mkdir -p "$RUN"; : > "$GLOG"
   out=$(MAAT_CONFIG="$W/conf15.maat.json" bash "$2" --run-dir "$RUN" std modules/app/apps/admin/utils/goals.ts 2>&1); rc=$?
@@ -259,16 +259,16 @@ chk "15 MAAT_CONFIG in WSL: test-fast.sh la riceve, tradotta, ed e' lo stesso fi
 M="$W/mut-conf.sh"; sed 's/\${MAAT_CONFIG:+; export MAAT_CONFIG=\$(sq "\$(wslp "\$MAAT_CONFIG")")}//' "$GT" > "$M"
 if cmp -s "$GT" "$M"; then ko "15 controprova: la mutazione non si applica"
 else conf15 mut "$M"
-  if [ -z "$CONFV" ]; then ok   # rosso atteso: test-fast.sh non vede MAAT_CONFIG
+  if [ -z "$CONFV" ]; then ok   # expected red: test-fast.sh does not see MAAT_CONFIG
   else ko "15 controprova: senza l'export test-fast.sh vede ancora MAAT_CONFIG (il test non discrimina)" "CONF=$CONFV"; fi
 fi
 : > "$GLOG"
 
-# --- controprova: senza i file non tracciati nella chiave, il caso «file nuovo» diventa un riuso sbagliato ---
+# --- counterproof: without untracked files in the key, the «file nuovo» case becomes a wrong reuse ---
 LINE='tree_now() { (cd "$ROOT" && bash "$RS" tree) 2>/dev/null; }'
 chk "controprova: riga del tree unica" '[ "$(grep -cxF -- "$LINE" "$GT")" = 1 ]'
 M="$W/mut-tracciati.sh"
-# mutante: tree = HEAD + diff dei soli file tracciati (i non tracciati spariscono dalla chiave)
+# mutant: tree = HEAD + diff of tracked files only (untracked files disappear from the key)
 MUT='tree_now() { (cd "$ROOT" \&\& { git rev-parse HEAD; git diff HEAD; } | sha) 2>/dev/null; }'
 sed "s#^tree_now() { (cd \"\$ROOT\" && bash \"\$RS\" tree) 2>/dev/null; }\$#$MUT#" "$GT" > "$M"
 if cmp -s "$GT" "$M"; then ko "controprova: la mutazione non si applica"; else
@@ -278,13 +278,13 @@ if cmp -s "$GT" "$M"; then ko "controprova: la mutazione non si applica"; else
   printf '<template><b/></template>\n' > "$R/modules/app/packages/ui/NuovoMut.vue"
   out=$(bash "$M" --run-dir "$RUN" std "${F_STD[@]}" 2>&1)
   if [ -z "$Km" ]; then ko "controprova: il mutante non gira" "$out"
-  elif [ "$(key)" = "$Km" ] && [ "$(calls VF)" = "$n_fe" ]; then ok   # rosso atteso: riuso sbagliato
+  elif [ "$(key)" = "$Km" ] && [ "$(calls VF)" = "$n_fe" ]; then ok   # expected red: wrong reuse
   else ko "controprova: sul mutante il file nuovo non tracciato fa ancora rilanciare (il test non discrimina)" "$out"; fi
 fi
 
-# --- L: cygpath -m antepone //?/ ai percorsi oltre MAX_PATH (run dir dal nome lungo: l'evidenza dei gate diventava
-# //?/C:/... e pytest in WSL non scriveva il JUnit). maat_cygm, definita una volta in lib/maat-paths.sh, toglie il
-# prefisso; gli script che convertono percorsi la includono e non chiamano cygpath -m (o -am) direttamente. ---
+# --- L: cygpath -m prepends //?/ to paths beyond MAX_PATH (run dir with a long name: the gates evidence became
+# //?/C:/... and pytest in WSL did not write the JUnit). maat_cygm, defined once in lib/maat-paths.sh, strips the
+# prefix; the scripts that convert paths include it and do not call cygpath -m (or -am) directly. ---
 if command -v cygpath >/dev/null 2>&1; then
   LIB="$HERE/lib/maat-paths.sh"
   LONG="/c/Users/$(printf 'x%.0s' $(seq 1 250))/spec.run/evidence/k"

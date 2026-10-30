@@ -1,93 +1,93 @@
 #!/usr/bin/env python3
-r"""guard.py — guardia dei comandi: hook PreToolUse delle sotto-sessioni e (con --universal) della sessione.
+r"""guard.py — command guard: PreToolUse hook of the sub-sessions and (with --universal) of the session.
 
-Le sotto-sessioni girano in bypassPermissions (le scritture sotto .claude/ passano solo cosi') con un
-deny per PREFISSO, che un comando avvolto in `wsl -- bash -lc '...'` aggira (misurato). Questo hook
-guarda il comando INTERO, dentro gli involucri, e nega (exit 2, motivo su stderr) un elenco CHIUSO di
-azioni irreversibili. Non e' una sandbox: cosa resta scoperto e' scritto in riferimento.md, sezione
+Sub-sessions run in bypassPermissions (the only way writes under .claude/ go through) with a
+PREFIX deny, which a command wrapped in `wsl -- bash -lc '...'` bypasses (measured). This hook
+looks at the WHOLE command, inside the wrappers, and denies (exit 2, reason on stderr) a CLOSED list of
+irreversible actions. It is not a sandbox: what stays uncovered is written in riferimento.md, section
 "Sub-session permissions".
 
-DUE STRATI DI REGOLE (R3.6, pk05):
-  NUCLEO, sempre attivo e generico: git che cambia stato (con le regole sui worktree collegati), GRAVE_GIT,
-     `rm -rf` e `Remove-Item -Recurse -Force`, heredoc Python che scrivono, installazioni di pacchetti, accesso
-     remoto diretto (ssh/scp/sftp/rsync), docker, psql; le regole delle fasi (scritture solo nella cartella di
-     lavoro per le fasi in sola lettura, suite intere vietate in plan/test-red/test-stage).
-  PROGETTO, da maat.json -> guardia:
-     produzione    regex (senza maiuscole) sull'intero testo del comando: sempre GRAVE, anche con la guardia ridotta;
-     rilascio      script di rilascio, confrontati come SOTTOSTRINGA del comando: negati sempre, sempre GRAVI; nel
-                   contenuto di uno script contano come comando, come la produzione;
-     involucri     script che incapsulano l'accesso remoto o la copia locale: ammessi e non letti; le loro
-                   opzioni_negate sono sempre GRAVI (eseguiti direttamente o con `bash …`);
-     vietati_extra prefissi di comandi negati nelle sotto-sessioni (gli stessi passano a --disallowedTools);
-     suite         script di suite del progetto ({script, selettori: pytest|vitest}), negati senza file o selettori come i runner;
-     la suite intera della regola 4: i runner dei comandi `test` dei moduli e guardia.suite, oltre a pytest e vitest.
-  Il file: MAAT_CONFIG (le sotto-sessioni lo ricevono da run-phase.sh, percorso assoluto), altrimenti
-  <CLAUDE_PROJECT_DIR>/.claude/maat.json (Claude Code fornisce la variabile agli hook; mai dalla cwd del comando).
-  Assente, illeggibile o non valido: il nucleo resta, e ogni comando che contiene un host o un dominio fuori da
-  localhost e' GRAVE (fail-closed): «maat.json non trovato» / «maat.json non valido».
+TWO LAYERS OF RULES (R3.6, pk05):
+  CORE, always active and generic: state-changing git (with the rules on linked worktrees), GRAVE_GIT,
+     `rm -rf` and `Remove-Item -Recurse -Force`, Python heredocs that write, package installs, direct remote
+     access (ssh/scp/sftp/rsync), docker, psql; the phase rules (writes only in the work folder
+     for the read-only phases, whole suites forbidden in plan/test-red/test-stage).
+  PROJECT, from maat.json -> guardia:
+     produzione    regex (case-insensitive) on the whole command text: always GRAVE, even with the reduced guard;
+     rilascio      release scripts, matched as a SUBSTRING of the command: always denied, always GRAVE; in
+                   the content of a script they count as a command, like produzione;
+     involucri     scripts that wrap remote access or the local copy: allowed and not read; their
+                   opzioni_negate are always GRAVE (run directly or with `bash …`);
+     vietati_extra command prefixes denied in sub-sessions (the same ones go to --disallowedTools);
+     suite         project suite scripts ({script, selettori: pytest|vitest}), denied without files or selectors like the runners;
+     the whole suite of rule 4: the runners of the modules' `test` commands and guardia.suite, besides pytest and vitest.
+  The file: MAAT_CONFIG (sub-sessions get it from run-phase.sh, absolute path), otherwise
+  <CLAUDE_PROJECT_DIR>/.claude/maat.json (Claude Code provides the variable to hooks; never from the command's cwd).
+  Missing, unreadable or invalid: the core stays, and every command containing a host or a domain other than
+  localhost is GRAVE (fail-closed): «maat.json non trovato» / «maat.json non valido».
 
-  1. Progetto, prima di tutto e sull'intero testo del comando: rilascio e produzione.
-  2. Strumenti solo in POSIZIONE DI COMANDO (dopo ; && || | & ( e le parole chiave do/then/else/{/!,
-     dentro bash -c / -lc (anche con -o pipefail), $( ), ``, xargs, find -exec, cmd /c, powershell -c):
-     ssh/scp/sftp/rsync diretti (si passa dagli involucri), git che cambia stato, docker, psql, installazioni di
-     pacchetti, rm ricorsivo forzato. Cosi' `git show <Base>:docker-compose.yml > docker-compose.yml` o
-     `git status && rm f` passano. Il payload degli involucri NON viene analizzato.
-  3. Fasi `plan`/`review`/`probe` (FIC_PHASE): Edit/Write/NotebookEdit dentro il repo solo sotto
-     la cartella di lavoro (cartelle.lavoro di maat.json, default `.claude/.ai-workflow/`). Fuori dal repo (scratchpad) e' libero.
-  3b. Corsia di implementazione (FIC_WRITE_SCOPE, harness-pt13): Edit/Write dentro il repo solo sui file di
-     `scrive:` dei blocchi della corsia e nella run dir (check_scope). Si somma alla regola 5: con FIC_WRITE_SCOPE
-     e FIC_SCOPE entrambi impostati una scrittura deve rispettare tutti e due (check_write li applica in fila).
-  4. Fase `plan`: niente suite complete — pytest, vitest e i runner dei comandi `test` dei moduli senza file o
-     selettori espliciti (-k/-m per pytest, -t per vitest) negati, anche dentro wsl/bash -c (check_suite). Le suite
-     del livello le esegue il driver (scripts/gates.sh del plugin) dopo implement/fix.
-  5. Fasi `test-red` e `test-stage` (harness-pt11): Edit/Write dentro il repo solo sui path dello SCOPE, il file
-     indicato da FIC_SCOPE (uno per riga, relativi al repo; una riga che finisce con / vale come prefisso):
-     test-red = i file di test del piano + i file che il piano dichiara nuovi (stub); test-stage = la sola
-     <run-dir>/staging/. Scope assente o illeggibile: tutto negato. Niente suite complete, come in `plan`.
+  1. Project, first of all and on the whole command text: rilascio and produzione.
+  2. Tools only in COMMAND POSITION (after ; && || | & ( and the keywords do/then/else/{/!,
+     inside bash -c / -lc (also with -o pipefail), $( ), ``, xargs, find -exec, cmd /c, powershell -c):
+     direct ssh/scp/sftp/rsync (go through the wrappers), state-changing git, docker, psql, package
+     installs, forced recursive rm. So `git show <Base>:docker-compose.yml > docker-compose.yml` or
+     `git status && rm f` pass. The wrappers' payload is NOT analysed.
+  3. Phases `plan`/`review`/`probe` (FIC_PHASE): Edit/Write/NotebookEdit inside the repo only under
+     the work folder (cartelle.lavoro in maat.json, default `.claude/.ai-workflow/`). Outside the repo (scratchpad) it is free.
+  3b. Implementation lane (FIC_WRITE_SCOPE, harness-pt13): Edit/Write inside the repo only on the files in
+     `scrive:` of the lane's blocks and in the run dir (check_scope). It adds to rule 5: with FIC_WRITE_SCOPE
+     and FIC_SCOPE both set a write must satisfy both (check_write applies them in sequence).
+  4. Phase `plan`: no full suites — pytest, vitest and the runners of the modules' `test` commands without explicit
+     files or selectors (-k/-m for pytest, -t for vitest) denied, also inside wsl/bash -c (check_suite). The level's
+     suites are run by the driver (the plugin's scripts/gates.sh) after implement/fix.
+  5. Phases `test-red` and `test-stage` (harness-pt11): Edit/Write inside the repo only on the SCOPE paths, the file
+     given by FIC_SCOPE (one per line, relative to the repo; a line ending with / acts as a prefix):
+     test-red = the plan's test files + the files the plan declares new (stubs); test-stage = only
+     <run-dir>/staging/. Scope missing or unreadable: everything denied. No full suites, as in `plan`.
 
-COSA RESTA SCOPERTO, per scelta (niente sandbox su Windows nativo; ogni test passa da `wsl bash -lc`,
-quindi un'allowlist vera di capability qui non e' applicabile): comandi offuscati (base64, variabili
-costruite a runtime, script scritti su file e poi eseguiti, un programma Python che apre una
-connessione); file scritti con Bash nelle fasi di sola lettura; il payload degli involucri.
-Un hook che FALLISCE (eccezione, interprete assente) lascia passare: e' fail-open. Per questo
-run-phase.sh non lancia la sottosessione se l'autotest non ottiene il diniego (exit 5). L'hook del plugin
-(scripts/guard-hook.sh) invece tratta un'uscita diversa da 0/2, o Python assente, come "ask" (nega con FIC_PHASE).
+WHAT STAYS UNCOVERED, by choice (no sandbox on native Windows; every test goes through `wsl bash -lc`,
+so a real capability allowlist is not applicable here): obfuscated commands (base64, variables
+built at runtime, scripts written to a file and then run, a Python program that opens a
+connection); files written with Bash in the read-only phases; the wrappers' payload.
+A hook that FAILS (exception, missing interpreter) lets the call through: it is fail-open. That is why
+run-phase.sh does not start the sub-session if the self-test does not get the denial (exit 5). The plugin hook
+(scripts/guard-hook.sh) instead treats an exit other than 0/2, or missing Python, as "ask" (denies with FIC_PHASE).
 
-MODALITA' --universal (guardia di SESSIONE, hook del plugin hooks/hooks.json -> guard-hook.sh): solo le regole
-1-2, niente regole per fase. Differenze: `git commit`/`checkout`/`add` ammessi solo DENTRO un worktree collegato
-(`git rev-parse --git-dir` != `--git-common-dir`; la directory e' il `cwd` dell'hook, seguito da `cd <dir>` e da
-`git -C <dir>`; ignota → negato), mai nel tree principale; `git worktree add|list` ammessi; push/reset/rebase/stash
-e il resto restano negati ovunque.
-In piu' `bash|sh <file>` con il file sotto script/ o .claude/ legge le righe ESEGUIBILI del file (senza
-commenti ne' corpi di heredoc di testo) e applica solo le regole remote e infrastrutturali: ssh/scp/
-sftp/rsync, docker, psql, installazioni, le opzioni negate degli involucri, e la produzione solo come comando
-(script di rilascio) o come argomento di un comando di rete (ssh, curl, ...), non in un echo. Git e `rm -rf` no:
-gli script lavorano su repo e cartelle temporanee e sono codice revisionato. Non si leggono gli involucri del
-progetto ne' gli involucri del plugin (PLUGIN_WRAPPERS sotto MAAT_ROOT/scripts/, confrontati per percorso
-assoluto risolto, anche nella forma /mnt/<drive>/ di WSL).
-In entrambe le modalita': heredoc Python (`python - <<`, `py -3 - <<`) che apre file in scrittura
-(open(..., 'w'|'a'), write_text, write_bytes) negata.
+--universal MODE (SESSION guard, plugin hook hooks/hooks.json -> guard-hook.sh): only rules
+1-2, no per-phase rules. Differences: `git commit`/`checkout`/`add` allowed only INSIDE a linked worktree
+(`git rev-parse --git-dir` != `--git-common-dir`; the directory is the hook's `cwd`, followed through `cd <dir>` and
+`git -C <dir>`; unknown → denied), never in the main tree; `git worktree add|list` allowed; push/reset/rebase/stash
+and the rest stay denied everywhere.
+In addition `bash|sh <file>` with the file under script/ or .claude/ reads the EXECUTABLE lines of the file (without
+comments or text heredoc bodies) and applies only the remote and infrastructure rules: ssh/scp/
+sftp/rsync, docker, psql, installs, the wrappers' denied options, and produzione only as a command
+(release script) or as an argument of a network command (ssh, curl, ...), not in an echo. Not git nor `rm -rf`:
+scripts work on repos and temporary folders and are reviewed code. Neither the project's wrappers
+nor the plugin's wrappers are read (PLUGIN_WRAPPERS under MAAT_ROOT/scripts/, matched by resolved absolute
+path, also in the WSL /mnt/<drive>/ form).
+In both modes: a Python heredoc (`python - <<`, `py -3 - <<`) that opens a file for writing
+(open(..., 'w'|'a'), write_text, write_bytes) is denied.
 
-Directory del git in --universal: `--git-dir`/`--work-tree`/`-c core.worktree`, GIT_DIR/GIT_WORK_TREE
-nel comando, pushd/popd/Push-Location → ignota (quindi non ammessa). Un `cd` dentro `( … )`, `$( )`,
-`bash -c`, `wsl [--cd x] -- bash -lc`, `cmd /c`, `powershell -c` non vale per i comandi che seguono.
-Tool analizzati: Bash e PowerShell (in PowerShell `\` e' un separatore; Remove-Item -Recurse -Force).
+Git directory in --universal: `--git-dir`/`--work-tree`/`-c core.worktree`, GIT_DIR/GIT_WORK_TREE
+in the command, pushd/popd/Push-Location → unknown (so not allowed). A `cd` inside `( … )`, `$( )`,
+`bash -c`, `wsl [--cd x] -- bash -lc`, `cmd /c`, `powershell -c` does not apply to the commands that follow.
+Tools analysed: Bash and PowerShell (in PowerShell `\` is a separator; Remove-Item -Recurse -Force).
 
-MOTIVI (R11): ogni risposta ha tre parti, separate da « — »: <cosa e' stato riconosciuto, a partire dal comando> —
-<regola del nucleo|del progetto, quale> — <cosa fare se e' voluto>. Tabella unica MSG, in it ed en; la lingua viene
-da maat.json -> lingua (assente, non in tabella, maat.json non valido o assente: it).
+REASONS (R11): every answer has three parts, separated by « — »: <what was recognised, starting from the command> —
+<core|project rule, which one> — <what to do if it is intended>. Single MSG table, in it and en; the language comes
+from maat.json -> lingua (missing, not in the table, maat.json invalid or missing: en).
 
-Uso: stdin = JSON del PreToolUse. Sottosessioni: uscita 0 = ammesso, 2 = negato (motivo su stderr).
-`--universal` = guardia di sessione: nella sessione principale (FIC_PHASE vuota) invece di negare CHIEDE
-CONFERMA (JSON `hookSpecificOutput.permissionDecision: "ask"` su stdout, uscita 0); con FIC_PHASE
-impostata (sotto-sessione) nega come sempre. `--deny-list`: stampa le voci di --disallowedTools per
-run-phase.sh (nucleo, rilascio, vietati_extra), una per riga. Test: guard.test.sh.
-GUARDIA RIDOTTA: con FIC_SESSION_GUARD=prod (blocco env di .claude/settings.local.json) la sessione principale
-chiede conferma SOLO per le azioni GRAVI: produzione, rilascio, opzioni negate degli involucri, maat.json
-assente o non valido con un host nel comando, git push/reset/rebase/clean/restore/filter-branch/update-ref,
-`checkout` che butta modifiche (`--`, `.`, `-f`), branch/tag con cancellazione o forzatura, input illeggibile. Il
-resto (commit, checkout di branch, merge, installazioni, docker, ssh, rm -rf, heredoc) passa. Le sotto-sessioni
-(FIC_PHASE impostata) applicano sempre le regole piene.
+Usage: stdin = PreToolUse JSON. Sub-sessions: exit 0 = allowed, 2 = denied (reason on stderr).
+`--universal` = session guard: in the main session (empty FIC_PHASE) instead of denying it ASKS FOR
+CONFIRMATION (JSON `hookSpecificOutput.permissionDecision: "ask"` on stdout, exit 0); with FIC_PHASE
+set (sub-session) it denies as always. `--deny-list`: prints the --disallowedTools entries for
+run-phase.sh (core, rilascio, vietati_extra), one per line. Tests: guard.test.sh.
+REDUCED GUARD: with FIC_SESSION_GUARD=prod (env block of .claude/settings.local.json) the main session
+asks for confirmation ONLY for GRAVE actions: produzione, rilascio, wrappers' denied options, maat.json
+missing or invalid with a host in the command, git push/reset/rebase/clean/restore/filter-branch/update-ref,
+`checkout` that discards changes (`--`, `.`, `-f`), branch/tag with deletion or force, unreadable input. The
+rest (commit, branch checkout, merge, installs, docker, ssh, rm -rf, heredocs) passes. Sub-sessions
+(FIC_PHASE set) always apply the full rules.
 """
 import importlib.util
 import io
@@ -102,7 +102,7 @@ REMOTE = {"ssh", "scp", "sftp", "rsync"}
 GIT_DENY = {"commit", "push", "reset", "checkout", "switch", "restore", "clean", "stash",
             "rebase", "merge", "rm", "mv", "add", "cherry-pick", "revert", "am", "apply",
             "update-ref", "worktree"}
-# sottocomandi innocui in lettura, distruttivi con certe opzioni
+# subcommands harmless when reading, destructive with certain options
 GIT_DENY_WITH = {"branch": {"-d", "-D", "--delete", "-m", "-M", "--move", "-f", "--force"},
                  "tag": {"-d", "--delete", "-f", "--force"}}
 KEYWORDS = {"do", "then", "else", "elif", "if", "while", "until", "{", "}", "!", "[[", "]]"}
@@ -112,54 +112,54 @@ WRAPPERS = {"env", "exec", "sudo", "nohup", "time", "command", "builtin", "nice"
 OPERATORS = {";", "&&", "||", "|", "&", "(", ")", "|&", ";;"}
 WRITE_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 READONLY_PHASES = {"plan", "review", "probe"}
-# fasi con uno scope di scrittura loro (FIC_SCOPE, regola 5) e senza suite complete (regola 4)
+# phases with their own write scope (FIC_SCOPE, rule 5) and without full suites (rule 4)
 SCOPED_PHASES = {"test-red", "test-stage"}
 SUITE_PHASES = {"plan"} | SCOPED_PHASES
-# --universal: sottocomandi git ammessi solo DENTRO un worktree collegato (git-dir != git-common-dir),
-# mai nel tree principale; `worktree add`/`worktree list` ammessi ovunque. push/reset/rebase/stash e
-# il resto di GIT_DENY restano negati ovunque.
+# --universal: git subcommands allowed only INSIDE a linked worktree (git-dir != git-common-dir),
+# never in the main tree; `worktree add`/`worktree list` allowed everywhere. push/reset/rebase/stash and
+# the rest of GIT_DENY stay denied everywhere.
 GIT_WORKTREE_OK = {"commit", "checkout", "add"}
 GIT_WORKTREE_SUB_OK = {"add", "list"}
-# `python - <<` / `py -3 - <<` (anche .exe con percorso): heredoc Python
+# `python - <<` / `py -3 - <<` (also .exe with a path): Python heredoc
 PY_HEREDOC_RE = re.compile(r"(?:^|[\s;&|(/\\])(?:python[0-9.]*|py)(?:\.exe)?(?:\s+-[-\w.]+)*\s+-?\s*<<")
-# open(..., 'w') sulla stessa riga, senza dipendere dalle parentesi: open(os.path.join(d, "f"), "w")
+# open(..., 'w') on the same line, without relying on parentheses: open(os.path.join(d, "f"), "w")
 PY_WRITE_RE = re.compile(r"""open\s*\(.*?,\s*(mode\s*=\s*)?['"][wax][bt+]*['"]|write_text|write_bytes""")
 MODE = {"universal": False, "cwd": None, "script": False, "gitenv": False}
-# variabili che spostano repository o working tree: con queste la directory del git e' ignota
+# variables that move the repository or working tree: with these the git directory is unknown
 GIT_ENV_RE = re.compile(r"GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)\b", re.IGNORECASE)
 CD_LIKE = {"cd", "chdir", "set-location", "sl"}
 CD_UNKNOWN = {"pushd", "popd", "push-location", "pop-location"}
 SHELL_TOOLS = {"Bash", "PowerShell"}
-# comandi di rete: nel contenuto di uno script la produzione conta solo come loro argomento (o come comando)
+# network commands: in the content of a script, produzione counts only as their argument (or as a command)
 NET_TOOLS = {"ssh", "scp", "sftp", "rsync", "curl", "wget", "http", "https", "nc", "ncat", "telnet", "ping"}
-# heredoc: `<<EOF`, `<<-'EOF'`, `<< "EOF"` (non `<<<`)
+# heredoc: `<<EOF`, `<<-'EOF'`, `<< "EOF"` (not `<<<`)
 HEREDOC_RE = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 HEREDOC_EXEC_RE = re.compile(r"(^|[\s;&|(/\\])(bash|sh|zsh|dash|ssh|python[0-9.]*|py)(\.exe)?(\s|$)")
-# Involucri del PLUGIN (passo 3-bis): ammessi per percorso assoluto risolto sotto MAAT_ROOT/scripts/, anche dentro
-# `wsl -- bash -lc '…'`. fic-mirror.sh no: e' una libreria inclusa dagli involucri, non si lancia da sola.
+# PLUGIN wrappers (step 3-bis): allowed by resolved absolute path under MAAT_ROOT/scripts/, also inside
+# `wsl -- bash -lc '…'`. Not fic-mirror.sh: it is a library sourced by the wrappers, it is not run on its own.
 PLUGIN_WRAPPERS = ("test-fast.sh", "counterproof.sh", "vitest-fast.sh")
-# Suite complete (regola 4), nucleo: runner noti. Quelli del progetto vengono dai comandi `test` dei moduli e da
-# guardia.suite (script di suite del progetto, con le regole di selezione di pytest o vitest).
+# Full suites (rule 4), core: known runners. The project's ones come from the modules' `test` commands and from
+# guardia.suite (project suite scripts, with the pytest or vitest selection rules).
 SUITE_NUCLEO = {"pytest": "pytest", "py.test": "pytest", "vitest": "vitest"}
-# Fail-closed senza maat.json valido: un host (nome con un punto) o un IPv4 nel comando. localhost non ha punti.
+# Fail-closed without a valid maat.json: a host (name with a dot) or an IPv4 in the command. localhost has no dots.
 HOST_RE = re.compile(r"(?<![\w.-])(?:\d{1,3}(?:\.\d{1,3}){3}|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*)"
                      r"(?![\w-])", re.IGNORECASE)
-# --deny-list: prefissi del nucleo per --disallowedTools (il deny per prefisso delle sotto-sessioni)
+# --deny-list: core prefixes for --disallowedTools (the sub-sessions' prefix deny)
 DENY_NUCLEO = ("ssh", "scp", "sftp", "rsync", "git commit", "git push", "git reset", "git checkout", "git switch",
                "git clean", "git stash", "git rebase", "git merge", "git restore", "docker", "psql", "pip install",
                "npm install", "rm -rf")
 
 
-# Guardia di sessione RIDOTTA (FIC_SESSION_GUARD=prod, nel blocco env di .claude/settings.local.json): nella
-# sola sessione principale (--universal senza FIC_PHASE) chiede conferma solo per le azioni GRAVI (vedi docstring).
-# Le sottosessioni (FIC_PHASE impostata) non la vedono mai.
+# REDUCED session guard (FIC_SESSION_GUARD=prod, in the env block of .claude/settings.local.json): in the
+# main session only (--universal without FIC_PHASE) it asks for confirmation only for GRAVE actions (see docstring).
+# Sub-sessions (FIC_PHASE set) never see it.
 GRAVE_GIT = {"push", "reset", "rebase", "clean", "update-ref", "filter-branch", "restore"}
-# `git checkout` che butta modifiche non committate (irreversibile): `-- <path>`, `.`, `-f/--force`
+# `git checkout` that discards uncommitted changes (irreversible): `-- <path>`, `.`, `-f/--force`
 GRAVE_CHECKOUT = {"--", ".", "-f", "--force"}
 
-# ------------------------------------------------------------------------------------------- motivi (R11)
-# Una voce per regola: (cosa e' stato riconosciuto, regola, cosa fare). Le parti variabili ({...}) stanno SOLO
-# nella prima parte, che inizia con il comando riconosciuto; « — » separa le tre parti e non compare nei valori.
+# ------------------------------------------------------------------------------------------- reasons (R11)
+# One entry per rule: (what was recognised, rule, what to do). The variable parts ({...}) are ONLY
+# in the first part, which starts with the recognised command; « — » separates the three parts and never appears in values.
 SEP = " — "
 MSG = {
     "input": {
@@ -332,16 +332,16 @@ MSG = {
                "counterproof revert and restore are done with Bash (git show … >, cp)")},
 }
 
-# Regole del progetto (load_config). stato: None = maat.json valido, "assente", "non_valido".
-CONF = {"stato": "assente", "lingua": "it", "prod": None, "rilascio": [], "involucri": [], "vietati": [],
+# Project rules (load_config). stato: None = valid maat.json, "assente", "non_valido".
+CONF = {"stato": "assente", "lingua": "en", "prod": None, "rilascio": [], "involucri": [], "vietati": [],
         "suite": dict(SUITE_NUCLEO)}
 
 
 def reason(key, **kw):
-    """Il motivo in tre parti, nella lingua di maat.json (it se assente, non in tabella o con maat.json non valido)."""
+    """The three-part reason, in the maat.json language (it if missing, not in the table or with an invalid maat.json)."""
     voci = MSG[key]
     t = voci.get(CONF["lingua"]) or voci["it"]
-    vals = {k: str(v).replace("—", "-") for k, v in kw.items()}   # « — » solo come separatore
+    vals = {k: str(v).replace("—", "-") for k, v in kw.items()}   # « — » only as the separator
     return SEP.join((t[0].format(**vals), t[1], t[2]))
 
 
@@ -351,10 +351,10 @@ def reduced():
 
 
 def deny(key, grave=False, **kw):
-    """Sottosessioni (anche con --universal, se FIC_PHASE e' impostata): diniego, exit 2.
-    Sessione principale (--universal senza FIC_PHASE): chiede conferma all'utente (permissionDecision
-    "ask" nel JSON su stdout, exit 0). Con la guardia ridotta (reduced()) un diniego non grave non chiede
-    niente: ritorna e i controlli proseguono (un'azione grave piu' avanti nello stesso comando chiede)."""
+    """Sub-sessions (also with --universal, if FIC_PHASE is set): denial, exit 2.
+    Main session (--universal without FIC_PHASE): asks the user for confirmation (permissionDecision
+    "ask" in the JSON on stdout, exit 0). With the reduced guard (reduced()) a non-grave denial asks
+    nothing: it returns and the checks go on (a grave action later in the same command asks)."""
     if reduced() and not grave:
         return
     msg = reason(key, **kw)
@@ -370,7 +370,7 @@ def deny(key, grave=False, **kw):
 
 # ------------------------------------------------------------------------------------------- maat.json
 def config_path():
-    """MAAT_CONFIG, altrimenti <CLAUDE_PROJECT_DIR>/.claude/maat.json; mai dalla cwd del comando."""
+    """MAAT_CONFIG, otherwise <CLAUDE_PROJECT_DIR>/.claude/maat.json; never from the command's cwd."""
     p = os.environ.get("MAAT_CONFIG")
     if p:
         return p
@@ -379,7 +379,7 @@ def config_path():
 
 
 def runner_of(txt):
-    """Il runner di un comando di test: `{python} -m pytest …` → pytest, `bash {maat}/scripts/x.sh …` → x.sh."""
+    """The runner of a test command: `{python} -m pytest …` → pytest, `bash {maat}/scripts/x.sh …` → x.sh."""
     try:
         toks = shlex.split(txt)
     except ValueError:
@@ -407,16 +407,16 @@ def load_config():
     if not path or not os.path.isfile(path):
         CONF["stato"] = "assente"
         return
-    sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+    sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
     try:
         spec = importlib.util.spec_from_file_location(
             "maat_config", os.path.join(os.path.dirname(os.path.abspath(__file__)), "maat-config.py"))
         mc = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mc)
-    except Exception:   # lettore assente o rotto: nessuna regola del progetto, fail-closed
+    except Exception:   # reader missing or broken: no project rules, fail-closed
         CONF["stato"] = "non_valido"
         return
-    saved, sys.stderr = sys.stderr, io.StringIO()   # gli errori del lettore non vanno nel canale dell'hook
+    saved, sys.stderr = sys.stderr, io.StringIO()   # the reader's errors do not go to the hook's channel
     try:
         cfg, _p = mc.carica(path)
         g = cfg.get("guardia", {}) or {}
@@ -425,13 +425,13 @@ def load_config():
     except mc.Uscita as u:
         CONF["stato"] = "assente" if u.codice == 4 else "non_valido"
         return
-    except Exception:   # regex non valida, file illeggibile
+    except Exception:   # invalid regex, unreadable file
         CONF["stato"] = "non_valido"
         return
     finally:
         sys.stderr = saved
     CONF["stato"] = None
-    CONF["lingua"] = cfg.get("lingua") if cfg.get("lingua") in ("it", "en") else "it"
+    CONF["lingua"] = cfg.get("lingua") if cfg.get("lingua") in ("it", "en") else "en"
     CONF["rilascio"] = [r for r in g.get("rilascio", []) if r]
     inv = []
     for x in g.get("involucri", []):
@@ -451,7 +451,7 @@ def load_config():
 
 
 def prod_hit(s):
-    """Il testo di produzione o di rilascio trovato in s (barre gia' in avanti), oppure None."""
+    """The produzione or rilascio text found in s (slashes already forward), or None."""
     low = s.lower()
     for r in CONF["rilascio"]:
         if r.replace("\\", "/").lower() in low:
@@ -466,8 +466,8 @@ def base(tok):
 
 
 def split_simple(cmd, marks=False):
-    """Comandi semplici (liste di token) di una riga di shell; ripiego grezzo se shlex fallisce.
-    Con marks=True le parentesi compaiono come stringhe "(" / ")": delimitano le subshell."""
+    """Simple commands (token lists) of a shell line; crude fallback if shlex fails.
+    With marks=True the parentheses appear as "(" / ")" strings: they delimit subshells."""
     out = []
     for line in cmd.splitlines() or [cmd]:
         try:
@@ -475,7 +475,7 @@ def split_simple(cmd, marks=False):
             lex.whitespace_split = True
             lex.commenters = ""
             toks = list(lex)
-        except ValueError:  # virgolette sbilanciate: si spezza tutto, e' conservativo
+        except ValueError:  # unbalanced quotes: split everything, which is conservative
             toks = re.split(r"[\s'\"]+", line)
         cur = []
         for t in toks:
@@ -493,14 +493,14 @@ def split_simple(cmd, marks=False):
 
 
 def substitutions(cmd):
-    """Contenuto di $( ... ) e `...`: vengono eseguiti, quindi si analizzano come comandi."""
+    """Content of $( ... ) and `...`: they are executed, so they are analysed as commands."""
     return re.findall(r"\$\(([^()]*)\)", cmd) + re.findall(r"`([^`]*)`", cmd)
 
 
 def check_command(cmd, depth=0):
     if depth > 6:
         return
-    for inner in substitutions(cmd):   # $( ) e ``: subshell, un `cd` dentro non esce
+    for inner in substitutions(cmd):   # $( ) and ``: subshell, a `cd` inside does not leak out
         saved = MODE["cwd"]
         check_command(inner, depth + 1)
         MODE["cwd"] = saved
@@ -510,21 +510,21 @@ def check_command(cmd, depth=0):
             stack.append(MODE["cwd"])
         elif item == ")":
             if stack:
-                MODE["cwd"] = stack.pop()   # `( cd x; … )`: la directory torna quella di prima
+                MODE["cwd"] = stack.pop()   # `( cd x; … )`: the directory goes back to the previous one
         else:
             check_simple(item, depth)
 
 
 def check_simple(toks, depth):
-    """Un comando semplice. Solo `cd` (e simili) ed `eval` cambiano la directory per i comandi che
-    seguono: `bash -c 'cd x'`, `wsl --cd x …`, `cmd /c`, `powershell -c` girano in un altro processo."""
+    """One simple command. Only `cd` (and similar) and `eval` change the directory for the commands that
+    follow: `bash -c 'cd x'`, `wsl --cd x …`, `cmd /c`, `powershell -c` run in another process."""
     saved = MODE["cwd"]
     if not _check_simple(toks, depth):
         MODE["cwd"] = saved
 
 
 def involucro_negato(name, args):
-    """Un involucro del progetto eseguito con un'opzione negata (guardia.involucri): sempre grave."""
+    """A project wrapper run with a denied option (guardia.involucri): always grave."""
     for _path, b, opts in CONF["involucri"]:
         if name == b:
             hit = [o for o in opts if o in args]
@@ -534,12 +534,12 @@ def involucro_negato(name, args):
 
 def _check_simple(toks, depth):
     i = 0
-    # assegnazioni VAR=... e involucri
+    # VAR=... assignments and wrappers
     while i < len(toks):
         t, b = toks[i], base(toks[i])
         if t in KEYWORDS:   # `for f in x; do git …`, `if …; then git …`, `{ git …; }`, `! git …`
             i += 1
-        elif b in ("for", "case", "select"):   # `for f in a b` non esegue nulla: il corpo e' dopo `do`
+        elif b in ("for", "case", "select"):   # `for f in a b` runs nothing: the body comes after `do`
             return
         elif b == "xargs":
             i += 1
@@ -555,7 +555,7 @@ def _check_simple(toks, depth):
             while i < len(toks) and toks[i].startswith("-"):
                 opt = toks[i]
                 i += 1
-                if opt == "--cd" and MODE["universal"]:   # vale solo per questo comando (check_simple)
+                if opt == "--cd" and MODE["universal"]:   # applies to this command only (check_simple)
                     tgt = toks[i] if i < len(toks) else ""
                     MODE["cwd"] = (norm(tgt, MODE["cwd"]) if MODE["cwd"] and tgt
                                    and not re.search(r"[$`~*?]", tgt) else None)
@@ -571,30 +571,30 @@ def _check_simple(toks, depth):
             i += 1
             while i < len(toks) and toks[i].startswith("-"):
                 i += 1
-            i += 1  # la durata
+            i += 1  # the duration
         else:
             break
     if i >= len(toks):
         return
     b, args = base(toks[i]), toks[i + 1:]
 
-    if b in CD_LIKE and MODE["universal"]:   # `cd <wt> && git commit`: la directory del git che segue
+    if b in CD_LIKE and MODE["universal"]:   # `cd <wt> && git commit`: the directory of the git that follows
         tgt = next((a for a in args if not a.startswith("-")), "")
         MODE["cwd"] = (norm(tgt, MODE["cwd"]) if MODE["cwd"] and tgt and not re.search(r"[$`~*?]", tgt)
                        else None)
         return True
-    if b in CD_UNKNOWN and MODE["universal"]:   # pila di directory: non la si segue, directory ignota
+    if b in CD_UNKNOWN and MODE["universal"]:   # directory stack: not followed, directory unknown
         MODE["cwd"] = None
         return True
-    if MODE["script"]:   # contenuto di uno script: la produzione conta come comando o come host di un comando di rete
-        cmd0 = toks[i].replace("\\", "/")   # un comando ha forma di percorso: niente spazi ne' parentesi
+    if MODE["script"]:   # content of a script: produzione counts as a command or as the host of a network command
+        cmd0 = toks[i].replace("\\", "/")   # a command has the shape of a path: no spaces or parentheses
         hit = prod_hit(cmd0) if re.fullmatch(r"[\w./:~-]+", cmd0) else None
         if not hit and b in NET_TOOLS | SHELLS:
             hit = next((h for h in (prod_hit(a.replace("\\", "/")) for a in args) if h), None)
         if hit:
             deny("produzione_script", grave=True, what=hit)
-    involucro_negato(b, args)   # eseguito direttamente; con `bash …` lo vede SHELLS
-    if b == "eval":   # gira nella shell corrente: un `cd` dentro vale anche dopo
+    involucro_negato(b, args)   # run directly; with `bash …` SHELLS sees it
+    if b == "eval":   # runs in the current shell: a `cd` inside also applies afterwards
         check_command(" ".join(args), depth + 1)
         return True
     if b in SHELLS:
@@ -608,7 +608,7 @@ def _check_simple(toks, depth):
                 break
             if not a.startswith("--"):
                 has_c = has_c or "c" in a[1:]
-                if a[-1] in "oO":   # `-euo pipefail`: l'ultima lettera prende un argomento
+                if a[-1] in "oO":   # `-euo pipefail`: the last letter takes an argument
                     j += 1
             j += 1
         if not has_c and j < len(args) and base(args[j]) in CONF["suite"]:   # `bash <runner> …`
@@ -619,7 +619,7 @@ def _check_simple(toks, depth):
             involucro_negato(base(args[j]), args[j + 1:])
             if MODE["universal"] and b in ("bash", "sh"):
                 check_script(args[j], depth)
-        return  # sottosessioni: `bash script.sh ...` non si analizza (vedi docstring)
+        return  # sub-sessions: `bash script.sh ...` is not analysed (see docstring)
     if b == "cmd":
         for j, a in enumerate(args):
             if a.lower() in ("/c", "/k", "/r"):
@@ -646,7 +646,7 @@ def _check_simple(toks, depth):
         return
     check_suite(b, args)
 
-    if MODE["script"] and b in ("git", "rm"):   # negli script: repo e cartelle temporanee, codice revisionato
+    if MODE["script"] and b in ("git", "rm"):   # in scripts: repos and temporary folders, reviewed code
         return
     if b == "git":
         j, gdir = 0, None if MODE["gitenv"] else MODE["cwd"]
@@ -654,7 +654,7 @@ def _check_simple(toks, depth):
             a = args[j]
             if a.startswith(("--git-dir", "--work-tree")) or (
                     a == "-c" and j + 1 < len(args) and args[j + 1].lower().startswith("core.worktree")):
-                gdir = None   # repository o working tree spostati: directory ignota
+                gdir = None   # repository or working tree moved: directory unknown
             if a in GIT_OPT_WITH_ARG:
                 if a == "-C" and j + 1 < len(args):
                     tgt = args[j + 1]
@@ -697,7 +697,7 @@ def _check_simple(toks, depth):
         force = "f" in flags or "--force" in long
         if rec and force:
             deny("rm_rf", what="rm -rf")
-    # PowerShell: Remove-Item (e alias) con -Recurse e -Force, anche abbreviati (-r, -fo)
+    # PowerShell: Remove-Item (and aliases) with -Recurse and -Force, also abbreviated (-r, -fo)
     if b in ("remove-item", "ri", "rm", "del", "erase", "rd", "rmdir"):
         low = [a.lower() for a in args]
         if any(a.startswith("-r") for a in low) and any(a.startswith("-fo") for a in low):
@@ -705,9 +705,9 @@ def _check_simple(toks, depth):
 
 
 def check_suite(b, args):
-    """Fase `plan` (harness-pt04, 1f): niente suite complete. I runner del nucleo (pytest, vitest) e quelli dei
-    comandi `test` dei moduli senza file o selettori espliciti → negato. Le suite del livello le esegue il driver
-    (scripts/gates.sh del plugin) dopo implement/fix; una fase di piano verifica al massimo un file o un selettore."""
+    """Phase `plan` (harness-pt04, 1f): no full suites. The core runners (pytest, vitest) and those of the modules'
+    `test` commands without explicit files or selectors → denied. The level's suites are run by the driver
+    (the plugin's scripts/gates.sh) after implement/fix; a plan phase checks at most one file or one selector."""
     if MODE["universal"] or os.environ.get("FIC_PHASE") not in SUITE_PHASES:
         return
     if b in ("npx", "pnpm", "yarn", "bunx") and args and base(args[0]) == "vitest":   # `npx vitest run`
@@ -724,7 +724,7 @@ def check_suite(b, args):
         deny("suite", what=b, fase=os.environ.get("FIC_PHASE"))
 
 
-# opzioni che prendono un valore (il valore non e' un selettore)
+# options that take a value (the value is not a selector)
 PYTEST_OPT_VAL = {"-p", "-c", "-o", "-W", "-n", "--rootdir", "--tb", "--maxfail", "--junitxml", "--junit-xml",
                   "--basetemp", "--confcutdir", "--durations", "--log-level", "--cov", "--cov-report",
                   "--deselect", "--ignore", "--ignore-glob", "--import-mode", "--capture"}
@@ -735,7 +735,7 @@ VITEST_SUBCOMMANDS = {"run", "watch", "dev", "related"}
 
 
 def pytest_selected(args):
-    """Un file .py, un node id (::) oppure -k/-m: selettori espliciti. Una cartella non lo e'."""
+    """A .py file, a node id (::) or -k/-m: explicit selectors. A folder is not one."""
     i = 0
     while i < len(args):
         a = args[i]
@@ -751,7 +751,7 @@ def pytest_selected(args):
 
 
 def vitest_selected(args):
-    """Un filtro posizionale (file o parte di nome) oppure -t/--testNamePattern."""
+    """A positional filter (file or part of a name) or -t/--testNamePattern."""
     i = 0
     if args and args[0] in VITEST_SUBCOMMANDS:
         i = 1
@@ -768,31 +768,31 @@ def vitest_selected(args):
     return False
 
 
-# Percorsi di Windows (Python di Windows, o di MSYS/Cygwin): lettere di unita' e confronto senza maiuscole. Altrove
-# (Linux, pk08) percorsi POSIX: nessuna unita' (/c/… e /mnt/c/… restano cartelle) e maiuscole intatte, perche' il
-# file system le distingue e il percorso normalizzato si usa anche per aprire file e per `git -C` (eccezione: il
-# confronto dentro/fuori dal repo, piega_repo, per Mac e /mnt/<lettera>/).
+# Windows paths (Windows Python, or MSYS/Cygwin): drive letters and case-insensitive comparison. Elsewhere
+# (Linux, pk08) POSIX paths: no drives (/c/… and /mnt/c/… stay folders) and case kept, because the
+# file system distinguishes it and the normalised path is also used to open files and for `git -C` (exception: the
+# inside/outside-the-repo comparison, piega_repo, for Mac and /mnt/<letter>/).
 WIN_PATHS = os.name == "nt" or sys.platform.startswith(("msys", "cygwin"))
 
 
 def pfold(s):
-    """Un percorso nella forma di confronto: minuscolo su Windows, com'e' altrove."""
+    """A path in comparison form: lowercase on Windows, as is elsewhere."""
     return s.lower() if WIN_PATHS else s
 
 
 def piega_repo(r):
-    """Review di pk08: fuori da Windows, il confronto «dentro/fuori dal repo» (check_scope, check_write) piega anche le
-    maiuscole se il file system del repo puo' non distinguerle: Mac (APFS) e WSL su /mnt/<lettera>/ (drvfs). `r` e' il
-    repo gia' normalizzato con norm. Solo la forma di confronto: norm resta la forma d'uso (open, `git -C`). Nel dubbio
-    si piega, cioe' si nega. Su Windows norm piega gia': False, comportamento invariato."""
+    """pk08 review: outside Windows, the «inside/outside the repo» comparison (check_scope, check_write) also folds
+    case if the repo's file system may not distinguish it: Mac (APFS) and WSL on /mnt/<letter>/ (drvfs). `r` is the
+    repo already normalised with norm. Only the comparison form: norm stays the usage form (open, `git -C`). When in doubt
+    it folds, i.e. denies. On Windows norm already folds: False, behaviour unchanged."""
     return not WIN_PATHS and (sys.platform == "darwin" or bool(re.match(r"^/mnt/[a-zA-Z](/|$)", r)))
 
 
 def rel_repo(p, r):
-    """Il percorso di p relativo al repo r (forme di norm), o None se p e' fuori dal repo. La forma piegata (piega_repo)
-    decide SOLO dentro/fuori; rel conserva le maiuscole di p (review giro 2 di pk08): corsia, FIC_SCOPE e cartella di
-    lavoro si confrontano con le maiuscole originali, cosi' `A.TXT` non vale `a.txt` e `.Claude/.AI-workflow/` non vale
-    come cartella di lavoro. Il prefisso del repo si toglie per lunghezza (coincide a meno delle maiuscole)."""
+    """The path of p relative to the repo r (norm forms), or None if p is outside the repo. The folded form (piega_repo)
+    decides ONLY inside/outside; rel keeps the case of p (pk08 review, round 2): lane, FIC_SCOPE and work
+    folder are compared with the original case, so `A.TXT` does not match `a.txt` and `.Claude/.AI-workflow/` does not count
+    as the work folder. The repo prefix is stripped by length (it matches up to case)."""
     if not piega_repo(r):
         return p[len(r) + 1:] if p == r or p.startswith(r + "/") else None
     pl, rl = p.lower(), r.lower()
@@ -800,7 +800,7 @@ def rel_repo(p, r):
         return None
     if p[:len(r)].lower() == rl and (len(p) == len(r) or p[len(r)] == "/"):
         return p[len(r) + 1:]
-    return p   # minuscolo di lunghezza diversa (Unicode): assoluto, non vale per nessuna voce relativa -> negato
+    return p   # lowercase of different length (Unicode): absolute, matches no relative entry -> denied
 
 
 def norm(p, cwd):
@@ -829,8 +829,8 @@ def norm(p, cwd):
 
 
 def linked_worktree(d):
-    """True se `d` sta in un worktree COLLEGATO (`git worktree add`): git-dir != git-common-dir.
-    Il tree principale ha git-dir == git-common-dir. Directory ignota, git assente o errore → False."""
+    """True if `d` is in a LINKED worktree (`git worktree add`): git-dir != git-common-dir.
+    The main tree has git-dir == git-common-dir. Unknown directory, missing git or error → False."""
     if not d:
         return False
     env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
@@ -847,14 +847,14 @@ def linked_worktree(d):
 
 
 def plugin_wrapper(p):
-    """Passo 3-bis: p (gia' normalizzato con norm) e' un involucro del plugin sotto MAAT_ROOT/scripts/?"""
+    """Step 3-bis: is p (already normalised with norm) a plugin wrapper under MAAT_ROOT/scripts/?"""
     root = os.environ.get("MAAT_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     root = root.replace("\\", "/").rstrip("/")
     return any(p == norm(root + "/scripts/" + n, root) for n in PLUGIN_WRAPPERS)
 
 
 def check_script(path, depth):
-    """--universal: `bash|sh <file>` con il file sotto script/ o .claude/ → stesse regole sul contenuto."""
+    """--universal: `bash|sh <file>` with the file under script/ or .claude/ → same rules on its content."""
     if depth > 6 or not MODE["cwd"] or re.search(r"[$`~*?]", path):
         return
     p = norm(path, MODE["cwd"])
@@ -876,8 +876,8 @@ def check_script(path, depth):
 
 
 def executable_lines(text):
-    """Righe eseguibili di uno script: senza commenti (`#` in testa) ne' corpi di heredoc di TESTO.
-    Il corpo di un'heredoc data a una shell, a ssh o a Python resta (viene eseguito)."""
+    """Executable lines of a script: without comments (leading `#`) or TEXT heredoc bodies.
+    The body of a heredoc fed to a shell, to ssh or to Python stays (it is executed)."""
     out, end = [], None
     for line in text.splitlines():
         if end is not None:
@@ -889,20 +889,20 @@ def executable_lines(text):
         out.append(line)
         m = HEREDOC_RE.search(line)
         pre = line[:m.start()] if m else ""
-        # un `<<` fra virgolette e' testo, non un'heredoc (altrimenti si salterebbe il resto del file)
+        # a quoted `<<` is text, not a heredoc (otherwise the rest of the file would be skipped)
         if m and pre.count("'") % 2 == 0 and pre.count('"') % 2 == 0 and not HEREDOC_EXEC_RE.search(pre):
             end = m.group(2)
     return "\n".join(out)
 
 
 def check_heredoc(cmd):
-    """`python - <<EOF` che apre file in scrittura: byte invisibili (incidente 23/09). Si scrive con Write/Edit."""
+    """`python - <<EOF` that opens files for writing: invisible bytes (incident 23/09). Write with Write/Edit."""
     if PY_HEREDOC_RE.search(cmd) and PY_WRITE_RE.search(cmd):
         deny("heredoc_py")
 
 
 def in_scope(rel):
-    """Regola 5: rel (relativo al repo, nella forma di pfold) sta nello scope di FIC_SCOPE? Scope illeggibile -> no."""
+    """Rule 5: is rel (relative to the repo, in pfold form) in the FIC_SCOPE scope? Unreadable scope -> no."""
     try:
         with open(os.environ.get("FIC_SCOPE") or "", encoding="utf-8") as f:
             entries = [pfold(ln.strip().replace("\\", "/")) for ln in f if ln.strip()]
@@ -919,28 +919,28 @@ _LAVORO = {}
 
 
 def lavoro(repo):
-    """La cartella di lavoro del progetto, relativa al repo e con / finale: cartelle.lavoro della sua maat.json
-    (maat_paths.py; default .claude/.ai-workflow), pk04a-1. Cache per processo: maat-config.py una volta per repo."""
+    """The project's work folder, relative to the repo and with a trailing /: cartelle.lavoro of its maat.json
+    (maat_paths.py; default .claude/.ai-workflow), pk04a-1. Per-process cache: maat-config.py once per repo."""
     project = repo.replace("\\", "/").rstrip("/")
     if project in _LAVORO:
         return _LAVORO[project]
-    sys.dont_write_bytecode = True   # nessun __pycache__ sotto MAAT_ROOT
+    sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import maat_paths
     try:
         v = maat_paths.maat_work(project)[len(project) + 1:].rstrip("/") + "/"
-    except maat_paths.ErroreMaat:   # plugin non risolto: il default dello schema
+    except maat_paths.ErroreMaat:   # plugin not resolved: the schema default
         v = maat_paths.LAVORO_DEFAULT + "/"
     _LAVORO[project] = v
     return v
 
 
 def check_scope(path, data):
-    """Corsia di implementazione (harness-pt13): FIC_WRITE_SCOPE = i file di `scrive:` dei suoi blocchi, separati
-    da virgole, relativi al repo (una voce che finisce con / e' una cartella). Edit/Write dentro il repo solo su
-    quei file e nella run dir (`<cartella di lavoro>/<x>.run/`); fuori dal repo (scratchpad) libero. Accanto alle
-    regole per fase, come FIC_PHASE; --universal non la applica. Le scritture via Bash le vede il controllo a
-    posteriori del driver (blocks-independent.py --posteriori)."""
+    """Implementation lane (harness-pt13): FIC_WRITE_SCOPE = the files in `scrive:` of its blocks, separated
+    by commas, relative to the repo (an entry ending with / is a folder). Edit/Write inside the repo only on
+    those files and in the run dir (`<work folder>/<x>.run/`); outside the repo (scratchpad) free. Alongside the
+    per-phase rules, like FIC_PHASE; --universal does not apply it. Writes via Bash are seen by the driver's
+    after-the-fact check (blocks-independent.py --posteriori)."""
     scope = [pfold(s.strip().replace("\\", "/")) for s in os.environ.get("FIC_WRITE_SCOPE", "").split(",")]
     scope = [s[2:] if s.startswith("./") else s for s in scope if s]
     if not scope or not path:
@@ -976,7 +976,7 @@ def check_write(path, data):
 
 
 def deny_list():
-    """Voci di --disallowedTools per run-phase.sh: nucleo + guardia.rilascio (`bash x` e `x`) + guardia.vietati_extra."""
+    """--disallowedTools entries for run-phase.sh: core + guardia.rilascio (`bash x` and `x`) + guardia.vietati_extra."""
     voci = list(DENY_NUCLEO)
     for r in CONF["rilascio"]:
         voci += ["bash " + r, r]
@@ -1014,22 +1014,22 @@ def main():
         m = CONF["prod"].search(flat) if CONF["prod"] else None
         if m:
             deny("produzione", grave=True, what=m.group(0))
-        if CONF["stato"]:   # maat.json assente o non valido: ogni host o dominio fuori da localhost e' grave
+        if CONF["stato"]:   # maat.json missing or invalid: every host or domain other than localhost is grave
             h = next((x.group(0) for x in HOST_RE.finditer(flat) if not x.group(0).startswith("127.")), None)
             if h:
                 deny("config_" + CONF["stato"], grave=True, what=h)
-        if os.environ.get("FIC_PHASE"):   # sotto-sessione: i prefissi vietati dal progetto, come --disallowedTools
+        if os.environ.get("FIC_PHASE"):   # sub-session: the prefixes forbidden by the project, as in --disallowedTools
             v = next((p for p in CONF["vietati"] if cmd.lstrip().startswith(p)), None)
             if v:
                 deny("vietato_extra", what=v)
         check_heredoc(cmd)
         MODE["cwd"] = norm(data.get("cwd") or os.getcwd(), os.getcwd())
         MODE["gitenv"] = bool(GIT_ENV_RE.search(cmd))
-        if tool == "PowerShell":   # in PowerShell `\` e' un separatore di percorso, non un escape
+        if tool == "PowerShell":   # in PowerShell `\` is a path separator, not an escape
             cmd = cmd.replace("\\", "/")
         check_command(cmd)
     elif MODE["universal"]:
-        pass   # le regole per fase (FIC_PHASE) valgono solo nelle sottosessioni
+        pass   # the per-phase rules (FIC_PHASE) apply only in sub-sessions
     elif tool in WRITE_TOOLS:
         check_write(ti.get("file_path") or ti.get("notebook_path") or "", data)
     sys.exit(0)

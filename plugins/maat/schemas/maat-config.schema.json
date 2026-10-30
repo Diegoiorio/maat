@@ -2,47 +2,47 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://maat.local/schemas/maat-config.schema.json",
   "title": "maat.json — configurazione di Maat per un progetto",
-  "description": "Unica fonte di percorsi, comandi e regole del progetto per il harness Maat (R2). Lo legge solo scripts/maat-config.py, con un validatore interno che copre i costrutti usati qui: type (anche lista), required, enum, properties, items, additionalProperties: false, pattern. I default sono le chiavi `default` di questo file, più radice_pacchetti = radice. Controlli semantici, nella tabella SEMANTICA di maat-config.py: S1 regola_test specchio => specchio presente; S2 comandi.test contiene {test}, comandi.lint e ogni controlli[].comando contengono {file}; S3 versione_schema accettata dal lettore (corrente o precedente, R9; maggiore = versione futura); S4 lint_base true => comandi.lint contiene {base?...}; S5 un comando di comandi che contiene test-fast.sh => copia ha la voce corrispondente (test o lint); S6 nessun comando di copia contiene test-fast.sh; S7 copia.test contiene {test}, ogni copia.lint e copia.lint_messaggi contiene {file}; S8 regola_test nessuna => nessun comandi.test; S9 nessun generati[] è un golden, uno snapshot o la base del lint; S10 moduli[].preparati => preparazione presente. Segnaposto dei comandi: {file} e {test} (liste, ogni voce quotata a parte), {base?prefisso} e {cache?prefisso} (facoltativi: prefisso, valore quotato e uno spazio, oppure niente: `{base?--base }{file}` dà `--base 'b' 'f'` o `'f'`), {maat} (radice del plugin, sempre quotata), {python} (interprete: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python > python3 nel PATH), {report} (file di report nell'evidenza), {nome} (nome del test di una controprova, quotato). Senza comando di test il gate di un modulo è NOT RUN (dichiarato), mai PASS.",
+  "description": "Single source of the project's paths, commands and rules for the Maat harness (R2). Read only by scripts/maat-config.py, with an internal validator that covers the constructs used here: type (list too), required, enum, properties, items, additionalProperties: false, pattern. The defaults are the `default` keys of this file, plus radice_pacchetti = radice. Semantic checks, in the SEMANTICA table of maat-config.py: S1 regola_test specchio => specchio present; S2 comandi.test contains {test}, comandi.lint and every controlli[].comando contain {file}; S3 versione_schema accepted by the reader (current or previous, R9; greater = future version); S4 lint_base true => comandi.lint contains {base?...}; S5 a command of comandi that contains test-fast.sh => copia has the matching entry (test or lint); S6 no command of copia contains test-fast.sh; S7 copia.test contains {test}, every copia.lint and copia.lint_messaggi contains {file}; S8 regola_test nessuna => no comandi.test; S9 no generati[] entry is a golden, a snapshot or the lint baseline; S10 moduli[].preparati => preparazione present. Command placeholders: {file} and {test} (lists, each entry quoted separately), {base?prefix} and {cache?prefix} (optional: prefix, quoted value and a space, or nothing: `{base?--base }{file}` gives `--base 'b' 'f'` or `'f'`), {maat} (plugin root, always quoted), {python} (interpreter: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python > python3 in the PATH), {report} (report file in the evidence), {nome} (name of a counterproof's test, quoted). Without a test command a module's gate is NOT RUN (dichiarato), never PASS.",
   "type": "object",
   "required": ["versione_schema", "moduli"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
-      "description": "Facoltativo: riferimento allo schema, per gli editor.",
+      "description": "Optional: reference to the schema, for editors.",
       "type": "string"
     },
     "versione_schema": {
-      "description": "Versione di questo schema usata dal file. Il lettore accetta la corrente (1) e la precedente con un avviso (R9); una maggiore dà «versione futura: aggiorna il plugin» (S3).",
+      "description": "Version of this schema used by the file. The reader accepts the current one (1) and the previous one with a warning (R9); a greater one gives «versione futura: aggiorna il plugin» (S3).",
       "type": "integer"
     },
     "harness": {
-      "description": "Versione minima del plugin richiesta, nella forma \">=MAJOR.MINOR\".",
+      "description": "Minimum plugin version required, in the form \">=MAJOR.MINOR\".",
       "type": "string",
       "pattern": "^>=[0-9]+\\.[0-9]+$"
     },
     "lingua": {
-      "description": "Lingua dei messaggi della guardia (R11). Default it.",
+      "description": "Language of Maat's messages to the user: guard reasons and the explanation under each permission request (R11). Default en.",
       "enum": ["it", "en"],
-      "default": "it"
+      "default": "en"
     },
     "cartelle": {
-      "description": "Dove stanno spec e run dir (lavoro) e il corpus di replay (corpus).",
+      "description": "Where specs and run dirs live (lavoro) and the replay corpus (corpus).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "lavoro": {
-          "description": "Cartella di lavoro, relativa al repo.",
+          "description": "Work folder, relative to the repo.",
           "type": "string",
           "default": ".claude/.ai-workflow"
         },
         "corpus": {
-          "description": "Facoltativo: il corpus.json di replay, relativo al repo.",
+          "description": "Optional: the replay corpus.json, relative to the repo.",
           "type": "string"
         }
       }
     },
     "moduli": {
-      "description": "I moduli del progetto. Ogni file del repo appartiene al modulo con la radice più lunga che lo contiene (a pari lunghezza il primo dell'elenco); fuori da ogni radice, a quello con la radice_pacchetti più lunga (conta solo per lint e build). La regola dei test di un file (test_di di R2) è regola_test del suo modulo.",
+      "description": "The project's modules. Each file of the repo belongs to the module with the longest radice that contains it (on equal length, the first in the list); outside every radice, to the one with the longest radice_pacchetti (it matters only for lint and build). The test rule of a file (test_di of R2) is the regola_test of its module.",
       "type": "array",
       "items": {
         "type": "object",
@@ -50,24 +50,24 @@
         "additionalProperties": false,
         "properties": {
           "nome": {
-            "description": "Nome del modulo: dà le etichette dei gate (tests-<nome>, controlli-<nome>).",
+            "description": "Module name: gives the gate labels (tests-<nome>, controlli-<nome>).",
             "type": "string"
           },
           "radice": {
-            "description": "Cartella del modulo, relativa al repo (\".\" = tutto il repo).",
+            "description": "Module folder, relative to the repo (\".\" = the whole repo).",
             "type": "string"
           },
           "radice_pacchetti": {
-            "description": "Cartella dei pacchetti (node_modules, workspace), relativa al repo. Default: radice.",
+            "description": "Packages folder (node_modules, workspace), relative to the repo. Default: radice.",
             "type": "string"
           },
           "regola_test": {
-            "description": "Come si trovano i test di un file toccato: accanto, specchio (vedi specchio) o nessuna.",
+            "description": "How the tests of a touched file are found: accanto (next to it), specchio (mirror, see specchio) or nessuna.",
             "enum": ["accanto", "specchio", "nessuna"],
             "default": "accanto"
           },
           "specchio": {
-            "description": "Con regola_test specchio (S1): da un file sorgente (da) ai suoi test (a), {m} = nome del file senza estensione. Relativi alla radice.",
+            "description": "With regola_test specchio (S1): from a source file (da) to its tests (a), {m} = file name without extension. Relative to the radice.",
             "type": "object",
             "required": ["da", "a"],
             "additionalProperties": false,
@@ -77,32 +77,32 @@
             }
           },
           "ambiente": {
-            "description": "Dove gira il modulo: wsl (copia WSL su Windows) o nativo.",
+            "description": "Where the module runs: wsl (WSL copy on Windows) or nativo.",
             "enum": ["wsl", "nativo"],
             "default": "nativo"
           },
           "python": {
-            "description": "Interprete del modulo, relativo alla radice (un nome senza / si cerca nel PATH). Precedenza: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python. Una lista = alternative in ordine: vince la prima che esiste; nessuna esiste -> l'ultimo percorso della lista. Con ambiente wsl gates.sh le cerca DENTRO WSL (percorsi relativi alla radice in forma /mnt/…) e, se nessuna esiste, il gate che usa {python} e' BLOCKED.",
+            "description": "The module's interpreter, relative to the radice (a name without / is looked up in the PATH). Precedence: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python. A list = alternatives in order: the first that exists wins; if none exists -> the last path of the list. With ambiente wsl gates.sh looks for them INSIDE WSL (paths relative to the radice in /mnt/… form) and, if none exists, the gate that uses {python} is BLOCKED.",
             "type": ["string", "array"],
             "items": { "type": "string" }
           },
           "report": {
-            "description": "Formato del report dei test: junit, vitest o nessuno.",
+            "description": "Format of the test report: junit, vitest or nessuno.",
             "enum": ["junit", "vitest", "nessuno"],
             "default": "nessuno"
           },
           "lint_base": {
-            "description": "true: il comando lint accetta una base ({base?...}, S4) e il nucleo classifica gli errori PREEXISTING/INTRODUCED/UNRESOLVED.",
+            "description": "true: the lint command accepts a base ({base?...}, S4) and the core classifies the errors as PREEXISTING/INTRODUCED/UNRESOLVED.",
             "type": "boolean",
             "default": false
           },
           "comandi": {
-            "description": "Comandi eseguiti dal harness nel repo. Ognuno è una stringa o {comando, cartella, se_presente?}. cartella (radice | radice_pacchetti | repo, default radice) è sia la cartella d'esecuzione sia la base dei percorsi di {file} e {test}. se_presente: eseguibile nel PATH, oppure glob di file sotto la radice; se manca il comando non gira ed è NOT RUN (dichiarato).",
+            "description": "Commands the harness runs in the repo. Each is a string or {comando, cartella, se_presente?}. cartella (radice | radice_pacchetti | repo, default radice) is both the working directory and the base of the {file} and {test} paths. se_presente: an executable in the PATH, or a glob of files under the radice; if it is missing the command does not run and is NOT RUN (dichiarato).",
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "test": {
-                "description": "Comando di test, con {test} (S2).",
+                "description": "Test command, with {test} (S2).",
                 "type": ["string", "object"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -113,7 +113,7 @@
                 }
               },
               "lint": {
-                "description": "Comando di lint, con {file} (S2); i file sono quelli sotto radice_pacchetti.",
+                "description": "Lint command, with {file} (S2); the files are those under radice_pacchetti.",
                 "type": ["string", "object"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -124,7 +124,7 @@
                 }
               },
               "build": {
-                "description": "Comando di build, solo per il livello full.",
+                "description": "Build command, only for the full level.",
                 "type": ["string", "object"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -137,12 +137,12 @@
             }
           },
           "copia": {
-            "description": "Comandi che test-fast.sh esegue DENTRO la copia WSL (mai test-fast.sh stesso, S6). cartella è relativa alla copia. lint può essere una lista di alternative: vale la prima il cui se_esiste (file relativo alla cartella) esiste, o che non ha se_esiste.",
+            "description": "Commands that test-fast.sh runs INSIDE the WSL copy (never test-fast.sh itself, S6). cartella is relative to the copy. lint can be a list of alternatives: the first whose se_esiste (file relative to the cartella) exists, or that has no se_esiste, applies.",
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "test": {
-                "description": "Con {test} (S7).",
+                "description": "With {test} (S7).",
                 "type": ["string", "object"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -153,7 +153,7 @@
                 }
               },
               "lint": {
-                "description": "Con {file} (S7); stringa, oggetto o lista di alternative.",
+                "description": "With {file} (S7); a string, an object or a list of alternatives.",
                 "type": ["string", "object", "array"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -174,7 +174,7 @@
                 }
               },
               "lint_messaggi": {
-                "description": "Stampa i messaggi in formato compact di eslint, per il lint con base; con {file} (S7).",
+                "description": "Prints the messages in eslint's compact format, for the lint with a base; with {file} (S7).",
                 "type": ["string", "object"],
                 "required": ["comando"],
                 "additionalProperties": false,
@@ -187,7 +187,7 @@
             }
           },
           "chiave": {
-            "description": "Voci in più della chiave dell'evidenza: {etichetta, file} (impronta del file, «assente» se manca) oppure {etichetta, comando} (uscita del comando); cartella come nei comandi, default radice.",
+            "description": "Extra entries of the evidence key: {etichetta, file} (fingerprint of the file, «assente» if missing) or {etichetta, comando} (the command's output); cartella as in the commands, default radice.",
             "type": "array",
             "items": {
               "type": "object",
@@ -202,7 +202,7 @@
             }
           },
           "controlli": {
-            "description": "Controlli alternativi ai test (R2): glob relativo alla radice, comando con {file} (S2), se_presente = eseguibile senza il quale la voce si salta ed è dichiarata.",
+            "description": "Checks that replace the tests (R2): glob relative to the radice, command with {file} (S2), se_presente = executable without which the entry is skipped and declared.",
             "type": "array",
             "items": {
               "type": "object",
@@ -216,7 +216,7 @@
             }
           },
           "controprova": {
-            "description": "Runner delle controprove del modulo (counterproof.sh), eseguito nella radice del modulo dentro la copia. runner vitest o pytest: adattatori del nucleo, che classificano dal report ({report}: JSON di vitest, JUnit di pytest); comando: rosso = uscita diversa da 0 (rosso_generico, prova debole). comando con {test} (file relativo alla radice; pytest: <file>::<nome>), {nome}, {report}, {python}. Senza (o senza comando): ogni mutazione è NOT RUN (dichiarato).",
+            "description": "Runner of the module's counterproofs (counterproof.sh), run in the module's radice inside the copy. runner vitest or pytest: core adapters, which classify from the report ({report}: vitest JSON, pytest JUnit); comando: red = non-zero exit (rosso_generico, weak proof). comando with {test} (file relative to the radice; pytest: <file>::<nome>), {nome}, {report}, {python}. Without it (or without comando): every mutation is NOT RUN (dichiarato).",
             "type": "object",
             "required": ["runner"],
             "additionalProperties": false,
@@ -226,21 +226,21 @@
             }
           },
           "preparazione": {
-            "description": "Comando che rigenera i file generati se mancano (es. npx nuxi prepare).",
+            "description": "Command that regenerates the generated files if they are missing (e.g. npx nuxi prepare).",
             "type": "string"
           },
           "preparati": {
-            "description": "File preparati dal framework (ignorati da git, scritti dalla preparazione, S10): glob relativi alla radice, es. il tsconfig e le dichiarazioni generati dal framework. Il primo glob senza caratteri jolly e' il «file guida». Le cartelle che li contengono si ripuliscono dalla copia (fic_mirror_pulisci): a ogni sync delle controprove, e in test-fast.sh quando cambiano dipendenze o tsconfig generato. ciclo-worktree.sh li copia dal tree principale nel worktree se il file guida c'e' li' e manca nel worktree (altrimenti avvisa di lanciare la preparazione), e verifica il file guida nella copia WSL del modulo con copia.",
+            "description": "Files prepared by the framework (ignored by git, written by the preparazione, S10): globs relative to the radice, e.g. the tsconfig and the declarations generated by the framework. The first glob without wildcards is the «file guida» (guide file). The folders that contain them are cleaned out of the copy (fic_mirror_pulisci): at every counterproof sync, and in test-fast.sh when the dependencies or the generated tsconfig change. ciclo-worktree.sh copies them from the main tree into the worktree if the guide file is there and missing in the worktree (otherwise it warns to run the preparazione), and checks the guide file in the WSL copy of a module with copia.",
             "type": "array",
             "items": { "type": "string" }
           },
           "copia_anche": {
-            "description": "Cartelle di sola lettura, relative al repo, che le controprove copiano insieme al modulo (rsync -a --delete --checksum --exclude=node_modules), fuori dal controllo del manifest: per esempio uno schema letto dai test. Le mutazioni restano sotto il modulo.",
+            "description": "Read-only folders, relative to the repo, that the counterproofs copy together with the module (rsync -a --delete --checksum --exclude=node_modules), outside the manifest check: for example a schema read by the tests. The mutations stay under the module.",
             "type": "array",
             "items": { "type": "string" }
           },
           "collega_nel_worktree": {
-            "description": "Cartelle di dipendenze installate da collegare in un worktree (worktree-lib.sh: junction su Windows, symlink altrove; mai copiate ne' installate): stringa (relativa alla radice) o {percorso, cartella}; percorso può contenere *. Si collegano solo quelle presenti nel tree principale. Senza voci: nessun collegamento.",
+            "description": "Folders of installed dependencies to link into a worktree (worktree-lib.sh: junctions on Windows, symlinks elsewhere; never copied nor installed): a string (relative to the radice) or {percorso, cartella}; percorso may contain *. Only those present in the main tree are linked. With no entries: no link.",
             "type": "array",
             "items": {
               "type": ["string", "object"],
@@ -253,7 +253,7 @@
             }
           },
           "file_dipendenze": {
-            "description": "Glob dei file che decidono le dipendenze (pathspec :(glob) di git): stringa (relativa alla radice) o {glob, cartella}. Se differiscono fra la base di un worktree e il tree principale, le dipendenze collegate non valgono: ciclo-worktree.sh e replay.sh si fermano.",
+            "description": "Globs of the files that decide the dependencies (git :(glob) pathspec): a string (relative to the radice) or {glob, cartella}. If they differ between a worktree's base and the main tree, the linked dependencies are not valid: ciclo-worktree.sh and replay.sh stop.",
             "type": "array",
             "items": {
               "type": ["string", "object"],
@@ -269,7 +269,7 @@
       }
     },
     "gate": {
-      "description": "Comandi eseguiti a ogni livello. Un comando non dichiarato dal modulo si salta.",
+      "description": "Commands run at each level. A command the module does not declare is skipped.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -291,7 +291,7 @@
       }
     },
     "piattaforma": {
-      "description": "Piattaforma: copia WSL (auto | sì | no), interprete Python di ripiego, Node in WSL.",
+      "description": "Platform: WSL copy (auto | sì | no), fallback Python interpreter, Node in WSL.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -300,7 +300,7 @@
           "default": "auto"
         },
         "python": {
-          "description": "Ultimo della precedenza di {python}; relativo al repo, o nome nel PATH.",
+          "description": "Last in the {python} precedence; relative to the repo, or a name in the PATH.",
           "type": "string"
         },
         "node_wsl": {
@@ -309,27 +309,27 @@
       }
     },
     "framework": {
-      "description": "Adattatori facoltativi del nucleo, attivi solo se dichiarati. nuxt-autoimport (blocks-independent.py): componenti e composable auto-importati, letti da .nuxt/components.d.ts e .nuxt/imports.d.ts, e gli alias ~/ @/ ~~/ @@/, per i moduli con preparati sotto .nuxt/. Senza adattatori valgono solo gli import espliciti.",
+      "description": "Optional core adapters, active only if declared. nuxt-autoimport (blocks-independent.py): auto-imported components and composables, read from .nuxt/components.d.ts and .nuxt/imports.d.ts, and the aliases ~/ @/ ~~/ @@/, for modules with preparati under .nuxt/. Without adapters only explicit imports count.",
       "type": "array",
       "items": { "enum": ["nuxt-autoimport"] }
     },
     "guardia": {
-      "description": "Regole di guardia del progetto, in aggiunta al nucleo (R3.6).",
+      "description": "The project's guard rules, in addition to the core (R3.6).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "produzione": {
-          "description": "Regex (senza distinzione di maiuscole) di host, domini e percorsi di produzione: sempre gravi.",
+          "description": "Case-insensitive regexes of production hosts, domains and paths: always severe.",
           "type": "array",
           "items": { "type": "string" }
         },
         "rilascio": {
-          "description": "Script di rilascio, relativi al repo: sempre negati e gravi, confrontati come sottostringa del comando (pk05); nel contenuto di uno script contano come comando.",
+          "description": "Release scripts, relative to the repo: always denied and severe, matched as a substring of the command (pk05); inside a script's content they count as a command.",
           "type": "array",
           "items": { "type": "string" }
         },
         "involucri": {
-          "description": "Script che incapsulano l'accesso remoto o la copia locale: ammessi e non letti dalla guardia, salvo le opzioni negate (sempre gravi, eseguiti direttamente o con bash). Stringa o {script, opzioni_negate}: la forma di pk03, usata cosi' da pk05.",
+          "description": "Scripts that wrap remote access or the local copy: allowed and not read by the guard, except for the denied options (always severe, run directly or with bash). A string or {script, opzioni_negate}: the pk03 form, used as such since pk05.",
           "type": "array",
           "items": {
             "type": ["string", "object"],
@@ -345,12 +345,12 @@
           }
         },
         "vietati_extra": {
-          "description": "Prefissi di comandi vietati in più nelle sotto-sessioni: entrano in --disallowedTools (guard.py --deny-list) e la guardia di fase li nega.",
+          "description": "Extra command prefixes forbidden in the sub-sessions: they go into --disallowedTools (guard.py --deny-list) and the phase guard denies them.",
           "type": "array",
           "items": { "type": "string" }
         },
         "suite": {
-          "description": "Script di suite del progetto, con le regole di selezione di pytest o vitest: nelle fasi plan, test-red e test-stage la guardia li nega senza file o selettori, come i runner del nucleo.",
+          "description": "The project's suite scripts, with the pytest or vitest selection rules: in the plan, test-red and test-stage phases the guard denies them without files or selectors, like the core runners.",
           "type": "array",
           "items": {
             "type": "object",
@@ -363,14 +363,14 @@
           }
         },
         "sonde": {
-          "description": "Host letterali che corrispondono alle regex di produzione: sonde di prova della guardia (maat-config.py sonda-produzione).",
+          "description": "Literal hosts that match the production regexes: probes that test the guard (maat-config.py sonda-produzione).",
           "type": "array",
           "items": { "type": "string" }
         }
       }
     },
     "verifica_remota": {
-      "description": "Facoltativa: verifica su un ambiente di prova. Se assente, il ciclo usa --no-dev.",
+      "description": "Optional: verification on a test environment. If absent, the cycle uses --no-dev.",
       "type": "object",
       "required": ["comando"],
       "additionalProperties": false,
@@ -380,14 +380,14 @@
       }
     },
     "contesto": {
-      "description": "Per context-pack.sh: file e comando dello schema del DB, riconoscimento delle tabelle.",
+      "description": "For context-pack.sh: file and command of the DB schema, table recognition.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "schema_db_file": { "type": "string" },
         "schema_db_comando": { "type": "string" },
         "tabelle": {
-          "description": "blocco: regex con il nome nel gruppo 1 e il corpo nel gruppo 2; nome_mappato: regex del nome reale dentro il blocco.",
+          "description": "blocco: regex with the name in group 1 and the body in group 2; nome_mappato: regex of the real name inside the block.",
           "type": "object",
           "required": ["blocco"],
           "additionalProperties": false,
@@ -399,7 +399,7 @@
       }
     },
     "piano": {
-      "description": "Regole del piano: superfici critiche e file di migrazione, come regex sul percorso relativo al repo.",
+      "description": "Plan rules: critical surfaces and migration files, as regexes on the path relative to the repo.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -422,22 +422,22 @@
       }
     },
     "generati": {
-      "description": "File GENERATI dal codice che un test confronta col codice: le fasi implement e fix li rigenerano col comando della voce, senza che conti come deviazione dal piano, e li dichiarano (`<percorso> (M) — rigenerato: <comando>`). percorso, cartella e test relativi al repo; il comando si lancia dalla cartella, nell'ambiente del modulo che la contiene (wsl: `wsl -- bash -lc 'cd <cartella> && <comando>'`), e nomina lo script che rigenera (.py .mjs .js .sh, relativo alla cartella). Nessun campo contiene `|`. NON sono generati da rigenerare (S9): golden, __snapshots__ e la base del lint, perché rigenerarli assorbirebbe la regressione che devono vedere. Lettura e verifica: maat-config.py generati [--verifica].",
+      "description": "Files GENERATED from the code that a test compares with the code: the implement and fix phases regenerate them with the entry's command, without it counting as a deviation from the plan, and declare them (`<percorso> (M) — rigenerato: <comando>`). percorso, cartella and test are relative to the repo; the command is run from the cartella, in the environment of the module that contains it (wsl: `wsl -- bash -lc 'cd <cartella> && <comando>'`), and names the script that regenerates (.py .mjs .js .sh, relative to the cartella). No field contains `|`. NOT generated files to regenerate (S9): goldens, __snapshots__ and the lint baseline, because regenerating them would absorb the regression they must catch. Reading and checking: maat-config.py generati [--verifica].",
       "type": "array",
       "items": {
         "type": "object",
         "required": ["percorso", "cartella", "comando", "test"],
         "additionalProperties": false,
         "properties": {
-          "percorso": { "description": "Il file generato.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
-          "cartella": { "description": "Cartella da cui lanciare il comando.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
-          "comando": { "description": "Comando che rigenera il file, lanciato dalla cartella.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
-          "test": { "description": "Il test che confronta il file col codice (nomina il file).", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" }
+          "percorso": { "description": "The generated file.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "cartella": { "description": "Folder to run the command from.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "comando": { "description": "Command that regenerates the file, run from the cartella.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "test": { "description": "The test that compares the file with the code (it names the file).", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" }
         }
       }
     },
     "da_non_toccare": {
-      "description": "Glob di percorsi che il ciclo non modifica mai.",
+      "description": "Globs of paths the cycle never changes.",
       "type": "array",
       "items": { "type": "string" }
     }

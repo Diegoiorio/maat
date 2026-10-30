@@ -1,6 +1,6 @@
 # driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv --certifica`.
 # Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se driver.py e loro stessi hanno ancora questi hash (CR tolti).
-driver 7490da89f8d68e08c29ad4ccc42bb600fbe1768d5bcdf49fa5f3fda0b87fca5c
-cycle-state 8731a80cae941cf4db15195c056c7c1ce6de8b301222e605898099c15adf845f
-run-phase 02c9e123b02ba938780487ed14cac154a05ecd6a4c2dd19f7ae84b178dfc81b6
-corpus spec=15 jsonl=83 · 2026-10-29T20:07:28Z
+driver d46e62721f8ac986a57c6cefbc741aac3f4255267063918d17142114ec3dc46b
+cycle-state 065c0bc828694aa6ddb8e6ec3062b5a945ded683775051f7a31938afe9a2ee1e
+run-phase 02b5d9c8e3310839f985d2da2a6611891899a06200b6c6e98bb175f363163f56
+corpus spec=15 jsonl=83 · 2026-10-30T13:04:14Z

@@ -162,8 +162,8 @@ exclude, an internal service symbol or helper. It does not stop you: write it, g
 literal prefix `difensiva: ` followed by `<file:riga> — <what it does> — <why the foreseen cases do not
 change>`. `Esito` stays `COMPLETATO`; the cycle goes on and the next code review judges it (one that is not
 purely defensive becomes a major finding). **In doubt it is not defensive**: stop as above, without the prefix.
-- defensive: `difensiva: status-label.ts:31 — l'etichetta di stato ha un ripiego per due stati senza data e il
-  codice grezzo nel default — casi esclusi dal CHECK del DB, nessun caso previsto cambia etichetta`;
+- defensive: `difensiva: status-label.ts:31 — the status label has a fallback for two states without a date and
+  the raw code in the default — cases excluded by the DB CHECK, no foreseen case changes its label`;
 - **not** defensive: the order of two checks of an endpoint (secret before body) chosen differently from the
   plan — it changes the observable response (which error a caller gets), so it is a STOP.
 

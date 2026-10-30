@@ -88,8 +88,9 @@ Aligned with how `/plan-review-cycle` derives `<name>`:
 
 ## Output language
 
-Write the spec in the **same language as the request** (default **Italian**, consistent
-with existing specs in `.claude/.ai-workflow/`).
+Write the spec in the **same language as the request** (default **English**, consistent
+with existing specs in `.claude/.ai-workflow/`). The template's headings and keywords stay exactly as written
+(Italian: Maat parses them, e.g. `## Requisiti funzionali`), whatever the spec language, until Maat 1.3.0.
 
 ## Mandatory spec format
 
@@ -97,61 +98,61 @@ The spec does NOT carry a `Status:` / `Spec source:` header — that header belo
 `plan-*.md` files. Use exactly this structure:
 
 ```markdown
-# <Titolo coerente con la richiesta>
+# <Title consistent with the request>
 
 ## Contesto
-Problema/bisogno, cosa ha originato la richiesta, esito atteso.
+Problem/need, what triggered the request, expected outcome.
 
 ## Richiesta originale
-Testo della richiesta passata, verbatim.
+Text of the request as passed, verbatim.
 
 ## Obiettivo
-Risultato desiderato in 1-3 frasi.
+Desired result in 1-3 sentences.
 
 ## Requisiti funzionali
-Elenco numerato di comportamenti osservabili attesi, ognuno con un ID stabile (`RF1`, `RF2`, …): il
-piano in formato 2 li usa come chiavi della tracciabilità e del piano di test.
+Numbered list of expected observable behaviours, each with a stable ID (`RF1`, `RF2`, …): a
+format 2 plan uses them as keys of the traceability table and of the test plan.
 
 ## Aree del codebase coinvolte (indicative)
-Path concreti individuati, raggruppati per livello:
-- Frontend (Nuxt): pagine/componenti/store
-- Backend (FastAPI): router/servizi/modelli
-- DB: tabelle/campi
-(Marcate come indicative: la localizzazione definitiva spetta al planner.)
+Concrete paths found, grouped by layer:
+- Frontend (Nuxt): pages/components/stores
+- Backend (FastAPI): routers/services/models
+- DB: tables/fields
+(Marked as indicative: the final localization is up to the planner.)
 
 ## Comportamento attuale vs desiderato
-Cosa fa oggi il sistema / cosa deve fare dopo.
+What the system does today / what it must do afterwards.
 
 ## Implicazioni
-- Ruoli e permessi
-- Stati UI (loading / empty / error)
-- Dati e persistenza
-- API / payload / contratti
-- Retrocompatibilità
+- Roles and permissions
+- UI states (loading / empty / error)
+- Data and persistence
+- API / payload / contracts
+- Backward compatibility
 
 ## Proposte alternative
-Solo se esistono più strade: opzione A/B con pro-contro + **Raccomandazione**.
-Altrimenti: "Nessuna alternativa rilevante: strada unica."
+Only if more than one path exists: option A/B with pros/cons + **Recommendation**.
+Otherwise: "No relevant alternative: single path."
 
 ## Criteri di accettazione
-Condizioni verificabili e osservabili (adatte a diventare test), ognuna con un ID stabile (`CA1`, `CA2`, …):
-`plan-check.sh split` verifica su questi ID, e su quelli `RF`, la partizione di una spec spezzata.
+Verifiable, observable conditions (fit to become tests), each with a stable ID (`CA1`, `CA2`, …):
+`plan-check.sh split` checks on these IDs, and on the `RF` ones, the partition of a split spec.
 
 ## Assunzioni
-Scelte fatte sui dubbi non bloccanti.
+Choices made on the non-blocking doubts.
 
 ## Domande aperte
-Incertezze residue non bloccanti da confermare col planner/utente.
+Residual non-blocking uncertainties to confirm with the planner/user.
 
 ## Fuori scope
-Cosa esplicitamente NON va fatto.
+What must explicitly NOT be done.
 
 ## Vincoli
-Limiti tecnici/di prodotto da rispettare.
+Technical/product limits to respect.
 ```
 
-Use concrete, observable statements. Avoid vague phrasing like "migliorare" or "gestire
-meglio" without a measurable definition. Every functional requirement and acceptance
+Use concrete, observable statements. Avoid vague phrasing like "improve" or "handle
+better" without a measurable definition. Every functional requirement and acceptance
 criterion must be verifiable.
 
 ## Mode `split` — proposing a chain for a spec that is too large

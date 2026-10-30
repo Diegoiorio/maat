@@ -1,74 +1,74 @@
 #!/usr/bin/env bash
-# ciclo-worktree.sh — /full-implementation-cycle in un git worktree DEDICATO (flag --worktree), per far girare il
-# ciclo mentre altre sessioni lavorano nel tree principale: un loro `git add -A` non committa i file del ciclo a
-# meta', e la review del ciclo non vede nel diff i file di altri flussi.
+# ciclo-worktree.sh — /full-implementation-cycle in a DEDICATED git worktree (flag --worktree), to run the
+# cycle while other sessions work in the main tree: their `git add -A` does not commit the half-done files of the
+# cycle, and the cycle's review does not see other flows' files in the diff.
 #
-#   ciclo-worktree.sh crea <spec> [--base <ref>]      crea (o riprende) il worktree del ciclo; ultima riga: il percorso
-#   ciclo-worktree.sh stato <nome>                    dove sta, branch, fase del ciclo, file modificati
-#   ciclo-worktree.sh riporta <nome> [--forza]        spec e run dir del worktree → tree principale (mai il codice)
+#   ciclo-worktree.sh crea <spec> [--base <ref>]      creates (or resumes) the cycle's worktree; last line: the path
+#   ciclo-worktree.sh stato <nome>                    where it is, branch, cycle phase, modified files
+#   ciclo-worktree.sh riporta <nome> [--forza]        worktree spec and run dir → main tree (never the code)
 #   ciclo-worktree.sh rimuovi <nome> [--branch] [--forza]
 #
-# Il repository e' quello della cartella corrente, che deve essere il TREE PRINCIPALE: da un worktree collegato
-# (git dir ≠ git common dir) ogni sottocomando e' rifiutato con STOP (pk09). <nome> = la spec senza `spec-` e `.md`.
+# The repository is the current folder's, which must be the MAIN TREE: from a linked worktree
+# (git dir ≠ git common dir) every subcommand is refused with STOP (pk09). <nome> = the spec without `spec-` and `.md`.
 #
-# crea, in ordine:
-#   1. worktree `<padre>/<repo>-fic-<nome>` sul branch `fic/<nome>` da --base (default HEAD del tree principale).
-#      Se il percorso esiste: ripresa se e' suo (marcatore sotto), altrimenti STOP. Branch `fic/<nome>` gia'
-#      esistente senza il suo worktree: STOP. Marcatore di proprieta' DENTRO il worktree:
-#      `<cartelle.lavoro>/spec-<nome>.worktree` (default .claude/.ai-workflow; gitignorato dalla regola spec-*, verificato: mai superficie di
-#      review), con il percorso, il branch, la base e l'impronta della spec del tree principale alla copia;
-#   2. PRIMA di creare qualunque cosa: i file che decidono le dipendenze (i file di `file_dipendenze` dei moduli di
-#      maat.json) devono coincidere fra la base e il working tree principale (deps_diff, la stessa logica di
-#      replay.sh). Se no: STOP, niente worktree — mai collegare dipendenze sbagliate;
-#   3. COLLEGA, mai copia ne' installa, le cartelle di `collega_nel_worktree` dei moduli presenti nel tree
-#      principale: junction su Windows, symlink altrove (worktree-lib.sh, condivisa con corpus/replay.sh); .git con
-#      gitdir relativo (il git di WSL lo legge);
-#   4. copia la spec e, se c'e', la sua run dir `spec-<nome>.run/` (gitignorate: il checkout non le porta); in
-#      ripresa quelle del worktree vincono e non si sovrascrivono;
-#   5. copia dal tree principale i `preparati` del modulo (dipendenze uguali, verificato al passo 2), se il file
-#      guida (il primo glob senza caratteri jolly) c'e' li' e manca nel worktree: il lint e i test della copia li
-#      leggono; se manca nel tree principale avvisa di lanciarvi la `preparazione` del modulo. Un modulo senza
-#      preparati: nessuna copia, nessun avviso;
-#   6. verifica la copia WSL del worktree (~/fic-mirror-<hash>) per il modulo con `copia`: la semina delle
-#      dipendenze della sua radice_pacchetti in hardlink da ~/fic-mirror (fic_seed_node_modules di fic-mirror.sh,
-#      la stessa del primo run di test-fast.sh) e il file guida dei suoi preparati visto da WSL. FIC_WT_WSL=0 la
-#      salta (test);
-#   7. stampa il percorso del worktree (ultima riga di stdout).
-# riporta: ALLINEA nel tree principale la spec (piano, review, righe di stato) e la run dir del worktree, al solito
-#   posto (.claude/.ai-workflow/), per cycle-report.py e per l'utente: la run dir si copia in una cartella
-#   temporanea accanto e prende il posto della vecchia (niente fusione: un file tolto nel worktree sparisce anche
-#   li'). Non tocca il codice. STOP se la spec o la run dir del tree principale sono cambiate dopo la copia (impronte
-#   nel marcatore: qualcuno ci ha lavorato li'), salvo --forza.
-# rimuovi, in ordine: STOP se una fase del worktree e' viva — lock delle fasi di codice (run-phase.sh --lock-status),
-#   <run-dir>/plan.lock con un pid vivo (mai forzabile) — o se una fase risulta in corso (log/*.running senza .exit:
-#   viva, o morta senza chiudere; --forza per procedere); STOP se il worktree ha modifiche non committate, o se la
-#   sua spec o la sua run dir non sono riportate nel tree principale (cmp, diff -rq), salvo --forza (che le perde);
-#   copie WSL del worktree cancellate (corsie comprese); collegamenti tolti (solo il collegamento, mai ricorsivo);
-#   verifica che non ne resti NESSUNO, anche fuori dall'elenco delle dipendenze (`find -type l`, reparse point da
-#   Windows con `dir /AL /S`, `find -type l` da WSL; un comando di verifica che fallisce e' STOP): se ne resta uno,
-#   STOP; poi `git worktree remove`; il branch solo con --branch (`git branch -d`: commit non integrati → resta).
-#   ⚠️ Misurato: `git worktree remove` (anche senza --force) SEGUE una junction e svuota la cartella di
-#   destinazione. Rimuovere senza scollegare svuoterebbe il node_modules VERO del tree principale.
-#   Limite: un symlink TRACCIATO dal repository (oggi nessuno) sarebbe visto come collegamento rimasto (falso
-#   positivo: STOP, direzione sicura).
+# crea, in order:
+#   1. worktree `<parent>/<repo>-fic-<nome>` on branch `fic/<nome>` from --base (default: HEAD of the main tree).
+#      If the path exists: resume if it is ours (marker below), otherwise STOP. Branch `fic/<nome>` already
+#      existing without its worktree: STOP. Ownership marker INSIDE the worktree:
+#      `<cartelle.lavoro>/spec-<nome>.worktree` (default .claude/.ai-workflow; gitignored by the spec-* rule, verified: never review
+#      surface), with the path, the branch, the base and the fingerprint of the main tree's spec at copy time;
+#   2. BEFORE creating anything: the files that decide the dependencies (the `file_dipendenze` files of the
+#      maat.json modules) must match between the base and the main working tree (deps_diff, the same logic as
+#      replay.sh). If not: STOP, no worktree — never link the wrong dependencies;
+#   3. LINKS, never copies or installs, the `collega_nel_worktree` folders of the modules present in the main
+#      tree: junctions on Windows, symlinks elsewhere (worktree-lib.sh, shared with corpus/replay.sh); .git with a
+#      relative gitdir (WSL's git can read it);
+#   4. copies the spec and, if present, its run dir `spec-<nome>.run/` (gitignored: the checkout does not bring
+#      them); on resume the worktree's ones win and are not overwritten;
+#   5. copies the module's `preparati` from the main tree (same dependencies, verified at step 2), if the guide
+#      file (the first glob without wildcards) is there and missing in the worktree: the copy's lint and tests
+#      read them; if it is missing in the main tree, warns to run the module's `preparazione` there. A module
+#      without preparati: no copy, no warning;
+#   6. checks the worktree's WSL copy (~/fic-mirror-<hash>) for the module with `copia`: the seeding of the
+#      dependencies of its radice_pacchetti as hardlinks from ~/fic-mirror (fic_seed_node_modules of fic-mirror.sh,
+#      the same as test-fast.sh's first run) and the guide file of its preparati as seen from WSL. FIC_WT_WSL=0
+#      skips it (tests);
+#   7. prints the worktree path (last line of stdout).
+# riporta: SYNCS into the main tree the worktree's spec (plan, review, status lines) and run dir, in the usual
+#   place (.claude/.ai-workflow/), for cycle-report.py and for the user: the run dir is copied into a temporary
+#   folder next to it and replaces the old one (no merging: a file removed in the worktree disappears there
+#   too). Does not touch the code. STOP if the main tree's spec or run dir changed after the copy (fingerprints
+#   in the marker: someone worked on them there), unless --forza.
+# rimuovi, in order: STOP if a worktree phase is alive — code phase lock (run-phase.sh --lock-status),
+#   <run-dir>/plan.lock with a live pid (never forceable) — or if a phase shows as running (log/*.running without
+#   .exit: alive, or dead without closing; --forza to proceed); STOP if the worktree has uncommitted changes, or if
+#   its spec or run dir are not synced back to the main tree (cmp, diff -rq), unless --forza (which loses them);
+#   the worktree's WSL copies deleted (lanes included); links removed (only the link, never recursive);
+#   check that NONE is left, even outside the dependency list (`find -type l`, reparse points from
+#   Windows with `dir /AL /S`, `find -type l` from WSL; a check command that fails is a STOP): if one is left,
+#   STOP; then `git worktree remove`; the branch only with --branch (`git branch -d`: unmerged commits → it stays).
+#   ⚠️ Measured: `git worktree remove` (even without --force) FOLLOWS a junction and empties the target
+#   folder. Removing without unlinking would empty the main tree's REAL node_modules.
+#   Limit: a symlink TRACKED by the repository (none today) would be seen as a leftover link (false
+#   positive: STOP, the safe direction).
 #
-# Il ciclo nel worktree: driver.py e run-phase.sh del PLUGIN della sessione (MAAT_SCRIPTS: stessa versione del plugin,
-# non il harness del commit del worktree), cwd nel worktree. Il lock delle fasi di codice e'
-# nella git dir del worktree (`git rev-parse --absolute-git-dir`: .git/worktrees/<id>/) e la copia WSL e'
-# ~/fic-mirror-<hash> (una per radice): il lavoro LOCALE di due cicli in due worktree non si blocca a vicenda. Il DEV
-# invece resta condiviso (sync del codice, context e2e): per questo con --worktree l'orchestratore forza --no-dev e
-# rifiuta --with-e2e; la verifica su DEV si fa dopo, dal tree principale, a codice integrato. Il ciclo non committa:
-# le modifiche restano non committate sul branch fic/<nome>.
+# The cycle in the worktree: driver.py and run-phase.sh of the session's PLUGIN (MAAT_SCRIPTS: same plugin version,
+# not the harness of the worktree's commit), cwd in the worktree. The code phase lock is
+# in the worktree's git dir (`git rev-parse --absolute-git-dir`: .git/worktrees/<id>/) and the WSL copy is
+# ~/fic-mirror-<hash> (one per root): the LOCAL work of two cycles in two worktrees does not block each other. DEV
+# instead stays shared (code sync, e2e context): that is why with --worktree the orchestrator forces --no-dev and
+# refuses --with-e2e; verification on DEV happens later, from the main tree, once the code is merged. The cycle does
+# not commit: the changes stay uncommitted on branch fic/<nome>.
 #
-# Uscita: 0 fatto · 1 verifica della copia WSL non riuscita (worktree creato: `crea` di nuovo riprende) o `stato`
-#         di un worktree assente · 2 uso o errore · 3 STOP (altrui, dipendenze diverse, modifiche, lock, collegamenti,
-#         lanciato da un worktree collegato).
-# Test: script/fic/ciclo-worktree.test.sh (repo finto, HOME finta, controprova per mutazione).
+# Exit: 0 done · 1 WSL copy check failed (worktree created: running `crea` again resumes) or `stato`
+#         of a missing worktree · 2 usage or error · 3 STOP (someone else's, different dependencies, changes, lock,
+#         links, launched from a linked worktree).
+# Tests: script/fic/ciclo-worktree.test.sh (fake repo, fake HOME, counterproof by mutation).
 
 set -uo pipefail
 unset MSYS_NO_PATHCONV
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
-. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT e MAAT_SCRIPTS (plugin), MAAT_WORK (progetto)
+. "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT and MAAT_SCRIPTS (plugin), MAAT_WORK (project)
 TAG=ciclo-worktree
 
 say() { echo "$TAG: $*"; }
@@ -80,14 +80,14 @@ WT_TAG=$TAG
 . "$HERE/worktree-lib.sh" || die "$HERE/worktree-lib.sh o $HERE/fic-mirror.sh non trovati"
 
 sha() { if [ -f "$1" ]; then sha256sum < "$1" | cut -c1-64; else echo assente; fi; }
-dir_fp() { # $1 cartella → impronta di percorsi e contenuti dei suoi file; «assente» se non c'e'
+dir_fp() { # $1 folder → fingerprint of the paths and contents of its files; «assente» if missing
   if [ -d "$1" ]; then (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) | sha256sum | cut -c1-64
   else echo assente; fi
 }
-AIW=.claude/.ai-workflow   # la cartella di lavoro (cartelle.lavoro di maat.json), relativa alla radice del repository
+AIW=.claude/.ai-workflow   # the work folder (cartelle.lavoro of maat.json), relative to the repository root
 [ -n "$MAAT_WORK" ] && AIW=${MAAT_WORK#"$PROJECT_ROOT"/}
 
-# --- argomenti ---
+# --- arguments ---
 CMD=${1:-}; [ $# -gt 0 ] && shift
 ARG="" BASE_REF="" FORCE=0 DELBRANCH=0
 while [ $# -gt 0 ]; do
@@ -110,16 +110,16 @@ case "$CMD" in
   *) die "$USO" ;;
 esac
 
-# --- repository: quello della cartella corrente ---
+# --- repository: the current folder's ---
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "la cartella corrente non e' in un repository git"
 MAIN=$(cd "$(dirname "$common")" 2>/dev/null && pwd) || die "tree principale non risolto da $common"
-# pk09 (pilota su un secondo progetto): da un worktree COLLEGATO (git dir ≠ git common dir) si risalirebbe al tree principale e se
-# ne prenderebbero base, maat.json e spec. Rifiuto per ogni sottocomando, prima di leggere o creare qualunque cosa
+# pk09 (pilot on a second project): from a LINKED worktree (git dir ≠ git common dir) we would climb to the main tree and
+# take its base, maat.json and spec. Refused for every subcommand, before reading or creating anything
 gdir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || die "git dir non risolta"
 [ "$gdir" = "$common" ] || stop "lancia il ciclo dal tree principale ($MAIN), o senza --worktree: questa cartella e' gia' un worktree ($(git rev-parse --show-toplevel 2>/dev/null))"
 MAINC=$(canon "$MAIN")
 [ "$(canon "$(git -C "$MAIN" rev-parse --show-toplevel 2>/dev/null)")" = "$MAINC" ] || die "tree principale non valido: $MAINC"
-# collegamenti, file delle dipendenze, preparati e copia: maat.json del tree principale, letta una volta
+# links, dependency files, preparati and copia: the main tree's maat.json, read once
 wt_conf_carica || die "maat.json del tree principale non leggibile: niente da collegare ne' da verificare"
 
 if [ "$CMD" = crea ]; then
@@ -139,12 +139,12 @@ MK_REL=$AIW/spec-$NAME.worktree
 SPEC_REL=$AIW/spec-$NAME.md RUN_REL=$AIW/spec-$NAME.run
 
 mk_get() { sed -n "s/^$1=//p" "$WT/$MK_REL" 2>/dev/null | tr -d '\r' | head -1; }
-mk_set() { # $1 chiave, $2 valore: riscrive la riga nel marcatore
+mk_set() { # $1 key, $2 value: rewrites the line in the marker
   local f=$WT/$MK_REL
   grep -v "^$1=" "$f" > "$f.tmp" && printf '%s=%s\n' "$1" "$2" >> "$f.tmp" && mv "$f.tmp" "$f"
 }
 
-# --- il percorso e' il worktree creato da questo script per <nome>? (0 = si'; altrimenti il motivo su stderr) ---
+# --- is the path the worktree created by this script for <nome>? (0 = yes; otherwise the reason on stderr) ---
 ours() {
   local c w found=0
   [ -d "$WT" ] || { echo "non esiste: $WT" >&2; return 1; }
@@ -161,30 +161,30 @@ ours() {
   return 0
 }
 
-# --- WSL: script su stdin (niente quoting attraverso wsl.exe); altrove bash diretto ---
+# --- WSL: script on stdin (no quoting through wsl.exe); elsewhere plain bash ---
 use_wsl() { [ "${FIC_WT_WSL:-1}" != 0 ]; }
-wsl_path() { # cartella o file esistente → percorso per WSL (canon vale solo per le cartelle)
+wsl_path() { # existing folder or file → path for WSL (canon only works for folders)
   local p
   if [ -d "$1" ]; then p=$(canon "$1"); else p="$(canon "$(dirname "$1")")/$(basename "$1")"; fi
   if [ $WIN -eq 1 ]; then wslp "$p"; else printf '%s' "$p"; fi
 }
-wsl_run() { # stdin = script bash
+wsl_run() { # stdin = bash script
   if [ $WIN -eq 1 ]; then MSYS_NO_PATHCONV=1 wsl.exe -- bash -s; else bash -s; fi
 }
 
-# --- scollegamento e verifica: nessun collegamento deve restare prima di rimuovere la cartella ---
-links_left() { # $1 worktree → i collegamenti rimasti (uno per riga), da Git Bash, poi da Windows, poi da WSL.
-  # Uscita ≠ 0 se una verifica non e' riuscita (find, dir o WSL falliti): il chiamante si ferma.
-  # Ogni vista parte solo se la precedente non ne ha trovati: `dir /S` ATTRAVERSA le junction (misurato), e su una
-  # rimasta scorrerebbe tutto il node_modules del tree principale (solo lettura, ma lento).
+# --- unlinking and check: no link may be left before removing the folder ---
+links_left() { # $1 worktree → the leftover links (one per line), from Git Bash, then from Windows, then from WSL.
+  # Exit ≠ 0 if a check failed (find, dir or WSL failed): the caller stops.
+  # Each view runs only if the previous one found none: `dir /S` TRAVERSES junctions (measured), and on a leftover
+  # one it would walk the main tree's whole node_modules (read-only, but slow).
   local wt=$1 w out rc err
   [ -d "$wt" ] || { echo "$TAG: $wt non e' una cartella: collegamenti non verificabili" >&2; return 2; }
   out=$(find "$wt" -type l) || { echo "$TAG: find -type l fallito su $wt" >&2; return 2; }
-  if [ -z "$out" ] && [ $WIN -eq 1 ]; then   # reparse point (junction e symlink) visti da Windows
+  if [ -z "$out" ] && [ $WIN -eq 1 ]; then   # reparse points (junctions and symlinks) as seen from Windows
     err=$(mktemp) || return 2
     out=$(MSYS2_ARG_CONV_EXCL='*' cmd.exe /c dir /AL /S /B "$(cygpath -w "$wt")" 2>"$err" | tr -d '\r' | sed '/^$/d'); rc=${PIPESTATUS[0]}
-    # dir esce 1 con «File non trovato» (o «File Not Found») quando non c'e' nessun reparse point: e' il caso buono
-    # (la cartella esiste, verificato sopra); qualunque altro esito e' una verifica fallita
+    # dir exits 1 with «File non trovato» (or «File Not Found») when there is no reparse point: that is the good case
+    # (the folder exists, checked above); any other outcome is a failed check
     if [ -z "$out" ] && ! { [ "$rc" -eq 1 ] && grep -qiE 'non trovato|not found' "$err"; }; then
       echo "$TAG: dir /AL /S fallito su $wt (uscita $rc: $(tr -d '\r' < "$err"))" >&2; rm -f "$err"; return 2
     fi
@@ -197,7 +197,7 @@ links_left() { # $1 worktree → i collegamenti rimasti (uno per riga), da Git B
   [ -z "$out" ] || printf '%s\n' "$out"
   return 0
 }
-scollega_e_verifica() { # $1 worktree: 0 = nessun collegamento resta; 1 = qualcosa resta, o verifica fallita (stderr)
+scollega_e_verifica() { # $1 worktree: 0 = no link left; 1 = something left, or check failed (stderr)
   local wt=$1 left
   unlink_deps "$wt" || return 1
   left=$(links_left "$wt") || { echo "$TAG: verifica dei collegamenti non riuscita" >&2; return 1; }
@@ -220,14 +220,14 @@ if [ "$CMD" = crea ]; then
   fi
   if [ $RESUME -eq 0 ]; then
     BASE=$(git -C "$MAIN" rev-parse --verify -q "${BASE_REF:-HEAD}^{commit}") || die "ref di base non valido: ${BASE_REF:-HEAD}"
-    # dipendenze: quelle del tree principale valgono per la base? (prima di creare qualunque cosa)
+    # dependencies: do the main tree's ones hold for the base? (before creating anything)
     DD=$(deps_diff "$BASE")
     [ -z "$DD" ] || stop "dipendenze diverse fra la base ${BASE:0:12} e il tree principale: $(echo $DD). node_modules e venv collegati dal tree principale non sarebbero quelli di questo codice. Niente worktree creato."
     git -C "$MAIN" worktree add -q -b "$BRANCH" "$WT" "$BASE" || die "git worktree add fallito: $WT"
     mkdir -p "$WT/$AIW" && printf 'fic-ciclo-worktree\npath=%s\nbranch=%s\nbase=%s\nprincipale=%s\nprincipale_run=%s\ncreato=%s\n' \
       "$(canon "$WT")" "$BRANCH" "$BASE" "$(sha "$MAINC/$SPEC_REL")" "$(dir_fp "$MAINC/$RUN_REL")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$WT/$MK_REL" ||
       die "marcatore non scrivibile: $WT/$MK_REL"
-    if ! git -C "$WT" check-ignore -q "$MK_REL"; then   # il marcatore non deve mai essere superficie di review
+    if ! git -C "$WT" check-ignore -q "$MK_REL"; then   # the marker must never be review surface
       git -C "$MAIN" worktree remove --force "$WT" && git -C "$MAIN" branch -D -q "$BRANCH"
       stop "$MK_REL non e' gitignorato alla base ${BASE:0:12} (regola $AIW/spec-*): worktree rimosso"
     fi
@@ -235,15 +235,15 @@ if [ "$CMD" = crea ]; then
     say "worktree creato: $WT (branch $BRANCH da ${BASE:0:12}); il ciclo usa il plugin della sessione ($MAAT_ROOT), non il harness del commit del worktree"
   else
     BASE=$(mk_get base)
-    # in ripresa: dipendenze della base ancora uguali al tree principale, e il ciclo non le ha cambiate nel worktree
-    # (ne' modificate ne' aggiunte come file non tracciati)
-    mapfile -t DEP_PS < <(dep_ps)   # file_dipendenze di maat.json; nessuno: niente da confrontare
+    # on resume: the base's dependencies still equal to the main tree's, and the cycle did not change them in the
+    # worktree (neither modified nor added as untracked files)
+    mapfile -t DEP_PS < <(dep_ps)   # file_dipendenze of maat.json; none: nothing to compare
     DD=$( { deps_diff "$BASE"; if [ ${#DEP_PS[@]} -gt 0 ]; then git -C "$WT" -c core.quotePath=false diff --name-only HEAD -- "${DEP_PS[@]}"
             git -C "$WT" -c core.quotePath=false ls-files -o --exclude-standard -- "${DEP_PS[@]}"; fi; } | LC_ALL=C sort -u)
     [ -z "$DD" ] || stop "dipendenze diverse fra il worktree e il tree principale: $(echo $DD). I collegamenti non varrebbero per questo codice."
   fi
 
-  # collegamenti: dipendenze del tree principale, mai copiate
+  # links: the main tree's dependencies, never copied
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     if [ -L "$WT/$p" ]; then continue
@@ -254,7 +254,7 @@ if [ "$CMD" = crea ]; then
   n=$(dep_links "$WT" | while IFS= read -r p; do [ -L "$WT/$p" ] && echo "$p"; done | wc -l)
   say "dipendenze collegate dal tree principale: $n ($(dep_links "$WT" | tr '\n' ' '))"
 
-  # spec e run dir: copiate alla creazione; in ripresa vincono quelle del worktree
+  # spec and run dir: copied at creation; on resume the worktree's ones win
   if [ -f "$WT/$SPEC_REL" ]; then
     say "spec del worktree gia' presente: non la sovrascrivo ($SPEC_REL)"
     [ "$(sha "$MAINC/$SPEC_REL")" = "$(mk_get principale)" ] ||
@@ -268,11 +268,11 @@ if [ "$CMD" = crea ]; then
     say "run dir copiata: $RUN_REL"
   fi
 
-  # preparati dei moduli (es. tsconfig e dichiarazioni generati), dipendenze uguali: copiati se il file guida c'e'
-  # nel tree principale e manca nel worktree; se manca nel tree principale, l'avviso nomina la preparazione
+  # module preparati (e.g. generated tsconfig and declarations), same dependencies: copied if the guide file is
+  # in the main tree and missing in the worktree; if missing in the main tree, the warning names the preparazione
   while IFS=$'\t' read -r k rad guida prepcmd globs; do
     [ "$k" = prep ] || continue
-    [ "$guida" = - ] && guida=""; [ "$prepcmd" = - ] && prepcmd=""   # campi vuoti (segnaposto di wt_conf)
+    [ "$guida" = - ] && guida=""; [ "$prepcmd" = - ] && prepcmd=""   # empty fields (wt_conf placeholder)
     [ -n "$guida" ] || continue
     pre=""; [ "$rad" = . ] || pre="$rad/"
     if [ -f "$MAINC/$pre$guida" ]; then
@@ -280,8 +280,8 @@ if [ "$CMD" = crea ]; then
       nc=0
       IFS=$'\t' read -ra gl <<< "$globs"
       for g in "${gl[@]}"; do
-        oifs=$IFS; IFS=; fs=("$MAINC/$pre"$g); IFS=$oifs   # pk08: IFS vuoto, una voce con spazi non si divide
-        for f in "${fs[@]}"; do   # $g senza virgolette: il * del glob si espande
+        oifs=$IFS; IFS=; fs=("$MAINC/$pre"$g); IFS=$oifs   # pk08: empty IFS, an entry with spaces is not split
+        for f in "${fs[@]}"; do   # $g unquoted: the glob's * expands
           [ -f "$f" ] || continue
           rel=${f#"$MAINC/"}
           [ -f "$WT/$rel" ] && continue
@@ -297,11 +297,11 @@ if [ "$CMD" = crea ]; then
   deps_fp_check "$MAINC" "$WT" >/dev/null 2>&1
   [ -z "$FPWARN" ] || say "AVVISO — $FPWARN"
 
-  # copia WSL del worktree, per ogni modulo con copia: seminata e con il file guida dei preparati
+  # WSL copy of the worktree, for each module with copia: seeded and with the guide file of the preparati
   cw=()
   while IFS=$'\t' read -r k p rad guida; do
     [ "$k" = copia ] || continue
-    [ "$guida" = - ] && guida=""   # guida vuota (segnaposto di wt_conf)
+    [ "$guida" = - ] && guida=""   # empty guide (wt_conf placeholder)
     cw+=("$p" "$rad" "$guida")
   done < <(wt_conf)
   if [ ${#cw[@]} -eq 0 ]; then
@@ -313,7 +313,7 @@ if [ "$CMD" = crea ]; then
 fic_mirror_init "$R" || { echo "git (WSL) non determina la radice del worktree $R"; exit 1; }
 case "$FIC_MIRROR" in "$HOME"/fic-mirror-????????????) ;; *) echo "copia inattesa: $FIC_MIRROR (non e' la copia di un worktree)"; exit 1 ;; esac
 while [ $# -ge 3 ]; do
-  P=$1 D=$2 G=$3; shift 3   # radice_pacchetti, radice e file guida del modulo con copia
+  P=$1 D=$2 G=$3; shift 3   # radice_pacchetti, radice and guide file of the module with copia
   if [ -d "$FIC_MIRROR/$P/node_modules" ] && [ -f "$FIC_MIRROR/$P/.fic-deps" ]; then
     echo "copia WSL gia' seminata: $FIC_MIRROR ($P)"
   else
@@ -345,7 +345,7 @@ if [ "$CMD" = stato ]; then
   if [ -f "$WT/$SPEC_REL" ]; then
     if cmp -s "$WT/$SPEC_REL" "$MAINC/$SPEC_REL"; then r=si; else r=no; fi
     echo "spec: $(canon "$WT")/$SPEC_REL · riportata nel tree principale: $r"
-    CS=$MAAT_SCRIPTS/cycle-state.sh   # il plugin della sessione, non il harness del commit del worktree
+    CS=$MAAT_SCRIPTS/cycle-state.sh   # the session's plugin, not the harness of the worktree's commit
     echo "ciclo: $( (cd "$WT" && bash "$CS" "$SPEC_REL" 2>&1) | tr -d '\r' | grep -E '^(State|Next):' | tr '\n' ' ')"
   else
     echo "spec: assente nel worktree"
@@ -374,9 +374,9 @@ if [ "$CMD" = riporta ]; then
   mkdir -p "$MAINC/$AIW" && cp "$WT/$SPEC_REL" "$MAINC/$SPEC_REL" || die "copia della spec fallita"
   say "spec riportata: $MAINC/$SPEC_REL"
   if [ -d "$WT/$RUN_REL" ]; then
-    # allineamento, non fusione: copia completa accanto (nome spec-*: gitignorato), poi prende il posto della vecchia
+    # sync, not merge: full copy next to it (name spec-*: gitignored), then it replaces the old one
     nuova="$MAINC/$RUN_REL.nuova.$$" vecchia="$MAINC/$RUN_REL.vecchia.$$"
-    # interruzione a meta' dello scambio: via la copia nuova, e la vecchia torna al suo posto se la run dir manca
+    # interrupted mid-swap: drop the new copy, and the old one goes back in place if the run dir is missing
     ripristina() { [ -e "$MAINC/$RUN_REL" ] || [ ! -d "$vecchia" ] || mv "$vecchia" "$MAINC/$RUN_REL"; }
     trap 'rm -rf "$nuova"; ripristina || echo "$TAG: run dir precedente in $vecchia" >&2; exit 130' INT TERM HUP
     cp -R "$WT/$RUN_REL" "$nuova" || { rm -rf "$nuova"; die "copia della run dir fallita (la run dir del tree principale e' intatta)"; }
@@ -399,12 +399,12 @@ if [ "$CMD" = riporta ]; then
 fi
 
 # ============================================================================================ rimuovi
-RP=$MAAT_SCRIPTS/run-phase.sh   # il plugin della sessione; il lock e' comunque quello del worktree (cwd)
+RP=$MAAT_SCRIPTS/run-phase.sh   # the session's plugin; the lock is still the worktree's (cwd)
 if [ -f "$RP" ]; then
   ls_out=$( (cd "$WT" && env -u FIC_LOCK -u FIC_PHASE -u FIC_REPO bash "$RP" --lock-status 2>&1) ); ls_rc=$?
   [ $ls_rc -eq 0 ] || stop "lock delle fasi di codice del worktree non libero: $(printf '%s' "$ls_out" | tr -d '\r'). Un ciclo gira li': prima fermalo"
 fi
-# lock del piano (<run-dir>/plan.lock): vivo se un suo pid esiste, o se e' appena creato senza owner (come run-phase.sh)
+# plan lock (<run-dir>/plan.lock): alive if one of its pids exists, or if just created without owner (as run-phase.sh)
 PL=$WT/$RUN_REL/plan.lock
 if [ -d "$PL" ]; then
   if [ -f "$PL/owner" ]; then
@@ -416,7 +416,7 @@ if [ -d "$PL" ]; then
     stop "lock del piano appena preso ($RUN_REL/plan.lock, owner non ancora scritto): una fase di piano sta partendo"
   fi
 fi
-# fase in corso: log/<etichetta>.running senza .exit (il driver lo legge come IN CORSO): viva, o morta senza chiudere
+# running phase: log/<label>.running without .exit (the driver reads it as IN CORSO): alive, or dead without closing
 running=""
 for f in "$WT/$RUN_REL"/log/*.running; do
   [ -e "$f" ] && [ ! -e "${f%.running}.exit" ] && running="$running $(basename "${f%.running}")"
@@ -429,7 +429,7 @@ st=$(git -C "$WT" status --porcelain --untracked-files=all)
 if [ -n "$st" ] && [ $FORCE -eq 0 ]; then
   stop "il worktree ha modifiche non committate ($(printf '%s\n' "$st" | grep -c .) file): integrale prima (commit e merge, oppure git -C $(q "$(canon "$WT")") diff | git apply), o --forza per scartarle"
 fi
-# spec e run dir del ciclo: con il worktree se ne andrebbero; devono essere gia' nel tree principale
+# the cycle's spec and run dir: they would go away with the worktree; they must already be in the main tree
 nr=""
 [ -f "$WT/$SPEC_REL" ] && ! cmp -s "$WT/$SPEC_REL" "$MAINC/$SPEC_REL" && nr="la spec ($SPEC_REL)"
 if [ -d "$WT/$RUN_REL" ] && ! diff -rq "$WT/$RUN_REL" "$MAINC/$RUN_REL" >/dev/null 2>&1; then nr="${nr:+$nr e }la run dir ($RUN_REL)"; fi
