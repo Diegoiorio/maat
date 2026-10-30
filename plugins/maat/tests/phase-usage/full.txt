@@ -1,0 +1,16 @@
+== 01-plan.jsonl  $1.00  1.0 min  turni 3  output 0k  quota5h 10%->10%  tool all'avvio 3 (mcp 1)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture
+   orchestratore               1      1      6k      6k      6k       5k      0k     1     0  0 (0k car.)
+== 02-implement.corsia-1.jsonl  $2.00  5.0 min  turni 3  output 0k  quota5h 20%->20%  tool all'avvio 3 (mcp 1)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture
+   orchestratore               1      1      6k      6k      6k       5k      0k     1     0  0 (0k car.)
+== 02-implement.corsia-2.jsonl  $1.50  2.0 min  turni 3  output 0k  quota5h 25%->25%  tool all'avvio 3 (mcp 1)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture
+   orchestratore               1      1      6k      6k      6k       5k      0k     1     0  0 (0k car.)
+== 02-implement.jsonl  $0.00  0.0 min  turni 0  output 0k  quota5h -  tool all'avvio None (mcp 0)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture
+== 03-review.jsonl  $0.70  3.0 min  turni 9  output 1k  quota5h 30%->30%  tool all'avvio 3 (mcp 1)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture
+   orchestratore               1      2      6k      6k      6k      10k      0k     2     0  0 (0k car.)
+== 04-chiusura.jsonl  $0.00  0.0 min  turni 0  output 0k  quota5h -  tool all'avvio None (mcp 0)
+   filo                     ist. chiam.    ctx0  ctxMed  ctxMax   cacheR  cacheW  tool multi  riletture

@@ -1,0 +1,33 @@
+# CI: all the plugin suites on Linux (tools/suite.sh), one at a time. Windows and macOS come later (1.4.3).
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30   # the Linux run measured about 15 min in a clean clone: twice that
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test identity for the temporary git repositories
+        run: |
+          git config --global user.name "Maat CI"
+          git config --global user.email "ci@example.invalid"
+      - name: Suites
+        run: bash tools/suite.sh esiti
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esiti
+          path: esiti/

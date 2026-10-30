@@ -2,6 +2,27 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.2.1 — cost summary, Linux CI, what is proven
+
+- **Cost summary at the end of every full cycle.** `phase-usage.py --summary <run dir>` prints total cost
+  (API-equivalent), minutes, phases and 5h quota, then one row per phase; the final response of
+  `/maat:full-implementation-cycle` carries it as printed, instead of figures copied by hand. The two lanes of a split
+  implementation count as one phase (minutes = the longer lane); a review relaunched in the same log counts both
+  sessions; a phase still running makes the total «at least»; a reset of the 5h window is stated. The output without
+  `--summary` and the `--json` output do not change. Test: `scripts/phase-usage.test.sh`, with counterproofs.
+- **Linux CI** on GitHub Actions (`.github/workflows/ci.yml`): every suite at every push and pull request, with
+  Python 3.10. The suites are listed once, in `tools/suite.list`, read by the new `tools/suite.sh` (CI) and by
+  `tools/giro-completo.sh`; `tools/suite.sh` refuses a list that misses a suite. `bash-node.test.sh` no longer
+  drops from `PATH` the whole directory that holds `shellcheck` (on the CI runner, `/usr/bin`): it replaces it with a
+  copy without `shellcheck`.
+- **README:** «Verified AI development for Claude Code»; new sections «When to use Maat» and «What is proven and what
+  is not», each claim with the file that supports it; CI badge. The same line opens the plugin and marketplace
+  descriptions (the marketplace one was still in Italian).
+- **Benchmark protocol** (`docs/BENCHMARK-PROTOCOL.md`), fixed before any run: does Maat complete a change on its own,
+  and is the result better than Claude Code alone, measured first of all by the defects its own report does not
+  disclose. Not run yet.
+- `driver.py`, `cycle-state.sh` and `run-phase.sh` are unchanged: the driver certificate stays valid.
+
 ## 1.2.0 — English, explained permission requests, chain rings no longer stale
 
 - **English everywhere except the formats:** documentation (README, flows guide, testing guide), code comments,

@@ -28,8 +28,13 @@ jget() { "$FIC_PY" -c 'import json,sys; v=json.load(open(sys.argv[1], encoding="
 FB="$W/bin"; mkdir -p "$FB"
 printf '#!/usr/bin/env bash\n[ "$1" = --check ] && grep -q SINTASSI_ROTTA "$2" && { echo "SyntaxError"; exit 1; }\nexit 0\n' > "$FB/node"
 chmod +x "$FB/node"
+# the directory holding shellcheck is replaced by a copy of links without it, not dropped: on CI runners it is /usr/bin
+k=0
 while d=$(command -v shellcheck 2>/dev/null) && [ -n "$d" ]; do
-  PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$(dirname "$d")" | paste -sd: -)
+  k=$((k + 1)); dd=$(dirname "$d"); nd="$W/path$k"; mkdir -p "$nd"
+  for f in "$dd"/*; do case "${f##*/}" in shellcheck|shellcheck.exe) ;; *) ln -s "$f" "$nd/" 2>/dev/null ;; esac; done
+  PATH=$(printf '%s' "$PATH" | tr ':' '\n' | awk -v o="$dd" -v n="$nd" '{ print ($0 == o ? n : $0) }' | paste -sd: -)
+  [ "$k" -lt 10 ] || { echo "shellcheck non rimovibile dal PATH" >&2; exit 2; }
 done
 export PATH="$FB:$PATH"
 export FIC_GATES_VENV_PY=$FIC_PY   # {python} = the harness interpreter (no python3 looked up in the Windows PATH)

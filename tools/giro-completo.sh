@@ -10,9 +10,7 @@ RAMO=${3:?ramo del clone Linux}
 LX=${MAAT_LINUX_CLONE:-maat-linux}
 SP=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT/linux" "$OUT/windows"
-TUTTE="maat-paths maat-config gates finalize ciclo-worktree context-pack cycle-report harness-merge guard stop-hook
-  blocks-independent phase-events test-review-surface plan-check bash-node genericita maat-doctor senza-wsl spazi
-  session-start test-fast counterproof comandi-equivalenza vitest-classify cycle-state run-phase driver"
+TUTTE=$(tr -d '\r' < "$SP/suite.list" | grep -v '^[[:space:]]*\(#\|$\)')   # the same list as tools/suite.sh (CI)
 
 # 1. Linux: throwaway clone, realigned to the branch (manual copies disappear)
 wsl -- bash -lc "cd ~/$LX && git fetch -q origin && git checkout -q -f $RAMO 2>/dev/null || git checkout -q -f -b $RAMO origin/$RAMO; git reset -q --hard origin/$RAMO && git clean -qfd && git log -1 --format='clone: %h %s'" > "$OUT/linux/clone.txt" 2>&1

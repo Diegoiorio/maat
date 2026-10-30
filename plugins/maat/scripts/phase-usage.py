@@ -19,10 +19,15 @@ For each phase log it prints:
 
 It decides nothing and writes nothing: it measures efficiency, kept separate from quality (findings, gates,
 outcomes), which is read in the specs and in the `.esito` files.
+
+        python phase-usage.py --summary <spec-<name>.run>
+
+prints the cost summary of a cycle, for the final response of the full cycle (see `summary`).
 """
 import glob
 import json
 import os
+import re
 import sys
 
 READ_ONLY = {"Read", "Grep", "Glob"}
@@ -176,7 +181,87 @@ def k(n):
     return "%dk" % round(n / 1000) if n < 1_000_000 else "%.1fM" % (n / 1_000_000)
 
 
+PHASE_LOG = re.compile(r"^([0-9]+-[^.]*)\.jsonl$")   # the phase logs, as driver.py counts them
+NOTE = ("Note: API-equivalent cost as reported by Claude Code; on a subscription it is not billed, the 5h quota is "
+        "the measure. A phase relaunched with the same label overwrites its log: earlier attempts are not counted.")
+
+
+def sessions_of(path):
+    """Sessions of one log: {key: {"cost": max total_cost_usd, "ms": sum of duration_ms}} and the 5h quota values.
+    A review relaunched after a key change appends a second `claude -p` session to the same log, after the
+    `fic_scartato` marker: its total_cost_usd restarts from 0, so the cost is the maximum PER SESSION, summed. The key
+    is the session_id of the result events; without it, the segment between two markers."""
+    seg, sess, quota = 0, {}, []
+    for ev in events_of(path):
+        t = ev.get("type")
+        if t == "system" and ev.get("subtype") == "fic_scartato":
+            seg += 1
+        elif t == "rate_limit_event":
+            w = ((ev.get("rate_limit_info") or {}).get("unifiedWindows") or {}).get("five_hour") or {}
+            if "utilization" in w:
+                quota.append(w["utilization"])
+        elif t == "result":
+            s = sess.setdefault(ev.get("session_id") or ("segment", seg), {"cost": 0, "ms": 0})
+            s["cost"] = max(s["cost"], ev.get("total_cost_usd") or 0)
+            s["ms"] += ev.get("duration_ms") or 0
+    return sess, quota
+
+
+def summary(run):
+    """Cost summary of a run directory: one row per phase log `log/NN-<label>.jsonl`; the lane logs
+    `log/NN-<label>.corsia-<k>.jsonl` (implementation split in two lanes running in parallel) are added to their phase:
+    cost summed, minutes = the longest lane. A phase with `<label>.running`, or without `<label>.exit`, is not
+    finished and makes the total a lower bound. The 5h quota goes from the lowest value of the first phase to the
+    highest of the last; a value lower than an earlier one (inside a log or between phases) means the window reset."""
+    d = os.path.join(run, "log")
+    names = sorted(os.listdir(d)) if os.path.isdir(d) else []
+    labels = [m.group(1) for m in map(PHASE_LOG.match, names) if m]
+    if not labels:
+        return ["Cost: not measured (no phase logs)"]
+    rows, tot_cost, tot_min, partial, reset, ranges = [], 0.0, 0.0, False, False, []
+    for lb in labels:
+        lanes = sorted(n for n in names if re.match(re.escape(lb) + r"\.corsia-[0-9]+\.jsonl$", n))
+        cost, mins, nsess, quota = 0.0, [], 0, []
+        for n in [lb + ".jsonl"] + lanes:
+            sess, q = sessions_of(os.path.join(d, n))
+            cost += sum(s["cost"] for s in sess.values())
+            nsess += sum(1 for s in sess.values() if s["cost"] or s["ms"])
+            mins.append(sum(s["ms"] for s in sess.values()) / 60000)
+            reset = reset or any(b < a for a, b in zip(q, q[1:]))
+            quota += q
+        m = max(mins[1:]) + mins[0] if lanes else mins[0]   # lanes in parallel: the longest one
+        if quota:
+            ranges.append((min(quota), max(quota)))
+        unfinished = os.path.exists(os.path.join(d, lb + ".running")) or not os.path.exists(os.path.join(d, lb + ".exit"))
+        partial = partial or unfinished
+        tot_cost, tot_min = tot_cost + cost, tot_min + m
+        if nsess == 0 and not unfinished:
+            rows.append("  %-26s %9s  (no session)" % (lb, "-"))
+            continue
+        notes = [x for x in ("%d lanes" % len(lanes) if lanes else "",
+                             "%d sessions" % nsess if nsess > 1 and not lanes else "",
+                             "not finished" if unfinished else "") if x]
+        rows.append("  %-26s %9s  %6.1f min%s" % (lb, "$%.2f" % cost, m, "  (%s)" % ", ".join(notes) if notes else ""))
+    reset = reset or any(b[0] < a[1] for a, b in zip(ranges, ranges[1:]))
+    if not ranges:
+        q = "5h quota -"
+    elif reset:
+        q = "5h quota window reset during the cycle"
+    else:
+        q = "5h quota %.0f%% -> %.0f%%" % (ranges[0][0] * 100, ranges[-1][1] * 100)
+    head = "Cost: %s$%.2f API-equivalent · %.1f min · %d phase%s · %s" % (
+        "at least " if partial else "", tot_cost, tot_min, len(labels), "" if len(labels) == 1 else "s", q)
+    return [head] + rows + [NOTE]
+
+
 def main(argv):
+    if "--summary" in argv:
+        args = [a for a in argv if a != "--summary"]
+        if len(args) != 1 or not os.path.isdir(args[0]):
+            print("uso: phase-usage.py --summary <spec-<name>.run>", file=sys.stderr)
+            return 2
+        print("\n".join(summary(args[0])))
+        return 0
     as_json = "--json" in argv
     args = [a for a in argv if a != "--json"]
     if not args:

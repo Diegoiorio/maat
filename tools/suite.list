@@ -1,0 +1,31 @@
+# The plugin suites, one per line, in the order they run (short ones first, the long ones last).
+# Read by tools/suite.sh (CI) and tools/giro-completo.sh. A name is plugins/maat/scripts/<name>.test.sh, except
+# test-review-surface (plugins/maat/scripts/test-review-surface.sh). tools/suite.sh refuses a list that misses a suite.
+maat-paths
+maat-config
+gates
+finalize
+ciclo-worktree
+context-pack
+cycle-report
+harness-merge
+guard
+stop-hook
+blocks-independent
+phase-events
+test-review-surface
+plan-check
+bash-node
+genericita
+maat-doctor
+senza-wsl
+spazi
+session-start
+phase-usage
+test-fast
+counterproof
+comandi-equivalenza
+vitest-classify
+cycle-state
+run-phase
+driver

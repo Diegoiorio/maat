@@ -49,7 +49,7 @@ bash plugins/maat/scripts/<name>.test.sh
 ```
 
 - Short: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
-  `harness-merge`, `guard`, `stop-hook`, `session-start`, `blocks-independent`, `phase-events`,
+  `harness-merge`, `guard`, `stop-hook`, `session-start`, `phase-usage`, `blocks-independent`, `phase-events`,
   `test-review-surface.sh`, `plan-check`,
   `senza-wsl` (pk08: Windows without WSL, PATH without `wsl`/`wsl.exe`; about 5 minutes, two `run-phase.sh` phases),
   `spazi` (pk08: plugin, project, run dir and worktree with spaces and «à»; about 5 minutes on Windows, 1 on Linux;
@@ -99,6 +99,23 @@ always `~/maat-linux` (another one with `MAAT_LINUX_CLONE`). For example:
 `bash tools/giro-completo.sh /tmp/esiti /c/<…>/maat-lavoro wip/lavoro`. Each suite writes
 `<folder>/<linux|windows>/<name>.log` and one line in `riepilogo.txt` (exit code, seconds, last line). Duration: a few
 hours, because of the long suites.
+
+**The list of suites** is `tools/suite.list`, one name per line, in the order they run; `giro-completo.sh` and
+`tools/suite.sh` both read it. A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
+`*.test.sh` or names a file that does not exist.
+
+## CI
+
+`.github/workflows/ci.yml` runs at every push and pull request on GitHub: `ubuntu-latest`, Python 3.10 (the lowest
+supported version), Node 20, a test git identity, then `bash tools/suite.sh esiti`: every suite of the list, one at a
+time, with `FIC_WT_WSL=0` like the Linux run. The job fails if a suite exits with a code other than 0; the logs and
+`riepilogo.txt` are kept as the `esiti` artifact. Locally the same run is
+`bash tools/suite.sh <results folder>` from a Linux clone.
+
+What CI does not cover: Windows (Git Bash and WSL) and macOS, which come with multi-platform CI (1.4.3). Until then
+the Windows part of `giro-completo.sh` runs before each release. What skips with a declared reason, as in the Linux
+clone: part 2 of `vitest-classify.test.sh` (specific to the guide project) and `comandi-equivalenza.test.sh`, which
+needs a commit of the private history.
 
 ## Genericity
 

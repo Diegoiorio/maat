@@ -1,0 +1,168 @@
+[
+ {
+  "cost_usd": 1.0,
+  "duration_min": 1.0,
+  "init_mcp_tools": 1,
+  "init_tools": 3,
+  "is_error": false,
+  "log": "01-plan.jsonl",
+  "models": {
+   "m1": 1.0
+  },
+  "output_tokens": 400,
+  "quota_5h": [
+   0.1,
+   0.1
+  ],
+  "results": 1,
+  "slow_tools": [],
+  "threads": {
+   "orchestratore": {
+    "cache_read": 5000,
+    "cache_write": 200,
+    "calls": 1,
+    "ctx_first": 6200,
+    "ctx_max": 6200,
+    "ctx_mean": 6200,
+    "instances": 1,
+    "multi_tool_msgs": 0,
+    "redundant_chars": 0,
+    "redundant_reads": 0,
+    "tools": 1
+   }
+  },
+  "turns": 3
+ },
+ {
+  "cost_usd": 2.0,
+  "duration_min": 5.0,
+  "init_mcp_tools": 1,
+  "init_tools": 3,
+  "is_error": false,
+  "log": "02-implement.corsia-1.jsonl",
+  "models": {
+   "m1": 2.0
+  },
+  "output_tokens": 400,
+  "quota_5h": [
+   0.2,
+   0.2
+  ],
+  "results": 1,
+  "slow_tools": [],
+  "threads": {
+   "orchestratore": {
+    "cache_read": 5000,
+    "cache_write": 200,
+    "calls": 1,
+    "ctx_first": 6200,
+    "ctx_max": 6200,
+    "ctx_mean": 6200,
+    "instances": 1,
+    "multi_tool_msgs": 0,
+    "redundant_chars": 0,
+    "redundant_reads": 0,
+    "tools": 1
+   }
+  },
+  "turns": 3
+ },
+ {
+  "cost_usd": 1.5,
+  "duration_min": 2.0,
+  "init_mcp_tools": 1,
+  "init_tools": 3,
+  "is_error": false,
+  "log": "02-implement.corsia-2.jsonl",
+  "models": {
+   "m1": 1.5
+  },
+  "output_tokens": 400,
+  "quota_5h": [
+   0.25,
+   0.25
+  ],
+  "results": 1,
+  "slow_tools": [],
+  "threads": {
+   "orchestratore": {
+    "cache_read": 5000,
+    "cache_write": 200,
+    "calls": 1,
+    "ctx_first": 6200,
+    "ctx_max": 6200,
+    "ctx_mean": 6200,
+    "instances": 1,
+    "multi_tool_msgs": 0,
+    "redundant_chars": 0,
+    "redundant_reads": 0,
+    "tools": 1
+   }
+  },
+  "turns": 3
+ },
+ {
+  "cost_usd": 0,
+  "duration_min": 0.0,
+  "init_mcp_tools": 0,
+  "init_tools": null,
+  "is_error": false,
+  "log": "02-implement.jsonl",
+  "models": {},
+  "output_tokens": 0,
+  "quota_5h": null,
+  "results": 1,
+  "slow_tools": [],
+  "threads": {},
+  "turns": 0
+ },
+ {
+  "cost_usd": 0.7,
+  "duration_min": 3.0,
+  "init_mcp_tools": 1,
+  "init_tools": 3,
+  "is_error": false,
+  "log": "03-review.jsonl",
+  "models": {
+   "m1": 0.7
+  },
+  "output_tokens": 1200,
+  "quota_5h": [
+   0.3,
+   0.3
+  ],
+  "results": 3,
+  "slow_tools": [],
+  "threads": {
+   "orchestratore": {
+    "cache_read": 10000,
+    "cache_write": 400,
+    "calls": 2,
+    "ctx_first": 6200,
+    "ctx_max": 6200,
+    "ctx_mean": 6200,
+    "instances": 1,
+    "multi_tool_msgs": 0,
+    "redundant_chars": 0,
+    "redundant_reads": 0,
+    "tools": 2
+   }
+  },
+  "turns": 9
+ },
+ {
+  "cost_usd": 0,
+  "duration_min": 0.0,
+  "init_mcp_tools": 0,
+  "init_tools": null,
+  "is_error": false,
+  "log": "04-chiusura.jsonl",
+  "models": {},
+  "output_tokens": 0,
+  "quota_5h": null,
+  "results": 0,
+  "slow_tools": [],
+  "threads": {},
+  "turns": 0
+ }
+]

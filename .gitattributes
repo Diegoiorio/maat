@@ -9,3 +9,5 @@
 LICENSE text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
+plugins/maat/tests/phase-usage/* text eol=lf
+tools/suite.list text eol=lf

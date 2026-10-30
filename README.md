@@ -4,6 +4,10 @@
 
 # Maat — Multi-Agent Assurance Toolkit
 
+[![CI](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml/badge.svg)](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml)
+
+**Verified AI development for Claude Code.**
+
 **Maat is a Claude Code plugin that makes agents work like a good team.** You describe the change you want. Maat
 carries it all the way to written and reviewed code, and stops when it needs a decision from you.
 
@@ -29,7 +33,25 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.2.0**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.2.1**.
+
+## When to use Maat
+
+Maat fits when:
+
+- the change can be described in a spec, with requirements you can verify;
+- the project has tests, or at least checks that can be run;
+- you want a second agent to check the work, and a written record of what was verified and what was not.
+
+Maat is not the right tool for:
+
+- one-line fixes: a single Claude Code session is faster;
+- exploratory prototypes, or requirements you are still discovering: there is no spec to verify against yet;
+- projects without tests: Maat still works, but the best outcome is `NEEDS_VERIFICATION`, because nothing can be
+  run to prove the change.
+
+A cycle starts several Claude Code sessions and takes from minutes to hours. At the end, Maat prints its cost and
+duration, phase by phase.
 
 ## Before you start
 
@@ -50,11 +72,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.1 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.2.0` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.2.1` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -90,7 +112,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.2.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.2.1/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -208,6 +230,31 @@ yourself.
 
 Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
 spaces.
+
+## What is proven and what is not
+
+Proven, and where to check it:
+
+- **The automated suites pass** on Linux at every push ([CI](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml));
+  they also run on Windows before each release (`docs/TESTING-harness.md`).
+- **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
+  remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
+- **The Python driver behaves like the original bash code** on 15 real, closed cycles of a private project
+  (`plugins/maat/scripts/driver.equiv`, line `corpus`; the cycles themselves are not public).
+
+One example, not a measurement: on a second private project, which has no tests, a pilot cycle of an early version
+(0.3.0) went from the spec to `NEEDS_VERIFICATION` with no human step during the cycle: plan and review approved at the
+first round, 22 minutes, $5.23 API-equivalent cost. A first attempt with `--worktree` had stopped on a defect, fixed
+since; the cycle that completed ran without it. It cannot be reproduced from this repo.
+
+Not proven yet:
+
+- that Maat produces better code than Claude Code alone: the benchmark has not been run; its protocol is fixed in
+  advance in [`docs/BENCHMARK-PROTOCOL.md`](docs/BENCHMARK-PROTOCOL.md);
+- that Maat finds, on its own, defects nobody had described: in the pilot above the defect the cycle fixed was
+  already described in the spec;
+- how often a cycle completes without help, across different projects;
+- Mac, and very large projects.
 
 ## Developing Maat
 

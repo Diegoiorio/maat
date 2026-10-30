@@ -59,10 +59,15 @@ Never read a sub-session's `.jsonl` into this chat.
 
 ## Final response (orchestrator)
 
+The cost block comes from a script, never computed by hand (with `--worktree`, run it after step 7):
+`. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/phase-usage.py" --summary .claude/.ai-workflow/spec-<name>.run`;
+copy its output as it is. If `riporta` stopped, give it the worktree's run dir instead (`<wt>/.claude/.ai-workflow/spec-<name>.run`).
+
 ```text
 Full implementation cycle — spec-<name>.md
 Outcome: IMPLEMENTED | NEEDS_VERIFICATION | STOP (<phase>: <reason>)
-Phases:          <label → ESITO FASE line · minutes · cost> one per line (driver.log, phase-usage.py)
+Cost:            <the block printed by phase-usage.py --summary, as it is>
+Phases:          <label → ESITO FASE line> one per line (driver.log)
 Plan:            Plan status <…> · <metric line of the plan changelog>
 Review:          Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3
 Evidence:        <the review's evidence table, as written in the spec>
