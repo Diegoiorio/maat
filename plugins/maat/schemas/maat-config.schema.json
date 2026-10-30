@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maat.local/schemas/maat-config.schema.json",
+  "title": "maat.json — configurazione di Maat per un progetto",
+  "description": "Unica fonte di percorsi, comandi e regole del progetto per il harness Maat (R2). Lo legge solo scripts/maat-config.py, con un validatore interno che copre i costrutti usati qui: type (anche lista), required, enum, properties, items, additionalProperties: false, pattern. I default sono le chiavi `default` di questo file, più radice_pacchetti = radice. Controlli semantici, nella tabella SEMANTICA di maat-config.py: S1 regola_test specchio => specchio presente; S2 comandi.test contiene {test}, comandi.lint e ogni controlli[].comando contengono {file}; S3 versione_schema accettata dal lettore (corrente o precedente, R9; maggiore = versione futura); S4 lint_base true => comandi.lint contiene {base?...}; S5 un comando di comandi che contiene test-fast.sh => copia ha la voce corrispondente (test o lint); S6 nessun comando di copia contiene test-fast.sh; S7 copia.test contiene {test}, ogni copia.lint e copia.lint_messaggi contiene {file}; S8 regola_test nessuna => nessun comandi.test; S9 nessun generati[] è un golden, uno snapshot o la base del lint; S10 moduli[].preparati => preparazione presente. Segnaposto dei comandi: {file} e {test} (liste, ogni voce quotata a parte), {base?prefisso} e {cache?prefisso} (facoltativi: prefisso, valore quotato e uno spazio, oppure niente: `{base?--base }{file}` dà `--base 'b' 'f'` o `'f'`), {maat} (radice del plugin, sempre quotata), {python} (interprete: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python > python3 nel PATH), {report} (file di report nell'evidenza), {nome} (nome del test di una controprova, quotato). Senza comando di test il gate di un modulo è NOT RUN (dichiarato), mai PASS.",
+  "type": "object",
+  "required": ["versione_schema", "moduli"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Facoltativo: riferimento allo schema, per gli editor.",
+      "type": "string"
+    },
+    "versione_schema": {
+      "description": "Versione di questo schema usata dal file. Il lettore accetta la corrente (1) e la precedente con un avviso (R9); una maggiore dà «versione futura: aggiorna il plugin» (S3).",
+      "type": "integer"
+    },
+    "harness": {
+      "description": "Versione minima del plugin richiesta, nella forma \">=MAJOR.MINOR\".",
+      "type": "string",
+      "pattern": "^>=[0-9]+\\.[0-9]+$"
+    },
+    "lingua": {
+      "description": "Lingua dei messaggi della guardia (R11). Default it.",
+      "enum": ["it", "en"],
+      "default": "it"
+    },
+    "cartelle": {
+      "description": "Dove stanno spec e run dir (lavoro) e il corpus di replay (corpus).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lavoro": {
+          "description": "Cartella di lavoro, relativa al repo.",
+          "type": "string",
+          "default": ".claude/.ai-workflow"
+        },
+        "corpus": {
+          "description": "Facoltativo: il corpus.json di replay, relativo al repo.",
+          "type": "string"
+        }
+      }
+    },
+    "moduli": {
+      "description": "I moduli del progetto. Ogni file del repo appartiene al modulo con la radice più lunga che lo contiene (a pari lunghezza il primo dell'elenco); fuori da ogni radice, a quello con la radice_pacchetti più lunga (conta solo per lint e build). La regola dei test di un file (test_di di R2) è regola_test del suo modulo.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["nome", "radice"],
+        "additionalProperties": false,
+        "properties": {
+          "nome": {
+            "description": "Nome del modulo: dà le etichette dei gate (tests-<nome>, controlli-<nome>).",
+            "type": "string"
+          },
+          "radice": {
+            "description": "Cartella del modulo, relativa al repo (\".\" = tutto il repo).",
+            "type": "string"
+          },
+          "radice_pacchetti": {
+            "description": "Cartella dei pacchetti (node_modules, workspace), relativa al repo. Default: radice.",
+            "type": "string"
+          },
+          "regola_test": {
+            "description": "Come si trovano i test di un file toccato: accanto, specchio (vedi specchio) o nessuna.",
+            "enum": ["accanto", "specchio", "nessuna"],
+            "default": "accanto"
+          },
+          "specchio": {
+            "description": "Con regola_test specchio (S1): da un file sorgente (da) ai suoi test (a), {m} = nome del file senza estensione. Relativi alla radice.",
+            "type": "object",
+            "required": ["da", "a"],
+            "additionalProperties": false,
+            "properties": {
+              "da": { "type": "string" },
+              "a": { "type": "string" }
+            }
+          },
+          "ambiente": {
+            "description": "Dove gira il modulo: wsl (copia WSL su Windows) o nativo.",
+            "enum": ["wsl", "nativo"],
+            "default": "nativo"
+          },
+          "python": {
+            "description": "Interprete del modulo, relativo alla radice (un nome senza / si cerca nel PATH). Precedenza: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python. Una lista = alternative in ordine: vince la prima che esiste; nessuna esiste -> l'ultimo percorso della lista. Con ambiente wsl gates.sh le cerca DENTRO WSL (percorsi relativi alla radice in forma /mnt/…) e, se nessuna esiste, il gate che usa {python} e' BLOCKED.",
+            "type": ["string", "array"],
+            "items": { "type": "string" }
+          },
+          "report": {
+            "description": "Formato del report dei test: junit, vitest o nessuno.",
+            "enum": ["junit", "vitest", "nessuno"],
+            "default": "nessuno"
+          },
+          "lint_base": {
+            "description": "true: il comando lint accetta una base ({base?...}, S4) e il nucleo classifica gli errori PREEXISTING/INTRODUCED/UNRESOLVED.",
+            "type": "boolean",
+            "default": false
+          },
+          "comandi": {
+            "description": "Comandi eseguiti dal harness nel repo. Ognuno è una stringa o {comando, cartella, se_presente?}. cartella (radice | radice_pacchetti | repo, default radice) è sia la cartella d'esecuzione sia la base dei percorsi di {file} e {test}. se_presente: eseguibile nel PATH, oppure glob di file sotto la radice; se manca il comando non gira ed è NOT RUN (dichiarato).",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "test": {
+                "description": "Comando di test, con {test} (S2).",
+                "type": ["string", "object"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_presente": { "type": "string" }
+                }
+              },
+              "lint": {
+                "description": "Comando di lint, con {file} (S2); i file sono quelli sotto radice_pacchetti.",
+                "type": ["string", "object"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_presente": { "type": "string" }
+                }
+              },
+              "build": {
+                "description": "Comando di build, solo per il livello full.",
+                "type": ["string", "object"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_presente": { "type": "string" }
+                }
+              }
+            }
+          },
+          "copia": {
+            "description": "Comandi che test-fast.sh esegue DENTRO la copia WSL (mai test-fast.sh stesso, S6). cartella è relativa alla copia. lint può essere una lista di alternative: vale la prima il cui se_esiste (file relativo alla cartella) esiste, o che non ha se_esiste.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "test": {
+                "description": "Con {test} (S7).",
+                "type": ["string", "object"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_esiste": { "type": "string" }
+                }
+              },
+              "lint": {
+                "description": "Con {file} (S7); stringa, oggetto o lista di alternative.",
+                "type": ["string", "object", "array"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_esiste": { "type": "string" }
+                },
+                "items": {
+                  "type": ["string", "object"],
+                  "required": ["comando"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "comando": { "type": "string" },
+                    "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                    "se_esiste": { "type": "string" }
+                  }
+                }
+              },
+              "lint_messaggi": {
+                "description": "Stampa i messaggi in formato compact di eslint, per il lint con base; con {file} (S7).",
+                "type": ["string", "object"],
+                "required": ["comando"],
+                "additionalProperties": false,
+                "properties": {
+                  "comando": { "type": "string" },
+                  "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] },
+                  "se_esiste": { "type": "string" }
+                }
+              }
+            }
+          },
+          "chiave": {
+            "description": "Voci in più della chiave dell'evidenza: {etichetta, file} (impronta del file, «assente» se manca) oppure {etichetta, comando} (uscita del comando); cartella come nei comandi, default radice.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["etichetta"],
+              "additionalProperties": false,
+              "properties": {
+                "etichetta": { "type": "string" },
+                "file": { "type": "string" },
+                "comando": { "type": "string" },
+                "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] }
+              }
+            }
+          },
+          "controlli": {
+            "description": "Controlli alternativi ai test (R2): glob relativo alla radice, comando con {file} (S2), se_presente = eseguibile senza il quale la voce si salta ed è dichiarata.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["glob", "comando"],
+              "additionalProperties": false,
+              "properties": {
+                "glob": { "type": "string" },
+                "comando": { "type": "string" },
+                "se_presente": { "type": "string" }
+              }
+            }
+          },
+          "controprova": {
+            "description": "Runner delle controprove del modulo (counterproof.sh), eseguito nella radice del modulo dentro la copia. runner vitest o pytest: adattatori del nucleo, che classificano dal report ({report}: JSON di vitest, JUnit di pytest); comando: rosso = uscita diversa da 0 (rosso_generico, prova debole). comando con {test} (file relativo alla radice; pytest: <file>::<nome>), {nome}, {report}, {python}. Senza (o senza comando): ogni mutazione è NOT RUN (dichiarato).",
+            "type": "object",
+            "required": ["runner"],
+            "additionalProperties": false,
+            "properties": {
+              "runner": { "enum": ["vitest", "pytest", "comando"] },
+              "comando": { "type": "string" }
+            }
+          },
+          "preparazione": {
+            "description": "Comando che rigenera i file generati se mancano (es. npx nuxi prepare).",
+            "type": "string"
+          },
+          "preparati": {
+            "description": "File preparati dal framework (ignorati da git, scritti dalla preparazione, S10): glob relativi alla radice, es. il tsconfig e le dichiarazioni generati dal framework. Il primo glob senza caratteri jolly e' il «file guida». Le cartelle che li contengono si ripuliscono dalla copia (fic_mirror_pulisci): a ogni sync delle controprove, e in test-fast.sh quando cambiano dipendenze o tsconfig generato. ciclo-worktree.sh li copia dal tree principale nel worktree se il file guida c'e' li' e manca nel worktree (altrimenti avvisa di lanciare la preparazione), e verifica il file guida nella copia WSL del modulo con copia.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "copia_anche": {
+            "description": "Cartelle di sola lettura, relative al repo, che le controprove copiano insieme al modulo (rsync -a --delete --checksum --exclude=node_modules), fuori dal controllo del manifest: per esempio uno schema letto dai test. Le mutazioni restano sotto il modulo.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "collega_nel_worktree": {
+            "description": "Cartelle di dipendenze installate da collegare in un worktree (worktree-lib.sh: junction su Windows, symlink altrove; mai copiate ne' installate): stringa (relativa alla radice) o {percorso, cartella}; percorso può contenere *. Si collegano solo quelle presenti nel tree principale. Senza voci: nessun collegamento.",
+            "type": "array",
+            "items": {
+              "type": ["string", "object"],
+              "required": ["percorso"],
+              "additionalProperties": false,
+              "properties": {
+                "percorso": { "type": "string" },
+                "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] }
+              }
+            }
+          },
+          "file_dipendenze": {
+            "description": "Glob dei file che decidono le dipendenze (pathspec :(glob) di git): stringa (relativa alla radice) o {glob, cartella}. Se differiscono fra la base di un worktree e il tree principale, le dipendenze collegate non valgono: ciclo-worktree.sh e replay.sh si fermano.",
+            "type": "array",
+            "items": {
+              "type": ["string", "object"],
+              "required": ["glob"],
+              "additionalProperties": false,
+              "properties": {
+                "glob": { "type": "string" },
+                "cartella": { "enum": ["radice", "radice_pacchetti", "repo"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gate": {
+      "description": "Comandi eseguiti a ogni livello. Un comando non dichiarato dal modulo si salta.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "array",
+          "items": { "enum": ["test", "controlli", "lint", "build"] },
+          "default": ["test", "controlli"]
+        },
+        "std": {
+          "type": "array",
+          "items": { "enum": ["test", "controlli", "lint", "build"] },
+          "default": ["test", "controlli"]
+        },
+        "full": {
+          "type": "array",
+          "items": { "enum": ["test", "controlli", "lint", "build"] },
+          "default": ["test", "controlli", "lint", "build"]
+        }
+      }
+    },
+    "piattaforma": {
+      "description": "Piattaforma: copia WSL (auto | sì | no), interprete Python di ripiego, Node in WSL.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "copia_wsl": {
+          "enum": ["auto", "sì", "no"],
+          "default": "auto"
+        },
+        "python": {
+          "description": "Ultimo della precedenza di {python}; relativo al repo, o nome nel PATH.",
+          "type": "string"
+        },
+        "node_wsl": {
+          "type": "string"
+        }
+      }
+    },
+    "framework": {
+      "description": "Adattatori facoltativi del nucleo, attivi solo se dichiarati. nuxt-autoimport (blocks-independent.py): componenti e composable auto-importati, letti da .nuxt/components.d.ts e .nuxt/imports.d.ts, e gli alias ~/ @/ ~~/ @@/, per i moduli con preparati sotto .nuxt/. Senza adattatori valgono solo gli import espliciti.",
+      "type": "array",
+      "items": { "enum": ["nuxt-autoimport"] }
+    },
+    "guardia": {
+      "description": "Regole di guardia del progetto, in aggiunta al nucleo (R3.6).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "produzione": {
+          "description": "Regex (senza distinzione di maiuscole) di host, domini e percorsi di produzione: sempre gravi.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rilascio": {
+          "description": "Script di rilascio, relativi al repo: sempre negati e gravi, confrontati come sottostringa del comando (pk05); nel contenuto di uno script contano come comando.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "involucri": {
+          "description": "Script che incapsulano l'accesso remoto o la copia locale: ammessi e non letti dalla guardia, salvo le opzioni negate (sempre gravi, eseguiti direttamente o con bash). Stringa o {script, opzioni_negate}: la forma di pk03, usata cosi' da pk05.",
+          "type": "array",
+          "items": {
+            "type": ["string", "object"],
+            "required": ["script"],
+            "additionalProperties": false,
+            "properties": {
+              "script": { "type": "string" },
+              "opzioni_negate": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "vietati_extra": {
+          "description": "Prefissi di comandi vietati in più nelle sotto-sessioni: entrano in --disallowedTools (guard.py --deny-list) e la guardia di fase li nega.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "suite": {
+          "description": "Script di suite del progetto, con le regole di selezione di pytest o vitest: nelle fasi plan, test-red e test-stage la guardia li nega senza file o selettori, come i runner del nucleo.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["script", "selettori"],
+            "additionalProperties": false,
+            "properties": {
+              "script": { "type": "string", "pattern": ".*\\S.*" },
+              "selettori": { "enum": ["pytest", "vitest"] }
+            }
+          }
+        },
+        "sonde": {
+          "description": "Host letterali che corrispondono alle regex di produzione: sonde di prova della guardia (maat-config.py sonda-produzione).",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "verifica_remota": {
+      "description": "Facoltativa: verifica su un ambiente di prova. Se assente, il ciclo usa --no-dev.",
+      "type": "object",
+      "required": ["comando"],
+      "additionalProperties": false,
+      "properties": {
+        "comando": { "type": "string" },
+        "descrizione": { "type": "string" }
+      }
+    },
+    "contesto": {
+      "description": "Per context-pack.sh: file e comando dello schema del DB, riconoscimento delle tabelle.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_db_file": { "type": "string" },
+        "schema_db_comando": { "type": "string" },
+        "tabelle": {
+          "description": "blocco: regex con il nome nel gruppo 1 e il corpo nel gruppo 2; nome_mappato: regex del nome reale dentro il blocco.",
+          "type": "object",
+          "required": ["blocco"],
+          "additionalProperties": false,
+          "properties": {
+            "blocco": { "type": "string" },
+            "nome_mappato": { "type": "string" }
+          }
+        }
+      }
+    },
+    "piano": {
+      "description": "Regole del piano: superfici critiche e file di migrazione, come regex sul percorso relativo al repo.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "superfici_critiche": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["superficie", "regex"],
+            "additionalProperties": false,
+            "properties": {
+              "superficie": { "type": "string" },
+              "regex": { "type": "string" }
+            }
+          }
+        },
+        "migrazioni": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "generati": {
+      "description": "File GENERATI dal codice che un test confronta col codice: le fasi implement e fix li rigenerano col comando della voce, senza che conti come deviazione dal piano, e li dichiarano (`<percorso> (M) — rigenerato: <comando>`). percorso, cartella e test relativi al repo; il comando si lancia dalla cartella, nell'ambiente del modulo che la contiene (wsl: `wsl -- bash -lc 'cd <cartella> && <comando>'`), e nomina lo script che rigenera (.py .mjs .js .sh, relativo alla cartella). Nessun campo contiene `|`. NON sono generati da rigenerare (S9): golden, __snapshots__ e la base del lint, perché rigenerarli assorbirebbe la regressione che devono vedere. Lettura e verifica: maat-config.py generati [--verifica].",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["percorso", "cartella", "comando", "test"],
+        "additionalProperties": false,
+        "properties": {
+          "percorso": { "description": "Il file generato.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "cartella": { "description": "Cartella da cui lanciare il comando.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "comando": { "description": "Comando che rigenera il file, lanciato dalla cartella.", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" },
+          "test": { "description": "Il test che confronta il file col codice (nomina il file).", "type": "string", "pattern": "[^|]*[^|\\s][^|]*" }
+        }
+      }
+    },
+    "da_non_toccare": {
+      "description": "Glob di percorsi che il ciclo non modifica mai.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

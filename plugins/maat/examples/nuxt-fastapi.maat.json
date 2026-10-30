@@ -1,0 +1,136 @@
+{
+  "versione_schema": 1,
+  "lingua": "it",
+  "framework": ["nuxt-autoimport"],
+  "moduli": [
+    {
+      "nome": "fe",
+      "radice": "modules/app/apps/admin",
+      "radice_pacchetti": "modules/app",
+      "regola_test": "accanto",
+      "ambiente": "wsl",
+      "report": "vitest",
+      "lint_base": true,
+      "comandi": {
+        "test": { "comando": "bash {maat}/scripts/test-fast.sh {test}", "cartella": "radice" },
+        "lint": { "comando": "bash {maat}/scripts/test-fast.sh --lint {base?--base }{file}", "cartella": "repo" },
+        "build": { "comando": "npm run build:admin", "cartella": "radice_pacchetti" }
+      },
+      "copia": {
+        "test": { "comando": "CI=true npx vitest run {test}", "cartella": "radice" },
+        "lint": [
+          { "comando": "CI=true npm run -s lint -- {cache?--cache --cache-location }{file}", "cartella": "radice", "se_esiste": "lint-baseline.mjs" },
+          { "comando": "CI=true npx eslint {cache?--cache --cache-location }--quiet {file}", "cartella": "radice" }
+        ],
+        "lint_messaggi": "CI=true npx eslint --format compact --quiet {file}"
+      },
+      "chiave": [
+        { "etichetta": "vitest", "comando": "f=node_modules/vitest/package.json; [ -f \"$f\" ] && sed -n 's/^ *\"version\": *\"\\([^\"]*\\)\".*/\\1/p' \"$f\" | head -1 || echo assente", "cartella": "radice_pacchetti" },
+        { "etichetta": "eslint", "comando": "f=node_modules/eslint/package.json; [ -f \"$f\" ] && sed -n 's/^ *\"version\": *\"\\([^\"]*\\)\".*/\\1/p' \"$f\" | head -1 || echo assente", "cartella": "radice_pacchetti" },
+        { "etichetta": "deps", "comando": "find . \\( -name node_modules -o -name .nuxt -o -name .output \\) -prune -o \\( -name package.json -o -name package-lock.json \\) -type f -print | LC_ALL=C sort | while IFS= read -r f; do printf '%s  %s\\n' \"$(sha256sum < \"$f\" | cut -c1-64)\" \"$f\"; done | sha256sum | cut -c1-64", "cartella": "radice_pacchetti" },
+        { "etichetta": "node_modules", "file": "node_modules/.package-lock.json", "cartella": "radice_pacchetti" },
+        { "etichetta": "tsconfig", "file": ".nuxt/tsconfig.json" }
+      ],
+      "controprova": {
+        "runner": "vitest",
+        "comando": "CI=true npx vitest run {test} -t {nome} --reporter=default --reporter=json --outputFile.json={report}"
+      },
+      "preparazione": "npx nuxi prepare",
+      "preparati": [".nuxt/tsconfig.json", ".nuxt/*.d.ts"],
+      "collega_nel_worktree": [
+        { "percorso": "node_modules", "cartella": "repo" },
+        { "percorso": "node_modules", "cartella": "radice_pacchetti" },
+        { "percorso": "apps/*/node_modules", "cartella": "radice_pacchetti" },
+        { "percorso": "packages/*/node_modules", "cartella": "radice_pacchetti" }
+      ],
+      "file_dipendenze": [
+        { "glob": "package.json", "cartella": "repo" },
+        { "glob": "package-lock.json", "cartella": "repo" },
+        { "glob": "**/package.json", "cartella": "radice_pacchetti" },
+        { "glob": "**/package-lock.json", "cartella": "radice_pacchetti" }
+      ]
+    },
+    {
+      "nome": "be",
+      "radice": "modules/api",
+      "radice_pacchetti": "modules/api",
+      "regola_test": "specchio",
+      "specchio": { "da": "app/**/{m}.py", "a": "tests/**/test_{m}*.py" },
+      "ambiente": "wsl",
+      "python": [".venv312/bin/python", ".venv/bin/python"],
+      "report": "junit",
+      "comandi": {
+        "test": "{python} -m pytest -q --junitxml={report} {test}"
+      },
+      "chiave": [
+        { "etichetta": "pip", "comando": "if {python} --version >/dev/null 2>&1; then {python} -m pip freeze 2>&1 | tr -d '\\r' | sha256sum | cut -c1-64; else echo assente; fi" }
+      ],
+      "controprova": {
+        "runner": "pytest",
+        "comando": "{python} -B -m pytest {test} -p no:cacheprovider --junitxml={report}"
+      },
+      "copia_anche": ["modules/db/prisma"],
+      "collega_nel_worktree": [".venv", ".venv312"],
+      "file_dipendenze": ["requirements*.txt"]
+    }
+  ],
+  "guardia": {
+    "produzione": [
+      "prod\\.example\\.internal",
+      "(?<![0-9.])10\\.20\\.30\\.40(?![0-9])",
+      "(?<![-a-z0-9])(app|api|auth)\\.example\\.com",
+      "(?<![-a-z0-9.@])((www|api|app|auth)\\.)?example\\.org(?![-a-z0-9])",
+      "script/prod/",
+      "deploy-production",
+      "docker-compose\\.prod",
+      "run-and-clean-prod"
+    ],
+    "rilascio": ["script/deploy-production.sh"],
+    "involucri": [
+      "script/dev/dev-exec.sh",
+      { "script": "script/dev/dev-sql.sh", "opzioni_negate": ["--apply"] },
+      "script/rsync-once.sh",
+      "script/test/vitest-fast.sh",
+      "script/test/counterproof.sh"
+    ],
+    "vietati_extra": ["bash script/rsync-once.sh", "bash script/rsync.sh", "script/rsync-once.sh", "bash script/prod"],
+    "suite": [{ "script": "run_tests.sh", "selettori": "pytest" }],
+    "sonde": ["prod.example.internal", "www.example.org"]
+  },
+  "verifica_remota": {
+    "comando": "/dev-verify",
+    "descrizione": "verifica sul DEV host (estensione locale del progetto)"
+  },
+  "contesto": {
+    "schema_db_file": "modules/db/prisma/schema.prisma",
+    "schema_db_comando": "bash script/dev/dev-sql.sh --read",
+    "tabelle": {
+      "blocco": "^model\\s+(\\w+)\\s*\\{(.*?)^\\}",
+      "nome_mappato": "@@map\\(\"([^\"]+)\"\\)"
+    }
+  },
+  "piano": {
+    "superfici_critiche": [
+      { "superficie": "permessi", "regex": "(^|/)routers/" },
+      { "superficie": "contratto-api", "regex": "(^|/)routers/" },
+      { "superficie": "permessi", "regex": "(^|/)core/(security|context_guard)\\.py$" },
+      { "superficie": "permessi", "regex": "^(?!modules/api/)(.*/)?(middleware/|composables/useRole/|utils/(adminRouteRoles|contextlessAdmin|rankingRowAccess)\\.ts$)" },
+      { "superficie": "dati", "regex": "(^|/)schema\\.prisma$" },
+      { "superficie": "dati", "regex": "(^|/)prisma/migrations/" },
+      { "superficie": "dati", "regex": "(^|/)script/migrations/" },
+      { "superficie": "dati", "regex": "(^|/)services/database\\.py$" },
+      { "superficie": "contratto-api", "regex": "^(?!modules/app/)(.*/)?models/" },
+      { "superficie": "logica-condivisa", "regex": "^(modules/app/)?packages/" }
+    ],
+    "migrazioni": ["(^|/)schema\\.prisma$", "(^|/)prisma/migrations/", "(^|/)script/migrations/"]
+  },
+  "generati": [
+    {
+      "percorso": "modules/api/docs/operation-log.md",
+      "cartella": "modules/api",
+      "comando": "PYTHONPATH=. .venv/bin/python tests/test_operation_log_docs.py",
+      "test": "modules/api/tests/test_operation_log_docs.py"
+    }
+  ],
+  "da_non_toccare": ["envs/*.local", "release/**"]
+}

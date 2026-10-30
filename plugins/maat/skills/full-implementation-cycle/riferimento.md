@@ -1,0 +1,330 @@
+# /full-implementation-cycle — riferimento
+
+Documentazione del ciclo che nessuna fase carica: la run directory, la modalita' inline, le catene, i permessi
+delle sotto-sessioni, e in fondo le regole che sono diventate codice. Le fasi leggono solo `SKILL.md` e il loro
+`workers/<fase>.md`; l'orchestratore `orchestratore.md`. La tabella di ripresa e' l'intestazione di
+`cycle-state.sh` (la stessa, in Python, in `${CLAUDE_PLUGIN_ROOT}/scripts/driver.py next`).
+
+## Inline mode
+
+- **Inline mode** — **only** when the user passes `--inline` explicitly. The orchestrator runs the
+  worker phases itself, one after another, in this session. It works, but the context accumulates — say
+  so when it happens. There is no guard and no lock in this mode (they live in `run-phase.sh`), so you
+  do its bookkeeping yourself, exactly as it does:
+  - before every code phase (review included), close each `log/*.pre-tree` without its
+    `.post-tree`: `git -c core.quotePath=false diff --name-only --no-renames <pre> <tree now>` appended
+    to `<run-dir>/touched.txt` (sort -u), then `<tree now>` into `.post-tree` — `<tree now>` is
+    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-surface.sh" tree`;
+  - around an implement/fix: `tree` into `log/<label>.pre-tree` before, and the same closing after;
+  - after each phase: its `ESITO FASE` line and `state=<State of cycle-state.sh>` into
+    `log/<label>.esito`. `cycle-state.sh` reads `.esito` as the phase's record; an implement/fix with no
+    `.post-tree` is a STOP, never a review;
+  - after each review: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize.sh" --level <level in force> <run-dir>`, its output into
+    `log/<label>.finalize`, and if it is missing or exits with anything but 0/1/4, the review's `.esito` is
+    `ESITO FASE review: STOP — finalize non eseguito|fallito` (harness-pt08). Without it, in a run directory
+    of the new regime `cycle-state.sh` never gives `DONE`: the `Finalize:` line must carry the fingerprint of
+    the current `Reviewed snapshot:`, and only finalize writes it.
+  ⚠️ **An environment failure never selects this mode by itself.** `run-phase.sh` exit `3` (no `claude`
+  binary found) is a **STOP**: say that the binary was not found and that `CLAUDE_BIN=<path>` or
+  `--inline` — a deliberate choice, with the guard and the lock gone — are the two ways out. Falling back
+  on its own would silently trade away the two protections that make unattended phases acceptable, at the
+  exact moment nobody is looking.
+
+## What this skill adds, and what it does not
+
+It **composes** the two existing skills; it does not restate their rules. Planning rules (lenses,
+delta, fresh-eyes gate, `plan-check.sh`) live in `plan-review-cycle`; review rules (snapshot,
+required gates, `Feature status`, counters) live in `implementation-review-cycle`. Copying them here
+would make them diverge. This skill adds only: the implementation phase, the fix loop, the
+orchestration across sub-sessions, resumption, and one final report.
+
+`/plan-review-cycle` and `/implementation-review-cycle` keep working alone, unchanged.
+`implementation-review-cycle` says "do NOT fix automatically; recommend a separate fix step": this
+skill **is** that separate fix step.
+
+It reads what those skills **write** — `Plan status:`, `Approved basis:`, `Test level:`,
+`### Piano di test`, `Review status:`, `Feature status:`, `Verification:`, `Reviewed snapshot:`,
+`Reviewed contract:`, `Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1`, the manifest
+`Scope:`/`Excluded:` — mostly through `cycle-state.sh`. If one of those formats changes, that script
+and this skill must be updated with it. A plan in **format 2** (`Plan format: 2`, defined in
+`plan-review-cycle`) is read the same way, plus its blocks and its generated procedure:
+`cycle-state.sh` then prints `Plan format: 2` and `Generated: FRESH | STALE | assente` — the state of
+`<run-dir>/gen/procedura.txt` against the plan's fingerprint (it never changes `Next:`).
+
+## The run directory
+
+`.claude/.ai-workflow/spec-<name>.run/` — ignored by git through the existing `spec-*` rule, so it is
+never review surface, and inside the project, so sub-sessions can write it (they cannot write
+outside the project). It holds:
+
+- `input.md` — pasted specification text, when there was no spec file;
+- `prompts/<label>.md`, `log/<label>.{jsonl,stderr,exit,running}` — one per phase run;
+- `base.txt`, `do-not-touch.txt`, `mixed.txt` — written by the implement worker, read by later ones;
+- `touched.txt` — the paths the implement/fix phases changed, **measured** by `run-phase.sh` (tree
+  before and after each of those phases, under the lock); `log/<label>.{pre,post}-tree` behind it. A
+  phase killed together with its sub-session leaves no lock to reclaim: its `.pre-tree` is closed at
+  the feature's next code phase, so other work done in between is over-included (the safe direction);
+  a review launched by hand on the spec reads this file too;
+- `log/<label>.altri-flussi` — paths changed during the phase that the sub-session **never named** in any
+  `tool_use` (`run-phase.sh`, ALTRI FLUSSI): in test-red an out-of-scope one is another flow's work → into
+  `do-not-touch.txt`, out of `touched.txt`, an `AVVISO` and no STOP (named, or a log without `result` → STOP); in
+  implement/fix it stays in `touched.txt`, only annotated. Prevention, said at S0: «durante il ciclo non modificare
+  file in questo working tree: per lavorare in parallelo usa un altro worktree
+  (`git worktree add ../<repo>-lavoro -b <branch> develop`)», or the cycle itself in its own worktree (`--worktree`,
+  «Worktree mode» below);
+- `log/<label>.esito` — the phase's `ESITO FASE` line (from the final `result` event only) and the
+  `State` at its end, written by `run-phase.sh`: how `cycle-state.sh` knows an implement or a fix
+  finished;
+- `log/<label>.result.json` — the phase's **structured outcome** (harness-pt08), written by `run-phase.sh`
+  only when the JSON block of the final `result` event is valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`
+  (see "Worker mode"). Missing or invalid output → no file, and `.esito` says `STOP — uscita non valida:
+  <errors>` with the worker's own `ESITO` line kept under `originale=`. **`.esito` is the authority**: when
+  the prose and the JSON disagree the more conservative wins — prose `OK` with a JSON that is `STOP`, has
+  `deviazioni` (unless all start with `difensiva: `) or a `bloccato_su` → `.esito` is `STOP — JSON: …` (prose under `originale=`); prose `STOP`
+  stays `STOP`. `cycle-state.sh` counts a phase as `OK` only if both `.esito` and `result.json` say so;
+- `log/<label>.finalize` — after every review that exited 0, `${CLAUDE_PLUGIN_ROOT}/scripts/finalize.sh` **signs the final
+  state**: it confirms `Feature status: IMPLEMENTED` only if every gate the level requires has
+  `evidence/<current key>/<gate>.json` `PASS` (or `SKIPPED`) and every counterproof is red on its assertion
+  (`counterproof/<id>.json`, or the review's evidence table when there is no `mutations.json`); otherwise it
+  writes `NEEDS_VERIFICATION` with the missing gate. **Verdict = AND** (harness-pt09): a required gate `FAIL` or a
+  counterproof that is not red (`rosso_import`, `rosso_raccolta`, `rosso_diverso`, `verde`) is `FAIL` even with the
+  review `APPROVED` — finalize writes `Review status: NEEDS_CHANGES`, `Feature status: PLANNED`, `Verification:
+  PARTIAL (finalize.sh: …)` and `Finalize: FAIL` (exit 3), and `cycle-state.sh` sends it to `FIX` within the
+  budget; a `BLOCKED` gate or a missing result stays `NEEDS_VERIFICATION`. With `--copertura
+  log/<label>.result.json` it also joins the review's requirement → test-ID map to the results of VERIFY and
+  writes the `Requirement evidence (finalize.sh: …)` table under the `Finalize:` line: an ID with no result leaves
+  the requirement «non coperto» (data, not a verdict). The review writes the verdict; the script signs the state.
+  **Fail-closed**: finalize missing, or exiting with anything but 0/1/4 → `.esito` is `STOP — finalize non
+  eseguito|fallito`; and in a run directory of the new regime (with `evidence/` or any `*.result.json`, also
+  renamed `.result.json.visto`) `cycle-state.sh` gives `DONE` only with a `Finalize: IMPLEMENTED — snapshot
+  <x12> — …` line whose fingerprint is that of the **current** `Reviewed snapshot:` and which is not older
+  than the last review launched — otherwise `REVIEW`. A review by hand or `--inline` must run finalize itself
+  (see "Inline mode"). Old run directories give `DONE` as before;
+- `log/<label>.gates` and `evidence/<key>/` — the **gates run by the driver** (harness-pt04):
+  `run-phase.sh` runs `${CLAUDE_PLUGIN_ROOT}/scripts/gates.sh` **outside** the sub-session after every implement/fix that
+  ended `OK` and before every review, with the level in force and the files of `touched.txt`. Each gate
+  (`tests-<module>` with the module's test command, `controlli-<module>`, and at `full` `lint` and `build` of the
+  modules that declare them) leaves
+  `evidence/<key>/<gate>.json` (esito, comando, exit, durata_s, report, riepilogo, motivo, file) next to
+  its runner report; `<key>` is a sha256 of the whole working tree (untracked files included), the
+  commands, the interpreter and tool versions, the modules' `chiave` entries (dependencies, generated files),
+  `TZ` and `CI`. Same key → reuse, no rerun: the review right after an implement does not run its suites again.
+  The gates of `nativo` modules run in parallel with the `wsl` lane. `log/<label>.prompt` is the review's actual prompt: the original plus the
+  evidence line;
+- `log/<label>.parallelo` — how the review phase ran (harness-pt09): `modo=parallelo controprove=driver|worker
+  chiave=<x12>`, or `modo=sequenza — <why>`, plus a `scartato: …` line when the key changed. **Review ∥ VERIFY**:
+  `run-phase.sh` computes the tree key (`review-surface.sh tree`, plus the sha256 of `counterproof/mutations.json`
+  when the driver runs the counterproofs) and starts, **together**, VERIFY — `gates.sh`, then `counterproof.sh`
+  through WSL **only if** `mutations.json` is the list `plan-check.sh gen` generates now from the approved plan
+  (`gen/procedura.txt` with the current `Impronta piano:` and the list byte-identical to one regenerated by the
+  driver; any other list — format 1, written by the worker in an earlier round, plan changed — keeps the
+  counterproofs with the worker, which rewrites it every round as before; output in `log/<label>.counterproof`;
+  the background VERIFY writes `vpid=` in the lock's owner, so the lock is not freed while it runs) — and the review
+  sub-session, whose prompt ends with `VERIFY IN PARALLELO (driver, run-phase.sh): …`. When both have finished it
+  recomputes the key: changed → **both results are discarded** (the spec is put back from
+  `log/<label>.spec-pre`, the round's `<id>.json` are deleted — the worker's too —, `.gates`/`.counterproof` become
+  `*.scartato`, the `evidence/<key>/` named in `.gates` becomes `<key>.scartato` so `gates.sh` cannot reuse it nor
+  `finalize.sh` read it as FRESH, an
+  event `fic_scartato` in the log marks where the valid output starts) and they are rerun **in sequence**. The
+  sequence is the old one (gates, then the review with `EVIDENZE DEI GATE`) and is also used with
+  `FIC_REVIEW_PARALLEL=0`, with a recorded `Review status: APPROVED` (promotion and gate-only paths do not launch
+  the reviewer and do not change), and when the key cannot be computed;
+- `chiusura.txt` — on a chain's **mother** only: the outcome of the closure phase, written by `run-phase.sh`
+  (`Chiusura: IMPLEMENTED — base <b> · tree <t> · gates PASS · e2e <…> · <UTC>` or `NEEDS_VERIFICATION —
+  <reason>`); to relaunch a failed closure, rename it `chiusura.txt.visto` (see "Chains");
+- `counterproof/` — `mutations.json` and one `<id>.json` result per counterproof, written by
+  `${CLAUDE_PLUGIN_ROOT}/scripts/counterproof.sh` (see "Counterproofs"). The `cp-run.sh` files and sidecars left in older
+  run directories are history: no new cycle uses them;
+- `test-red/` (format 2, harness-pt11) — `rossi.json` (each acceptance test's red on the base with stubs:
+  esito, message, position), `stubs.json` (the exported symbols of each new file at the close of `test-red`),
+  `tests.txt` (the acceptance test files' hashes, the `tests <fp>` of the `Approved basis`); `log/<label>.scope`
+  (the guard's write scope), `log/<label>.gates` and `log/<label>.rossi` (the driver's verification);
+- `staging/`, `staging.fp` (S3) — acceptance tests written by a `test-stage` phase while the plan was under its
+  final gate, bound to the plan's fingerprint at launch; consumed (`staging.copiato`) or discarded by `test-red`;
+- `context-pack.md` — the **context pack**, written only by `${CLAUDE_PLUGIN_ROOT}/scripts/context-pack.sh`: files and symbols
+  the spec names (verified: they exist or not), per-file signatures (exports, `.vue` props/emits, FastAPI
+  routes, Pydantic models) and the tests that cite them, tests citing the spec's strings and `data-test`,
+  DB columns of the named tables (`contesto` of `.claude/maat.json`: «schema DB non dichiarato» without it; when
+  the schema command fails, its exit code and the first line of its output), a header with date, commit
+  and the spec's fingerprint; ≤ ~5k tokens. **Orientation, not authority: the code wins over the pack.**
+
+## Worktree mode (`--worktree`)
+
+For when other sessions work in the main tree during the cycle: their `git add -A` cannot commit the cycle's files
+halfway, and the cycle's review does not see their files in its diff. Opt-in; without the flag nothing changes.
+`${CLAUDE_PLUGIN_ROOT}/scripts/ciclo-worktree.sh` (test: `ciclo-worktree.test.sh`, fake repo and fake HOME, with a mutation counterproof):
+
+- `crea <spec> [--base <ref>]` — worktree `../<repo>-fic-<name>` on branch `fic/<name>` from `--base` (default the main
+  tree's `HEAD`); an existing one is resumed only if it is its own (marker `.claude/.ai-workflow/spec-<name>.worktree`
+  inside the worktree, gitignored by the `spec-*` rule), otherwise STOP; a `fic/<name>` branch without its worktree is a
+  STOP too. **Before creating anything**, the dependency files (the `file_dipendenze` of the modules in
+  `.claude/maat.json`) must be equal between the base and the main working tree, else STOP. It **links**,
+  never copies nor installs, the folders of the modules' `collega_nel_worktree` (installed dependencies) of the
+  main tree — junctions on Windows, symlinks elsewhere, the same code as
+  `corpus/replay.sh` (`${CLAUDE_PLUGIN_ROOT}/scripts/worktree-lib.sh`) —; copies the spec and its run directory (gitignored: the checkout
+  does not bring them; on resume the worktree's win); copies the modules' `preparati` (files written by their
+  `preparazione`) from the main tree when their guide file is there (the lint and `vitest-classify` need them:
+  without them the lint is `BLOCKED`); checks the worktree's WSL
+  copy `~/fic-mirror-<hash>` (node_modules seeded in hardlinks from `~/fic-mirror`); prints the path (last line);
+- `stato <name>` — where, branch, the cycle's `State`/`Next` (`cycle-state.sh` on the worktree's spec), lock, changed files;
+- `riporta <name> [--forza]` — spec and run directory back to the main tree's `.claude/.ai-workflow/`, for
+  `cycle-report.py` and the user; never the code. The run directory is **aligned**, not merged (full copy next to it,
+  then it replaces the old one). STOP if the main tree's spec or run directory changed after the copy (fingerprints in
+  the marker; `--forza` overwrites);
+- `rimuovi <name> [--branch] [--forza]` — STOP while a phase of the worktree is alive: code-phase lock held, or
+  `<run-dir>/plan.lock` with a live pid (never forced); a `log/<label>.running` without `.exit` (alive, or dead without
+  closing) is a STOP unless `--forza`. STOP with uncommitted changes, or with the worktree's spec or run directory not
+  brought back to the main tree (`cmp`, `diff -rq`: run `riporta` first) — `--forza` loses them. Then it deletes the
+  worktree's WSL copies (lanes included); **unlinks first**, then checks that no link at all is left, registered or not
+  (`find -type l`, Windows reparse points with `dir /AL /S`, `find -type l` from WSL; a failing check is a STOP) — one
+  left → STOP; then `git worktree remove`; the branch only with `--branch` (`git branch -d`). ⚠️ Measured:
+  `git worktree remove`, even without `--force`, **follows a junction** and empties its target: removing without
+  unlinking would empty the main tree's real `node_modules`. A symlink tracked by the repository (none today) would
+  count as a link left: false positive, STOP.
+
+The cycle runs the worktree's `driver.py` and `run-phase.sh` with cwd in the worktree: the code-phase lock is in the
+worktree's git dir (`.git/worktrees/<id>/`) and the WSL copy is the worktree's (`~/fic-mirror-<hash>`), so only the
+**local** work of two cycles in two worktrees runs side by side. **The DEV stays shared** (code sync, e2e context): a
+second cycle, or an e2e of the declared remote verification (`verifica_remota` in `.claude/maat.json`) from the main tree, could sync different code onto it and give a false PASS.
+So `--worktree` forces `--no-dev` (the cycle ends at best `NEEDS_VERIFICATION`) and refuses `--with-e2e`; the DEV
+verification is done afterwards, from the main tree, on the integrated code. `driver.py` and `run-phase.sh` do not
+change. Integration is the user's: commit in the worktree and merge `fic/<name>`, or `git -C <wt> diff | git apply` in
+the main tree.
+
+## S3 · tests on hold
+
+**S3 · tests on hold:** with a format-2 plan, when the plan phase's `▶` line announces its final gate
+(fresh eyes / S2), you may launch `<NN>-test-stage` in the background next to it (same steps 1–3, its own
+Monitor): it writes the acceptance tests under `<run-dir>/staging/`, takes no lock and never writes the spec.
+The `test-red` that follows copies them if the approved plan has the same fingerprint, discards them otherwise.
+
+## Feature paths
+
+Needed by preflight and counterproofs:
+- if a `## Review implementazione` section exists: its manifest (`Scope:` / `Excluded:`);
+- before that: `<run-dir>/touched.txt` (measured), plus dirty paths (`git status --porcelain`) that
+  match a file or a directory prefix named by the plan, plus every path the implementer reported
+  under `File toccati:`.
+
+A path in `touched.txt` or reported by the implementer is never excluded by you: exclusions are the
+review's decision, with its rules, and the review never excludes a `touched.txt` path. Every other
+dirty path is **another flow's work**.
+
+## Chains (harness-pt12)
+
+A spec too large for one plan becomes a **chain**: the plan phase measures the skeleton, `spec-author`
+(mode `split`) proposes the rings, `plan-check.sh split` checks that every `RF`/`CA` of the mother lands in
+one and only one child, and the user approves the cut once. The **mother** then carries `Figlie:
+spec-<nome>-1-…, spec-<nome>-2-…`; each **ring** (child) is a spec with its own run directory, plan, gates,
+review and `finalize.sh` — no ring closes without its `Finalize: IMPLEMENTED`. The rules are code in
+`cycle-state.sh` (rows C1–C4) and `plan-check.sh basis`; here is what they mean for you.
+
+- **On the mother** `cycle-state.sh` says `WAIT — catena: anello k/n (…) non chiuso` while a ring is open: run
+  the cycle on that ring's spec. When all rings are closed it says `CHIUSURA`: launch the closure phase on
+  the **mother's** run directory, label `NN-chiusura`, prompt `/maat:full-implementation-cycle --worker=chiusura
+  <mother>`. `run-phase.sh` does it under the code lock: `touched.txt` = union of the rings', `base.txt` = the
+  first ring's, gates at level `full` on the final tree; a sub-session only if the rings have
+  `[e2e-locator:` lines. It writes `<run-dir>/chiusura.txt`; the mother is `DONE` only with `Chiusura:
+  IMPLEMENTED` on the current code.
+- **On ring k>1**: `PLAN` becomes `WAIT` until ring k−1's plan is `APPROVED` (L6: plans run ahead of the
+  code); `IMPLEMENT` becomes `WAIT` until ring k−1 is closed. At the start of the ring (no code phase yet) the
+  working tree must be ring k−1's last `.post-tree`: otherwise `STOP` (human edits the ring would take as its
+  own); `run-phase.sh` refuses the launch with exit 7 too.
+- **Same working tree** (the commit stays the user's): `cycle-state.sh` prints, for ring k>1, `Anelli
+  precedenti:` — the files of the previous rings' `touched.txt`: **same chain, previous ring**, never another
+  flow's work, never mixed, and they never trigger `completion`; `Base anello:` — ring k−1's `.post-tree`,
+  never HEAD; `Diff anello:` — the paths changed since that base. Before the ring's review `run-phase.sh`
+  writes `log/<label>.anello.diff` (from `Base anello` to the current tree, on the ring's `touched.txt`) and
+  appends it to the review prompt: that diff, not one against HEAD, is what the reviewer reads.
+- **A ring is closed** only with `Review status: APPROVED`, `Feature status: IMPLEMENTED` and a fresh
+  `Finalize: IMPLEMENTED` (on the current `Reviewed snapshot`, not older than the last review) —
+  `plan-check.sh closed <spec>`, the one criterion used everywhere; no legacy fallback.
+- **Basis of a ring**: `madre`, `prec` and, once ring k−1 is closed, `interfaccia` join `spec` and `plan`
+  (`plan-check.sh basis`). The ring's plan becomes `STALE` — row 6, re-open it with a delta round — when the
+  mother changes, ring k−1's plan is re-opened, its real interface differs, or any file the plan cites is in
+  ring k−1's `touched.txt` while the plan was approved before k−1 closed.
+
+## Termination
+
+No counter of this skill's own: the review's counters (rounds, post-approval budget, recurrence) are
+written in its section and bound the loop across invocations. STOP also on a deviation from the
+plan (not on purely defensive ones, `difensiva: `: recorded, judged by the review), a migration to apply, `NEEDS HUMAN DECISION` from either skill, and a `NEEDS_VERIFICATION`
+obtained in this invocation, whatever its cause (a later invocation makes one promotion attempt:
+`cycle-state.sh` row 12) — a `BLOCKED` environment gate (tunnel, WSL timeout), `NOT RUN (--no-dev)`,
+`NOT RUN (file misto)`, an approval made stale by the freshness check, gate artefacts the user must
+accept. Code is not "fixed" for an environment problem: report the cause and the command.
+
+## Sub-session permissions — declared, not hidden
+
+Sub-sessions run in `bypassPermissions` (in `-p` mode only bypass lets them write the spec under
+`.claude/`, measured) with two layers: a deny list by prefix, which a `wsl -- bash -lc '…'` wrapper
+defeats; and **`guard.py`**, a PreToolUse hook that reads the whole command inside the wrappers and
+denies a closed list — anything naming PROD (hosts, IPs, public names, release scripts: the `guardia` of
+`.claude/maat.json`), direct `ssh`/`scp`/`sftp`/`rsync` (remote access goes through the project's declared
+helpers and the remote verification), database writes through the project's helpers, git that changes state, docker, psql, installs, `rm -rf`; in the
+`plan`/`review` phases also Edit/Write outside `.claude/.ai-workflow/`; in the `plan` phase also a full
+suite (vitest, pytest, `run_tests.sh` with no file or selector). Next to it, a **`Stop` hook**
+(`${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.py`) denies the end of a turn whose last message has no `ESITO FASE` line, or while
+a background job the transcript shows is not collected; with `stop_hook_active` it always lets the turn
+end, so it cannot loop, and it fails open. It is not a sandbox (none
+exists on native Windows): what it covers and what stays open is written in the docstring of
+`guard.py`. The hook itself fails open; `run-phase.sh` refuses to launch when its self-test does not
+get a denial (exit 5). Code phases (`implement`, `review`, `fix`) run **one at a time** across all
+features, under a lock in `.git` (exit 4); plan phases of **different** specs run in parallel, two plan
+phases on the **same** spec do not (`<run-dir>/plan.lock`, exit 4 with its owner). `/implementation-review-cycle`
+and an e2e of the remote verification launched by hand ask `run-phase.sh --lock-status` and stop while a code phase
+runs. The lock does not attribute code: `touched.txt` does, measured around each implement/fix phase.
+Tests: `guard.test.sh`, `run-phase.test.sh`, `cycle-state.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/gates.test.sh`,
+`${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/finalize.test.sh`, `${CLAUDE_PLUGIN_ROOT}/scripts/blocks-independent.test.sh`.
+
+## Regole in codice (harness-pt14)
+
+Le regole uscite dalla prosa di `full-implementation-cycle`, `plan-review-cycle` e `implementation-review-cycle`
+quando l'orchestrazione e' passata al driver. Ognuna e' applicata dallo script indicato e sorvegliata dal test
+indicato; nessuna regola che non fosse gia' codice e' stata tolta: e' rimasta in prosa, nel file caricato dalla
+fase che la usa (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `freschezza.md`,
+`gate-manuali.md`, `light.md`, `prompt-revisore.md`, `workers/controprove.md`) o qui sopra.
+
+| Regola (dove stava) | Script che la applica | Test |
+|---|---|---|
+| Scelta della fase successiva, tabella di ripresa (FIC «Resumption», passo 3) | `cycle-state.sh` / `driver.py next` | `cycle-state.test.sh`, `driver.test.sh` §9 |
+| Anti-loop: stessa fase e stesso `State:` → STOP (FIC «Resumption») | `driver.py run` | `driver.test.sh` §4, controprova §6 |
+| `ESITO FASE … STOP` → STOP; uscite 4/5/6/7 di run-phase come STOP/WAIT (FIC passo 5) | `driver.py run` | `driver.test.sh` §4 |
+| `NEEDS_VERIFICATION` ottenuto in questa invocazione → STOP (FIC «Resumption», «Termination») | `driver.py run` | `driver.test.sh` §4 |
+| Fase ancora in corso (`.running` senza `.exit`) → niente lancio (FIC passo 2) | `driver.py run` (exit 4) | `driver.test.sh` §4 |
+| Etichette numerate, prompt della fase `--worker=<fase>`, flag inoltrati (FIC passo 4) | `driver.py run` | `driver.test.sh` §4 |
+| Pacchetto di contesto prima di ogni fase (FIC passo 4.0) | `driver.py run` → `context-pack.sh` | `driver.test.sh` §4, `context-pack.test.sh` |
+| Catena: sulla madre in WAIT si lavora sull'anello che nomina; un anello chiuso riporta alla madre (FIC «Chains», «On the mother») | `driver.py run` | `driver.test.sh` §4 |
+| Senza certificato di equivalenza valido `run` prende Next/State da `cycle-state.sh` autonomo | `driver.py run` | `driver.test.sh` §4 |
+| Budget di fasi per invocazione | `driver.py run --max-fasi` | `driver.test.sh` §4 |
+| Budget dei fix (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` riga 11b | `cycle-state.test.sh` |
+| Esito strutturato: JSON valido per lo schema, deviazioni/bloccato_su → STOP, il piu' conservativo fra prosa e JSON (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, controprova §6 |
+| Deviazioni tutte `difensiva: ` (puramente difensive, nessun effetto sui casi del piano) → nessuno STOP: riga in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, nota nel changelog del piano (fuori dall'impronta), elenco alla review (una non difensiva = major); anche una sola senza prefisso → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, riga `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |
+| Attribuzione (`touched.txt`, `.pre/.post-tree`) e STOP se non misurata (FIC «Run directory», «Resumption») | `run-phase.sh`, `cycle-state.sh` riga 7 | `run-phase.test.sh` §5, `cycle-state.test.sh` |
+| File toccato fra gli esclusi → STOP (FIC «Resumption») | `cycle-state.sh` 10b | `cycle-state.test.sh` |
+| Suite del livello eseguite fuori dalla sotto-sessione, evidenza per chiave (FIC «Run directory», IRC Step 2.5) | `run-phase.sh` → `gates.sh` (`--verify`) | `gates.test.sh`, `run-phase.test.sh` |
+| Review ∥ VERIFY, scarto a chiave cambiata, controprove del driver solo su lista `gen` coerente (FIC «Run directory», «Worker review», IRC Step 2.5) | `run-phase.sh` | `run-phase.test.sh` §8, §8b-8d |
+| Firma dello stato finale, verdetto = AND, `Finalize:` fresca per il DONE (FIC «Run directory», IRC Step 3) | `finalize.sh`, `cycle-state.sh` 13f | `finalize.test.sh`, `cycle-state.test.sh` |
+| Verifica dei rossi di test-red e test di accettazione invariati dopo implement/fix; file di test nello `scrive:` di un blocco = modifica prescritta: funzioni di accettazione invariate (ast) o non verificabili → OK con `AVVISO` e impronta `tests` riregistrata, funzione cambiata → STOP (FIC «Worker test-red») | `run-phase.sh` (`verify_red`, `tests_guard`), `plan-check.sh rossi` | `run-phase.test.sh` §10, `plan-check.test.sh` |
+| Corsie: indipendenza dei blocchi, controllo a posteriori, liste unite, riga ESITO ricavata dal JSON della corsia se manca (FIC «Worker implement») | `blocks-independent.py`, `run-phase.sh` (`launch_lanes`), decisione in `driver.py` | `blocks-independent.test.sh`, `run-phase.test.sh` §11, `driver.test.sh` §7 |
+| Blocchi dell'implementer in formato 2 (FIC «Implement, in 2–4 blocks»): lotti col contesto stimato sotto il tetto | `driver.py` (`lotti`, riga `LOTTI`) | `driver.test.sh` §7 |
+| Catene: C1–C4, WAIT/STOP, diff dell'anello, chiusura (FIC «Chains») | `cycle-state.sh`, `run-phase.sh` (exit 7, `ring_prompt`, chiusura) | `cycle-state.test.sh`, `run-phase.test.sh` §9 |
+| Lock di codice e per spec (FIC «Sub-session permissions») | `run-phase.sh` | `run-phase.test.sh` §2-3 |
+| Impronta del harness (FIC passo 5, exit 6) | `run-phase.sh`, `cycle-state.sh` riga 0 | `run-phase.test.sh` §7, `cycle-state.test.sh` |
+| Divieti delle sotto-sessioni: PROD, ssh/rsync, git che cambia stato, docker, psql, installazioni (child-rules) | `guard.py` (hook PreToolUse) | `guard.test.sh` |
+| Nessuna fine turno senza `ESITO FASE` o con job non raccolti (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
+| Struttura del piano formato 2: tracciabilita' ↔ test ↔ passi ↔ file, blocchi, tabella dei test, stringhe tolte ancora asserite, presenza/assenza per posizione (PRC «Plan format 2», «Lint») | `plan-check.sh lint2` | `plan-check.test.sh` |
+| Test ESISTENTI di non-regressione fuori dalla tabella del Piano di test: riga con asserzione «resta verde» (o «rimane verde», «continua a passare») → VIOLAZIONE; vanno nella nota sotto la tabella, tracciabilità «non verificabile a test (invarianza, …)» (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
+| File GENERATI rigenerabili da implement/fix senza deviazione, col loro comando (FIC «Worker implement», «Worker fix», harness-pt15); un generato rigenerato da una sola corsia che lo dichiara è suo | `generati` di `.claude/maat.json` (`maat-config.py generati [--verifica]`, S9), `blocks-independent.py --posteriori` | `maat-config.test.sh` §8b, `blocks-independent.test.sh` |
+| Percorso leggero/pieno dai file (tabella dei percorsi, soglie) (PRC «L5») | `plan-check.sh route` | `plan-check.test.sh` |
+| Decisione S2: pulito sull'impronta corrente, respinti (PRC «Review ≤4 rounds») | `plan-check.sh s2` | `plan-check.test.sh` |
+| Tetti di dimensione (≤15 passi, ≤40 file, ≤400 righe) e taglio rifiutato (PRC «Size») | `plan-check.sh skeleton` | `plan-check.test.sh` |
+| Controllo del taglio in anelli (PRC «Size», punto 3) | `plan-check.sh split` | `plan-check.test.sh` |
+| Delta calcolato, vuoto o intero = errore, righe `xref:` (PRC «Step 2-bis») | `plan-check.sh delta` | `plan-check.test.sh` |
+| Campi della basis di un anello (madre, prec, interfaccia, L6 touched) e `tests` (PRC «Size» punto 4, Step 3) | `plan-check.sh basis` | `plan-check.test.sh` |
+| Pipeline L6: il piano dell'anello k+1 aspetta il piano di k (PRC «Size» punto 4) | `cycle-state.sh` C3 | `cycle-state.test.sh` |
+| Lettura del contratto del piano (IRC Step 1) | `plan-check.sh contract` | `plan-check.test.sh` |
+| Idoneita' al percorso solo-gate, EXCLUDED-CHANGED (IRC «Freshness») | `review-surface.sh check` | `test-review-surface.sh` |
+| Classificazione del lint fuori dalla `radice` del modulo (IRC Step 2.5) | `test-fast.sh --lint --base` | `test-fast.test.sh` |
+| Esecuzione ed esiti delle controprove (FIC «Counterproofs») | `counterproof.sh` | `counterproof.test.sh` |
+| Righe caricate per fase ≤300 (obiettivo di pt14) | `driver.py righe` | `driver.test.sh` §8 |

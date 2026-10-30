@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Test di script/test/vitest-classify.py e dell'elenco UNIT_TEST_FILES di modules/app/apps/admin/vitest.config.ts
+# (harness-pt06: due progetti vitest, `unit` e `nuxt`). Da eseguire in WSL (python3):
+#   wsl -- bash -lc 'bash /mnt/c/<repo>/script/test/vitest-classify.test.sh'
+# Parte 1: fixture finte (nessun vitest). Parte 2: il repository vero — ogni file dell'elenco `unit` e' ancora
+# classificato `unit`, e un file che monta un componente con un figlio auto-importato (GoalsUserPanelBody) non
+# ci sta. La parte 2 legge le dichiarazioni generate da nuxt (`.nuxt/imports.d.ts`, `components.d.ts`): da
+# apps/admin/.nuxt se c'e', altrimenti dalla copia WSL di questa radice (esiste dopo un run di vitest-fast.sh).
+# Controprova per mutazione, eseguita qui: la regola dei componenti spenta -> il caso GoalsUserPanelBody diventa rosso.
+set -u
+HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/../.." && pwd)
+PY=$(command -v python3 || command -v python) || { echo "vitest-classify.test.sh: serve python3"; exit 2; }
+VC=${VC:-$HERE/vitest-classify.py}
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+n=0; fail=0
+check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
+kind() { awk -F'\t' -v f="$2" '$2 == f { print $1 }' "$1"; }
+
+# ── Parte 1: fixture ──────────────────────────────────────────────────────────────────────────────────
+A=$T/modules/app/apps/admin
+mkdir -p "$A/.nuxt" "$A/tests" "$A/utils" "$A/helpers" "$A/components/goals" "$T/modules/app/packages/stores"
+cat > "$A/.nuxt/imports.d.ts" <<'EOF'
+export { useFoo, formatThing } from '../utils/auto';
+export { ref, computed, readonly } from 'vue';
+export { type SomeType } from '../utils/auto';
+EOF
+cat > "$A/.nuxt/components.d.ts" <<'EOF'
+interface _GlobalComponents {
+      'GoalsUserPanelBody': typeof import("../components/goals/UserPanelBody.vue")['default']
+    'Title': typeof import("../node_modules/nuxt/head")['Title']
+}
+EOF
+echo '{ "name": "@repo/shared-stores", "main": "./index.ts" }' > "$T/modules/app/packages/stores/package.json"
+echo 'export const store = () => 1' > "$T/modules/app/packages/stores/index.ts"
+echo '<template><div/></template>' > "$A/components/goals/UserPanelBody.vue"
+echo 'export const add = (a: number, b: number) => a + b' > "$A/utils/pure.ts"
+echo 'export const which = () => GoalsUserPanelBody' > "$A/helpers/panel.ts"
+echo 'export const x = () => useFoo()' > "$A/helpers/auto-user.ts"
+w() { printf '%s\n' "$2" > "$A/tests/$1"; }
+w pure.test.ts "import { add } from '~/utils/pure'
+// Title in una riga di commento non conta
+it('somma', () => expect(add(1, 2)).toBe(3))"
+w comp-direct.test.ts "it('usa il componente', () => expect(GoalsUserPanelBody).toBeDefined())"
+w comp-kebab.test.ts "const tpl = '<goals-user-panel-body :plan=\"p\" />'"
+w comp-transitive.test.ts "import { which } from '~/helpers/panel'
+it('x', () => which())"
+w vue-import.test.ts "import Body from '../components/goals/UserPanelBody.vue'"
+w auto.test.ts "it('x', () => useFoo())"
+w auto-transitive.test.ts "import { x } from '../helpers/auto-user'"
+w auto-imported.test.ts "import { useFoo } from '~/utils/pure'
+it('x', () => useFoo())"
+w string-name.test.ts "const role = 'useFoo'; const r: readonly string[] = []"
+w readonly-call.test.ts "const r = readonly({})"
+w mount.test.ts "import { mountSuspended } from '@nuxt/test-utils/runtime'"
+w dom.test.ts "it('x', () => document.createElement('div'))"
+w define.test.ts "if (import.meta.client) {}"
+w alias.test.ts "import { useX } from '#imports'"
+w unresolved.test.ts "import { nope } from '~/utils/nope'"
+w repo-pkg.test.ts "import { store } from '@repo/shared-stores'"
+w docblock-node.test.ts "/** @vitest-environment node */
+import { add } from '~/utils/pure'"
+w docblock-node-auto.test.ts "/** @vitest-environment node */
+it('x', () => useFoo())"
+w docblock-other.test.ts "/** @vitest-environment happy-dom */
+import { add } from '~/utils/pure'"
+"$PY" "$VC" "$A" > "$T/out" 2> "$T/err"; echo $? > "$T/rc"
+check "classificatore: exit 0 su tutte le fixture" '[ "$(cat "$T/rc")" = 0 ]'
+check "file puro (import esplicito) -> unit" '[ "$(kind "$T/out" tests/pure.test.ts)" = unit ]'
+check "GoalsUserPanelBody usato senza import -> nuxt (componente auto-importato)" '[ "$(kind "$T/out" tests/comp-direct.test.ts)" = nuxt ] && grep -q "comp-direct.test.ts.*componente auto-importato GoalsUserPanelBody" "$T/out"'
+check "  anche in kebab-case (goals-user-panel-body) -> nuxt" '[ "$(kind "$T/out" tests/comp-kebab.test.ts)" = nuxt ]'
+check "  anche attraverso un import locale -> nuxt" '[ "$(kind "$T/out" tests/comp-transitive.test.ts)" = nuxt ] && grep -q "comp-transitive.test.ts.*GoalsUserPanelBody" "$T/out"'
+check "import di un .vue -> nuxt" '[ "$(kind "$T/out" tests/vue-import.test.ts)" = nuxt ]'
+check "auto-import usato senza import -> nuxt" '[ "$(kind "$T/out" tests/auto.test.ts)" = nuxt ]'
+check "  anche attraverso un import locale -> nuxt" '[ "$(kind "$T/out" tests/auto-transitive.test.ts)" = nuxt ]'
+check "nome importato esplicitamente -> non e un auto-import" '[ "$(kind "$T/out" tests/auto-imported.test.ts)" = unit ]'
+check "nome auto-importato solo in una stringa, readonly come modificatore TS -> unit" '[ "$(kind "$T/out" tests/string-name.test.ts)" = unit ]'
+check "readonly(...) chiamato -> nuxt" '[ "$(kind "$T/out" tests/readonly-call.test.ts)" = nuxt ]'
+check "mountSuspended / @nuxt/test-utils -> nuxt" '[ "$(kind "$T/out" tests/mount.test.ts)" = nuxt ]'
+check "globale del DOM -> nuxt" '[ "$(kind "$T/out" tests/dom.test.ts)" = nuxt ]'
+check "define di Nuxt (import.meta.client) -> nuxt" '[ "$(kind "$T/out" tests/define.test.ts)" = nuxt ]'
+check "import da #imports -> nuxt" '[ "$(kind "$T/out" tests/alias.test.ts)" = nuxt ]'
+check "import locale non risolvibile -> nuxt (il dubbio va a nuxt)" '[ "$(kind "$T/out" tests/unresolved.test.ts)" = nuxt ]'
+check "pacchetto @repo risolto e puro -> unit" '[ "$(kind "$T/out" tests/repo-pkg.test.ts)" = unit ]'
+check "docblock node e puro -> unit" '[ "$(kind "$T/out" tests/docblock-node.test.ts)" = unit ]'
+check "docblock node ma con un auto-import -> nuxt" '[ "$(kind "$T/out" tests/docblock-node-auto.test.ts)" = nuxt ]'
+check "docblock di un altro environment -> nuxt" '[ "$(kind "$T/out" tests/docblock-other.test.ts)" = nuxt ]'
+"$PY" "$VC" "$T/nessuna" > /dev/null 2>&1; r1=$?
+rm "$A/.nuxt/components.d.ts"; "$PY" "$VC" "$A" > /dev/null 2>&1; r2=$?
+check "uso errato o dichiarazioni generate assenti -> exit 2, niente classificazione" '[ "$r1" = 2 ] && [ "$r2" = 2 ]'
+cp "$T/out" "$T/out.fixture"
+printf "interface _GlobalComponents {\n      'GoalsUserPanelBody': typeof import('x')['default']\n}\n" > "$A/.nuxt/components.d.ts"
+
+# Controprova per mutazione (qui, su una copia): la regola dei componenti auto-importati spenta
+sed 's/        if self\.comp_re:/        if False:/' "$VC" > "$T/vc-mut.py"
+check "premessa: mutazione applicata" '! cmp -s "$VC" "$T/vc-mut.py"'
+"$PY" "$T/vc-mut.py" "$A" tests/comp-direct.test.ts > "$T/out.mut" 2>&1
+check "controprova: senza la regola dei componenti GoalsUserPanelBody finirebbe in unit" '[ "$(kind "$T/out.mut" tests/comp-direct.test.ts)" = unit ]'
+
+# ── Parte 2: il repository vero ──────────────────────────────────────────────────────────────────────────
+ADMIN=$ROOT/modules/app/apps/admin
+CFG=$ADMIN/vitest.config.ts
+# SPECIFICA DEL PROGETTO GUIDA: la parte 2 legge il vitest.config.ts vero, che dal plugin (pk04a-1) non c'e':
+# senza, si SALTA con motivo dichiarato.
+if [ ! -f "$CFG" ]; then
+  echo "SALTATO [parte 2, il repository vero]: specifica del progetto guida ($CFG assente)"
+  echo "vitest-classify.test.sh: $((n - fail))/$n ok"
+  [ $fail -eq 0 ]; exit
+fi
+ND=$ADMIN/.nuxt
+if [ ! -f "$ND/imports.d.ts" ] || [ ! -f "$ND/components.d.ts" ]; then
+  if [ -f "$HERE/fic-mirror.sh" ] && . "$HERE/fic-mirror.sh" && fic_mirror_init "$ROOT"; then
+    ND=$FIC_MIRROR/modules/app/apps/admin/.nuxt
+  fi
+fi
+check "dichiarazioni generate disponibili ($ND)" '[ -f "$ND/imports.d.ts" ] && [ -f "$ND/components.d.ts" ]'
+# l'elenco: le righe fra `UNIT_TEST_FILES = [` e la `]` di chiusura, una stringa per riga
+sed -n '/UNIT_TEST_FILES = \[/,/^\]/p' "$CFG" | tr -d '\r' | sed -n "s/^ *'\([^']*\)',\{0,1\}$/\1/p" > "$T/unit-list"
+check "elenco UNIT_TEST_FILES letto da vitest.config.ts (non vuoto)" '[ -s "$T/unit-list" ]'
+missing=$(while IFS= read -r f; do [ -f "$ADMIN/$f" ] || echo "$f"; done < "$T/unit-list")
+check "ogni file dell'elenco unit esiste" '[ -z "$missing" ]' || true
+[ -z "$missing" ] || echo "  assenti: $missing"
+if [ -f "$ND/imports.d.ts" ] && [ -s "$T/unit-list" ]; then
+  # shellcheck disable=SC2046
+  "$PY" "$VC" "$ADMIN" --nuxt-dir "$ND" $(cat "$T/unit-list") > "$T/real" 2>&1
+  bad=$(awk -F'\t' '$1 != "unit"' "$T/real")
+  check "ogni file dell'elenco unit e' ancora classificato unit" '[ -z "$bad" ]'
+  [ -z "$bad" ] && : || printf '  %s\n' "$bad"
+  "$PY" "$VC" "$ADMIN" --nuxt-dir "$ND" components/goals/UserPanel.test.ts > "$T/panel" 2>&1
+  check "UserPanel.test.ts (monta UserPanel, figlio GoalsUserPanelBody auto-importato) -> nuxt" '[ "$(kind "$T/panel" components/goals/UserPanel.test.ts)" = nuxt ]'
+  check "  e non sta nell'elenco unit" '! grep -qx "components/goals/UserPanel.test.ts" "$T/unit-list"'
+  grep -rl 'GoalsUserPanelBody' "$ADMIN/components" --include=*.vue | sed "s|^$ADMIN/||" > "$T/users-of-body"
+  check "premessa: GoalsUserPanelBody e' usato da un componente vero" '[ -s "$T/users-of-body" ]'
+fi
+
+echo "vitest-classify.test.sh: $((n - fail))/$n ok"
+[ $fail -eq 0 ]

@@ -1,0 +1,11 @@
+*.sh   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.svg  text eol=lf
+*.cases text eol=lf
+*.equiv text eol=lf
+*.html text eol=lf
+LICENSE text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf

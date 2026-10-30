@@ -1,0 +1,56 @@
+{
+  "versione_schema": 1,
+  "harness": ">=0.2",
+  "lingua": "it",
+  "moduli": [
+    {
+      "nome": "script",
+      "radice": ".",
+      "regola_test": "nessuna",
+      "controlli": [
+        { "glob": "**/*.sh", "comando": "bash -n {file}" },
+        { "glob": "**/*.json", "comando": "{python} -m json.tool {file}" },
+        { "glob": "**/*.sh", "comando": "shellcheck {file}", "se_presente": "shellcheck" }
+      ]
+    },
+    {
+      "nome": "console",
+      "radice": "server/console",
+      "comandi": {
+        "test": { "comando": "node --test {test}", "cartella": "radice", "se_presente": "**/*.test.js" }
+      },
+      "controlli": [
+        { "glob": "**/*.js", "comando": "node --check {file}" }
+      ]
+    },
+    {
+      "nome": "agenti",
+      "radice": "server/agenti",
+      "comandi": {
+        "test": { "comando": "node --test {test}", "cartella": "radice", "se_presente": "**/*.test.js" }
+      },
+      "controlli": [
+        { "glob": "**/*.js", "comando": "node --check {file}" }
+      ]
+    },
+    {
+      "nome": "claude",
+      "radice": "server/claude",
+      "comandi": {
+        "test": { "comando": "node --test {test}", "cartella": "radice", "se_presente": "**/*.test.js" }
+      },
+      "controlli": [
+        { "glob": "**/*.js", "comando": "node --check {file}" }
+      ]
+    }
+  ],
+  "guardia": {
+    "produzione": [
+      "(?<![0-9.])203\\.0\\.113\\.10(?![0-9])",
+      "app\\.203\\.0\\.113\\.10\\.sslip\\.io"
+    ],
+    "rilascio": ["deploy.sh"],
+    "sonde": ["app.203.0.113.10.sslip.io", "203.0.113.10"]
+  },
+  "da_non_toccare": [".env", "**/.env", "server/database/migrations/**"]
+}

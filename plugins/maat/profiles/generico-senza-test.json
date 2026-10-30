@@ -1,0 +1,12 @@
+{
+  "profilo": "generico-senza-test",
+  "descrizione": "Nessuna suite di test: solo controlli dichiarati (bash -n, JSON valido, shellcheck se installato). Il gate dei test è NOT RUN (dichiarato).",
+  "modulo": {
+    "regola_test": "nessuna",
+    "controlli": [
+      { "glob": "**/*.sh", "comando": "bash -n {file}" },
+      { "glob": "**/*.json", "comando": "{python} -m json.tool {file}" },
+      { "glob": "**/*.sh", "comando": "shellcheck {file}", "se_presente": "shellcheck" }
+    ]
+  }
+}

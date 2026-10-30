@@ -1,0 +1,12 @@
+{
+  "profilo": "node-semplice",
+  "descrizione": "Node senza framework: node --check su ogni .js; node --test solo se il modulo ha file *.test.js.",
+  "modulo": {
+    "comandi": {
+      "test": { "comando": "node --test {test}", "cartella": "radice", "se_presente": "**/*.test.js" }
+    },
+    "controlli": [
+      { "glob": "**/*.js", "comando": "node --check {file}" }
+    ]
+  }
+}

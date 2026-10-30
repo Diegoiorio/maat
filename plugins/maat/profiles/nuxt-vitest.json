@@ -1,0 +1,40 @@
+{
+  "profilo": "nuxt-vitest",
+  "descrizione": "Frontend Nuxt 3 con vitest ed eslint, test accanto ai file, copia WSL veloce (test-fast.sh), lint con base, auto-import.",
+  "sezioni": {
+    "framework": ["nuxt-autoimport"]
+  },
+  "modulo": {
+    "regola_test": "accanto",
+    "ambiente": "wsl",
+    "report": "vitest",
+    "lint_base": true,
+    "comandi": {
+      "test": { "comando": "bash {maat}/scripts/test-fast.sh {test}", "cartella": "radice" },
+      "lint": { "comando": "bash {maat}/scripts/test-fast.sh --lint {base?--base }{file}", "cartella": "repo" },
+      "build": { "comando": "npm run build", "cartella": "radice_pacchetti" }
+    },
+    "copia": {
+      "test": { "comando": "CI=true npx vitest run {test}", "cartella": "radice" },
+      "lint": [
+        { "comando": "CI=true npm run -s lint -- {cache?--cache --cache-location }{file}", "cartella": "radice", "se_esiste": "lint-baseline.mjs" },
+        { "comando": "CI=true npx eslint {cache?--cache --cache-location }--quiet {file}", "cartella": "radice" }
+      ],
+      "lint_messaggi": "CI=true npx eslint --format compact --quiet {file}"
+    },
+    "chiave": [
+      { "etichetta": "tsconfig", "file": ".nuxt/tsconfig.json" }
+    ],
+    "controprova": {
+      "runner": "vitest",
+      "comando": "CI=true npx vitest run {test} -t {nome} --reporter=default --reporter=json --outputFile.json={report}"
+    },
+    "preparazione": "npx nuxi prepare",
+    "preparati": [".nuxt/tsconfig.json", ".nuxt/*.d.ts"],
+    "collega_nel_worktree": [{ "percorso": "node_modules", "cartella": "radice_pacchetti" }],
+    "file_dipendenze": [
+      { "glob": "**/package.json", "cartella": "radice_pacchetti" },
+      { "glob": "**/package-lock.json", "cartella": "radice_pacchetti" }
+    ]
+  }
+}

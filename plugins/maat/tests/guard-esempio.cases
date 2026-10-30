@@ -1,0 +1,360 @@
+# guard-esempio.cases — fixture di guard.test.sh (pk05): i casi della guardia del progetto guida di prima della
+# divisione, IDENTICI (comando, fase, cwd, esito atteso), tranne la sezione `hrun` (hook di .claude/settings.json),
+# riscritta in guard.test.sh su guard-hook.sh. Si includono con `.` da guard.test.sh, che definisce run/deny/allow/
+# srun/lrun/urun/udeny/uallow/pdeny, REPO, MAINTREE, T (MAIN, WT) ed esporta MAAT_CONFIG =
+# examples/nuxt-fastapi.maat.json: stessa decisione e stesso livello (grave o no) della guardia di prima = equivalenza.
+# File di test: ammesso dal test di genericita' (nomi del progetto guida voluti).
+
+# --- negati: PROD, anche annidata ---
+deny "ssh -i ~/.ssh/id_ed25519 root@prod.example.internal 'cat /etc/hostname'"
+deny "wsl -- bash -lc 'ssh -i ~/.ssh/id_ed25519 root@prod.example.internal uptime'"
+deny "wsl -- bash -lc \"scp f root@prod.example.internal:/tmp/\""
+deny "curl -s https://api.example.com/health"
+deny "bash script/deploy-production.sh deploy"
+deny "bash script\\prod\\verify-release.sh"
+deny "docker compose -f docker-compose.prod.yml ps"
+deny "bash script/dev/dev-exec.sh 'curl https://app.example.com'"
+# --- negati: git che cambia stato, docker, db, installazioni, rm -rf, anche annidati ---
+deny "wsl -- bash -lc 'cd /mnt/c/x && git checkout -- modules/a.vue'"
+deny "git -C modules reset --hard"
+deny "git -c core.x=y stash push"
+deny "bash -c \"git clean -fdx\""
+deny "echo \$(git restore modules/a.vue)"
+deny "echo \`git add -A\`"
+deny "bash -c \"docker ps\""
+deny "wsl -d Ubuntu -- bash -lc 'psql -U postgres -c \"select 1\"'"
+deny "wsl -- bash -lc 'cd modules/app && npm install left-pad'"
+deny "modules/api/.venv/Scripts/python.exe -m pip install requests"
+deny "wsl -- bash -lc 'rm -rf /mnt/c/x/modules'"
+deny "rm -fr modules/api"
+deny "env FOO=1 git commit -m x"
+# --- negati: costrutti di shell ordinari (regression review 2026-09-22) ---
+deny "for f in a b; do git checkout -- \$f; done"
+deny "wsl -- bash -lc 'for f in a.vue b.py; do git checkout abc -- \$f; done'"
+deny "if true; then git reset --hard; fi"
+deny "wsl -- bash -lc 'if true; then git reset --hard; fi'"
+deny "{ git reset --hard; }"
+deny "! git reset --hard"
+deny "while true; do rm -rf x; done"
+deny "echo x | xargs git reset --hard"
+deny "git ls-files | xargs -I {} git checkout -- {}"
+deny "find . -name '*.vue' -exec rm -rf {} +"
+deny "find . -name x -exec git checkout -- {} \\;"
+deny "find modules -name '*.tmp' -delete"
+deny "cmd /c git reset --hard"
+deny "powershell -c 'git reset --hard'"
+deny "bash -o pipefail -c 'git reset --hard'"
+deny "bash -euo pipefail -c 'git stash'"
+deny "git branch -D feature-x"
+deny "git tag -d v1"
+deny "git worktree remove ../x"
+# --- negati: PROD per IP o dominio nuovo, accesso remoto diretto anche verso il DEV (2026-09-22) ---
+deny "wsl -- bash -lc 'ssh -i k root@10.20.30.40 true'"
+deny "curl -s https://www.example.org/"
+deny "curl -s https://api.example.org/health"
+deny "wsl -- ssh -i k root@dev.example.internal true"
+deny "wsl ssh root@dev.example.internal true"
+deny "bash -c \"scp a root@dev.example.internal:/tmp/\""
+deny "rsync -a modules/ root@dev.example.internal:/root/x/"
+deny "wsl -- bash -lc 'cd /mnt/c/x && sftp root@h'"
+deny "bash script/dev/dev-sql.sh --apply \"\$(cat m.sql)\""
+deny "wsl -- bash -lc 'bash script/dev/dev-sql.sh --apply x'"
+deny "script/dev/dev-sql.sh --apply x"
+deny "./script/dev/dev-sql.sh --apply x"
+deny "wsl -- bash -lc 'cd /mnt/c/x && script/dev/dev-sql.sh --apply x'"
+allow "script/dev/dev-sql.sh --read \"SELECT 1\""
+allow "bash script/dev/dev-sql.sh --tx-rollback \"UPDATE x SET y=1\""
+allow "grep -rn notifications@example.org envs/"
+allow "ping -c1 10.20.30.99"
+allow "grep -rn ssh docs/ | head"
+allow "bash script/dev/dev-exec.sh 'cat /etc/hostname'"
+allow "git branch --show-current"
+allow "for f in a b; do echo \$f; done"
+allow "find modules -name '*.test.ts' | head"
+allow "bash -o pipefail -c 'git diff --stat'"
+# --- ammessi: i falsi positivi da non introdurre ---
+allow "git show abc123:docker-compose.yml > docker-compose.yml"
+allow "git status --porcelain && rm modules/app/nuovo.vue"
+allow "git log -- modules/app/components/add-customer.vue"
+allow "git diff abc123 -- modules/api/app/services/goals.py"
+allow "git -c core.quotePath=false diff --name-status HEAD"
+allow "bash .claude/skills/implementation-review-cycle/review-surface.sh snapshot"
+allow "bash .claude/skills/plan-review-cycle/plan-check.sh lint .claude/.ai-workflow/spec-x.md"
+allow "bash script/dev/dev-exec.sh 'E2E_ARGS=\"e2e-8-permissions\" bash script/e2e/run-and-clean.sh'"
+allow "bash script/dev/dev-sql.sh --read \"SELECT count(*) FROM opportunity\""
+allow "wsl -- bash -lc 'cd /mnt/c/x && RSYNC_RSH=\"ssh -i ~/.ssh/id_ed25519\" bash script/rsync-once.sh root@dev.example.internal --yes'"
+allow "wsl -- bash -lc 'cd /mnt/c/x/modules/app/apps/admin && npx vitest run tests/a.test.ts'"
+allow "modules/api/.venv/Scripts/python.exe -m pytest tests/test_goals.py -q"
+allow "curl -s https://dev-app.example.com/health"
+allow "grep -rn 'docker compose' docs/ | head"
+allow "cp .claude/.ai-workflow/spec-x.run/counterproof/modules/a.vue modules/a.vue"
+allow "echo 'rm -rf e git checkout sono solo testo qui'"
+
+# --- Edit/Write: fasi di sola lettura del codice ---
+for p in "modules/app/a.vue" "$REPO/modules/app/a.vue" "$(printf '%s' "$REPO" | sed 's#^\(.\):#/\L\1#')/modules/app/a.vue" "$(printf '%s' "$REPO" | tr '/' '\\')\\modules\\app\\a.vue" ".claude/.ai-workflow/../../modules/a.vue"; do
+  run 2 plan "$(write_path Edit "$p")"
+  run 2 review "$(write_path Write "$p")"
+  run 0 implement "$(write_path Edit "$p")"
+  run 0 fix "$(write_path Edit "$p")"
+done
+run 0 plan "$(write_path Edit ".claude/.ai-workflow/spec-x.md")"
+run 0 review "$(write_path Write "$REPO/.claude/.ai-workflow/spec-x.run/counterproof/a.meta")"
+run 0 plan "$(write_path Write "$SCRATCH/spec-x.copy.md")"
+run 0 "" "$(write_path Edit "modules/app/a.vue")"
+run 2 implement '{"tool_name":"Bash","tool_input":'   # JSON illeggibile → negato
+
+# --- corsia di implementazione (harness-pt13): FIC_WRITE_SCOPE limita Edit/Write ai file dei suoi blocchi ---
+SC="modules/api/app/a.py,modules/app/apps/admin/components/goals/"
+srun 2 "$SC" "$(write_path Edit "modules/app/apps/admin/pages/b.vue")"          # fuori scope: negato
+srun 2 "$SC" "$(write_path Write "$REPO/modules/api/app/b.py")"
+srun 0 "$SC" "$(write_path Edit "modules/api/app/a.py")"                         # nello scope
+srun 0 "$SC" "$(write_path Write "$REPO/modules/app/apps/admin/components/goals/Nuovo.vue")"   # cartella dello scope
+srun 0 "$SC" "$(write_path Write ".claude/.ai-workflow/spec-x.run/do-not-touch.1.txt")"      # run dir
+srun 2 "$SC" "$(write_path Edit ".claude/.ai-workflow/spec-x.md")"               # la spec no
+srun 0 "$SC" "$(write_path Write "$SCRATCH/x.md")"   # fuori dal repo
+srun 0 "" "$(write_path Edit "modules/app/apps/admin/pages/b.vue")"             # senza corsia: come prima
+n=$((n + 1))
+# nella sessione principale --universal non nega ma chiede (exit 0 + JSON "ask"): conta lo stdout, non l'uscita
+uo=$(printf '%s' "$(write_path Edit "modules/app/apps/admin/pages/b.vue")" | env -u FIC_PHASE FIC_WRITE_SCOPE="$SC" FIC_REPO="$REPO" "$FIC_PY" "$HERE/guard.py" --universal 2>/dev/null); urc=$?
+{ [ $urc -eq 0 ] && ! printf '%s' "$uo" | grep -q permissionDecision; } \
+  || { fail=$((fail + 1)); echo "FAIL: --universal applica FIC_WRITE_SCOPE (exit $urc, stdout: $uo)"; }
+
+# --- fase plan: niente suite complete (harness-pt04, 1f); con file o selettori ammesse ---
+deny  "npx vitest run" plan
+deny  "wsl -- bash -lc 'cd /mnt/c/x/modules/app/apps/admin && npx vitest run'" plan
+deny  "npx vitest run --reporter verbose" plan
+allow "npx vitest run tests/goals.test.ts" plan
+allow "wsl -- bash -lc 'cd /mnt/c/x/modules/app/apps/admin && npx vitest run utils/goals.test.ts'" plan
+allow "npx vitest run -t 'somma'" plan
+deny  "modules/api/.venv/Scripts/python.exe -m pytest -q" plan
+deny  "cd modules/api && .venv/Scripts/python.exe -m pytest tests" plan
+allow "modules/api/.venv/Scripts/python.exe -m pytest tests/test_goals.py -q" plan
+allow "python -m pytest -k goals" plan
+allow "pytest tests/test_goals.py::test_f" plan
+deny  "cd modules/api && ./run_tests.sh" plan
+deny  "wsl -- bash -lc 'cd modules/api && bash run_tests.sh -q'" plan
+allow "cd modules/api && ./run_tests.sh tests/test_goals.py" plan
+# le altre fasi non cambiano
+allow "npx vitest run" implement
+allow "modules/api/.venv/Scripts/python.exe -m pytest -q" review
+
+# --- fasi test-red / test-stage (harness-pt11): scope di scrittura da FIC_SCOPE, niente suite complete ---
+SCD=$(mktemp -d)
+printf 'modules/api/tests/test_calc.py\nmodules/api/app/calc.py\n' > "$SCD/red"
+printf '.claude/.ai-workflow/spec-x.run/staging/\n' > "$SCD/stage"
+export FIC_SCOPE; FIC_SCOPE=$(nat "$SCD/red")
+run 0 test-red "$(write_path Write "modules/api/tests/test_calc.py")"
+run 0 test-red "$(write_path Edit "$REPO/modules/api/app/calc.py")"
+run 2 test-red "$(write_path Edit "modules/api/app/services/goals.py")"
+run 2 test-red "$(write_path Write ".claude/.ai-workflow/spec-x.md")"
+run 2 test-red "$(write_path Write "modules/api/tests/test_calc.py.bak")"
+run 0 test-red "$(write_path Write "$SCRATCH/x.py")"
+deny  "npx vitest run" test-red
+allow "npx vitest run tests/fmt.test.ts" test-red
+deny  "modules/api/.venv/Scripts/python.exe -m pytest -q" test-red
+FIC_SCOPE=$(nat "$SCD/stage")
+run 0 test-stage "$(write_path Write ".claude/.ai-workflow/spec-x.run/staging/modules/api/tests/test_calc.py")"
+run 2 test-stage "$(write_path Write "modules/api/tests/test_calc.py")"
+run 2 test-stage "$(write_path Write ".claude/.ai-workflow/spec-x.md")"
+deny  "npx vitest run" test-stage
+FIC_SCOPE="$SCD/non-esiste"
+run 2 test-red "$(write_path Write "modules/api/tests/test_calc.py")"   # scope illeggibile: tutto negato
+unset FIC_SCOPE; rm -rf "$SCD"
+run 2 test-red "$(write_path Write "modules/api/tests/test_calc.py")"   # scope assente: tutto negato
+run 0 implement "$(write_path Edit "modules/api/app/services/goals.py")"
+
+# --- heredoc Python che scrive file: negata anche nelle sottosessioni ---
+deny $'python - <<\'EOF\'\nopen("f.txt", "w").write("x")\nEOF'
+allow $'python - <<\'EOF\'\nprint(open("f.txt").read())\nEOF'
+
+# --- cartella di lavoro da cartelle.lavoro della maat.json del progetto (pk04a-1, passo 8) ---
+lrun 0 plan lavoro/cicli/spec-x.md
+lrun 2 plan .claude/.ai-workflow/spec-x.md
+lrun 0 implement lavoro/cicli/spec-x.run/do-not-touch.1.txt a.py
+lrun 2 implement .claude/.ai-workflow/spec-x.run/do-not-touch.1.txt a.py
+
+# --- modalita' --universal (guardia di sessione) ---
+# script del repo temporaneo MAIN (creato da guard.test.sh): il contenuto si legge
+mkdir -p "$T/main/script" "$T/main/tools"
+printf '#!/usr/bin/env bash\nset -e\nssh -i k root@host true\n' > "$T/main/script/x.sh"
+printf '#!/usr/bin/env bash\nssh -i k root@host true\n' > "$T/main/tools/x.sh"
+printf '#!/usr/bin/env bash\ngit status --short\necho ok\n' > "$T/main/script/ok.sh"
+printf '#!/usr/bin/env bash\ncd /tmp\ndocker compose ps\n' > "$T/main/script/x-docker.sh"
+printf '#!/usr/bin/env bash\nssh -i k root@prod.example.internal true\n' > "$T/main/script/x-prod.sh"
+printf '#!/usr/bin/env bash\nH=1\ncurl -s https://app.example.com/health\n' > "$T/main/script/x-curl.sh"
+printf '#!/usr/bin/env bash\nbash script/deploy-production.sh deploy\n' > "$T/main/script/x-deploy.sh"
+# negli script: messaggi, commenti, heredoc di testo, git e rm -rf su cartelle temporanee → ammessi
+printf '%s\n' '#!/usr/bin/env bash' '# ssh root@prod.example.internal: mai' \
+  'echo "la PROD e'"'"' prod.example.internal: non toccarla"' \
+  'cat > "$T/m.md" <<'"'"'EOF'"'"'' 'ssh root@h true' 'docker compose up' 'EOF' \
+  'T=$(mktemp -d); trap '"'"'rm -rf "$T"'"'"' EXIT' 'git init -q "$T/r" && git -C "$T/r" add -A && git -C "$T/r" commit -qm x' 'rm -rf "$T/r"' \
+  > "$T/main/script/ok2.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'bash <<EOF' 'ssh root@h true' 'EOF' > "$T/main/script/x-heredoc.sh"
+# negati ovunque
+udeny "ssh -i ~/.ssh/id_ed25519 root@prod.example.internal 'cat /etc/hostname'"
+udeny "curl -s https://app.example.com/health" "$WT"
+udeny "git push origin wt" "$WT"
+udeny "git push" "$MAIN"
+udeny "git reset --hard" "$WT"
+udeny "git rebase main" "$WT"
+udeny "git stash" "$WT"
+udeny "git merge main" "$WT"
+udeny "git worktree remove ../y" "$MAIN"
+udeny "wsl -- ssh -i k root@dev.example.internal true"
+udeny "docker compose ps"
+udeny "wsl -- bash -lc 'psql -U postgres -c \"select 1\"'"
+udeny "modules/api/.venv/Scripts/pip.exe install requests"
+udeny "rm -rf modules/api"
+udeny "bash script/dev/dev-sql.sh --apply x"
+# git che cambia stato: nel worktree collegato si', nel tree principale no
+uallow "git commit -m x" "$WT"
+udeny  "git commit -m x" "$MAIN"
+uallow "git checkout -- ." "$WT"
+udeny  "git checkout -- ." "$MAIN"
+uallow "git add -A && git commit -m x" "$WT"
+udeny  "git add -A" "$MAIN"
+uallow "git -C $WT commit -m x" "$MAIN"
+udeny  "git -C $MAIN commit -m x" "$WT"
+uallow "cd $WT && git add -A && git commit -m x" "$MAIN"
+udeny  "cd $MAIN && git commit -m x" "$WT"
+udeny  "cd \$X && git commit -m x" "$WT"
+udeny  "git commit -m x" "$T/non-esiste"
+uallow "git worktree add ../y -b y HEAD" "$MAIN"
+# aggiramenti della directory (review pt02): repository spostato, pila di directory, cd in subshell
+WTM=$(printf '%s' "$WT" | sed 's#^\(.\):#/mnt/\L\1#')   # stesso worktree visto da WSL
+udeny  "git --git-dir=$MAIN/.git commit -m x" "$WT"
+udeny  "git --git-dir $MAIN/.git --work-tree $MAIN commit -m x" "$WT"
+udeny  "git --work-tree=$MAIN add -A" "$WT"
+udeny  "git -c core.worktree=$MAIN add -A" "$WT"
+udeny  "GIT_DIR=$MAIN/.git git commit -m x" "$WT"
+udeny  "GIT_WORK_TREE=$MAIN git add -A" "$WT"
+udeny  "export GIT_DIR=$MAIN/.git; git commit -m x" "$WT"
+udeny  "env GIT_DIR=$MAIN/.git git commit -m x" "$WT"
+udeny  "pushd $WT && git commit -m x" "$MAIN"
+udeny  "popd; git commit -m x" "$WT"
+udeny  "(cd $WT) && git commit -m x" "$MAIN"
+uallow "(cd $MAIN) && git commit -m x" "$WT"
+udeny  "(cd $MAIN && git commit -m x)" "$WT"
+udeny  "echo \$(cd $WT) && git commit -m x" "$MAIN"
+udeny  "bash -c 'cd $WT' && git commit -m x" "$MAIN"
+udeny  "wsl -- bash -lc 'cd $WTM' && git commit -m x" "$MAIN"
+uallow "wsl -- bash -lc 'cd $WTM && git add -A && git commit -m x'" "$MAIN"
+udeny  "wsl --cd $WTM -- bash -lc true; git commit -m x" "$MAIN"
+uallow "wsl --cd $WTM -- bash -lc 'git commit -m x'" "$MAIN"
+udeny  "wsl --cd $MAIN -- bash -lc 'git commit -m x'" "$WT"
+# tool PowerShell: stesse regole (in PowerShell `\` e' un separatore di percorso)
+uallow "git status" "$REPO" PowerShell
+udeny  "git push" "$REPO" PowerShell
+udeny  "docker compose up" "$REPO" PowerShell
+udeny  "wsl -- bash -lc 'ssh root@h true'" "$REPO" PowerShell
+udeny  "Set-Location $(printf '%s' "$MAIN" | tr '/' '\\'); git commit -m x" "$WT" PowerShell
+uallow "Set-Location $(printf '%s' "$WT" | tr '/' '\\'); git commit -m x" "$MAIN" PowerShell
+udeny  "Push-Location $WT; git commit -m x" "$MAIN" PowerShell
+udeny  "Remove-Item -Recurse -Force modules" "$REPO" PowerShell
+udeny  "rm -r -fo modules" "$REPO" PowerShell
+uallow "Get-ChildItem modules | Select-Object -First 3" "$REPO" PowerShell
+# sotto-sessione (FIC_PHASE impostata) con --universal: nega, non chiede
+pdeny  "git push" "$WT"
+pdeny  "docker compose ps"
+pdeny  "git push" "$REPO" PowerShell
+# formato esatto della risposta "ask" (hook PreToolUse di Claude Code)
+n=$((n + 1))
+ujson "git push" "$REPO" | env -u FIC_PHASE "$FIC_PY" "$HERE/guard.py" --universal 2>/dev/null \
+  | "$FIC_PY" -c 'import json,sys; h=json.load(sys.stdin)["hookSpecificOutput"]; sys.exit(0 if h["hookEventName"]=="PreToolUse" and h["permissionDecision"]=="ask" and "git push" in h["permissionDecisionReason"] else 1)' \
+  || { fail=$((fail + 1)); echo "FAIL: formato JSON della risposta ask"; }
+# bash|sh <file> sotto script/: il contenuto si legge (controprova: senza la lettura diventa verde)
+udeny  "bash script/x.sh" "$MAIN"
+udeny  "sh script/x.sh --opt" "$MAIN"
+udeny  "wsl -- bash -lc 'cd /mnt/c/x && bash $MAIN/script/x.sh'" "$MAIN"
+udeny  "bash script/x-docker.sh" "$MAIN"
+udeny  "bash script/x-prod.sh" "$MAIN"
+udeny  "bash script/x-curl.sh" "$MAIN"
+udeny  "bash script/x-deploy.sh" "$MAIN"
+udeny  "bash script/x-heredoc.sh" "$MAIN"
+uallow "bash tools/x.sh" "$MAIN"
+uallow "bash script/ok.sh" "$MAIN"
+uallow "bash script/ok2.sh" "$MAIN"
+# heredoc Python che scrive
+udeny  $'python - <<\'EOF\'\nopen("f.txt", \'w\').write("x")\nEOF'
+udeny  $'py -3 - <<EOF\nfrom pathlib import Path\nPath("f").write_text("x")\nEOF'
+udeny  $'modules/api/.venv/Scripts/python.exe - <<EOF\nwith open("f", mode="a") as f: f.write("x")\nEOF'
+uallow $'python - <<\'EOF\'\nimport json; print(json.load(open("f.json")))\nEOF'
+udeny  $'python - <<\'EOF\'\nimport os\nopen(os.path.join(d, "f"), "w").write("x")\nEOF'
+udeny  $'python - <<\'EOF\'\nfrom pathlib import Path\nopen(Path(p) / "x", \'w\').write("x")\nEOF'
+pdeny  $'python - <<\'EOF\'\nopen(os.path.join(d, "f"), mode="wb").write(b"x")\nEOF'
+uallow $'python - <<\'EOF\'\nprint(open(os.path.join(d, "f"), "r").read())\nEOF'
+# comandi ordinari del flusso H e dei cicli
+uallow "git status --short"
+uallow "git diff --stat"
+uallow "git log --oneline -5"
+uallow "git worktree list"
+uallow "git -C $WT log --oneline -1" "$MAIN"
+uallow "bash .claude/skills/full-implementation-cycle/cycle-state.sh .claude/.ai-workflow/spec-x.md"
+uallow "bash .claude/skills/plan-review-cycle/plan-check.test.sh"
+uallow "bash .claude/skills/implementation-review-cycle/review-surface.sh snapshot"
+uallow "bash .claude/skills/full-implementation-cycle/run-phase.sh --lock-status"
+uallow "bash .claude/skills/full-implementation-cycle/guard.test.sh"
+uallow "bash .claude/skills/full-implementation-cycle/run-phase.test.sh"
+uallow "bash .claude/skills/full-implementation-cycle/cycle-state.test.sh"
+uallow "bash .claude/skills/implementation-review-cycle/test-review-surface.sh"
+uallow "bash script/fic/cycle-report.test.sh"
+uallow "bash script/fic/corpus/replay.sh ux-6 review --dry-run"
+uallow "bash script/dev/dev-exec.sh 'cat /etc/hostname'"
+uallow "wsl -- bash -lc 'bash /mnt/c/progetti/app/script/test/vitest-fast.sh tests/a.test.ts'"
+# counterproof.sh (pt05) contiene rsync verso la copia WSL locale: come vitest-fast.sh e' un wrapper, non si legge.
+# Il percorso punta al repository di QUESTO test, cosi' la guardia trova il file vero (con rsync dentro).
+drv=$(printf '%s' "${REPO%%:*}" | tr 'A-Z' 'a-z'); WREPO="/mnt/$drv${REPO#?:}"
+uallow "wsl -- bash -lc 'bash $WREPO/script/test/counterproof.sh $WREPO/.claude/.ai-workflow/spec-x.run/counterproof/mutations.json'"
+uallow "bash script/test/counterproof.sh .claude/.ai-workflow/spec-x.run/counterproof/mutations.json"
+uallow "modules/api/.venv/Scripts/python.exe -m pytest tests/test_goals.py -q"
+# le regole per fase non valgono in --universal
+n=$((n + 1))
+printf '%s' "$(write_path Edit "modules/app/a.vue")" | FIC_PHASE=plan FIC_REPO="$REPO" "$FIC_PY" "$HERE/guard.py" --universal >/dev/null 2>&1 \
+  || { fail=$((fail + 1)); echo "FAIL: --universal applica le regole per fase a Edit"; }
+
+# --- guardia di sessione RIDOTTA (FIC_SESSION_GUARD=prod): chiede solo per l'irreversibile ---
+export FIC_SESSION_GUARD=prod
+# chiede ancora: produzione, dev-sql --apply, push e riscritture di storia, modifiche buttate
+udeny "wsl -- bash -lc 'ssh root@prod.example.internal true'"
+udeny "curl -s https://app.example.com/health"
+udeny "bash script/deploy-production.sh deploy"
+udeny "bash script/dev/dev-sql.sh --apply x.sql"
+udeny "git push"
+udeny "git push --force origin develop"
+udeny "git reset --hard HEAD~1"
+udeny "git rebase main"
+udeny "git clean -fdx"
+udeny "git restore modules/app/a.vue"
+udeny "git checkout -- modules/app/a.vue" "$MAINTREE"
+udeny "git checkout ." "$MAINTREE"
+udeny "git branch -D vecchio"
+udeny "git tag -d v1"
+udeny "git filter-branch --tree-filter true HEAD"
+udeny "git status && git push"          # un'azione grave dopo una non grave nello stesso comando
+udeny "npm install && git push"         # anche se prima c'e' un'azione che ora passa
+udeny "git push" "$REPO" PowerShell
+# passa senza chiedere
+uallow "git commit -m x"
+uallow "git checkout develop"
+uallow "git add -A"
+uallow "git merge feature"
+uallow "git stash"
+uallow "npm install"
+uallow "pip install requests"
+uallow "docker compose ps"
+uallow "ssh root@dev.example.internal true"
+uallow "rm -rf /tmp/x"
+uallow "Remove-Item -Recurse -Force C:/tmp/x" "$REPO" PowerShell
+uallow "psql -c 'select 1'"
+# le sotto-sessioni (FIC_PHASE impostata) non vedono mai la riduzione
+pdeny "git commit -m x" "$MAINTREE"
+pdeny "npm install"
+pdeny "docker compose ps"
+pdeny "rm -rf /tmp/x"
+# valore diverso da "prod": guardia piena
+FIC_SESSION_GUARD=tutto udeny "git commit -m x" "$MAINTREE"
+FIC_SESSION_GUARD=tutto udeny "npm install"
+unset FIC_SESSION_GUARD
+# controprova: senza l'interruttore gli stessi comandi tornano a chiedere
+udeny "npm install"
+udeny "git commit -m x" "$MAINTREE"

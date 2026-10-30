@@ -1,0 +1,81 @@
+{
+  "title": "phase-result",
+  "description": "Esito strutturato di una fase di full-implementation-cycle (harness-pt08). Lo passa run-phase.sh con --json-schema e lo rivalida sul blocco estratto dall evento result; cycle-state.sh ne applica le regole. Solo le keyword type, enum, required, properties, additionalProperties, items, minLength, minimum: il validatore minimo di run-phase.sh rifiuta le altre. Niente barre nel testo: lo schema passa come argomento a claude.exe e MSYS le convertirebbe come percorsi.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fase", "esito", "motivo", "deviazioni", "bloccato_su", "file", "gate_interni", "finding"],
+  "properties": {
+    "fase": {
+      "description": "La fase che chiude: deve coincidere con quella dell etichetta di run-phase.sh.",
+      "type": "string",
+      "enum": ["plan", "implement", "review", "fix", "probe", "test-red", "test-stage"]
+    },
+    "esito": {
+      "description": "OK o STOP. Con deviazioni non vuoto o bloccato_su diverso da nessuno la fase vale STOP comunque.",
+      "type": "string",
+      "enum": ["OK", "STOP"]
+    },
+    "motivo": {
+      "description": "Il riassunto della riga ESITO FASE.",
+      "type": "string",
+      "minLength": 1
+    },
+    "deviazioni": {
+      "description": "Ogni passo del piano non eseguito come scritto (anche adattato o minore). Vuoto se nessuna. Una puramente difensiva comincia con \"difensiva: \": se lo fanno tutte la fase non si ferma per deviazione.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "bloccato_su": {
+      "description": "Il letterale nessuno, oppure il motivo del blocco (es. migrazione da applicare).",
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "description": "File toccati dalla fase, relativi al repository.",
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "gate_interni": {
+      "description": "Gate eseguiti dentro la fase (ciclo interno dell implementer, controprove della review).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["comando", "esito"],
+        "properties": {
+          "comando": {"type": "string", "minLength": 1},
+          "esito": {"type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "SKIPPED", "NOT RUN"]},
+          "dettaglio": {"type": "string"}
+        }
+      }
+    },
+    "finding": {
+      "description": "Finding della review (o del fix che li chiude).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severita", "file", "riga", "testo"],
+        "properties": {
+          "severita": {"type": "string", "enum": ["blocker", "major", "minor", "nit"]},
+          "file": {"type": "string"},
+          "riga": {"type": ["integer", "null"], "minimum": 1},
+          "testo": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "copertura": {
+      "description": "Facoltativo, fase review (harness-pt09): per ogni requisito gli ID dei test che lo coprono (node id pytest, nome completo vitest o file di test, id di una controprova), MAI i risultati. finalize.sh li unisce ai risultati di VERIFY e compone la tabella Evidence; un ID senza risultato lascia il requisito non coperto.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requisito", "test"],
+        "properties": {
+          "requisito": {"type": "string", "minLength": 1},
+          "test": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
+  }
+}

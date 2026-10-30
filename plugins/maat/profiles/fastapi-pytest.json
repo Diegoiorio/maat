@@ -1,0 +1,19 @@
+{
+  "profilo": "fastapi-pytest",
+  "descrizione": "Backend Python con pytest: test a specchio (app/…/x.py -> tests/…/test_x*.py), report JUnit, interprete del venv del modulo.",
+  "modulo": {
+    "regola_test": "specchio",
+    "specchio": { "da": "app/**/{m}.py", "a": "tests/**/test_{m}*.py" },
+    "ambiente": "nativo",
+    "report": "junit",
+    "comandi": {
+      "test": "{python} -m pytest -q --junitxml={report} {test}"
+    },
+    "controprova": {
+      "runner": "pytest",
+      "comando": "{python} -B -m pytest {test} -p no:cacheprovider --junitxml={report}"
+    },
+    "collega_nel_worktree": [".venv"],
+    "file_dipendenze": ["requirements*.txt"]
+  }
+}

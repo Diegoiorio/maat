@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maat · Guida ai flussi agentici</title>
+<meta name="description" content="Maat, plugin di Claude Code: guida ai flussi agentici di sviluppo (skill, agenti, script, schemi, configurazione e decisioni).">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJNYWF0Ij4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFDNEU5QSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzBGMkE1QyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0idXJsKCNiZykiLz4KPG1hc2sgaWQ9Im0iIG1hc2tVbml0cz0idXNlclNwYWNlT25Vc2UiIHg9IjAiIHk9IjAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCI+CjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgZmlsbD0iI2ZmZiIvPgo8cmVjdCB4PSIyNC44IiB5PSIzNy42IiB3aWR0aD0iMTQuNCIgaGVpZ2h0PSI3LjIiIHJ4PSIzLjYiIGZpbGw9IiMwMDAiLz4KPHJlY3QgeD0iMjAuMSIgeT0iMzEuNiIgd2lkdGg9IjIzLjgiIGhlaWdodD0iMTkuMyIgcng9IjYuNiIgZmlsbD0iIzAwMCIvPgo8cmVjdCB4PSIyMS41IiB5PSIzMyIgd2lkdGg9IjIxIiBoZWlnaHQ9IjE2LjUiIHJ4PSI1LjIiIGZpbGw9IiNmZmYiLz4KPHJlY3QgeD0iMjQuOCIgeT0iMzcuNiIgd2lkdGg9IjE0LjQiIGhlaWdodD0iNy4yIiByeD0iMy42IiBmaWxsPSIjMDAwIi8+CjxyZWN0IHg9IjI4LjQiIHk9IjIwLjIwIiB3aWR0aD0iNy4yIiBoZWlnaHQ9IjEuOCIgZmlsbD0iIzAwMCIvPgo8cmVjdCB4PSIyOC40IiB5PSIyNC44MCIgd2lkdGg9IjcuMiIgaGVpZ2h0PSIxLjgiIGZpbGw9IiMwMDAiLz4KPHJlY3QgeD0iMjguNCIgeT0iMzEuNDAiIHdpZHRoPSI3LjIiIGhlaWdodD0iMS42IiBmaWxsPSIjMDAwIi8+CjwvbWFzaz4KPGcgbWFzaz0idXJsKCNtKSIgZmlsbD0iI0YyQjUzQSI+Cjxwb2x5Z29uIHBvaW50cz0iMjQuMDAsMzQuNTAgMjMuMTYsMzMuODggMjIuMzIsMzMuMjggMjEuNDgsMzIuNzAgMjAuNjIsMzIuMTQgMTkuNzcsMzEuNTkgMTguOTEsMzEuMDYgMTguMDQsMzAuNTUgMTcuMTcsMzAuMDYgMTYuMjksMjkuNTggMTUuNDEsMjkuMTIgMTQuNTIsMjguNjggMTMuNjIsMjguMjUgMTIuNzMsMjcuODQgMTEuODIsMjcuNDUgMTAuOTEsMjcuMDggMTAuMDAsMjYuNzIgOS4wOCwyNi4zOCA4LjE2LDI2LjA2IDcuMjMsMjUuNzYgNi4yOSwyNS40NyA1LjM1LDI1LjIwIDQuNDEsMjQuOTUgMy40NiwyNC43MiAyLjUwLDI0LjUwIDQuNjAsMjkuODAgNS40MiwzMC4wNiA2LjI1LDMwLjMzIDcuMDcsMzAuNjEgNy44OSwzMC45MSA4LjcxLDMxLjIyIDkuNTMsMzEuNTUgMTAuMzQsMzEuODkgMTEuMTYsMzIuMjQgMTEuOTcsMzIuNjEgMTIuNzgsMzIuOTkgMTMuNTksMzMuMzkgMTQuNDAsMzMuODAgMTUuMjEsMzQuMjIgMTYuMDEsMzQuNjYgMTYuODIsMzUuMTEgMTcuNjIsMzUuNTggMTguNDIsMzYuMDYgMTkuMjMsMzYuNTUgMjAuMDIsMzcuMDYgMjAuODIsMzcuNTggMjEuNjIsMzguMTEgMjIuNDEsMzguNjYgMjMuMjEsMzkuMjIgMjQuMDAsMzkuODAiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPHBvbHlnb24gcG9pbnRzPSI0MC4wMCwzNC41MCA0MC44NCwzMy44OCA0MS42OCwzMy4yOCA0Mi41MiwzMi43MCA0My4zOCwzMi4xNCA0NC4yMywzMS41OSA0NS4wOSwzMS4wNiA0NS45NiwzMC41NSA0Ni44MywzMC4wNiA0Ny43MSwyOS41OCA0OC41OSwyOS4xMiA0OS40OCwyOC42OCA1MC4zOCwyOC4yNSA1MS4yNywyNy44NCA1Mi4xOCwyNy40NSA1My4wOSwyNy4wOCA1NC4wMCwyNi43MiA1NC45MiwyNi4zOCA1NS44NCwyNi4wNiA1Ni43NywyNS43NiA1Ny43MSwyNS40NyA1OC42NSwyNS4yMCA1OS41OSwyNC45NSA2MC41NCwyNC43MiA2MS41MCwyNC41MCA1OS40MCwyOS44MCA1OC41OCwzMC4wNiA1Ny43NSwzMC4zMyA1Ni45MywzMC42MSA1Ni4xMSwzMC45MSA1NS4yOSwzMS4yMiA1NC40OCwzMS41NSA1My42NiwzMS44OSA1Mi44NCwzMi4yNCA1Mi4wMywzMi42MSA1MS4yMiwzMi45OSA1MC40MSwzMy4zOSA0OS42MCwzMy44MCA0OC43OSwzNC4yMiA0Ny45OSwzNC42NiA0Ny4xOCwzNS4xMSA0Ni4zOCwzNS41OCA0NS41OCwzNi4wNiA0NC43NywzNi41NSA0My45OCwzNy4wNiA0My4xOCwzNy41OCA0Mi4zOCwzOC4xMSA0MS41OSwzOC42NiA0MC43OSwzOS4yMiA0MC4wMCwzOS44MCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8cG9seWdvbiBwb2ludHM9IjIyLjgyLDM4LjM1IDE3LjY2LDM1LjAwIDE1Ljc4LDQ4Ljk3IDIwLjk0LDUyLjMyIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjxwb2x5Z29uIHBvaW50cz0iNDEuMTgsMzguMzUgNDYuMzQsMzUuMDAgNDguMjIsNDguOTcgNDMuMDYsNTIuMzIiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPHBvbHlnb24gcG9pbnRzPSIxNi44MSwzNC41MSAxMS41OSwzMS44NCA3LjU1LDQyLjk0IDEyLjc4LDQ1LjYxIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjxwb2x5Z29uIHBvaW50cz0iNDcuMTksMzQuNTEgNTIuNDEsMzEuODQgNTYuNDUsNDIuOTQgNTEuMjIsNDUuNjEiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPHBvbHlnb24gcG9pbnRzPSIxMC43MywzMS40NiA1LjQzLDI5LjQ2IDAuNDAsMzcuNTIgNS42OSwzOS41MiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8cG9seWdvbiBwb2ludHM9IjUzLjI3LDMxLjQ2IDU4LjU3LDI5LjQ2IDYzLjYwLDM3LjUyIDU4LjMxLDM5LjUyIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CjxyZWN0IHg9IjIxLjUiIHk9IjMzIiB3aWR0aD0iMjEiIGhlaWdodD0iMTYuNSIgcng9IjUuMiIvPgo8cGF0aCBkPSJNMjkuNCAzMyBWMTQuMjIgQzI5LjQgNy45OCAzNS4xMiA2LjY4IDM3Ljk4IDEwLjg0IEMzOS4yOCAxMi45MiAzOC43NiAxNi4wNCAzNy40NiAxNy44NiBDMzcuMjAgMTYuMDQgMzYuMTYgMTQuNDggMzQuNjAgMTUuMDAgVjMzIFoiLz4KPC9nPgo8Y2lyY2xlIGN4PSIyOS4wIiBjeT0iNDEuMCIgcj0iMS43IiBmaWxsPSIjRjJCNTNBIi8+CjxwYXRoIGQ9Ik0yNy42MCA0MS4yMCBMMjUuNDAgNDAuNzAiIHN0cm9rZT0iI0YyQjUzQSIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8Y2lyY2xlIGN4PSIzNS4wIiBjeT0iNDEuMCIgcj0iMS43IiBmaWxsPSIjRjJCNTNBIi8+CjxwYXRoIGQ9Ik0zNi40MCA0MS4yMCBMMzguNjAgNDAuNzAiIHN0cm9rZT0iI0YyQjUzQSIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;display=swap">
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1f23; --muted: #5b6270; --line: #dcdfe4;
+  --accent: #2f5fd0; --accent-soft: #e8eefc; --ok: #1f7a4d; --ok-soft: #e4f4ec;
+  --warn: #9a6100; --warn-soft: #fbf1dd; --bad: #b3261e; --bad-soft: #fbe6e4;
+  --code: #f1f2f4; --shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --panel: #1d2026; --ink: #e7e9ee; --muted: #a2a9b6; --line: #333842;
+    --accent: #8fb0ff; --accent-soft: #23304d; --ok: #6fd3a0; --ok-soft: #1c3329;
+    --warn: #f0c060; --warn-soft: #3a2f18; --bad: #ff8f86; --bad-soft: #3d1f1d; --code: #262a31;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --panel: #1d2026; --ink: #e7e9ee; --muted: #a2a9b6; --line: #333842;
+  --accent: #8fb0ff; --accent-soft: #23304d; --ok: #6fd3a0; --ok-soft: #1c3329;
+  --warn: #f0c060; --warn-soft: #3a2f18; --bad: #ff8f86; --bad-soft: #3d1f1d; --code: #262a31;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15.5px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .88em; }
+code { background: var(--code); padding: .08em .35em; border-radius: 4px; }
+pre.cmd { background: var(--code); padding: .8em 1em; border-radius: 8px; overflow-x: auto; line-height: 1.45; }
+.card pre.cmd { white-space: pre-wrap; word-break: break-word; }
+.diagram svg { max-width: 100%; height: auto; }
+.layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 100vh; }
+nav.toc { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 22px 18px; border-right: 1px solid var(--line); background: var(--panel); }
+nav.toc h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+nav.toc a { display: block; padding: 3px 8px; border-radius: 6px; text-decoration: none; color: var(--ink); font-size: 14px; }
+nav.toc a:hover { background: var(--accent-soft); }
+nav.toc .brand { font-weight: 700; font-size: 17px; }
+nav.toc .logo { display: block; color: var(--ink); margin: 0 0 10px; }
+nav.toc .logo svg { width: 200px; height: auto; display: block; }
+nav.toc .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+main { padding: 34px clamp(16px, 4vw, 56px) 80px; max-width: 1180px; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2.sec { font-size: 23px; margin: 56px 0 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+h3 { font-size: 18px; margin: 28px 0 8px; }
+h4 { font-size: 15.5px; margin: 20px 0 6px; }
+.lead { color: var(--muted); font-size: 16.5px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); margin: 14px 0; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.grid .card { margin: 0; }
+.card h4 { margin-top: 0; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; margin-right: 4px; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); } .tag.warn { background: var(--warn-soft); color: var(--warn); } .tag.bad { background: var(--bad-soft); color: var(--bad); }
+.note { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+.note.warn { border-color: var(--warn); background: var(--warn-soft); }
+.note.bad { border-color: var(--bad); background: var(--bad-soft); }
+.note.ok { border-color: var(--ok); background: var(--ok-soft); }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14.2px; background: var(--panel); }
+th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: var(--code); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+.diagram { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 14px 0; overflow-x: auto; text-align: center; }
+.diagram .cap { font-size: 13px; color: var(--muted); margin-top: 6px; text-align: left; }
+pre.mermaid { background: transparent; margin: 0; font-size: 14px; }
+.topbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+button.theme { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 10px 0; }
+details summary { cursor: pointer; font-weight: 600; }
+.kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-size: 13px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <a class="logo" href="#inizio" aria-label="Maat — Multi-Agent Assurance Toolkit">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-label="Maat — Multi-Agent Assurance Toolkit">
+<defs></defs>
+<mask id="maat-logo-m" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+<rect width="64" height="64" fill="#fff"/>
+<rect x="24.8" y="37.6" width="14.4" height="7.2" rx="3.6" fill="#000"/>
+<rect x="20.1" y="31.6" width="23.8" height="19.3" rx="6.6" fill="#000"/>
+<rect x="21.5" y="33" width="21" height="16.5" rx="5.2" fill="#fff"/>
+<rect x="24.8" y="37.6" width="14.4" height="7.2" rx="3.6" fill="#000"/>
+<rect x="28.4" y="20.20" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="23.80" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="27.40" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="31.40" width="7.2" height="1.6" fill="#000"/>
+</mask>
+<g mask="url(#maat-logo-m)" fill="currentColor">
+<polygon points="24.00,34.50 23.16,33.88 22.32,33.28 21.48,32.70 20.62,32.14 19.77,31.59 18.91,31.06 18.04,30.55 17.17,30.06 16.29,29.58 15.41,29.12 14.52,28.68 13.62,28.25 12.73,27.84 11.82,27.45 10.91,27.08 10.00,26.72 9.08,26.38 8.16,26.06 7.23,25.76 6.29,25.47 5.35,25.20 4.41,24.95 3.46,24.72 2.50,24.50 4.60,29.80 5.42,30.06 6.25,30.33 7.07,30.61 7.89,30.91 8.71,31.22 9.53,31.55 10.34,31.89 11.16,32.24 11.97,32.61 12.78,32.99 13.59,33.39 14.40,33.80 15.21,34.22 16.01,34.66 16.82,35.11 17.62,35.58 18.42,36.06 19.23,36.55 20.02,37.06 20.82,37.58 21.62,38.11 22.41,38.66 23.21,39.22 24.00,39.80" stroke-linejoin="round"/>
+<polygon points="40.00,34.50 40.84,33.88 41.68,33.28 42.52,32.70 43.38,32.14 44.23,31.59 45.09,31.06 45.96,30.55 46.83,30.06 47.71,29.58 48.59,29.12 49.48,28.68 50.38,28.25 51.27,27.84 52.18,27.45 53.09,27.08 54.00,26.72 54.92,26.38 55.84,26.06 56.77,25.76 57.71,25.47 58.65,25.20 59.59,24.95 60.54,24.72 61.50,24.50 59.40,29.80 58.58,30.06 57.75,30.33 56.93,30.61 56.11,30.91 55.29,31.22 54.48,31.55 53.66,31.89 52.84,32.24 52.03,32.61 51.22,32.99 50.41,33.39 49.60,33.80 48.79,34.22 47.99,34.66 47.18,35.11 46.38,35.58 45.58,36.06 44.77,36.55 43.98,37.06 43.18,37.58 42.38,38.11 41.59,38.66 40.79,39.22 40.00,39.80" stroke-linejoin="round"/>
+<polygon points="22.82,38.35 20.67,36.88 18.79,50.85 20.94,52.32" stroke-linejoin="round"/>
+<polygon points="41.18,38.35 43.33,36.88 45.21,50.85 43.06,52.32" stroke-linejoin="round"/>
+<polygon points="19.83,36.33 17.66,35.00 14.78,47.87 16.95,49.20" stroke-linejoin="round"/>
+<polygon points="44.17,36.33 46.34,35.00 49.22,47.87 47.05,49.20" stroke-linejoin="round"/>
+<polygon points="16.81,34.51 14.63,33.32 10.94,45.02 13.12,46.21" stroke-linejoin="round"/>
+<polygon points="47.19,34.51 49.37,33.32 53.06,45.02 50.88,46.21" stroke-linejoin="round"/>
+<polygon points="13.78,32.88 11.59,31.84 7.26,42.33 9.46,43.38" stroke-linejoin="round"/>
+<polygon points="50.22,32.88 52.41,31.84 56.74,42.33 54.54,43.38" stroke-linejoin="round"/>
+<polygon points="10.73,31.46 8.52,30.55 3.75,39.83 5.96,40.73" stroke-linejoin="round"/>
+<polygon points="53.27,31.46 55.48,30.55 60.25,39.83 58.04,40.73" stroke-linejoin="round"/>
+<polygon points="7.65,30.22 5.43,29.46 0.40,37.52 2.62,38.29" stroke-linejoin="round"/>
+<polygon points="56.35,30.22 58.57,29.46 63.60,37.52 61.38,38.29" stroke-linejoin="round"/>
+<rect x="21.5" y="33" width="21" height="16.5" rx="5.2"/>
+<path d="M29.4 33 V14.22 C29.4 7.98 35.12 6.68 37.98 10.84 C39.28 12.92 38.76 16.04 37.46 17.86 C37.20 16.04 36.16 14.48 34.60 15.00 V33 Z"/>
+</g>
+<circle cx="29.0" cy="41.0" r="1.7" fill="currentColor"/>
+<path d="M27.60 41.20 L25.40 40.70" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+<circle cx="35.0" cy="41.0" r="1.7" fill="currentColor"/>
+<path d="M36.40 41.20 L38.60 40.70" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+<text x="72" y="37" fill="currentColor" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-weight="800" font-size="34" letter-spacing="-0.5">maat</text>
+<text x="73" y="50" fill="currentColor" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="6.2" textLength="158" lengthAdjust="spacing">MULTI-AGENT ASSURANCE TOOLKIT</text>
+</svg>
+  </a>
+  <div class="brand">Guida ai flussi agentici</div>
+  <div class="sub">plugin di Claude Code · stato al 2026-10-29</div>
+  <h2>Orientarsi</h2>
+  <a href="#inizio">In 5 minuti</a>
+  <a href="#mappa">Mappa generale</a>
+  <a href="#principi">Principi e invarianti</a>
+  <a href="#spec">Il file della feature</a>
+  <h2>La catena</h2>
+  <a href="#spec-author">1 · Spec: spec-author</a>
+  <a href="#plan">2 · Piano: /plan-review-cycle</a>
+  <a href="#light">2b · Variante light</a>
+  <a href="#livelli">Livelli di test</a>
+  <a href="#implement">3 · Implementazione</a>
+  <a href="#review">4 · Review: /implementation-review-cycle</a>
+  <a href="#full">Tutto insieme: /full-implementation-cycle</a>
+  <h2>Mattoncini</h2>
+  <a href="#configurazione">La configurazione: maat.json</a>
+  <a href="#dev-verify">Verifica remota (facoltativa)</a>
+  <a href="#test-fast">test-fast.sh: la copia WSL</a>
+  <a href="#browser-qa">QA da browser (estensione)</a>
+  <a href="#altri">Altri agenti e flussi</a>
+  <a href="#release">Rilascio e produzione</a>
+  <h2>Sotto il cofano</h2>
+  <a href="#sicurezza">Guardia, lock, permessi</a>
+  <a href="#script">Script deterministici e test</a>
+  <a href="#efficienza">Consumo, tempi, misure</a>
+  <h2>Riferimento</h2>
+  <a href="#stop">Quando si ferma: cosa fare</a>
+  <a href="#decisioni">Decisioni prese</a>
+  <a href="#rischi">Rischi residui e limiti</a>
+  <a href="#file">Dove sta cosa</a>
+  <a href="#glossario">Glossario</a>
+</nav>
+
+<main>
+<div class="topbar">
+  <div>
+    <h1>Maat · Guida ai flussi agentici di sviluppo</h1>
+    <div class="lead">Come una richiesta diventa codice rivisto e verificato: skill, agenti, script, schemi e le decisioni che li hanno formati.</div>
+  </div>
+  <button class="theme" id="themeBtn" type="button">Tema chiaro/scuro</button>
+</div>
+
+<div class="note">
+<b>Come leggere questo documento.</b> È una guida <i>esplicativa</i>. Le regole vincolanti stanno nei file
+normativi del plugin: le <code>SKILL.md</code> di ogni skill (<code>${CLAUDE_PLUGIN_ROOT}/skills/</code>), i file degli
+agenti (<code>${CLAUDE_PLUGIN_ROOT}/agents/</code>) e gli header degli script (<code>${CLAUDE_PLUGIN_ROOT}/scripts/</code>; la
+tabella di ripresa, per esempio, vive nell'header di <code>cycle-state.sh</code>). In caso di contrasto vale il file
+normativo, e questo documento va corretto. Gli schemi richiedono la rete la prima volta (libreria Mermaid da CDN); senza rete si vede il loro testo.
+</div>
+<div class="note">
+<b>Nomi e percorsi.</b> Le skill del plugin si chiamano con il prefisso <code>/maat:</code> (per esempio
+<code>/maat:full-implementation-cycle</code>); qui, per brevità, spesso lo si omette. <code>${CLAUDE_PLUGIN_ROOT}</code> è la
+radice del plugin installato (negli script: <code>MAAT_ROOT</code>). Ciò che dipende dal progetto — moduli, comandi di
+test e lint, produzione, cartelle — non è scritto negli script: sta in <code>.claude/maat.json</code> del progetto
+(vedi <a href="#configurazione">La configurazione</a>). La cartella di lavoro è <code>cartelle.lavoro</code> di
+<code>maat.json</code>, per difetto <code>.claude/.ai-workflow/</code>: è quella degli esempi.
+</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="inizio">In 5 minuti</h2>
+
+<div class="grid">
+  <div class="card"><h4>Tutto in automatico</h4>
+  <pre class="cmd">/maat:full-implementation-cycle .claude/.ai-workflow/spec-&lt;nome&gt;.md</pre>
+  Piano → implementazione → review → correzioni, ogni fase in una sottosessione separata. Si ferma da solo quando serve una persona. Rilanciando lo stesso comando riprende dalla fase giusta. Non committa.</div>
+  <div class="card"><h4>Passo per passo</h4>
+  <pre class="cmd">Use the spec-author agent.   (richiesta)
+/maat:plan-review-cycle .claude/.ai-workflow/spec-&lt;nome&gt;.md
+(implementi tu, o chiedi di implementare il piano)
+/maat:implementation-review-cycle &lt;nome&gt;</pre>
+  Utile per rivedere il piano prima dell'implementazione o implementare a mano.</div>
+  <div class="card"><h4>Configurazione e diagnosi</h4>
+  <pre class="cmd">/maat:setup
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/maat-doctor.sh"</pre>
+  La prima scrive <code>.claude/maat.json</code> dopo la tua conferma; il secondo controlla l'ambiente in sola lettura. La verifica su un ambiente remoto, se il progetto ne ha una, è una sua skill (<a href="#dev-verify">Verifica remota</a>).</div>
+</div>
+
+<div class="tablewrap"><table>
+<tr><th>Opzione</th><th>Dove vale</th><th>Effetto</th></tr>
+<tr><td><code>--tests=min|std|full</code></td><td>piano, review, full cycle</td><td>quanta verifica prescrivere ed eseguire (default <code>std</code>); vedi <a href="#livelli">Livelli di test</a></td></tr>
+<tr><td><code>--light</code></td><td>piano (nel full cycle: solo il piano)</td><td>usa <code>/plan-review-cycle-light</code>: un reviewer, giri sempre a scope pieno</td></tr>
+<tr><td><code>--light</code></td><td>review (solo a mano)</td><td>un solo giro con mandato stretto, mai <code>IMPLEMENTED</code>; il full cycle non lo passa mai alla review</td></tr>
+<tr><td><code>--no-dev</code></td><td>piano, review, full cycle</td><td>nessun accesso all'ambiente remoto di prova (<code>verifica_remota</code>) e nessun gate eseguito da lì: al massimo <code>NEEDS_VERIFICATION</code>. Senza <code>verifica_remota</code> in <code>maat.json</code> il ciclo gira sempre così</td></tr>
+<tr><td><code>--with-e2e</code></td><td>review</td><td>aggiunge uno spec e2e mirato come gate <i>opzionale</i></td></tr>
+<tr><td><code>--base=&lt;ref&gt;</code></td><td>review, full cycle</td><td>implementazione già (in parte) committata: superficie calcolata da <code>merge-base</code></td></tr>
+<tr><td><code>--worktree</code></td><td>full cycle</td><td>il ciclo gira in un worktree dedicato <code>../&lt;repo&gt;-fic-&lt;nome&gt;</code> (branch <code>fic/&lt;nome&gt;</code>, <code>scripts/ciclo-worktree.sh</code> del plugin): chi lavora nel tree principale non ne committa i file a metà e la review non vede i file di altri flussi. Si lancia <b>dal tree principale</b>: da una cartella che è già un worktree collegato il comando è rifiutato. Dipendenze del tree principale <b>collegate</b> (junction o symlink, voci <code>collega_nel_worktree</code> di <code>maat.json</code>), mai copiate; lock e copia WSL del worktree: in parallelo gira solo il lavoro <b>locale</b>. <b>L'ambiente remoto di prova resta condiviso</b>: con <code>--worktree</code> il ciclo gira sempre <code>--no-dev</code> (al massimo <code>NEEDS_VERIFICATION</code>) e <code>--with-e2e</code> è rifiutato; la verifica remota si fa dopo, dal tree principale, a codice integrato. A fine ciclo spec e run dir riportate nel tree principale, il codice resta sul branch, non committato. Rimozione solo con <code>ciclo-worktree.sh rimuovi</code></td></tr>
+<tr><td><code>--inline</code></td><td>full cycle</td><td>esegue le fasi nella chat invece che in sottosessioni (niente guardia né lock: il bookkeeping lo fa l'orchestratore). <b>Solo se chiesto esplicitamente</b> <span class="tag ok">2026-09-23</span>: un <code>run-phase.sh</code> che esce 3 (binario <code>claude</code> non trovato) è uno <b>STOP</b>, non un declassamento automatico a una modalità senza guardia</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="mappa">Mappa generale</h2>
+<p>Una feature attraversa quattro stadi. Ognuno scrive nello <b>stesso file</b>
+<code>.claude/.ai-workflow/spec-&lt;nome&gt;.md</code>, e ogni stadio legge ciò che il precedente ha scritto nelle
+sue righe di stato (la cartella è <code>cartelle.lavoro</code> di <code>maat.json</code>). <code>/full-implementation-cycle</code> non aggiunge regole di piano o di review: compone le due skill e aggiunge implementazione, correzioni, orchestrazione e ripresa.</p>
+
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  R(["Richiesta"]) --> SA["spec-author&lt;br/&gt;(agente)"]
+  SA --> SPEC[("spec-nome.md")]
+  R -. "oppure testo incollato" .-> PRC
+  SPEC --> PRC["/plan-review-cycle&lt;br/&gt;oppure -light"]
+  PRC -->|"Plan status: APPROVED"| IMP["Implementazione&lt;br/&gt;a mano o plan-implementer"]
+  IMP --> IRC["/implementation-review-cycle"]
+  IRC -->|"gate richiesti"| DV["comandi dei moduli (maat.json)&lt;br/&gt;e verifica remota, se dichiarata"]
+  DV --> IRC
+  IRC -->|"NEEDS_CHANGES"| FIX["Correzione&lt;br/&gt;solo blocker/major"]
+  FIX --> IRC
+  IRC -->|"APPROVED + gate PASS"| DONE(["Feature status: IMPLEMENTED&lt;br/&gt;commit dell'utente"])
+  subgraph FIC ["/full-implementation-cycle: tutto questo in sottosessioni, con ripresa"]
+    PRC
+    IMP
+    IRC
+    FIX
+  end
+  DONE -.-> QA["QA del progetto&lt;br/&gt;(agenti o skill proprie, a richiesta)"]
+</pre><div class="cap">La catena principale. Le frecce tratteggiate sono passi facoltativi.</div></div>
+
+<div class="grid">
+  <div class="card"><h4><span class="tag">skill</span> Catena</h4>
+  <code>/plan-review-cycle</code>, <code>/plan-review-cycle-light</code>, <code>/implementation-review-cycle</code>, <code>/full-implementation-cycle</code></div>
+  <div class="card"><h4><span class="tag">skill</span> Configurazione</h4>
+  <code>/maat:setup</code> (scrive <code>.claude/maat.json</code> dopo la conferma) e <code>maat-doctor.sh</code> (diagnosi in sola lettura)</div>
+  <div class="card"><h4><span class="tag warn">progetto</span> Estensioni</h4>
+  skill e agenti propri del progetto: verifica remota (<code>verifica_remota</code>), QA da browser, rilascio. Maat li conosce solo se dichiarati in <code>maat.json</code></div>
+</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="principi">Principi e invarianti</h2>
+<p>Poche regole spiegano quasi tutto il disegno. Ognuna è nata da un difetto misurato.</p>
+<div class="tablewrap"><table>
+<tr><th>Principio</th><th>Come si applica</th><th>Perché</th></tr>
+<tr><td><b>Un file per feature</b></td><td>spec, piano e review sono sezioni di <code>spec-&lt;nome&gt;.md</code>; ogni skill scrive solo la propria sezione</td><td>una sola fonte di verità; niente file versionati che divergono</td></tr>
+<tr><td><b>Le righe di stato sono il contratto</b></td><td><code>Plan status:</code>, <code>Review status:</code>, <code>Feature status:</code>… a inizio riga e una sola volta</td><td>gli script le leggono con grep: un doppione le renderebbe ambigue</td></tr>
+<tr><td><b>Solo blocker e major bloccano</b></td><td>minor e nit diventano note, <b>mai applicati</b></td><td>i ~155 optional applicati fuori revisione erano il luogo dove nascevano nuovi difetti</td></tr>
+<tr><td><b>Un finding bloccante ha un'àncora verificabile</b></td><td><code>codice path:riga</code> · riga di spec/piano · assenza (ricerca con 0 risultati) · misura</td><td>un'opinione non può costare un giro; un'àncora falsa si rifiuta</td></tr>
+<tr><td><b>Le approvazioni sono legate a ciò che approvano</b></td><td><code>Approved basis</code> (spec+piano), <code>Reviewed contract</code>, <code>Reviewed snapshot</code> (codice)</td><td>un'approvazione su testo o codice poi cambiato non vale più: STALE</td></tr>
+<tr><td><b>Lo stato lo tengono gli script</b></td><td><code>plan-check.sh</code>, <code>review-surface.sh</code>, <code>cycle-state.sh</code>, <code>run-phase.sh</code></td><td>ciò che si può calcolare non si lascia all'interpretazione di un LLM</td></tr>
+<tr><td><b>Budget limitati</b></td><td>piano 10 iterazioni; review 3 giri + 1 dopo un'approvazione diventata vecchia; ricorrenza = stop</td><td>ogni ciclo termina; il ritorno dei giri successivi è calante</td></tr>
+<tr><td><b>Un <code>SKIPPED</code> fuori perimetro non è un gate soddisfatto</b> <span class="tag ok">2026-09-23</span></td><td>vale come <code>PASS</code> solo quando non c'era nulla da eseguire (nessuna configurazione eslint, nessuna estensione lintabile). Un file lintabile fuori dal perimetro del lint del modulo <b>mai classificato</b> — manca <code>--base</code>, oppure il run è ripiegato fuori dalla copia WSL — è <code>BLOCKED</code>: una superficie che nessuno ha guardato non è una superficie senza niente da guardare</td><td>trovato da una review indipendente: la regola vecchia «SKIPPED = soddisfatto» citava proprio il fuori perimetro e riapriva il falso PASS</td></tr>
+<tr><td><b>Assenza di evidenza ≠ evidenza</b></td><td><code>PASS/FAIL/BLOCKED/SKIPPED/NOT RUN</code> distinti; <code>IMPLEMENTED</code> solo con review approvata <i>e</i> gate richiesti PASS</td><td>prima un gate bloccato valeva di fatto come PASS</td></tr>
+<tr><td><b>Nessun commit automatico</b></td><td>tutto resta nel working tree</td><td>la decisione di committare è dell'utente</td></tr>
+<tr><td><b>La produzione esiste</b></td><td>guardia <code>guard.py</code> (nucleo più <code>guardia</code> di <code>maat.json</code>), divieti espliciti negli agenti, migrazioni mai applicate dall'automazione</td><td>un'automazione senza sorveglianza non deve poter toccare PROD o dati reali</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="spec">Il file della feature</h2>
+<p>Tutto il ciclo di una feature vive in <code>.claude/.ai-workflow/spec-&lt;nome&gt;.md</code> (la cartella di lavoro, da tenere fuori da git: per esempio <code>.claude/.ai-workflow/</code> nel <code>.gitignore</code>), più la sua cartella di lavoro <code>spec-&lt;nome&gt;.run/</code> quando si usa il full cycle.</p>
+
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph F ["spec-nome.md"]
+    direction TB
+    S["Sezioni della specifica&lt;br/&gt;Contesto · Requisiti · Regole · Criteri…&lt;br/&gt;proprietario: spec-author o l'utente"]
+    P["## Piano di implementazione&lt;br/&gt;Plan status · Test level · Superfici a rischio · Approved basis&lt;br/&gt;Tracciabilità requisiti · Piano di test · Changelog + riga Metrica&lt;br/&gt;proprietario: plan-review-cycle"]
+    V["## Review implementazione&lt;br/&gt;Review status · Feature status · Verification · Review basis&lt;br/&gt;Reviewed snapshot · Reviewed contract · Review rounds&lt;br/&gt;manifest Scope/Excluded · tabella evidenze · tabella finding&lt;br/&gt;proprietario: implementation-review-cycle"]
+    S --> P --> V
+  end
+  RUN[("spec-nome.run/&lt;br/&gt;prompts · log · base.txt · touched.txt&lt;br/&gt;do-not-touch.txt · mixed.txt · counterproof/")]
+  F -. "solo full cycle" .- RUN
+</pre><div class="cap">Chi scrive cosa. Nessuno modifica le sezioni degli altri; <code>plan-check.sh lint</code> lo controlla per il piano.</div></div>
+
+<h3>Le righe di stato</h3>
+<div class="tablewrap"><table>
+<tr><th>Riga</th><th>Valori</th><th>Scritta da</th><th>Letta da</th></tr>
+<tr><td><code>Plan status:</code></td><td><code>DRAFT</code> · <code>APPROVED</code> · <code>NEEDS HUMAN DECISION</code></td><td>plan-review-cycle</td><td>review (preflight), cycle-state</td></tr>
+<tr><td><code>Test level:</code></td><td><code>min</code> · <code>std</code> · <code>full</code> (assente = <code>legacy</code>)</td><td>plan-review-cycle, allo Step 1</td><td>review, plan-implementer</td></tr>
+<tr><td><code>Superfici a rischio:</code></td><td>token del vocabolario o <code>nessuna</code></td><td>plan-review-cycle</td><td>lenti, review (focus di rischio), plan-check</td></tr>
+<tr><td><code>Approved basis:</code></td><td><code>spec &lt;fp12&gt; · plan &lt;fp12&gt;</code></td><td>plan-review-cycle, all'approvazione</td><td><code>plan-check.sh basis</code> → FRESH/STALE</td></tr>
+<tr><td><code>Review status:</code></td><td><code>APPROVED</code> · <code>NEEDS_CHANGES</code> · <code>NEEDS HUMAN DECISION</code></td><td>implementation-review-cycle</td><td>cycle-state</td></tr>
+<tr><td><code>Feature status:</code></td><td><code>PLANNED</code> · <code>NEEDS_VERIFICATION</code> · <code>IMPLEMENTED</code></td><td>implementation-review-cycle; nel full cycle firmato da <code>finalize.sh</code></td><td>cycle-state, utente</td></tr>
+<tr><td><code>Verification:</code></td><td><code>VERIFIED</code> · <code>PARTIAL (…)</code> · <code>NOT RUN (…)</code></td><td>implementation-review-cycle</td><td>utente</td></tr>
+<tr><td><code>Reviewed snapshot:</code></td><td><code>base · tree · fingerprint · n paths</code></td><td>implementation-review-cycle</td><td><code>review-surface.sh check</code>, cycle-state</td></tr>
+<tr><td><code>Reviewed contract:</code></td><td><code>spec &lt;fp12&gt; · plan &lt;fp12&gt;</code></td><td>implementation-review-cycle</td><td>cycle-state (contratto cambiato → review)</td></tr>
+<tr><td><code>Review rounds:</code></td><td><code>n/3 · post-approval NEEDS_CHANGES: k/1</code></td><td>implementation-review-cycle</td><td>cycle-state (budget dei fix), review stessa</td></tr>
+</table></div>
+
+<h3>Vocabolario delle superfici a rischio</h3>
+<p>Unica lista, definita nello Step 0 di <code>/plan-review-cycle</code>.</p>
+<div class="tablewrap"><table>
+<tr><th>Token</th><th>Copre</th><th>Critica</th><th>Conseguenza</th></tr>
+<tr><td><code>permessi</code></td><td>autenticazione, autorizzazione, ruoli, visibilità per ruolo</td><td><span class="tag bad">sì</span></td><td rowspan="3">un <b>pavimento</b> di verifica obbligatorio (<code>[pavimento: …]</code>) a ogni livello; senza pavimento né deroga → <b>obbligo</b>, chiuso solo dall'evidenza dell'utente; se il giro 1 approva subito, scatta comunque il gate occhi nuovi</td></tr>
+<tr><td><code>dati</code></td><td>schema DB, migrazioni, stato persistente, dati scritti o cancellati in massa</td><td><span class="tag bad">sì</span></td></tr>
+<tr><td><code>distruttiva</code></td><td>operazioni che cancellano o sovrascrivono in modo irreversibile</td><td><span class="tag bad">sì</span></td></tr>
+<tr><td><code>contratto-api</code></td><td>forma di request/response, codici, rotte usate da altri</td><td>no</td><td rowspan="3">focus di rischio (raggio d'azione) per lenti e review; nessun pavimento</td></tr>
+<tr><td><code>import</code></td><td>pipeline di import</td><td>no</td></tr>
+<tr><td><code>logica-condivisa</code></td><td>logica di business, componenti, store, composable condivisi</td><td>no</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="spec-author">1 · La specifica: <code>spec-author</code></h2>
+<p>Agente (<code>Read, Grep, Glob, Write, Edit</code>) che trasforma una richiesta grezza in <code>spec-&lt;nome&gt;.md</code>
+pronta per il piano. Interpreta la richiesta sul codice, <b>si ferma con domande</b> sulle ambiguità critiche e propone alternative quando le strade sono più di una. Non pianifica e non implementa.</p>
+<pre class="cmd">Use the spec-author agent.
+
+[richiesta di modifica]</pre>
+<p>In alternativa: spec scritta a mano (prefisso <code>spec-</code>, nella cartella di lavoro, fuori da git) oppure testo incollato
+direttamente a <code>/plan-review-cycle</code>, che crea il contenitore.</p>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="plan">2 · Il piano: <code>/plan-review-cycle</code></h2>
+<p>Scrive la sezione <code>## Piano di implementazione</code> e la fa rivedere da reviewer avversariali
+(<code>spec-plan-reviewer</code>, solo <code>Read/Grep/Glob</code>) finché è <code>APPROVED</code>, in un solo turno autonomo e senza pause. Non scrive codice.</p>
+
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  A["Step 0 · propone il ramo&lt;br/&gt;superfici del vocabolario → ramo pieno&lt;br/&gt;nessuna → suggerisce -light"] --> B["Step 1 · scrive il piano DRAFT&lt;br/&gt;copia della spec nello scratchpad&lt;br/&gt;plan-check.sh lint"]
+  B --> C["Step 2 · giro 1: TRE lenti in parallelo&lt;br/&gt;L1 contratto e dati · L2 fedeltà al codice · L3 gate e test"]
+  C --> D{"Tutte APPROVED?"}
+  D -->|"no"| E["Verifica le àncore&lt;br/&gt;rifiuta solo se letteralmente false"]
+  E --> F["Revisione chirurgica&lt;br/&gt;un Edit minimo per finding&lt;br/&gt;changelog · lint"]
+  F --> G["Step 2-bis · UN reviewer sul DELTA&lt;br/&gt;intervalli da plan-check.sh delta&lt;br/&gt;+ max 8 righe xref"]
+  G --> D2{"APPROVED?"}
+  D2 -->|"no"| E
+  D2 -->|"sì"| H{"Il gate occhi nuovi&lt;br/&gt;deve scattare?"}
+  D -->|"sì"| H
+  H -->|"sì: c'è stato un delta, o superficie critica&lt;br/&gt;approvata al giro 1, o un finding rifiutato"| I["Step 2-ter · gate occhi nuovi&lt;br/&gt;scope pieno: quale premessa&lt;br/&gt;non è mai stata messa in dubbio?"]
+  I -->|"major"| E
+  I -->|"APPROVED"| J
+  H -->|"no"| J["Step 3 · APPROVED&lt;br/&gt;scrive Approved basis&lt;br/&gt;optional = note · riga Metrica"]
+  D -. "STOP di un reviewer, ricorrenza, disaccordo su un fatto,&lt;br/&gt;scope fuori spec, ambiguità, 10 iterazioni" .-> K(["NEEDS HUMAN DECISION"])
+</pre><div class="cap">Il ciclo del piano. Un ventaglio conta come una iterazione, e anche ogni esecuzione del gate.</div></div>
+
+<h3>Le tre lenti del giro 1</h3>
+<div class="grid">
+  <div class="card"><h4>L1 · Contratto e dati</h4>requisiti mancanti e conformità alla spec, ruoli e permessi, API/payload/persistenza, validazione, migrazioni, retrocompatibilità. Verifica <b>ogni</b> <code>nessuna implicazione</code>, la riga delle superfici e la tabella di tracciabilità.</div>
+  <div class="card"><h4>L2 · Fedeltà al codice</h4>ogni <code>path:riga</code> esiste ed è quella giusta, a quale file risolve un componente auto-importato (se il framework lo fa), raggio d'azione dei file condivisi, minimalità. <b>Riconta</b> ogni numero dichiarato.</div>
+  <div class="card"><h4>L3 · Gate e test</h4>set di test minimo <b>e</b> sufficiente: sotto-test e sovra-test hanno la stessa gravità. Non-vacuità (<code>rosso se:</code>), stringhe cercate nelle cartelle dei test e degli e2e, criteri soddisfacibili, stati UI.</div>
+</div>
+
+<h3>Regole che fanno convergere il ciclo</h3>
+<div class="tablewrap"><table>
+<tr><th>Regola</th><th>Contenuto</th></tr>
+<tr><td>Verifica prima di applicare</td><td>ogni blocker/major si controlla con 1 Read o 1 Grep. Si rifiuta <b>solo</b> se l'àncora è letteralmente falsa, mai per ragionamento. Un rifiuto finisce nel changelog, nelle liste dei prompt successivi e fa scattare il gate. Se in un giro <b>tutti</b> i finding sono rifiutati non si calcola il delta: si rilanciano gli stessi produttori sugli stessi intervalli, e conta come iterazione.</td></tr>
+<tr><td>Stop duri (NEEDS HUMAN DECISION)</td><td>STOP del reviewer · stesso finding in due esecuzioni consecutive · finding rifiutato che torna senza prove nuove · scope fuori dalla spec · ambiguità non risolvibile dal codice · 10 iterazioni</td></tr>
+<tr><td>Delta derivato, mai dichiarato</td><td>copia della spec prima di ogni revisione, poi <code>plan-check.sh delta</code>. Diff vuoto, baseline mancante o diff su tutto il file = <b>errore duro</b>: si rifà a scope pieno, mai APPROVED.</td></tr>
+<tr><td>Revisione chirurgica</td><td>un Edit minimo per finding; niente riscritture, niente blocchi di codice toccati senza motivo. Le liste di <code>file:riga</code> scritte in revisione vengono da una ricerca appena fatta.</td></tr>
+<tr><td>Ricorrenza tenuta dall'orchestratore</td><td>chiave stabile <code>area/claim</code> + simbolo; stesso blocker/major in due esecuzioni consecutive dello stesso produttore → STOP. <code>reintrodotto</code> è un'etichetta, non uno stop.</td></tr>
+<tr><td>Una revisione parziale non è un'approvazione</td><td>un <code>APPROVED</code> con <code>Blocked on:</code> o con intervalli scoperti non conta; un solo rilancio gratuito sullo scoperto, poi conta come iterazione, poi STOP.</td></tr>
+<tr><td>Un piano approvato non si modifica</td><td>si emenda solo con una <b>riapertura</b> (<code>DRAFT</code>, giro delta, gate) con budget nuovo di 10. Una modifica a mano rende STALE l'<code>Approved basis</code> e ferma review e full cycle.</td></tr>
+<tr><td>Reviewer: letture a lotti</td><td>Read/Grep/Glob indipendenti nello stesso messaggio, una riga di testo dopo ogni messaggio con tool call; il budget conta le chiamate, non i messaggi. Budget morbido: ~25 al giro 1, poi 20 → 15 → 12 sui delta (+50% su una pista da blocker).</td></tr>
+<tr><td>Orchestratore: letture mirate</td><td>prima una ricerca, poi gli intervalli che indica; niente riletture di intervalli invariati; si rilegge dopo ogni scrittura su quel file, dopo qualunque comando dalla scrittura incerta, dopo una compattazione. Ciò che si cita viene da una lettura ancora valida.</td></tr>
+</table></div>
+
+<h3>Stati del piano</h3>
+<div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> DRAFT: Step 1
+  DRAFT --> DRAFT: giro con blocker/major
+  DRAFT --> APPROVED: tutte le lenti + gate
+  DRAFT --> NHD: STOP / ricorrenza / 10 iterazioni
+  APPROVED --> DRAFT: riapertura (nuovo requisito nella spec)
+  APPROVED --> STALE: spec o piano cambiati a mano
+  STALE --> DRAFT: riapertura
+  state "NEEDS HUMAN DECISION" as NHD
+  state "APPROVED ma basis STALE&lt;br/&gt;(rilevato da plan-check.sh basis)" as STALE
+</pre></div>
+
+<h3><code>plan-check.sh</code>: struttura e confini, mai contenuto</h3>
+<div class="tablewrap"><table>
+<tr><th>Sottocomando</th><th>A cosa serve</th><th>Chi lo usa</th></tr>
+<tr><td><code>lint &lt;spec&gt; [--baseline &lt;copia&gt;]</code></td><td>VIOLATION: righe di stato duplicate, sezioni sopra il piano cambiate, review toccata, <code>[pavimento:</code> su una superficie non dichiarata o non critica (o più di uno per superficie), token sconosciuti, <code>Approved basis</code> duplicata. <code>AVVISO</code> non bloccanti (lunghezza del piano di test, superficie critica senza pavimento…)</td><td>plan-review-cycle dopo ogni scrittura</td></tr>
+<tr><td><code>delta &lt;copia&gt; &lt;spec&gt;</code></td><td>intervalli riscritti ±2 righe e fino a 8 <code>xref</code>; diff vuoto = exit 1</td><td>Step 2-bis</td></tr>
+<tr><td><code>contract &lt;spec&gt;</code></td><td>l'unico parser del piano: livello, superfici, pavimenti, obblighi, righe ⚠️, intervalli di piano di test e tracciabilità</td><td>implementation-review-cycle</td></tr>
+<tr><td><code>basis &lt;spec&gt;</code></td><td>impronte di spec e piano; <code>FRESH</code> · <code>STALE</code> · <code>LEGACY</code></td><td>Step 3, review, cycle-state</td></tr>
+<tr><td><code>lint2 &lt;spec&gt;</code> <span class="tag ok">formato 2</span></td><td>VIOLATION: requisito senza test, test fuori da un passo, file di un passo fuori da <code>### File toccati</code>, blocco senza <code>scrive:</code>, riga di test o mutazione malformata, <code>⚠️ Rischio aperto</code> senza test, stringa o <code>data-test</code> tolti ma ancora asserita da un test che il piano non tocca. Formato 1: <code>non si applica</code></td><td>prima di ogni giro di review</td></tr>
+<tr><td><code>gen &lt;spec&gt; [--run-dir &lt;dir&gt;]</code> <span class="tag ok">formato 2</span></td><td>dalla tabella dei test: livello, file e selettori per i comandi dei moduli (<code>maat.json</code>), comandi, blocchi in <code>&lt;run-dir&gt;/gen/procedura.txt</code>; <code>mutations.json</code> per <code>counterproof.sh</code> in <code>&lt;run-dir&gt;/counterproof/</code>. Mai nel piano</td><td>Step 3, worker implement e review</td></tr>
+<tr><td><code>route &lt;spec&gt; [--diff &lt;file&gt;]</code></td><td>L5: superfici rilevate dai percorsi e dalle parole chiave, confrontate con la dichiarazione; <code>Percorso: leggero</code> solo con piano ≤150 righe, nessuna migrazione, nessuna superficie rilevata né dichiarata</td><td>dopo lo Step 1</td></tr>
+<tr><td><code>s2 &lt;spec&gt; --delta &lt;f&gt; --gate &lt;f&gt; [--respinti &lt;n&gt;]</code></td><td>S2: <code>APPROVA</code> solo se delta e occhi freschi sono puliti sulla stessa impronta, quella attuale; un finding respinto ⇒ <code>RILANCIA</code> (delta e gate di nuovo insieme, con la lista dei respinti; <code>--respinti</code> conta solo le risposte nuove; una riproposta senza evidenza nuova è lo stop per ricorrenza)</td><td>giri 2–4 del formato 2</td></tr>
+<tr><td><code>skeleton &lt;spec&gt;</code> <span class="tag ok">formato 2</span></td><td>conta passi, file, superfici e righe: <code>Scheletro: SOTTO IL TETTO</code> (≤15 passi, ≤40 file) oppure <code>SOPRA IL TETTO</code> (exit 1: proposta di taglio); lo stesso comando, sul piano completo, respinge oltre 400 righe</td><td>Step 1, prima del piano completo e prima del giro 1</td></tr>
+<tr><td><code>split &lt;madre&gt; [&lt;figlia&gt;…]</code></td><td>ogni <code>RF</code>/<code>CA</code> della madre in <b>una e una sola</b> figlia (perso o duplicato ⇒ STOP), nessun requisito aggiunto, <code>Dipende da:</code> e <code>Interfaccia per:</code> in ogni figlia</td><td>proposta di taglio</td></tr>
+</table></div>
+
+<h3>Formato 2 <span class="tag ok">nuovi piani</span></h3>
+<p>Riga <code>Plan format: 2</code> subito sotto <code>## Piano di implementazione</code>. Decisioni in prosa con una tabella di esempi <code>input | output</code>; passi <code>id | file | modifica | test</code> dentro blocchi <code>#### Blocco &lt;id&gt;</code> con <code>scrive:</code> (i file) e <code>dopo:</code> (i blocchi da cui dipende); piano di test come tabella <code>ID | requisito | file | asserzione | mutazione</code>, con la mutazione nella forma di <code>counterproof.sh</code> (<code>file · simbolo · cerca → sostituisci · rosso se</code>). Comandi, percorsi e ricette delle controprove li genera <code>plan-check.sh gen</code>: nel piano non ci sono, e i finding sulla procedura non bloccano più. I piani senza la riga (formato 1) seguono il percorso di sempre, 10 giri compresi.</p>
+<div class="note"><b>Review ≤4 giri.</b> Giro 1: le tre lenti. Dal giro 2 (<b>S2</b>): delta e occhi freschi partono <b>insieme</b> sulla stessa impronta del piano; si approva solo se entrambi sono puliti su quell'impronta — pulito vuol dire nessun finding bloccante, <b>nemmeno respinto</b> (<code>plan-check.sh s2</code>). L'autore delle correzioni è un agente a contesto fresco per giro; un difetto di prodotto trovato tardi diventa un <code>⚠️ Rischio aperto</code> con un test assegnato; due sezioni in contraddizione bloccano sempre.</div>
+<div class="note"><b>Fase test-red <span class="tag ok">harness-pt11</span>.</b> Nel full cycle, fra piano APPROVED e implement (solo formato 2, <code>Next: TEST-RED</code>): l'agente <code>acceptance-test-writer</code> scrive i test della tabella e gli <b>stub</b> dei simboli nuovi (i file marcati <code>(nuovo)</code> in <code>### File toccati</code>: lo scope della guardia); il driver li esegue (<code>gates.sh</code> mirato, poi <code>plan-check.sh rossi</code>) e vuole ogni test <b>rosso sulla sua asserzione</b>. Rosso da import o raccolta = «non dimostrato», verde = il test non prova nulla, una suite esistente rossa o un test che vieta un valore che il piano aggiunge = conflitto: tutti STOP, prima di scrivere codice. Chiusa OK, la riga <code>Approved basis</code> prende <code>· tests &lt;fp&gt;</code>: un test di accettazione cambiato dopo è una deviazione (STOP). <b>S3:</b> una fase <code>test-stage</code> può scrivere i test in <code>&lt;run-dir&gt;/staging/</code> mentre gira il gate finale del piano; a piano approvato con la stessa impronta test-red li copia, altrimenti li scarta. <b>L2:</b> per i soli file nuovi la coppia «rosso alla base con stub / verde dopo» vale da controprova (<code>"assorbita"</code> in <code>mutations.json</code>, ricontrollata da <code>finalize.sh</code>).</div>
+
+<h3>Spec grandi: scheletro, taglio e catene <span class="tag ok">harness-pt12</span></h3>
+<p>Un piano enorme non converge: il revisore lo campiona invece di esaurirlo (i 7 piani su 13 che hanno esaurito o quasi i giri stavano tutti sopra le 590 righe). Per questo il piano nuovo nasce come <b>scheletro</b> — solo passi, file e superfici, in formato 2 — e <code>plan-check.sh skeleton</code> lo misura: sotto il tetto (≤15 passi, ≤40 file) il piano completo parte dallo scheletro; sopra, <b>proposta di taglio</b>. Il piano completo si rimisura: oltre 400 righe si torna alla proposta, senza deroghe.</p>
+<div class="tablewrap"><table>
+<tr><th>Passo</th><th>Chi</th><th>Cosa</th></tr>
+<tr><td>proposta</td><td><code>spec-author</code>, modalità <code>split</code></td><td>una catena di figlie <code>spec-&lt;nome&gt;-&lt;k&gt;-&lt;slug&gt;.md</code> col primo criterio che dà pezzi sotto il tetto: dati per primi · per contratto · refactor preparatorio a parte · fetta verticale di valore. Ogni figlia ha <code>Dipende da:</code> e <code>Interfaccia per:</code></td></tr>
+<tr><td>verifica</td><td><code>plan-check.sh split</code></td><td>ogni <code>RF</code> e <code>CA</code> della madre in una e una sola figlia; «ogni anello lascia l'app funzionante» è un giudizio e passa dall'utente</td></tr>
+<tr><td>decisione</td><td>tu, una volta per feature</td><td>STOP breve: anelli, requisiti di ciascuno, cosa vedono gli utenti fra un anello e l'altro (la produzione esiste). Approvato, la madre riceve <code>Figlie: …</code> e la catena gira da sola</td></tr>
+<tr><td>anelli</td><td><code>cycle-state.sh</code> (righe C1–C4), <code>run-phase.sh</code></td><td>stesso working tree, il commit resta tuo. Base dell'anello k = <code>.post-tree</code> di k−1 (mai HEAD): prima della review il driver scrive <code>log/&lt;label&gt;.anello.diff</code> (<code>review-surface.sh diff</code> dalla base dell'anello, sui file del suo <code>touched.txt</code>) e lo mette nel prompt, quindi la review legge solo il diff dell'anello; senza base la review non parte (exit 7). Un anello è chiuso solo con <code>Finalize: IMPLEMENTED</code> fresca (<code>plan-check.sh closed</code>); i file degli anelli precedenti sono «stessa catena», né altri flussi né misti, niente <code>completion</code>. All'avvio di k il tree deve essere il <code>.post-tree</code> di k−1, altrimenti STOP (exit 7)</td></tr>
+<tr><td>L6 · pipeline dei piani</td><td><code>plan-check.sh basis</code></td><td>il piano di k+1 parte quando quello di k è APPROVED (prima: <code>WAIT</code>); l'implement di k+1 aspetta k IMPLEMENTED. La basis di un anello include madre, piano di k e, a k chiuso, l'interfaccia reale: STALE se la madre cambia, se il piano di k si riapre, se l'interfaccia differisce o se un file citato da k+1 è nel <code>touched.txt</code> di k (giro delta a k chiuso)</td></tr>
+<tr><td>chiusura</td><td><code>run-phase.sh</code>, etichetta <code>NN-chiusura</code> sulla run dir della madre</td><td>sotto il lock: gate <code>full</code> sull'albero finale contro la base del primo anello, e2e via la verifica remota (<code>verifica_remota</code>) se le figlie hanno <code>[e2e-locator:</code>; scrive <code>chiusura.txt</code>. La madre è <code>DONE</code> solo così</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="light">2b · Variante <code>/plan-review-cycle-light</code></h2>
+<p>Stesse regole del ramo pieno (àncore, revisione chirurgica, optional come note, <code>Approved basis</code>, ricorrenza, lint, livelli, pavimenti) con due eccezioni dichiarate: usa <code>spec-plan-reviewer-light</code> (conciso, profondo solo su permessi, DB, API, import, logica condivisa, auth, stato persistente) e <b>non prende</b> ventaglio, delta né gate: <b>ogni giro è a scope pieno</b>.</p>
+<div class="note"><b>L5 · formato 2:</b> il ramo leggero non si sceglie più a mano. Dopo lo Step 1 <code>plan-check.sh route</code> lo concede solo con piano ≤150 righe, nessuna migrazione e nessuna superficie, né rilevata dai file (le regex di <code>piano.superfici_critiche</code> e <code>piano.migrazioni</code> in <code>maat.json</code>: per esempio la cartella delle rotte → permessi e contratto-api, lo schema del DB → dati, i pacchetti condivisi → logica-condivisa; <code>DELETE</code>, <code>DROP</code>, <code>TRUNCATE</code>… → distruttiva) né dichiarata. Qualunque discordanza ⇒ ramo pieno. La review dell'implementazione resta sempre piena.</div>
+<div class="note warn">Qui non c'è mai un gate occhi nuovi: la regola «una revisione parziale non è un'approvazione» è l'unica cosa fra un giro parziale e un piano approvato. Su cambi piccoli il guadagno strutturale è zero: il ramo esiste per non peggiorarli. Nel dubbio si va sul ramo pieno.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="livelli">Livelli di test: <code>--tests=min|std|full</code></h2>
+<p>Il livello è il <b>budget di verifica</b>. Si scrive nel piano (<code>Test level:</code>) e la review lo rilegge da lì. Si sceglie per <i>forma</i> del cambiamento: logica pura in un modulo → <code>min</code>; il resto → <code>std</code>; <code>full</code> quando servono lint o più di 5 casi.</p>
+<div class="tablewrap"><table>
+<tr><th></th><th><code>min</code></th><th><code>std</code> (default)</th><th><code>full</code></th></tr>
+<tr><td>Suite</td><td>gate esistenti dei soli moduli toccati</td><td>uguale</td><td>suite dei moduli + lint (build solo se il piano la prescrive)</td></tr>
+<tr><td>Casi nuovi nel piano</td><td>0 (1 se regressione)</td><td>≤ 5, solo sul comportamento che cambia</td><td>senza tetto</td></tr>
+<tr><td>Pavimento per superficie critica</td><td colspan="3">1, fuori dai tetti, a ogni livello</td></tr>
+<tr><td>Controprova</td><td>nessuna</td><td>sul gate centrale (1, max 2)</td><td>ogni caso nuovo</td></tr>
+<tr><td>e2e</td><td>solo <code>[e2e-locator:]</code></td><td>solo <code>[e2e-locator:]</code></td><td>al massimo 1 spec mirato + <code>[e2e-locator:]</code></td></tr>
+<tr><td>QA da browser (<code>/browser-qa</code> o simili)</td><td colspan="3">mai prescritta in un piano</td></tr>
+<tr><td>Suite intera come gate</td><td>vietata</td><td>vietata</td><td>permessa, mai obbligatoria</td></tr>
+<tr><td>Lunghezza di <code>### Piano di test</code></td><td>~1 riga</td><td>~15 righe</td><td>libera — è solo un segnale, mai un finding</td></tr>
+</table></div>
+<div class="grid">
+  <div class="card"><h4><code>rosso se:</code></h4>ogni caso nuovo dice in quale mondo va rosso: rende controllabile la non-vacuità.</div>
+  <div class="card"><h4>Controprova</h4>nomina i file che tocca: riportati alla base, oppure una <b>mutazione nominata</b> (file · simbolo · cosa si toglie) quando il test importa ciò che la feature aggiunge. Mai «tutta la feature», mai <code>git stash</code>.</div>
+  <div class="card"><h4><code>[e2e-locator: spec]</code></h4>a ogni livello, quando il piano cambia uno spec e2e o una stringa/classe/attributo usata come locator (max 2): è il caso in cui l'unit test passa e l'e2e va rosso. Ognuna è un gate richiesto che gira sull'ambiente remoto di prova (la verifica remota con <code>--e2e</code>): con <code>--no-dev</code> la feature si ferma, di proposito, a <code>NEEDS_VERIFICATION</code>.</div>
+  <div class="card"><h4>Pavimento, deroga, obbligo</h4><code>[pavimento: permessi] … rosso se: …</code> (per i permessi: il ruolo negato è negato). Se non c'è una verifica raggiungibile: riga <code>⚠️ Superficie &lt;token&gt; non coperta…</code>, che a valle è un <b>obbligo</b> (STOP umano), salvo deroga <code>— statica sufficiente: &lt;motivo&gt;</code> quando il comportamento a runtime non cambia.</div>
+</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="implement">3 · Implementazione</h2>
+<p><b>A mano</b>: si chiede di implementare il piano approvato seguendolo esattamente, entro il livello. <b>Nel full cycle</b>: l'agente <code>plan-implementer</code> (<code>Read, Grep, Glob, Edit, Write, Bash</code>).</p>
+<div class="grid">
+  <div class="card"><h4>Modalità</h4><code>full</code> il piano nel suo ordine — e può arrivare <b>ristretto a un blocco di passi</b> · <code>completion</code> riprende un'implementazione interrotta · <code>fix</code> solo i blocker/major e i gate FAIL ricevuti, diff minimo, poi rilancia i test dei moduli toccati.</div>
+  <div class="card"><h4>A blocchi</h4>la fase lancia 2–4 implementer in sequenza, uno per area (backend, frontend, test), che <b>partizionano</b> i passi del piano: ognuno con contesto fresco. <span class="tag ok">pt14</span> In formato 2 i blocchi li dimensiona il <b>driver</b>: raggruppa i <code>#### Blocco</code> del piano in <b>lotti</b>, in ordine di <code>dopo:</code>, stimando il contesto dell'implementer dalle righe del piano e dei file che il lotto scrive (tetto <code>FIC_LOTTO_MAX</code>, 150k), e li passa nella riga <code>LOTTI (driver)</code> del prompt; un blocco che da solo supera il tetto resta un lotto a sé, dichiarato. Preflight calcolato una volta sola, budget di rilancio uno per fase, report aggregati in uno. Serve a tenere piccolo il contesto: era in media 353k token, con punte di 595k. <span class="tag ok">pt13</span> <b>Corsie:</b> nel full cycle, formato 2, <code>scripts/blocks-independent.py</code> decide se i blocchi si dividono in <b>due corsie</b> (<code>scrive:</code> disgiunti, nessuna dipendenza nel grafo reale — import espliciti e, se <code>maat.json</code> dichiara un adattatore <code>framework</code> (per esempio <code>nuxt-autoimport</code>), gli auto-import che quel framework genera, nomi dal percorso per i file nuovi —, nessun <code>dopo:</code> fra loro, nessun file condiviso o generato); allora <code>run-phase.sh</code> lancia due sotto-sessioni insieme sotto lo stesso lock, con <code>FIC_LANE=k</code> (copia WSL della corsia) e <code>FIC_WRITE_SCOPE</code> (la guardia nega Edit/Write fuori dai suoi file). A corsie finite il controllo a posteriori divide il diff per <code>scrive:</code> (fuori dall'unione, di entrambe, condiviso ⇒ STOP) e i gate girano sull'albero intero. <code>FIC_LANES=0</code> o una condizione falsa: in serie, come prima.</div>
+  <div class="card"><h4>Regole</h4>segue il piano alla lettera, nessun refactor, test solo dove prescritti, gate solo del livello. I comandi sono quelli dei moduli in <code>maat.json</code> (ambienti e interpreti già esistenti, mai un'installazione); i moduli con <code>copia</code> passano da <a href="#test-fast"><code>test-fast.sh</code></a>. Le controprove non sono sue.</div>
+  <div class="card"><h4>Gate insieme, raccolti entrambi</h4><span class="tag ok">2026-09-23</span> due moduli su substrati disgiunti (per esempio un backend nel repo e un frontend sulla copia WSL) partono <b>entrambi in background</b> nello stesso messaggio e si raccolgono con <b>BashOutput</b> prima di scrivere una sola riga di esito. Niente run in background di un modulo che legge il repo <i>mentre</i> se ne modificano i file: legge l'albero mutabile e il verde non appartiene a nessuna versione.</div>
+  <div class="card"><h4>Test mentre si implementa</h4>il più piccolo insieme di test che copre in modo affidabile ciò che è appena cambiato; la suite dei moduli toccati a fine blocco; mai la suite intera sotto <code>full</code>. Un run lanciato in background è <b>feedback</b>, mai evidenza di un gate, e non si sovrappone a un altro: la copia ha un solo lock.</div>
+  <div class="card"><h4>Deviazione = STOP</h4>se un passo si rivela impossibile o sbagliato sul codice si ferma con l'evidenza: il piano non si «aggiusta» nel codice. Migrazione necessaria → scrive il file, <b>non la applica</b>, STOP.</div>
+  <div class="card"><h4>Divieti (la produzione esiste)</h4>host remoti (<code>ssh</code>, <code>rsync</code>, <code>scp</code>, gli script di rilascio e di accesso remoto dichiarati in <code>guardia</code> di <code>maat.json</code>) salvo l'eccezione nominata <code>test-fast.sh</code> del plugin (copia fra due cartelle locali); scritture su DB; docker; git che cambia stato; installazioni; la spec; i file do-not-touch.</div>
+</div>
+<p>Lettura e batching: parte da una ricerca o dagli intervalli che il piano cita, non rilegge intervalli invariati, raggruppa solo chiamate indipendenti (mai due Edit sullo stesso file nello stesso lotto). Il suo report ha forma fissa: <code>Esito</code> (COMPLETATO · PARZIALE · DEVIAZIONE), <code>Modalità</code>, <code>File toccati</code>, <code>Gate eseguiti</code> con l'output reale, <code>Gate non eseguiti</code> con il motivo, <code>Artefatti generati</code>, <code>Deviazione dal piano</code>, <code>Bloccato su</code>. Mai un gate scritto PASS senza averlo eseguito; mai <code>/browser-qa</code> né un browser.</p>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="review">4 · La review: <code>/implementation-review-cycle</code></h2>
+<p>Rivede la <b>superficie di review</b> (staged + unstaged + untracked, calcolata da <code>review-surface.sh</code>, mai un <code>git diff</code> nudo) contro spec e piano con <code>implementation-reviewer</code> (solo <code>Read/Grep/Glob</code>: legge un file di diff preparato per lui), poi esegue i gate richiesti. <code>IMPLEMENTED</code> significa due cose insieme: <b>review approvata</b> e <b>ogni gate richiesto PASS sulla stessa superficie</b>. Non modifica mai codice.</p>
+
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  L{"run-phase.sh --lock-status"} -->|"occupato / sconosciuto"| X(["STOP: un'altra fase di codice è in corso"])
+  L -->|"libero o dentro il ciclo"| PA{"Plan status: APPROVED?"}
+  PA -->|"no"| X0(["STOP: prima /plan-review-cycle"])
+  PA -->|"sì"| B{"plan-check.sh basis"}
+  B -->|"STALE"| X2(["STOP: riaprire il piano"])
+  B -->|"FRESH / LEGACY"| C["plan-check.sh contract&lt;br/&gt;livello · superfici · pavimenti · obblighi · piano di test"]
+  C --> S["review-surface.sh snapshot&lt;br/&gt;Base · Tree · Changes"]
+  S -->|"Changes vuoto"| X3(["STOP: niente da rivedere (già committato? --base)"])
+  S --> SC["Scope = Changes − esclusioni scritte&lt;br/&gt;mai esclusi: touched.txt, file nominati dal piano, file misti&lt;br/&gt;file nuovo fuori da touched: escluso solo con due grep"]
+  SC --> FR{"C'è già una review&lt;br/&gt;con Reviewed snapshot?"}
+  FR -->|"no"| RV
+  FR -->|"sì"| CK["review-surface.sh check&lt;br/&gt;+ contratto cambiato? + esclusioni in touched?"]
+  CK -->|"contratto cambiato, o tree potato"| RVF["giro a scope pieno"]
+  CK -->|"un path escluso è in touched.txt"| RVX["giro su quel path, diff dall'intera&lt;br/&gt;base registrata, mai promozione"]
+  RVX --> RV
+  CK -->|"FRESH e APPROVED"| PR["promozione: solo i gate mancanti"]
+  CK -->|"STALE, solo test puri aggiunti"| GO["gate-only: rilancia i gate"]
+  CK -->|"STALE"| RVD["giro sul delta calcolato"]
+  RVF --> RV
+  RVD --> RV
+  RV["Step 2 · implementation-reviewer&lt;br/&gt;legge il diff dall'indice offset/limit&lt;br/&gt;requisiti · 4 classi che i test non vedono"] --> G
+  PR --> G
+  GO --> G
+  G["Step 2.5 · gate richiesti: comandi dei moduli&lt;br/&gt;o verifica remota · gate del piano · righe obligation"] --> D["Step 3 · check di freschezza finale&lt;br/&gt;tabella di decisione · scrive la sezione"]
+  VP["full cycle · VERIFY del driver IN PARALLELO (pt09)&lt;br/&gt;gates.sh + counterproof.sh, stessa chiave del tree&lt;br/&gt;la review scrive gli ID dei test, non i risultati"] -.->|"insieme a Step 2"| RV
+  VP --> K{"chiave ricalcolata&lt;br/&gt;alla fine di entrambe"}
+  D --> K
+  K -->|"cambiata"| SQ["scarto di entrambi&lt;br/&gt;rilancio in sequenza"]
+  K -->|"uguale"| FZ["finalize.sh · verdetto = AND&lt;br/&gt;gate FAIL o controprova non rossa → FAIL&lt;br/&gt;BLOCKED → NEEDS_VERIFICATION&lt;br/&gt;unione requisito → ID → risultato"]
+</pre><div class="cap">Il flusso della review in modalità «per nome» (a). In modalità (b), piano incollato, la review resta nella conversazione e non ha snapshot persistente. Nel full cycle (pt09) VERIFY gira insieme alla review statica, non prima: solo se la sezione registrata non è <code>APPROVED</code> (promozione e gate-only restano in sequenza) e con <code>FIC_REVIEW_PARALLEL</code> diverso da 0.</div></div>
+
+<h3>Cosa chiede al reviewer</h3>
+<p>I gate verdi dichiarati con i numeri <b>veri</b> e le suite <b>non</b> eseguite a quel livello; poi solo le classi che i test non vedono:</p>
+<div class="grid">
+  <div class="card"><h4>1 · Raggio d'azione</h4>chi altro consuma i file condivisi toccati, e si rompe?</div>
+  <div class="card"><h4>2 · Superfici dimenticate</h4>se il cambio nasconde o blocca qualcosa, esiste un'altra strada per arrivarci?</div>
+  <div class="card"><h4>3 · Interazioni e anelli</h4>middleware, redirect, guardie che insieme producono un rimbalzo o un ciclo.</div>
+  <div class="card"><h4>4 · Integrità dei test</h4>i <i>Test signals</i> (asserzioni tolte, skip/only, snapshot rigenerate): il test segue la spec o è stato piegato all'implementazione? Un gate può davvero andare rosso?</div>
+</div>
+<p>Più la copertura dei requisiti, una riga per ID della tabella di tracciabilità, con l'evidenza (<code>static</code> · <code>test</code> · <code>runtime</code> · <code>none</code>).</p>
+
+<h3>Gate richiesti e opzionali</h3>
+<div class="tablewrap"><table>
+<tr><th>Livello</th><th>Gate richiesti</th></tr>
+<tr><td><code>min</code>, <code>std</code>, <code>legacy</code></td><td>i test dei moduli toccati (<code>tests-&lt;modulo&gt;</code>, i file scelti da <code>regola_test</code> del modulo: per esempio i test cambiati più il test omonimo di un sorgente cambiato) e i loro <code>controlli</code> (<code>controlli-&lt;modulo&gt;</code>). L'elenco lo calcola <code>maat-config.py gate-richiesti</code></td></tr>
+<tr><td><code>full</code></td><td>lo stesso + <code>lint</code> (e <code>build</code>, se il modulo li dichiara) sui file toccati</td></tr>
+<tr><td>ogni livello</td><td>ogni gate del <code>### Piano di test</code> (controprove, e2e prescritti, check DB, misure) e una riga <code>obligation:</code> per ogni obbligo</td></tr>
+<tr><td>opzionali (mai bloccanti)</td><td>importatori diretti di moduli condivisi (≤10), e2e chiesto solo con <code>--with-e2e</code> e non prescritto dal piano. Sotto <code>full</code> il lint non gira affatto</td></tr>
+</table></div>
+<p>Evidenza valida per un gate che né i comandi dei moduli né la verifica remota possono eseguire (controprova, misura manuale): <b>osservata</b> in questa sessione dopo l'ultima modifica, oppure <b>riportata dall'utente</b> con comando e output. L'affermazione di un agente senza output non è evidenza.</p>
+<p><span class="tag ok">2026-09-29</span> <b>Evidenza del driver.</b> Dentro <code>/full-implementation-cycle</code> le suite del livello le ha già eseguite <code>run-phase.sh</code> con <code>scripts/gates.sh</code>: la review riceve la cartella <code>evidence/&lt;chiave&gt;/</code>, la verifica con <code>gates.sh --verify</code> e, se è <code>FRESH</code>, prende i file <code>&lt;gate&gt;.json</code> come evidenza senza rieseguire nulla (un <code>BLOCKED</code> lo riesegue). <code>STALE</code>, o review lanciata a mano senza driver: i gate si eseguono come sempre. Controprove, e2e e obblighi restano fuori da <code>evidence/</code>.</p>
+<p><span class="tag ok">pt09</span> <b>Review in parallelo con la verifica.</b> Dentro il full cycle <code>run-phase.sh</code> calcola la chiave del tree (<code>review-surface.sh tree</code>, più lo sha256 di <code>counterproof/mutations.json</code> quando le controprove sono sue) e lancia <b>insieme</b> VERIFY (<code>gates.sh</code>, poi <code>counterproof.sh</code> solo se <code>mutations.json</code> è la lista di <code>plan-check.sh gen</code> ancora coerente col piano — stessa impronta in <code>gen/procedura.txt</code> e lista identica a una rigenerata —; altrimenti, lista del worker o piano cambiato, le controprove restano del worker, che riscrive la lista a ogni giro) e la sotto-sessione di review, col prompt che termina con <code>VERIFY IN PARALLELO (driver, run-phase.sh)</code>. Il reviewer non cita risultati: per ogni requisito scrive gli <b>ID dei test</b> (campo <code>copertura</code> del JSON), e il verdetto è provvisorio. Finite entrambe, la chiave si ricalcola: se è cambiata si scartano entrambi i risultati (spec rimessa com'era) e si rilanciano <b>in sequenza</b>. Poi <code>finalize.sh</code> fa l'<b>AND</b> — un gate rosso o una controprova non rossa è <code>FAIL</code> anche con la review <code>APPROVED</code>, un <code>BLOCKED</code> è <code>NEEDS_VERIFICATION</code> — e unisce la mappa requisito → ID ai risultati nella tabella <code>Requirement evidence</code>: un ID senza risultato lascia il requisito «non coperto». Un runner il cui report non ha un esito per test (vitest, per esempio): valgono i <code>FAIL</code> nominati e il <code>✓</code> di un file di test. Vietato il parallelo con gate eseguiti dal modello; <code>FIC_REVIEW_PARALLEL=0</code> torna alla sequenza. Modo in <code>log/&lt;label&gt;.parallelo</code>.</p>
+<p><span class="tag ok">2026-09-29</span> <b>IMPLEMENTED firmato da uno script.</b> Dentro il full cycle l'<code>IMPLEMENTED</code> della review è il verdetto, non ancora lo stato: dopo la fase <code>run-phase.sh</code> lancia <code>scripts/finalize.sh</code>, che lo conferma solo se ogni gate richiesto dal livello ha <code>evidence/&lt;chiave attuale&gt;/&lt;gate&gt;.json</code> <code>PASS</code> col report (o <code>SKIPPED</code>) e ogni controprova è rossa su asserzione (<code>counterproof/&lt;id&gt;.json</code>, altrimenti le righe della tabella della review). Altrimenti scrive <code>NEEDS_VERIFICATION</code> col gate mancante e una riga <code>Finalize:</code>. Un gate dichiarato verde nella prosa ma rosso, o senza file di evidenza, non porta più a <code>IMPLEMENTED</code>. Lanciata a mano, la review decide come prima.</p>
+
+<h3>Tabella di decisione</h3>
+<div class="tablewrap"><table>
+<tr><th>Reviewer</th><th>Gate richiesti</th><th>Review status</th><th>Feature status</th><th>Verification</th></tr>
+<tr><td>APPROVED</td><td>tutti PASS</td><td>APPROVED</td><td><span class="tag ok">IMPLEMENTED</span></td><td>VERIFIED</td></tr>
+<tr><td>APPROVED</td><td>nessun gate di piano e suite tutte SKIPPED</td><td>APPROVED</td><td><span class="tag ok">IMPLEMENTED</span></td><td>VERIFIED (static only — …)</td></tr>
+<tr><td>APPROVED</td><td>un FAIL</td><td>NEEDS_CHANGES</td><td>PLANNED</td><td>PARTIAL (…)</td></tr>
+<tr><td>APPROVED</td><td>nessun FAIL, qualche BLOCKED/NOT RUN</td><td>APPROVED</td><td><span class="tag warn">NEEDS_VERIFICATION</span></td><td>PARTIAL (…)</td></tr>
+<tr><td>APPROVED</td><td><code>--no-dev</code></td><td>APPROVED</td><td><span class="tag warn">NEEDS_VERIFICATION</span></td><td>NOT RUN (--no-dev)</td></tr>
+<tr><td>NEEDS_CHANGES</td><td>qualsiasi</td><td>NEEDS_CHANGES</td><td>PLANNED</td><td>come misurato</td></tr>
+<tr><td>STOP_HUMAN_DECISION_REQUIRED</td><td>qualsiasi</td><td>NEEDS HUMAN DECISION</td><td>PLANNED</td><td>come misurato</td></tr>
+</table></div>
+
+<div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> PLANNED: nessuna review ancora
+  PLANNED --> NEEDS_CHANGES: blocker/major o gate FAIL
+  NEEDS_CHANGES --> PLANNED: correzione, nuovo giro
+  PLANNED --> NEEDS_VERIFICATION: approvata, gate mancanti
+  NEEDS_VERIFICATION --> IMPLEMENTED: promozione (gate ottenuti, stesso snapshot)
+  PLANNED --> IMPLEMENTED: approvata e gate PASS
+  IMPLEMENTED --> STALE: codice o contratto cambiati
+  STALE --> IMPLEMENTED: gate-only (solo test aggiunti, deciso dallo script)
+  STALE --> PLANNED: giro sul delta, o a scope pieno se contratto cambiato o tree potato
+  NEEDS_CHANGES --> NHD: ricorrenza, STOP del reviewer, 2° NEEDS_CHANGES post-approvazione, 3° parziale
+  state "APPROVAZIONE STALE" as STALE
+  state "NEEDS HUMAN DECISION" as NHD
+</pre><div class="cap">Budget: 3 giri per piano (1 in <code>--light</code>) + 1 giro post-approvazione per snapshot diventato vecchio; la promozione e il gate-only non consumano giri. Finiti i 3 giri lo stato resta <code>NEEDS_CHANGES</code>: il worker fix si ferma con «budget esaurito» e decide una persona.</div></div>
+
+<div class="note"><b><code>--light</code> della review</b>: un solo giro con mandato stretto, da fare sempre dopo un'implementazione. Non porta mai a <code>IMPLEMENTED</code>, scrive la sezione solo se emergono finding bloccanti e, anche allora, senza <code>Reviewed snapshot</code>. Nato da un caso misurato: un piano rivisto 7 volte e 4566 test verdi nascondevano una rotta gemella non protetta, trovata da un solo giro veloce.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="full">Tutto insieme: <code>/full-implementation-cycle</code></h2>
+<p>Esegue la catena per una feature, in ordine e senza pause: <b>plan → implement → review (con le controprove) → fix → review</b>, finché la review lo consente. Ogni fase gira in una <b>sottosessione Claude headless</b> (<code>claude -p</code>) con contesto vuoto, lanciata da <code>run-phase.sh</code>; la chat principale riceve solo righe di avanzamento. <span class="tag ok">pt14</span> A scegliere e lanciare le fasi è il <b>driver</b> <code>scripts/driver.py run</code>, una macchina a stati in codice: l'orchestratore LLM lo lancia in background e ne mostra gli eventi (<code>&lt;run-dir&gt;/driver.log</code>). Tre modalità: <b>orchestratore</b> (default, <code>orchestratore.md</code>), <b>worker</b> (<code>--worker=&lt;fase&gt;</code>, dentro la sottosessione: legge solo <code>workers/&lt;fase&gt;.md</code>), <b>inline</b> (tutto nella chat, <code>riferimento.md</code>). Le regole diventate codice, con i loro test, sono elencate in <code>riferimento.md</code> («Regole in codice»); <code>driver.py righe</code> misura le righe di istruzioni caricate per fase (≤300).</p>
+
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as Utente
+  participant O as Orchestratore (chat)
+  participant D as driver.py run
+  participant RP as run-phase.sh
+  participant G as guard.py + lock
+  participant W as Sottosessione worker
+  participant M as Monitor (driver.log, watch-phase)
+  U->>O: /maat:full-implementation-cycle spec
+  O->>D: driver.py run spec -- flag (in background)
+  loop finché non è DONE, STOP o WAIT
+    D->>D: next = tabella di cycle-state.sh (State + Next)
+    D->>D: anti-loop · budget di fasi · fase in corso
+    D->>D: context-pack.sh · etichetta NN-fase · prompt --worker
+    D->>D: implement formato 2: LOTTI (contesto stimato sotto 150k) e corsie (blocks-independent.py)
+    D->>RP: lancia la fase (FIC_CORSIE)
+    RP->>G: autotest della guardia (exit 5) · lock (exit 4) · impronta del harness (exit 6)
+    RP->>W: claude -p · bypass + deny + hook + niente MCP (due corsie se decise)
+    W-->>M: righe ▶ · agenti lanciati · verdetti
+    W-->>RP: ESITO FASE + JSON
+    RP->>RP: valida il JSON (driver.py valida) · touched.txt · gates.sh · review ∥ VERIFY · finalize.sh
+    RP-->>D: exit + .esito
+    D-->>M: ▶ / ■ eventi
+    M-->>O: eventi di avanzamento
+    D->>D: ESITO STOP, exit 4/5/6/7, NEEDS_VERIFICATION → fine
+  end
+  D-->>O: Esito driver: DONE | STOP | WAIT | OCCUPATO
+  O-->>U: report finale (nessun commit)
+</pre><div class="cap">Architettura del full cycle con il driver (harness-pt14). <code>cycle-state.sh</code> e <code>run-phase.sh</code> restano script completi: chiamano il driver (<code>next</code>, <code>valida</code>) solo con il certificato di equivalenza <code>scripts/driver.equiv</code> valido per i loro hash, altrimenti sono autonomi.</div></div>
+
+<h3>La ripresa: <code>cycle-state.sh</code></h3>
+<p>La prossima fase si <b>calcola</b>, non si interpreta. L'header dello script è la tabella autorevole; la prima riga che combacia vince.</p>
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  A{"Piano?"} -->|"review senza piano"| S1(["STOP"])
+  A -->|"assente o DRAFT senza review"| PLAN(["PLAN"])
+  A -->|"DRAFT/NHD con review, NHD, non standard"| S2(["STOP"])
+  A -->|"APPROVED"| B{"Approved basis"}
+  B -->|"STALE"| S3(["STOP: riaprire il piano"])
+  B -->|"FRESH o LEGACY"| C{"Review?"}
+  C -->|"nessuna"| D{"ultima implement OK&lt;br/&gt;e stato invariato?"}
+  D -->|"no"| IMPL(["IMPLEMENT"])
+  D -->|"sì"| E{"attribuzione misurata?&lt;br/&gt;post-tree presente, nessun pre-tree aperto"}
+  E -->|"sì"| REV1(["REVIEW"])
+  E -->|"no"| S4(["STOP: attribuzione non misurata"])
+  C -->|"legacy senza righe"| REV2(["REVIEW"])
+  C -->|"NEEDS HUMAN DECISION"| S5(["STOP"])
+  C -->|"presente"| F{"Reviewed contract&lt;br/&gt;= basis attuale?"}
+  F -->|"no"| REV3(["REVIEW scope pieno"])
+  F -->|"sì"| G{"un path di touched.txt&lt;br/&gt;è sotto Excluded?"}
+  G -->|"sì"| S6(["STOP: codice della feature escluso"])
+  G -->|"no"| H{"Stato review"}
+  H -->|"NEEDS_CHANGES"| I{"ultimo fix OK&lt;br/&gt;e attribuzione misurata?"}
+  I -->|"no"| FIX(["FIX"])
+  I -->|"sì"| REV4(["REVIEW"])
+  H -->|"NEEDS_VERIFICATION"| REV5(["REVIEW: un tentativo di promozione"])
+  H -->|"APPROVED + IMPLEMENTED"| J{"review-surface.sh check"}
+  J -->|"FRESH o legacy"| DONE(["DONE"])
+  J -->|"STALE / UNKNOWN"| REV6(["REVIEW"])
+  H -->|"qualunque altra combinazione"| S7(["STOP: combinazione non riconosciuta"])
+</pre><div class="cap">Righe 1–14 (e 10b) dell'header di <code>cycle-state.sh</code>. Restano all'orchestratore: una fase ancora in corso, un <code>ESITO FASE … STOP</code>, un <code>NEEDS_VERIFICATION</code> ottenuto in questa stessa invocazione, l'anti-loop. Catene (righe C1–C4): sulla madre <code>WAIT</code> finché un anello è aperto, poi <code>CHIUSURA</code>, poi <code>DONE</code>; su un anello k&gt;1 <code>WAIT</code> prima del piano o dell'implement di k−1, STOP se il tree non è il <code>.post-tree</code> di k−1.</div></div>
+
+<h3>Le fasi del worker</h3>
+<div class="tablewrap"><table>
+<tr><th>Worker</th><th>Cosa fa</th><th>Esce OK quando</th><th>STOP tipici</th></tr>
+<tr><td><code>probe</code></td><td>diagnostica: non tocca nulla, dice quale fase partirebbe</td><td>sempre</td><td>—</td></tr>
+<tr><td><code>plan</code></td><td>invoca <code>/plan-review-cycle</code> (o <code>-light</code>)</td><td><code>Plan status: APPROVED</code></td><td>decisione aperta</td></tr>
+<tr><td><code>implement</code></td><td>scrive <code>base.txt</code>; preflight → <code>do-not-touch.txt</code> e <code>mixed.txt</code>, calcolati <b>una volta sola</b>; lancia un <code>plan-implementer</code> per <b>lotto</b> della riga <code>LOTTI (driver)</code> (formato 2: blocchi del piano raggruppati dal driver con il contesto stimato sotto ~150k) o, in formato 1, <b>2–4</b> blocchi che partizionano i passi (<code>full</code> o <code>completion</code>, deciso per la fase)</td><td>report senza deviazioni</td><td>deviazione dal piano · migrazione da applicare · parziale due volte</td></tr>
+<tr><td><code>review</code></td><td>scrive <code>counterproof/mutations.json</code> con <b>tutte</b> le controprove del piano e lancia <a href="#controprove"><code>counterproof.sh</code></a> <span class="tag ok">2026-09-29</span> (solo nel mirror WSL, il working tree non si tocca); invoca <code>/implementation-review-cycle</code> con touched, do-not-touch e i <code>&lt;id&gt;.json</code> osservati</td><td>sempre (anche NEEDS_CHANGES: decide cycle-state)</td><td>mirror non ripristinato (exit 5) · sidecar della ricetta vecchia rimasto</td></tr>
+<tr><td><code>fix</code></td><td>solo se <code>Review rounds n&lt;3</code> e <code>post-approval k&lt;1</code>, <b>calcolato da <code>cycle-state.sh</code></b> (fuori budget: <code>Next: STOP</code>); <code>plan-implementer</code> in modalità <code>fix</code> con i soli blocker/major e gate FAIL</td><td>report senza deviazioni</td><td>budget esaurito · deviazione · migrazione</td></tr>
+<tr><td><code>chiusura</code></td><td>solo nella chiusura di una catena con <code>[e2e-locator:</code> e gate <code>full</code> verdi: la verifica remota (<code>verifica_remota</code>) con <code>--e2e &lt;spec&gt;</code> per ogni spec; nessun blocco JSON (conta la riga ESITO)</td><td>e2e verdi</td><td>e2e rosso o bloccato</td></tr>
+</table></div>
+
+<h3>Attribuzione: chi ha toccato cosa</h3>
+<div class="diagram"><pre class="mermaid">
+flowchart LR
+  A["run-phase.sh&lt;br/&gt;tree PRIMA → label.pre-tree"] --> B["sottosessione&lt;br/&gt;implement o fix"]
+  B --> C["tree DOPO → label.post-tree"]
+  C --> D["git diff dei due tree&lt;br/&gt;→ touched.txt (sort -u)"]
+  D --> E["review: i path di touched.txt&lt;br/&gt;non si escludono mai"]
+  D --> F["cycle-state: senza post-tree,&lt;br/&gt;o con un pre-tree più vecchio aperto → STOP"]
+</pre><div class="cap">Il lavoro di altri già presente prima della fase resta fuori; quello fatto durante la fase ci finisce dentro (sovra-inclusione: direzione sicura). Una fase uccisa si chiude alla prossima fase di codice.</div></div>
+
+<h3 id="controprove">Controprove: <code>scripts/counterproof.sh</code> <span class="tag ok">2026-09-29</span></h3>
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  A{"Il gate nomina file e simbolo?"} -->|"no"| NR1(["NOT RUN: il gate non nomina file"])
+  A -->|"file misto"| NR2(["NOT RUN: file misto"])
+  A -->|"sì"| M["una voce in counterproof/mutations.json&lt;br/&gt;file · simbolo · cerca → sostituisci · test · rosso_se"]
+  M --> L["counterproof.sh: lock del mirror (flock -w, mai ripiego sul repo)&lt;br/&gt;sync + manifest verificato"]
+  L --> S["gradino 1, seriale nel mirror:&lt;br/&gt;moduli senza copie private, pacchetti condivisi"]
+  L --> P["gradino 2, parallelo su N copie private&lt;br/&gt;(il modulo con copia; N dalla memoria misurata)"]
+  S --> R["per mutazione: copia di sicurezza · sostituzione · solo il test nominato&lt;br/&gt;· ripristino · hash sul manifest"]
+  P --> R
+  R --> E{"esito dal report del runner"}
+  E -->|"rosso_asserzione"| PASS(["prova: PASS"])
+  E -->|"rosso_import · rosso_raccolta&lt;br/&gt;rosso_diverso · verde"| FAIL(["FAIL"])
+  E -->|"bloccato"| BL(["BLOCKED"])
+</pre><div class="cap">Il working tree non viene mai scritto: niente copie, sidecar, ripristini o accoppiamenti a mano. I duplicati esatti girano una volta. Il lock del mirror resta preso per tutto il run, gradino 2 compreso: le copie leggono ancora le dipendenze e i pacchetti condivisi del mirror. Su TERM/INT il trap uccide anche i gruppi aperti da <code>timeout</code> e cancella le copie. Exit: 0 prove · 1 FAIL · 2 bloccate · 3 ambiente (niente eseguito) · 5 mirror non ripristinato → STOP · 64 lista non valida. Misurato su 4 mutazioni di una feature reale (2026-09-29): macchina carica di altri flussi, seriale 441 s contro parallelo su 4 copie 150 s; macchina scarica, 143 s contro 117 s (ogni copia parte a freddo, con le cache del runner e i file generati vuoti, mentre il seriale riusa quelli del mirror). Stessi esiti, hash di working tree e sorgenti del mirror invariati. Le copie condividono le dipendenze del mirror: la configurazione del runner può leggere <code>FIC_VITE_CACHE_DIR</code> e <code>FIC_VITE_FS_ALLOW</code>, solo se impostate (senza, configurazione identica). Il comando della controprova di ogni modulo è <code>comandi.controprova</code> in <code>maat.json</code>.</div></div>
+
+<h3>Cartella di lavoro <code>spec-&lt;nome&gt;.run/</code></h3>
+<div class="tablewrap"><table>
+<tr><th>File</th><th>Contenuto</th></tr>
+<tr><td><code>prompts/&lt;label&gt;.md</code></td><td>il comando del worker (<code>01-plan</code>, <code>02-implement</code>, <code>03-review</code>, <code>04-fix</code>…)</td></tr>
+<tr><td><code>log/&lt;label&gt;.jsonl · .stderr · .exit · .running</code></td><td>log stream-json completo, errori, codice d'uscita, marcatore «in corso»</td></tr>
+<tr><td><code>log/&lt;label&gt;.esito</code></td><td>la riga <code>ESITO FASE</code> dell'evento finale + <code>state=&lt;hash&gt;</code>: è ciò che fa passare implement/fix alla review</td></tr>
+<tr><td><code>log/&lt;label&gt;.result.json</code> <span class="tag ok">2026-09-29</span></td><td>l'esito <b>strutturato</b> della fase (<code>schemas/phase-result.schema.json</code> del plugin: <code>fase</code>, <code>esito</code>, <code>motivo</code>, <code>deviazioni[]</code>, <code>bloccato_su</code>, <code>file[]</code>, <code>gate_interni[]</code>, <code>finding[]</code>). La sotto-sessione riceve <code>--json-schema</code> e <code>run-phase.sh</code> rivalida il blocco JSON; assente o non valido → nessun file e <code>.esito</code> = <code>STOP — uscita non valida</code> (la riga ESITO originale resta sotto <code>originale=</code>). Se c'è, <code>cycle-state.sh</code> legge l'esito da qui: <code>deviazioni</code> non vuoto o <code>bloccato_su</code> ≠ <code>nessuno</code> → STOP anche con <code>esito: OK</code>. Per riprendere dopo la decisione si rinomina il file (<code>.result.json.visto</code>)</td></tr>
+<tr><td><code>log/&lt;label&gt;.finalize</code> <span class="tag ok">2026-09-29</span></td><td>esito di <code>finalize.sh</code> dopo una review: <code>IMPLEMENTED</code> confermato, <code>NEEDS_VERIFICATION</code> scritto, <code>FAIL</code> scritto (gate rosso o controprova non rossa, exit 3: pt09), o niente da firmare</td></tr>
+<tr><td><code>log/&lt;label&gt;.parallelo · .counterproof · .spec-pre</code> <span class="tag ok">pt09</span></td><td>il modo della fase review (<code>modo=parallelo controprove=driver|worker chiave=…</code> o <code>modo=sequenza — motivo</code>, più <code>scartato: …</code> se la chiave è cambiata); l'output di <code>counterproof.sh</code> lanciato dal driver con <code>exit=</code>; la spec prima della review, per rimetterla com'era allo scarto</td></tr>
+<tr><td><code>log/&lt;label&gt;.corsie · .corsia-&lt;k&gt;.{prompt,jsonl,file} · .cambiati · .posteriori</code> <span class="tag ok">pt13</span></td><td>la decisione di <code>blocks-independent.py</code> per l'implement (<code>esito=parallelo corsie=2</code> con <code>corsia k:</code> e <code>scope k:</code>, o <code>esito=serie motivo=…</code>, più le righe <code>dipendenza:</code>); prompt, log e file dichiarati di ogni corsia; il diff del tree durante le corsie e il controllo a posteriori (<code>posteriori: esito=OK corsia 1: … · corsia 2: …</code> o <code>esito=STOP — …</code>). In <code>&lt;label&gt;.jsonl</code> un solo evento result unito</td></tr>
+<tr><td><code>log/&lt;label&gt;.pre-tree · .post-tree</code>, <code>touched.txt</code></td><td>attribuzione misurata</td></tr>
+<tr><td><code>base.txt · do-not-touch.txt · mixed.txt</code></td><td>base della review; lavoro di altri; file misti</td></tr>
+<tr><td><code>counterproof/</code></td><td><code>mutations.json</code> e un <code>&lt;id&gt;.json</code> di esito per controprova (i <code>cp-run.sh</code> e i sidecar delle run directory vecchie sono storia)</td></tr>
+<tr><td><code>input.md</code></td><td>il testo incollato quando non c'era un file di spec</td></tr>
+</table></div>
+<div class="note warn"><b>Fine vera di una fase</b>: solo il file <code>log/&lt;label&gt;.exit</code>. In modalità <code>-p</code> una sottosessione che aspetta agenti in background emette eventi <code>result</code> intermedi, che il lettore può scambiare per la fine.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="configurazione">La configurazione: <code>.claude/maat.json</code></h2>
+<p>Gli script del plugin non conoscono il progetto: tutto ciò che cambia da un progetto all'altro sta in
+<code>.claude/maat.json</code>, letto da un solo lettore (<code>scripts/maat-config.py</code>, solo libreria standard). Lo scrive
+<code>/maat:setup</code> dopo la tua conferma; <code>maat-config.py valida</code> lo controlla contro
+<code>schemas/maat-config.schema.json</code>. Il minimo è un modulo:</p>
+<pre class="cmd">{
+  "versione_schema": 1,
+  "lingua": "it",
+  "moduli": [{ "nome": "app", "radice": ".", "regola_test": "nessuna" }]
+}</pre>
+<div class="tablewrap"><table>
+<tr><th>Chiave</th><th>Cosa dichiara</th><th>Chi la usa</th></tr>
+<tr><td><code>moduli[]</code></td><td>nome, <code>radice</code>, <code>comandi</code> (<code>test</code>, <code>lint</code>, <code>build</code>, <code>controprova</code>), <code>controlli</code> per file, <code>regola_test</code>, <code>ambiente</code> (<code>nativo</code> o <code>wsl</code>), <code>copia</code> per la copia WSL, <code>preparati</code> e <code>preparazione</code> (file generati che servono al lint)</td><td><code>gates.sh</code>, <code>finalize.sh</code>, <code>test-fast.sh</code>, <code>counterproof.sh</code>, <code>plan-check.sh gen</code></td></tr>
+<tr><td><code>guardia</code></td><td>host e domini di <code>produzione</code>, script di <code>rilascio</code>, <code>involucri</code> di accesso remoto (con le <code>opzioni_negate</code>), <code>suite</code> da non lanciare intere, <code>sonde</code></td><td><code>guard.py</code> (si somma alle regole del nucleo)</td></tr>
+<tr><td><code>piano</code></td><td><code>superfici_critiche</code> e <code>migrazioni</code> come regex sul percorso</td><td><code>plan-check.sh route</code></td></tr>
+<tr><td><code>verifica_remota</code></td><td>facoltativa: la skill del progetto che verifica su un ambiente di prova. Assente ⇒ il ciclo gira <code>--no-dev</code></td><td>review, chiusura delle catene</td></tr>
+<tr><td><code>cartelle</code>, <code>da_non_toccare</code>, <code>piattaforma</code>, <code>contesto</code>, <code>framework</code></td><td>cartella di lavoro, percorsi vietati, copia WSL sì/no, schema del DB per il pacchetto di contesto, adattatori (per esempio <code>nuxt-autoimport</code>)</td><td>i rispettivi script</td></tr>
+</table></div>
+<p><b>Profili</b> (<code>${CLAUDE_PLUGIN_ROOT}/profiles/</code>): moduli pronti per gli stack comuni (<code>fastapi-pytest</code>,
+<code>nuxt-vitest</code>, <code>node-semplice</code>, <code>generico-senza-test</code>). <code>/maat:setup</code> li propone e li compone
+(<code>maat-config.py componi &lt;profilo&gt; --radice &lt;modulo&gt;=&lt;percorso&gt;</code>). Due configurazioni vere stanno in
+<code>${CLAUDE_PLUGIN_ROOT}/examples/</code>.</p>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="dev-verify">Verifica remota (facoltativa)</h2>
+<p>Se il progetto ha un ambiente di prova remoto, la verifica che gira lì è una <b>skill del progetto</b>, dichiarata in
+<code>verifica_remota.comando</code> di <code>maat.json</code> (per esempio <code>/&lt;verifica&gt;</code>). Maat le chiede una verifica
+per invocazione, con esito strutturato, e non la sostituisce ai reviewer statici: li affianca. Vocabolario:
+<code>PASS · FAIL · SKIPPED · BLOCKED · NOT RUN</code>, <code>Decision: PASS | FAIL | BLOCKED</code>.</p>
+<div class="diagram"><pre class="mermaid">
+flowchart LR
+  DV["verifica remota&lt;br/&gt;(verifica_remota.comando)"] --> T["--tests&lt;br/&gt;i comandi dei moduli toccati&lt;br/&gt;substrati disgiunti LANCIATI INSIEME,&lt;br/&gt;raccolti entrambi"]
+  DV --> L["--lint&lt;br/&gt;lint sui soli file toccati&lt;br/&gt;dopo aver raccolto i test · solo al livello full"]
+  DV --> E["--e2e spec&lt;br/&gt;lock-status → sync sull'ambiente di prova + prova sha256&lt;br/&gt;seed · suite · teardown in un contesto di prova"]
+  DV --> Q["--db-read SQL&lt;br/&gt;involucro di sola lettura&lt;br/&gt;transazione read-only"]
+  E --> DEV[("ambiente remoto di prova")]
+  Q --> DEV
+</pre></div>
+<div class="tablewrap"><table>
+<tr><th>Regola</th><th>Dettaglio</th></tr>
+<tr><td>Path toccati</td><td>quelli passati dal chiamante, o <code>review-surface.sh snapshot</code>; mai <code>git diff --name-only</code> (perde staged e untracked)</td></tr>
+<tr><td><b>Runner indipendenti insieme</b> <span class="tag ok">2026-09-23</span></td><td>due moduli che non condividono nulla (per esempio un backend che legge il repo e un frontend sulla copia WSL, con un lock che l'altro non prende) si lanciano <b>entrambi in background</b>, nello stesso messaggio, e si raccolgono <b>entrambi</b> prima di decidere. Misurato nel progetto guida: ~38 min in fila, ~20 insieme</td></tr>
+<tr><td><b>Perché entrambi in background</b></td><td>il budget del tool Bash si ferma a <b>600 000 ms (dieci minuti)</b> e non è alzabile: una suite da 20 min in primo piano verrebbe uccisa a metà e il gate sarebbe <code>BLOCKED</code> a ogni giro. In background quel tetto non si applica</td></tr>
+<tr><td><b>Raccogliere è un'azione</b> <span class="tag ok">2026-09-23</span></td><td>in <code>-p</code> nessuno notifica: chiudere il turno «in attesa del run» chiude la <b>fase</b>, senza <code>ESITO FASE</code> (accaduto: una review durata 2,1 min). Si raccoglie con <b>BashOutput</b>, ripetendo finché il run non è finito. Un run <b>lanciato e non raccolto</b> rende la sua riga <code>BLOCKED (run non raccolto)</code>; <code>NOT RUN</code> resta per ciò che non è stato tentato</td></tr>
+<tr><td><b>Lint fuori dal perimetro del modulo</b></td><td>con <code>--base</code> i file lintabili degli altri pacchetti sono classificati: <code>INTRODUCED</code> = <b>FAIL</b> come un errore del gate · <code>PREEXISTING</code> = nota · <code>UNRESOLVED</code> = <code>BLOCKED</code>. Un file lintabile <b>mai classificato</b> non è un gate soddisfatto</td></tr>
+<tr><td><b>Lint con una base di errori</b> <span class="tag ok">2026-09-29</span></td><td>se il modulo dichiara <code>lint_base</code>, il gate blocca solo gli errori assenti nella base del progetto (<code>INTRODUCED</code> = <b>FAIL</b>; <code>PREEXISTING</code> = nota), con lo stesso comando della CI del progetto</td></tr>
+<tr><td>Timeout o setup fallito</td><td><code>BLOCKED (ambiente: …)</code>, mai <code>FAIL</code>: un test che scade per l'ambiente accusa codice sano; la riga riporta il comando equivalente</td></tr>
+<tr><td>Nessun selettore</td><td><code>SKIPPED</code> con i path; mai una suite intera senza selettore</td></tr>
+<tr><td>e2e legato a uno snapshot</td><td>se l'ambiente di prova non è un checkout git: sync, poi prova dell'allineamento con <code>sha256sum</code>; altrimenti <code>BLOCKED (ambiente non allo snapshot)</code></td></tr>
+<tr><td>DB</td><td>solo lettura, da un involucro dichiarato in <code>guardia.involucri</code> con le scritture fra le <code>opzioni_negate</code>; ciò che muta stato passa solo da un contesto di prova con teardown</td></tr>
+<tr><td>Accesso remoto giù</td><td>l'involucro dice che il tunnel o l'host non risponde → <code>BLOCKED</code>; un errore SQL vero su <code>--db-read</code> → <code>FAIL</code></td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="test-fast">Mattoncino: <code>scripts/test-fast.sh</code>, la copia WSL</h2>
+<p>Su Windows, un runner JavaScript lanciato da WSL su <code>/mnt/c</code> è fino a ~100× più lento del filesystem nativo.
+Per i moduli che dichiarano <code>copia</code> in <code>maat.json</code> il wrapper esegue gli stessi test su una <b>copia locale</b>
+della radice del repository dentro WSL — <code>~/fic-mirror/&lt;radice_pacchetti&gt;</code> dal tree principale,
+<code>~/fic-mirror-&lt;hash&gt;/&lt;radice_pacchetti&gt;</code> da un worktree collegato —, verificata identica prima di ogni run.
+Il comando dentro la copia è il campo <code>copia</code> del modulo (<code>test</code>, <code>lint</code>, <code>lint_messaggi</code>), mai
+<code>comandi</code>. Senza WSL, o con <code>piattaforma.copia_wsl: no</code>, i moduli girano nel repo con <code>ambiente: nativo</code>.
+<code>vitest-fast.sh</code> resta come involucro deprecato di <code>test-fast.sh</code>.</p>
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  ARG{"ogni argomento è un path?&lt;br/&gt;(niente opzioni, niente assoluti, niente ..)"} -->|"no"| U64(["exit 64 · uso errato&lt;br/&gt;un'opzione cambierebbe cosa significa il gate"])
+  ARG -->|"sì"| P
+  P{"--lint: dove sta il path?"} -->|"fuori da radice_pacchetti del modulo&lt;br/&gt;o estensione non lintabile"| SK(["SKIPPED, deciso prima di eseguire&lt;br/&gt;(con i path)"])
+  P -->|"altro pacchetto sotto radice_pacchetti"| CL{"il pacchetto ha una&lt;br/&gt;configurazione del lint?"}
+  CL -->|"no"| SK2(["SKIPPED (non lintabile):&lt;br/&gt;lì 'non applicabile' è vero"])
+  CL -->|"sì, e c'è --base"| CLS["linta il contenuto ATTUALE e quello della BASE&lt;br/&gt;(scritto nella copia allo stesso path, poi ripristinato)&lt;br/&gt;confronto senza riga e colonna"]
+  CLS --> CLE(["INTRODUCED → exit 1 (FAIL)&lt;br/&gt;PREEXISTING → informativo&lt;br/&gt;UNRESOLVED → exit 3 (BLOCKED)"])
+  P -->|"radice del modulo (il gate)"| TS{"--lint: ci sono i preparati del modulo?&lt;br/&gt;(preparati, es. un tsconfig generato)"}
+  TS -->|"no"| BL2(["exit 2 · BLOCKED&lt;br/&gt;eseguire il comando preparazione del modulo&lt;br/&gt;(niente ripiego: nel repo mancano uguale)"])
+  TS -->|"sì, e vengono copiati nella copia"| A
+  A{"copia presente&lt;br/&gt;con le dipendenze e l'impronta?"} -->|"no"| ND
+  A -->|"sì"| B{"flock -w: copia libera&lt;br/&gt;entro FIC_LOCK_WAIT (default 900 s)?"}
+  B -->|"no, tetto superato"| ND
+  B -->|"sì"| C{"impronta dei file di dipendenza&lt;br/&gt;(file_dipendenze) invariata?"}
+  C -->|"no: dipendenze stantie"| RA{"riallineamento automatico sotto il lock&lt;br/&gt;(dall'origine con le dipendenze, o risemina in hardlink):&lt;br/&gt;impronta giusta ora?"}
+  RA -->|"no: nessuna fonte, rsync fallito"| ND
+  RA -->|"sì: «dipendenze cambiate (impronta a -> b)»"| D
+  C -->|"sì"| D["sync: COMPLETO senza stato della copia (rsync -a --delete --checksum,&lt;br/&gt;esclusi dipendenze, generati e cache: l'elenco del nucleo),&lt;br/&gt;poi INCREMENTALE sul diff dei due manifest&lt;br/&gt;generati e cache ripuliti solo se cambiano dipendenze o preparati"]
+  D --> E{"manifest identico?&lt;br/&gt;tracciati + non tracciati + .env*&lt;br/&gt;(git utilizzabile)"}
+  E -->|"no"| RS{"UNA risincronizzazione:&lt;br/&gt;manifest identico ora?"}
+  RS -->|"no"| ND
+  RS -->|"sì"| F
+  E -->|"sì"| F["CI=true, nella copia:&lt;br/&gt;copia.test oppure copia.lint del modulo (cache solo se chiesta)"]
+  F --> G{"il run ha scritto file?"}
+  G -->|"sì"| BL(["exit 4 · BLOCKED&lt;br/&gt;snapshot da generare nel repo"])
+  G -->|"no"| OK(["esito PASS/FAIL · luogo=copia&lt;br/&gt;(snapshot MANCANTE = FAIL, perché CI=true)"])
+  ND{"copia non utilizzabile:&lt;br/&gt;FIC_ALLOW_MNT_C=1?"} -->|"no (default)"| BL3(["exit 3 · BLOCKED&lt;br/&gt;mai un ripiego silenzioso"])
+  ND -->|"sì, esplicito"| FB["RIPIEGO dichiarato: stesso comando nel repo&lt;br/&gt;(mai con la cache: la scriverebbe nel repository)"] --> OK2(["esito PASS/FAIL · luogo=mnt-c&lt;br/&gt;(ripiego dichiarato: FIC_ALLOW_MNT_C=1)"])
+</pre><div class="cap">Destinazione locale derivata dalla radice del repository (<code>git rev-parse --show-toplevel</code>: tree principale o worktree collegato): nessun argomento la cambia, nessun host remoto. È l'unica eccezione nominata al divieto di rsync per <code>plan-implementer</code> e per le sottosessioni.</div></div>
+<div class="tablewrap"><table>
+<tr><th>Uso</th><th>Comando</th></tr>
+<tr><td>Test (sottosessioni, gate, a mano)</td><td><code>wsl -- bash -lc 'cd &lt;radice del modulo&gt; &amp;&amp; bash &lt;maat&gt;/scripts/test-fast.sh &lt;file di test…&gt;'</code> (file relativi alla radice del modulo). Di solito non serve scriverlo: è il <code>comandi.test</code> del modulo, che <code>gates.sh</code> esegue</td></tr>
+<tr><td>Lint (solo al livello <code>full</code>)</td><td><code>wsl -- bash -lc 'cd &lt;repo&gt; &amp;&amp; bash &lt;maat&gt;/scripts/test-fast.sh --lint [--cache] [--base &lt;ref&gt;] &lt;file…&gt;'</code>, file <b>relativi al repository</b>. Misurato 2,2× più veloce (28 s contro 62 s su tre file). La cache è dell'inner loop: il gate richiesto gira senza</td></tr>
+<tr><td>Lint fuori dal perimetro <span class="tag ok">2026-09-23</span></td><td>i file lintabili degli altri pacchetti non sono «innocui per definizione»: con <code>--base</code> il wrapper linta due volte — contenuto attuale e contenuto della base, scritto nella copia allo <b>stesso path</b> perché solo lì si risolve la stessa configurazione — e confronta i messaggi <b>senza riga e colonna</b>. <b>INTRODUCED</b> (assente nella base) = gate <code>FAIL</code> · <b>PREEXISTING</b> = informativo, non blocca · <b>UNRESOLVED</b> (non classificabile, es. nel ripiego) = <code>BLOCKED</code>, mai PASS. Pacchetto senza configurazione del lint → <code>SKIPPED</code> vero</td></tr>
+<tr><td>Solo path, mai opzioni <span class="tag ok">2026-09-23</span></td><td>gli argomenti finiscono testualmente nella riga di comando del runner: un'opzione come <code>--passWithNoTests</code> renderebbe PASS una selezione vuota, <code>--fix</code> riscriverebbe il codice. Qualunque argomento che inizia per <code>-</code>, assoluto o con <code>..</code> → <code>64</code></td></tr>
+<tr><td>Setup (a mano, una volta per radice)</td><td><code>wsl -- bash -lc 'cd &lt;repo&gt; &amp;&amp; bash &lt;maat&gt;/scripts/test-fast.sh --setup'</code>. Le dipendenze cambiate dopo non chiedono più un <code>--setup</code>: <code>test-fast.sh</code> e <code>counterproof.sh</code> riallineano la copia da soli, dentro il lock, con la riga <code>dipendenze cambiate (impronta &lt;vecchia&gt; -&gt; &lt;nuova&gt;)</code>; mai un'installazione, mai la rete; senza una fonte con le dipendenze o con rsync fallito, BLOCKED col motivo. Ogni worktree ha la sua copia (<code>~/fic-mirror-&lt;hash&gt;</code>, regola in <code>scripts/fic-mirror.sh</code>, la stessa per <code>counterproof.sh</code>; anche per i worktree creati da Git per Windows, con <code>gitdir: C:/…</code> tradotto in <code>/mnt/c/…</code>): senza dipendenze le prende <b>in hardlink</b> dalla copia del tree principale se coincidono, altrimenti BLOCKED col motivo. L'impronta delle dipendenze è sul contenuto senza CR, quindi fine riga diverse fra checkout non la cambiano</td></tr>
+<tr><td>Snapshot nuove</td><td>si generano solo nel repo, con il runner lanciato lì: entrano nel diff che la review vede. Un exit 4, o un FAIL dovuto solo a una snapshot mancante, si riporta come <code>BLOCKED (snapshot da generare nel repo)</code>; ogni altro fallimento resta FAIL</td></tr>
+<tr><td>Uscite</td><td>quella del runner · 4 = il run ha scritto file (vale anche in modo lint) · 64 = uso errato, opzione al posto di un path, <code>--setup</code> non da solo, <code>--base</code> con un path invece di un riferimento, o non eseguito dentro WSL. Per il lint: 0 PASS · 1 FAIL (errori veri o un INTRODUCED fuori perimetro) · 2 <b>BLOCKED</b> (configurazione o ambiente del lint, mai FAIL su codice sano) · 3 <b>BLOCKED</b> (UNRESOLVED fuori perimetro). In ogni modo: 3 <b>BLOCKED</b> anche per la copia non utilizzabile (occupata oltre il tetto, assente, dipendenze stantie non riallineabili, disallineata dopo la risincronizzazione). Ultima riga: <code>esito=… luogo=copia|mnt-c</code></td></tr>
+<tr><td>Copia occupata, niente ripiego silenzioso <span class="tag ok">2026-09-29</span></td><td>la copia occupata da un altro run si <b>attende</b> (<code>flock -w</code>, tetto <code>FIC_LOCK_WAIT</code> secondi, default 900), poi <code>BLOCKED</code> exit 3. Dipendenze stantie ⇒ riallineamento automatico della copia; copia disallineata ⇒ una risincronizzazione, poi <code>BLOCKED</code> se non basta. Il ripiego nel repo solo con <code>FIC_ALLOW_MNT_C=1</code> esplicito, dichiarato nella prima riga e nella riga d'esito. Misurato: ~92 min di ripiego silenzioso (3–17× più lento) nei 13 cicli precedenti</td></tr>
+<tr><td>Test del wrapper</td><td><code>test-fast.test.sh</code> e <code>counterproof.test.sh</code>, dentro WSL (vedi <code>docs/TESTING-harness.md</code> del repo maat)</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="browser-qa">Estensione del progetto: QA da browser</h2>
+<p>Un esempio di skill del progetto che Maat non contiene ma rispetta: uno smoke test esplorativo da <b>browser vero</b>
+sull'ambiente di prova, con un agente che usa l'app come una persona. Input: una sezione, una lista di scenari o un brief
+libero. <b>Mai prescritto dai piani</b>: si lancia a mano.</p>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  actor U as Utente
+  participant S as Skill di QA (progetto)
+  participant A as Agente tester
+  participant DB as DB di prova (contesto isolato)
+  U->>S: sezione o scenari
+  S->>S: modalità · ruolo · scrittura sì/no
+  S->>S: credenziali di prova dal file locale non tracciato
+  opt run con scrittura e stato preesistente
+    S->>DB: seed (ricetta sicura)
+  end
+  S->>A: input + credenziali di prova + regole
+  A->>A: login, naviga, verifica il contesto di prova prima di scrivere
+  A-->>S: findings · Decision CLEAN / ISSUES_FOUND / BLOCKED
+  opt run con scrittura
+    S->>DB: teardown garantito
+  end
+  S-->>U: report
+</pre></div>
+<p>Categorie tipiche: <code>BLOCKING_BUG · NON_BLOCKING_BUG · UX_UI · INEFFICIENCY · RISK · TO_CHECK</code>; solo i finding
+riprodotti almeno 2 volte guidano la <code>Decision</code>. L'agente non ha Bash né Write: il DB e il report sono della skill.
+Le regole del plugin lo trattano come flusso separato: <code>plan-review-cycle</code> non lo prescrive mai.</p>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="altri">Altri agenti e flussi</h2>
+<p>Gli agenti del plugin sono sei: <code>spec-author</code>, <code>spec-plan-reviewer</code>, <code>spec-plan-reviewer-light</code>,
+<code>acceptance-test-writer</code>, <code>plan-implementer</code>, <code>implementation-reviewer</code> (in
+<code>${CLAUDE_PLUGIN_ROOT}/agents/</code>, chiamati con il prefisso: <code>maat:plan-implementer</code>). Un progetto può averne
+altri, propri, fuori dalla catena:</p>
+<div class="tablewrap"><table>
+<tr><th>Tipo di agente o flusso (del progetto)</th><th>Quando serve</th></tr>
+<tr><td>QA avversariale prima del rilascio</td><td>edge case, flussi rotti, race condition, stati utente</td></tr>
+<tr><td>review del codice contro un piano solo</td><td>fuori dalla catena, senza spec separata</td></tr>
+<tr><td>implementer iterativo per modifiche piccole</td><td>chiarisce, propone un piano, implementa dopo conferma; resta <b>fuori</b> dalla pipeline (il piano non finisce nella spec)</td></tr>
+<tr><td>sorveglianza delle regressioni</td><td>suite e2e periodica sull'ambiente di prova, attraverso l'involucro remoto del progetto; mai due run e2e in parallelo sullo stesso contesto di prova</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="release">Rilascio e produzione</h2>
+<p>Il rilascio in produzione non è di Maat: resta un flusso del progetto (una skill, un playbook, uno script). Maat ne
+conosce solo ciò che serve a <b>non toccarlo per errore</b>, da <code>guardia</code> di <code>maat.json</code>:</p>
+<div class="grid">
+  <div class="card"><h4><code>produzione</code></h4>regex di host, IP e domini di produzione: un comando che li nomina è sempre grave (negato nelle sottosessioni, conferma nella sessione principale).</div>
+  <div class="card"><h4><code>rilascio</code></h4>gli script di rilascio: mai lanciati dall'automazione.</div>
+  <div class="card"><h4><code>involucri</code></h4>gli script di accesso remoto ammessi, con le <code>opzioni_negate</code> (per esempio l'opzione che applica una migrazione).</div>
+  <div class="card"><h4><code>sonde</code></h4>gli host che <code>/maat:setup</code> e il doctor usano per provare la guardia.</div>
+</div>
+<div class="note bad">La produzione esiste. Dichiararla in <code>guardia.produzione</code> è la prima cosa che chiede <code>/maat:setup</code>: senza, la guardia conosce solo le regole del nucleo. Le regole del progetto per toccarla (accesso, backup, rollback) restano nella sua documentazione.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="sicurezza">Guardia, lock, permessi</h2>
+<p>Le sottosessioni girano senza sorveglianza, in <code>bypassPermissions</code> (misurato: in <code>-p</code> è l'unico modo di scrivere la spec sotto <code>.claude/</code>). La sicurezza è a strati, dichiarati per quello che sono: <b>una protezione dagli incidenti, non una sandbox</b> (su Windows nativo non esiste).</p>
+<div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph LANCIO ["Al lancio della fase: run-phase.sh, una volta"]
+    direction TB
+    L0{"lock calcolabile?"} -->|"no"| E2(["exit 2: fase non lanciata"])
+    L0 -->|"sì"| ST{"autotest: la guardia nega&lt;br/&gt;un comando PROD fittizio?"}
+    ST -->|"no"| E5(["exit 5: non si lancia"])
+    ST -->|"sì"| PL{"fase plan:&lt;br/&gt;&lt;run-dir&gt;/plan.lock libero?"}
+    PL -->|"no"| E4P(["exit 4: un altro plan sulla STESSA spec"])
+    PL -->|"sì, o fase non plan"| LK{"fase implement/review/fix:&lt;br/&gt;lock in .git libero?"}
+    LK -->|"no"| E4(["exit 4: un'altra fase di codice"])
+    LK -->|"sì, o fase plan"| RUN(["sottosessione avviata"])
+  end
+  subgraph CMDS ["A ogni comando della sottosessione"]
+    direction TB
+    CMD["Comando"] --> D1{"Deny per prefisso&lt;br/&gt;(--disallowedTools)"}
+    D1 -->|"match diretto"| NO1(["negato"])
+    D1 -->|"passa (es. dentro wsl bash -lc)"| D2{"guard.py (hook PreToolUse)&lt;br/&gt;legge il comando intero, anche annidato"}
+    D2 -->|"PROD per host, IP o dominio · ssh/scp/sftp/rsync diretti&lt;br/&gt;opzioni negate degli involucri · git che cambia stato · docker · psql&lt;br/&gt;installazioni · rm -rf · fasi plan/review/probe: Edit/Write fuori da .ai-workflow"| NO2(["negato (exit 2)"])
+    D2 -->|"altro"| OK(["eseguito"])
+  end
+  RUN --> CMD
+</pre><div class="cap">L'hook delle sottosessioni in sé è fail-open (se si rompe lascia passare); per questo <code>run-phase.sh</code> rifiuta il lancio (exit 5) se il suo autotest non ottiene un diniego. La guardia di sessione (l'hook del plugin, <code>hooks/hooks.json</code>) invece non è fail-open: se <code>guard.py</code> va in crash chiede conferma (nega con <code>FIC_PHASE</code> impostata). Cosa resta scoperto è scritto nella docstring di <code>guard.py</code>.</div></div>
+<div class="tablewrap"><table>
+<tr><th>Meccanismo</th><th>Cosa garantisce</th><th>Cosa non garantisce</th></tr>
+<tr><td><b>Lock</b> <code>.git/full-implementation-cycle.lock</code></td><td>una sola fase di codice alla volta, di qualunque feature (working tree, ambiente remoto e contesto di prova sono condivisi). Liveness con i PID MSYS. Se non è calcolabile, <code>--lock-status</code> risponde <code>sconosciuto</code> (exit 1): mai «libero» per errore</td><td>le skill lanciate a mano lo interrogano (<code>--lock-status</code>) ma non lo prendono</td></tr>
+<tr><td><b>Lock per spec</b> <code>&lt;run-dir&gt;/plan.lock</code> <span class="tag ok">2026-09-29</span></td><td>ogni fase <code>plan</code> lo prende (stessa liveness del lock di codice): un secondo <code>plan</code> sulla <b>stessa</b> spec esce 4 con il proprietario nello stderr (incidente: un piano approvato sovrascritto da un secondo plan). Piani di spec diverse restano paralleli</td><td>non è un lock globale sul planning (rifiutato il 22/09)</td></tr>
+<tr><td><b>Isolamento del harness</b> <code>&lt;run-dir&gt;/harness.fp</code> + <code>scripts/harness-merge.sh</code> <span class="tag ok">pt03</span></td><td>un harness in modifica si sviluppa in un worktree (con la sua copia WSL) ed entra nel tree principale solo con <code>bash "${CLAUDE_PLUGIN_ROOT}/scripts/harness-merge.sh" &lt;worktree&gt;</code>: rifiuta (exit 4, con l'elenco) se <code>--lock-status</code> non dice <code>libero</code> o se una fase ha <code>.running</code> senza <code>.exit</code> (con il comando di recupero), altrimenti <b>stampa</b> il comando (<code>git merge --ff-only &lt;branch&gt;</code> o il cherry-pick), senza eseguirlo; solo dopo elenca i cicli non chiusi dalle righe di stato della spec (secondi: prima, con <code>cycle-state.sh</code> completo, 24 minuti; <code>FIC_MERGE_NO_LIST=1</code> lo salta, <code>FIC_MERGE_LIST_MAX</code> lo tronca). Al primo lancio di un ciclo <code>run-phase.sh</code> registra l'impronta di ogni file del plugin (<code>MAAT_ROOT</code>, tranne l'elenco <code>HARNESS_EXCLUDE</code>) più <code>.claude/maat.json</code> del progetto; a ogni fase successiva la ricalcola e, se è cambiata, esce 6 con lo STOP «harness cambiato dal &lt;data&gt;: ricomincia la fase o conferma» (incidente: harness cambiato sotto un ciclo, misure falsate). <code>cycle-state.sh</code> e <code>driver.py next</code> danno lo stesso STOP prima di un lancio</td><td>i cicli avviati prima della regola (run dir senza <code>harness.fp</code>) non si controllano; le skill del <b>progetto</b> non fanno parte dell'impronta: una loro modifica non ferma un ciclo</td></tr>
+<tr><td><b>guard.py</b></td><td>diniego dei comandi pericolosi anche dentro <code>wsl -- bash -lc</code>, cicli, <code>xargs</code>, <code>find -exec</code>; heredoc Python che scrive file (<code>python - &lt;&lt;</code> con <code>open(…, 'w'|'a')</code>, <code>write_text</code>, <code>write_bytes</code>: incidente del 23/09, byte invisibili) — si scrive con Write/Edit</td><td>script scritti e poi eseguiti (nelle sottosessioni), payload passati agli involucri remoti, file scritti con Bash nelle fasi di sola lettura (così passano le controprove della review) (docstring di <code>guard.py</code>); una scrittura nascosta dentro un comando «di sola lettura» di un involucro (lo deve escludere l'involucro stesso)</td></tr>
+<tr><td><b>Guardia di sessione</b> <code>guard.py --universal</code> <span class="tag ok">2026-09-29</span></td><td>hook <code>PreToolUse</code> del plugin (<code>hooks/hooks.json</code> → <code>scripts/guard-hook.sh</code>), attivo in ogni progetto dove il plugin è abilitato, per <b>ogni</b> sessione (interattiva, notturna, skill lanciate a mano), sui tool <b>Bash e PowerShell</b>. Nella sessione principale <b>chiede conferma</b> (<code>permissionDecision: "ask"</code>, exit 0) invece di negare; con <code>FIC_PHASE</code> impostata (sotto-sessione) nega (exit 2). Solo le regole universali, niente regole per fase: chiede conferma per PROD (host, IP, dominio, script di rilascio), <code>ssh</code>/<code>scp</code>/<code>sftp</code>/<code>rsync</code> diretti, git che cambia stato — <code>git commit</code>/<code>add</code>/<code>checkout</code> ammessi <b>solo dentro un worktree collegato</b> (git-dir ≠ git-common-dir; directory dal <code>cwd</code>, da <code>cd</code>/<code>Set-Location</code> o da <code>git -C</code>; ignota → non ammesso: <code>--git-dir</code>, <code>--work-tree</code>, <code>GIT_DIR</code>/<code>GIT_WORK_TREE</code>, <code>pushd</code>/<code>popd</code>; un <code>cd</code> dentro <code>( … )</code>, <code>$( )</code>, <code>bash -c</code> o <code>wsl -- bash -lc</code> non vale fuori), <code>git worktree add|list</code> ammessi; <code>push</code>, <code>reset</code>, <code>rebase</code>, <code>stash</code> mai —, docker, psql, installazioni, <code>rm -rf</code>, le <code>opzioni_negate</code> degli involucri, heredoc Python che scrive file. Per <code>bash|sh &lt;file&gt;</code> con il file sotto <code>script/</code> o <code>.claude/</code> legge le righe <b>eseguibili</b> del file (senza commenti né corpi di heredoc di testo) e applica le sole regole remote e infrastrutturali (ssh/scp/sftp/rsync, docker, psql, installazioni, opzioni negate degli involucri, PROD solo come comando o argomento di un comando di rete); git e <code>rm -rf</code> dentro gli script no</td><td>gli involucri dichiarati (<code>guardia.involucri</code>) e i wrapper del plugin (<code>test-fast.sh</code>, <code>counterproof.sh</code>) non si leggono; senza Python l'hook scende a un controllo ridotto per espressione regolare, prudente (chiede conferma più spesso), e lo dice nel motivo</td></tr>
+<tr><td><b>Hook Stop</b> <code>scripts/stop-hook.py</code> <span class="tag ok">2026-09-29</span></td><td>passato con <code>--settings</code> accanto a <code>guard.py</code>: nega la fine di un turno il cui ultimo messaggio non ha la riga <code>ESITO FASE</code>, o con un job in background che il transcript mostra non raccolto (nessuna notifica di fine, nessun <code>BashOutput</code>/<code>TaskOutput</code> finale, nessun <code>TaskStop</code>). Le regole «mai attese passive» di <code>child-rules.md</code> diventano codice</td><td>con <code>stop_hook_active</code> lascia sempre chiudere (niente loop): rimanda indietro <b>una</b> volta per turno. Fallisce aperto (transcript assente, input illeggibile → lascia chiudere)</td></tr>
+<tr><td><b>Niente suite nelle fasi di piano</b> <span class="tag ok">2026-09-29</span></td><td><code>guard.py</code>, con <code>FIC_PHASE=plan</code>, nega <code>vitest</code>, <code>pytest</code> e le suite dichiarate in <code>guardia.suite</code> senza file o selettori espliciti (<code>-k</code>/<code>-m</code>, <code>-t</code>), anche dentro <code>wsl -- bash -lc</code></td><td>una cartella non è un selettore; <code>npm test</code> non è coperto</td></tr>
+<tr><td><b>Niente MCP</b> (<code>--strict-mcp-config</code>)</td><td>le sottosessioni partono con 31 strumenti invece di 79: nessun browser, Drive o Docs</td><td>—</td></tr>
+<tr><td><b>Divieti negli agenti</b></td><td><code>plan-implementer</code> e <code>child-rules.md</code> li scrivono esplicitamente; un diniego è definitivo</td><td>—</td></tr>
+<tr><td><b>Reviewer senza Bash</b></td><td>la sola lettura è una capacità, non una promessa</td><td>—</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="script">Script deterministici e test</h2>
+<p>Tutti in <code>${CLAUDE_PLUGIN_ROOT}/scripts/</code>, ognuno con la sua suite <code>&lt;nome&gt;.test.sh</code> accanto.</p>
+<div class="tablewrap"><table>
+<tr><th>Script</th><th>Ruolo</th><th>Test</th></tr>
+<tr><td><code>maat-config.py</code> · <code>lib/maat-paths.sh</code> · <code>maat_paths.py</code></td><td>il lettore unico di <code>.claude/maat.json</code> (valida, leggi, comando di un modulo, gate richiesti, test di un file, componi dai profili) e il risolutore delle due radici, <code>MAAT_ROOT</code> (il plugin) e <code>PROJECT_ROOT</code> (il progetto, dalla cartella di lavoro)</td><td><code>maat-config.test.sh</code> · <code>maat-paths.test.sh</code></td></tr>
+<tr><td><code>maat-doctor.sh</code></td><td>diagnosi in sola lettura: versioni, <code>maat.json</code>, WSL, comandi dei moduli, guardia agganciata e provata, cartella di lavoro; <code>--prova-test</code> esce dalla sola lettura</td><td><code>maat-doctor.test.sh</code></td></tr>
+<tr><td><code>plan-check.sh</code></td><td>lint, delta, contract, basis del piano; formato 2: lint2, gen, route (L5), s2; test-red: accept, tests, rossi, stubs, l2, <code>basis --write-tests</code></td><td><code>plan-check.test.sh</code></td></tr>
+<tr><td><code>review-surface.sh</code></td><td>snapshot, check di freschezza, fingerprint, test-signals, tree, diff per il reviewer</td><td><code>test-review-surface.sh</code></td></tr>
+<tr><td><code>cycle-state.sh</code></td><td>tabella di ripresa: <code>State</code> e <code>Next</code></td><td><code>cycle-state.test.sh</code></td></tr>
+<tr><td><code>driver.py</code> <span class="tag ok">pt14</span></td><td>macchina a stati del full cycle: <code>next</code> (la tabella di <code>cycle-state.sh</code>, provata equivalente), <code>run</code> (fasi, anti-loop, budget, lotti e corsie), <code>valida</code>, <code>equiv --certifica</code>, <code>righe</code></td><td><code>driver.test.sh</code></td></tr>
+<tr><td><code>run-phase.sh</code></td><td>lancia una fase: guardia e hook Stop, lock, tree prima/dopo, <code>.esito</code>, gate del driver (<code>.gates</code>), <code>--lock-status</code>, impronta del harness (<code>harness.fp</code>, <code>--harness-fp</code>), review in parallelo con VERIFY (chiave ricalcolata, scarto e sequenza: <code>.parallelo</code>)</td><td><code>run-phase.test.sh</code></td></tr>
+<tr><td><code>guard.py</code> · <code>guard-hook.sh</code></td><td>hook PreToolUse: sottosessioni, e guardia di sessione con <code>--universal</code> (l'hook del plugin)</td><td><code>guard.test.sh</code></td></tr>
+<tr><td><code>gates.sh</code> <span class="tag ok">2026-09-29</span></td><td>i gate del livello eseguiti <b>dal driver</b>, fuori dalle sottosessioni: dopo ogni implement/fix finita OK e prima di ogni review, <code>run-phase.sh</code> lo lancia col livello in vigore e i file di <code>touched.txt</code> (esito in <code>log/&lt;label&gt;.gates</code>). I gate sono quelli di <code>maat-config.py gate-richiesti</code>: <code>tests-&lt;modulo&gt;</code> e <code>controlli-&lt;modulo&gt;</code>, a <code>full</code> anche <code>lint</code> e <code>build</code>; i moduli che leggono il repo girano <b>in parallelo</b> a quelli sulla copia WSL, che vanno in serie sotto il lock della copia. Evidenza in <code>&lt;run-dir&gt;/evidence/&lt;chiave&gt;/&lt;gate&gt;.json</code> (esito, comando, exit, durata, report del runner); mai un PASS senza report. La <b>chiave</b> è lo sha256 di tree intero (non tracciati compresi), comandi, versioni degli strumenti, dipendenze, file generati che contano, <code>TZ</code> e <code>CI</code>: a chiave identica si <b>riusa</b>, un byte cambiato ovunque rilancia tutto. La review lo verifica con <code>--verify</code> (FRESH/STALE); lanciata a mano senza driver esegue i gate come sempre</td><td><code>gates.test.sh</code></td></tr>
+<tr><td><code>finalize.sh</code></td><td>firma lo stato della feature dopo una review (vedi sopra)</td><td><code>finalize.test.sh</code></td></tr>
+<tr><td><code>stop-hook.py</code> <span class="tag ok">2026-09-29</span></td><td>hook Stop delle sottosessioni (vedi sopra)</td><td><code>stop-hook.test.sh</code></td></tr>
+<tr><td><code>blocks-independent.py</code> <span class="tag ok">pt13</span></td><td>corsie dell'implement: indipendenza dei blocchi calcolata (<code>scrive:</code>, grafo reale con l'adattatore <code>framework</code> se dichiarato, file condivisi) e controllo a posteriori del diff (<code>--posteriori</code>)</td><td><code>blocks-independent.test.sh</code></td></tr>
+<tr><td><code>watch-phase.sh</code> + <code>phase-events.py</code></td><td>trasforma il log stream-json in righe di avanzamento per il Monitor. Un evento <code>result</code> è solo avanzamento (<code>· turno concluso</code>): in <code>-p</code> ogni turno intermedio ne produce uno. La fine (<code>■</code>/<code>✖</code>) si emette <b>solo</b> quando esiste <code>log/&lt;label&gt;.exit</code>; l'ultimo <code>result</code> resta in <code>&lt;log&gt;.pending</code> per il riarmo; con <code>.exit</code> diverso da 0 la fine è <code>✖</code> anche dopo un <code>result</code></td><td><code>phase-events.test.sh</code></td></tr>
+<tr><td><code>phase-usage.py</code></td><td>misura in sola lettura: costo, contesto, turni, quota, tool lenti</td><td>—</td></tr>
+<tr><td><code>cycle-report.py</code> + <code>corpus/replay.sh</code></td><td>misura di un ciclo intero (A lavoro, B attesa, bucket, riesecuzioni, STOP, $ e token; <code>--json</code>, <code>--append</code> su <code>metrics.csv</code>) e rigioco di una sola fase di un ciclo del corpus in un worktree usa-e-getta, con il harness indicato da <code>--harness</code> (tutti i percorsi di <code>run-phase.sh --harness-paths</code>, gli stessi dell'impronta) e la sua copia WSL cancellata alla fine</td><td><code>cycle-report.test.sh</code></td></tr>
+<tr><td><code>ciclo-worktree.sh</code> + <code>worktree-lib.sh</code></td><td>il ciclo in un worktree dedicato (<code>--worktree</code>), solo dal tree principale: <code>crea</code> (worktree sul branch <code>fic/&lt;nome&gt;</code>, STOP se le dipendenze della base differiscono dal tree principale o se il worktree non è suo; le voci <code>collega_nel_worktree</code> collegate, spec e run dir copiate, i <code>preparati</code> dei moduli copiati, copia WSL seminata), <code>stato</code>, <code>riporta</code> (spec e run dir nel tree principale, run dir allineata e non fusa, STOP se cambiate lì dopo la copia; mai il codice), <code>rimuovi</code> (STOP se una fase del worktree è viva o se spec e run dir non sono riportate; cancella le copie WSL, corsie comprese; scollega, verifica che nessun collegamento resti, anche non registrato, poi <code>git worktree remove</code>: misurato, <code>git worktree remove</code> segue le junction e svuoterebbe le dipendenze vere). L'ambiente remoto di prova resta condiviso: <code>--worktree</code> forza <code>--no-dev</code></td><td><code>ciclo-worktree.test.sh</code></td></tr>
+<tr><td><code>context-pack.sh</code></td><td>pacchetto di contesto di uno spec, in sola lettura, in <code>spec-&lt;nome&gt;.run/context-pack.md</code>: file nominati verificati (esiste / NON ESISTE), simboli, firme, test che citano file, stringhe e <code>data-test</code>, colonne DB dallo schema dichiarato in <code>contesto</code> di <code>maat.json</code> («assente» se la fonte non risponde); ≤ ~5k token. Lo genera l'orchestratore prima di ogni fase (solo se l'impronta dello spec è cambiata); lo leggono autore e lenti del piano, il reviewer e ogni <code>plan-implementer</code> (la parte dei suoi file). Orientamento: il codice vince sul pacchetto</td><td><code>context-pack.test.sh</code></td></tr>
+<tr><td><code>python.sh</code></td><td>trova un Python vero (mai lo stub dello Store)</td><td>—</td></tr>
+<tr><td><code>test-fast.sh</code> · <code>fic-mirror.sh</code></td><td>test e lint su copia WSL per i moduli con <code>copia</code>, con ripiego dichiarato e classificazione fuori perimetro; sync incrementale con cache di stat, controllo completo dell'origine ogni <code>FIC_SYNC_AUDIT_RUNS</code> run (20) o <code>FIC_SYNC_AUDIT_SECS</code> s (1800), guardia di equivalenza (<code>FIC_SYNC_EQUIV=1</code>, solo test) <span class="tag ok">pt06</span></td><td><code>test-fast.test.sh</code></td></tr>
+<tr><td><code>counterproof.sh</code></td><td>controprove da <code>mutations.json</code>, solo nel mirror WSL (o con il ripiego dichiarato senza WSL), seriali o su copie private in parallelo</td><td><code>counterproof.test.sh</code></td></tr>
+<tr><td><code>harness-merge.sh</code></td><td>via libera per portare un harness modificato in un worktree nel tree principale: lock libero, nessuna fase a metà, cicli non chiusi elencati; stampa il comando di merge, nessuna scrittura di git</td><td><code>harness-merge.test.sh</code></td></tr>
+</table></div>
+<p>Le suite si lanciano dal repo maat, una alla volta, con <code>bash plugins/maat/scripts/&lt;nome&gt;.test.sh</code> (Git Bash su
+Windows, bash su Linux); alcune girano dentro WSL. Elenco, durate e varianti Windows/Linux: <code>docs/TESTING-harness.md</code>
+del repo maat. Ogni suite accetta una variante da provare (<code>RP=</code>, <code>CS=</code>, <code>PC=</code>, <code>SCRIPT=</code>, <code>VF=</code>, <code>GT=</code>, <code>CP=</code>): è così che si fanno le controprove per mutazione delle regole nuove. I test usano repository git temporanei e non toccano il lock vero.</p>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="efficienza">Consumo, tempi, misure</h2>
+<p>Il costo di un ciclo è un <b>equivalente API</b> (<code>total_cost_usd</code> dei log), non un addebito: con l'abbonamento conta la quota della finestra di 5 ore. La misura si fa con:</p>
+<pre class="cmd">bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" &amp;&amp; "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/phase-usage.py" .claude/.ai-workflow/spec-&lt;nome&gt;.run'</pre>
+<div class="grid">
+  <div class="card"><h4>Dove va il costo (log reali)</h4>letture dalla cache 42–54% · scritture in cache (TTL 1 h) 24–34% · output 21–24%. Oltre l'80% del traffico è <b>crescita</b> del contesto, non la base.</div>
+  <div class="card"><h4>Dove va il tempo</h4>piano: 13–19 min su 21–29 sono attesa dei reviewer; implementazione: i test valgono 3–21 min.</div>
+  <div class="card"><h4>Il più caro</h4>l'implementer: in un ciclo reale 49,6 $ e contesto medio 353k token.</div>
+</div>
+<div class="diagram"><pre class="mermaid">
+pie showData
+  title Composizione del costo di una fase (media dei log)
+  "Letture dalla cache" : 48
+  "Scritture in cache (1 h)" : 29
+  "Output e ragionamento" : 23
+</pre></div>
+
+<h3>Ottimizzazioni in vigore (2026-09-22)</h3>
+<div class="tablewrap"><table>
+<tr><th>Leva</th><th>Cosa cambia</th><th>Cosa NON cambia</th></tr>
+<tr><td>O1 · batching</td><td>chiamate indipendenti nello stesso messaggio (mai due Edit sullo stesso file, mai una scrittura con ciò che deve vederla)</td><td>quante letture, ricerche, test e verifiche si fanno</td></tr>
+<tr><td>O2 · letture mirate</td><td>prima una ricerca, poi gli intervalli; niente riletture di intervalli invariati (invalidazione a scopo)</td><td>cosa si copre: ogni file, consumer e superficie che serve è ancora letto</td></tr>
+<tr><td>O3 · reviewer a lotti</td><td>Read/Grep/Glob indipendenti insieme, una riga di testo per messaggio</td><td>budget (conta le chiamate), lenti, mandato, protezione anti-stallo</td></tr>
+<tr><td>B · niente MCP</td><td>79 → 31 strumenti all'avvio delle sottosessioni</td><td>nessuna fase della catena usa MCP</td></tr>
+<tr><td>T1 · test veloci</td><td>test dei moduli con <code>copia</code> su copia WSL verificata (<code>test-fast.sh</code>)</td><td>stessi test, stesso comando, <code>CI=true</code>, ripiego solo dichiarato</td></tr>
+<tr><td>T2 · lint dalla copia <span class="tag ok">2026-09-23</span></td><td>lint dalla stessa copia: misurato 2,2× (28 s contro 62 s)</td><td>perimetro del modulo come la CI del progetto; gate finale senza cache; errore di configurazione = <code>BLOCKED</code>, mai FAIL</td></tr>
+<tr><td>T3 · implementer a blocchi <span class="tag ok">2026-09-23</span></td><td>2–4 agenti in sequenza che partizionano i passi: contesto da ~353k a ~150k</td><td>stesso diff, stessa review, stessi gate; preflight e budget restano della fase</td></tr>
+<tr><td>T4 · runner indipendenti insieme <span class="tag ok">2026-09-23</span></td><td>i moduli che leggono il repo (per esempio un backend con pytest) e quelli sulla copia WSL (con un lock che i primi non prendono) si lanciano insieme: i gate (le controprove, dal 2026-09-29, passano da <a href="#controprove"><code>counterproof.sh</code></a>). Misurato in fila ~38 min, insieme ~20</td><td>substrati e file disgiunti; entrambi raccolti prima di decidere; nessun esito parziale; mai due run sulla copia</td></tr>
+<tr><td>T5 · meno round trip <span class="tag ok">2026-09-23</span></td><td>batching per difetto delle chiamate indipendenti e report senza ripetizioni. Misurato: 167 chiamate di cui 29 appaiate, contesto medio 353k riletto ogni volta</td><td>si accorcia il <b>testo</b>, mai il lavoro: esplorazione, ricerche, evidenze e verifiche restano quelle</td></tr>
+</table></div>
+<div class="note"><b>Misurato il 2026-09-23.</b> Un ciclo grande valeva 174,7 min · 90,76 $ · 101,5M token, di cui <b>93 minuti di soli test</b> (vitest 54 · pytest 20 · eslint 19). Da lì sono nate le due leve sopra. Restano fuori, dietro una misura: il wrapper backend, <code>pytest-xdist</code> e il riuso deterministico dell'evidenza.</div>
+
+<h3>Risultati misurati</h3>
+<div class="tablewrap"><table>
+<tr><th>Misura</th><th>Prima</th><th>Dopo</th><th>Δ</th></tr>
+<tr><td>Fase piano (stessa spec e base) · tempo</td><td>29,1 min</td><td>21,3 min</td><td><b>−27%</b></td></tr>
+<tr><td>Fase piano · costo equivalente</td><td>26,67 $</td><td>21,86 $</td><td><b>−18%</b></td></tr>
+<tr><td>Fase piano · letture dalla cache</td><td>31,1 M</td><td>21,4 M</td><td><b>−31%</b></td></tr>
+<tr><td>Fase piano · chiamate al modello dei reviewer</td><td>112</td><td>62</td><td>−45%</td></tr>
+<tr><td>Fase piano · esito</td><td colspan="2">3 giri, 3 major al giro 1, approvato (uguale)</td><td>=</td></tr>
+<tr><td>vitest, 42 test</td><td>131–332 s</td><td>36–48 s</td><td>3–9× più veloce, stesso esito</td></tr>
+<tr><td>Ciclo interno <span class="tag ok">pt06</span>: la copia WSL su un file puro (progetto <code>unit</code>), mediana A/B intercalato, 4 giri</td><td>59,2 s</td><td>18,7–19,2 s</td><td><b>−68%</b>, stesso esito</td></tr>
+<tr><td>Ciclo interno <span class="tag ok">pt06</span>: su un file che monta (progetto <code>nuxt</code>, 41 test)</td><td>77,7 s</td><td>47,7–53,1 s</td><td><b>−32/−39%</b> (solo sync: vitest da solo invariato)</td></tr>
+<tr><td>Suite completa, due progetti contro progetto unico</td><td colspan="2">201 file · 2333 test · stessi nomi · stessi esiti (3 rossi preesistenti, gli stessi), due run</td><td>=</td></tr>
+<tr><td>Corpus di difetti reali reinseriti</td><td>1 su 6 esecuzioni</td><td>2 su 6</td><td>nessuna regressione osservata</td></tr>
+</table></div>
+<p>Stima per un ciclo con frontend: tempo −20/−45% (da ~50 a ~30–40 min), costo e token −12/−15%. Una sola esecuzione per lato: da confermare con <code>phase-usage.py</code> su 2–3 cicli reali.</p>
+<div class="note"><b>Esperimenti non attivi.</b> Cache a 5 minuti (<code>FORCE_PROMPT_CACHING_5M=1</code>, documentata ufficialmente; effetto sulla quota da misurare su un ciclo reale). Implementer Sonnet: solo progetto, da implementare alla prima feature con <code>Superfici a rischio: nessuna</code>. Discovery separata: solo se l'orchestratore del piano resta dominante.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="stop">Quando si ferma: cosa fare</h2>
+<div class="tablewrap"><table>
+<tr><th>Messaggio / stato</th><th>Significato</th><th>Cosa fare</th></tr>
+<tr><td><code>Plan status: NEEDS HUMAN DECISION</code></td><td>disaccordo su un fatto, ricorrenza, 10 iterazioni, scope fuori spec</td><td>leggere i finding aperti nel changelog, decidere, eventualmente correggere la spec e rilanciare</td></tr>
+<tr><td><code>Approved basis STALE</code></td><td>spec o piano modificati dopo l'approvazione</td><td>rilanciare <code>/plan-review-cycle</code> sulla stessa spec (riapertura)</td></tr>
+<tr><td>Deviazione dal piano</td><td>un passo è impossibile o sbagliato sul codice</td><td>decidere se riaprire il piano; il piano non si tocca a mano</td></tr>
+<tr><td>Migrazione da applicare</td><td>il file di migrazione è scritto, non applicato</td><td>applicarla a mano con la procedura del progetto (mai dall'automazione: le opzioni che scrivono sul DB sono fra le <code>opzioni_negate</code>), poi rilanciare il ciclo</td></tr>
+<tr><td><code>NEEDS_VERIFICATION</code></td><td>review approvata, ma un gate richiesto non è PASS (ambiente, <code>--no-dev</code>, file misto, obbligo)</td><td>ottenere il gate (il comando è nel report) e rilanciare la review: stesso snapshot = solo promozione</td></tr>
+<tr><td>Riga <code>obligation:</code></td><td>superficie critica che nessun gate eseguibile copre</td><td>fare la verifica proposta, poi <code>/implementation-review-cycle &lt;nome&gt;</code> incollando comando e output, oppure — solo per gli obblighi — la descrizione scritta della verifica manuale (cosa, dove, con quale ruolo, esito). Il full cycle non ha un canale per l'evidenza</td></tr>
+<tr><td><code>run-phase</code> exit 2 / exit 3</td><td>uso errato o repository git non trovato / binario <code>claude</code> non trovato</td><td>exit 3: <b>STOP</b>, si imposta <code>CLAUDE_BIN</code> (oppure si chiede <code>--inline</code> di proposito); exit 2: controllare il comando e l'ambiente</td></tr>
+<tr><td>Budget di review esaurito</td><td>3 giri, o il giro post-approvazione già speso</td><td>decisione umana sui finding aperti</td></tr>
+<tr><td><code>run-phase</code> exit 4 / <code>occupato</code></td><td>un'altra fase di codice ha il lock, oppure (fase <code>plan</code>) un altro plan della stessa spec ha <code>&lt;run-dir&gt;/plan.lock</code></td><td>aspettare e rilanciare; togliere il lock (comando nello stderr) solo se si è certi che nulla giri</td></tr>
+<tr><td><code>sconosciuto</code></td><td>il lock non è calcolabile (git non risponde)</td><td>trattarlo come occupato; controllare l'ambiente</td></tr>
+<tr><td><code>run-phase</code> exit 5</td><td>guardia non attiva (Python mancante o autotest fallito)</td><td>mai rilanciare senza guardia: sistemare Python (<code>python.sh</code>)</td></tr>
+<tr><td><code>run-phase</code> exit 6 / «harness cambiato dal &lt;data&gt;»</td><td>il harness è cambiato dal primo lancio del ciclo (<code>&lt;run-dir&gt;/harness.fp</code>)</td><td>se il cambio è voluto, registrare l'impronta attuale con il comando stampato nello stderr (o nella riga STOP di <code>cycle-state.sh</code>) e riprendere; altrimenti riportare il harness com'era</td></tr>
+<tr><td>Attribuzione non misurata</td><td>implement/fix senza <code>.post-tree</code>, o <code>.pre-tree</code> più vecchio aperto</td><td>seguire il recupero scritto nella riga STOP di <code>cycle-state.sh</code></td></tr>
+<tr><td>Codice della feature escluso</td><td>un path di <code>touched.txt</code> è sotto <code>Excluded:</code></td><td>lanciare a mano <code>/implementation-review-cycle &lt;nome&gt;</code>: il path rientra in scope con un giro sul diff dall'intera base registrata (rilanciare il full cycle si fermerebbe di nuovo). Se il path non è della feature, toglierlo da <code>touched.txt</code></td></tr>
+<tr><td>«scritture fuori dallo scope di test-red» / <code>AVVISO: … da un altro flusso</code></td><td>un file è cambiato durante la fase: nominato dalla sotto-sessione → STOP; mai nominato → lavoro di un altro flusso (in <code>do-not-touch.txt</code>, il ciclo continua)</td><td>durante il ciclo non modificare file in questo working tree: per lavorare in parallelo usare un altro worktree (<code>git worktree add ../&lt;repo&gt;-lavoro -b &lt;branch&gt; &lt;ramo di base&gt;</code>), oppure lanciare il ciclo con <code>--worktree</code></td></tr>
+<tr><td>«la fase non ha cambiato lo stato»</td><td>anti-loop: stessa fase, stesso <code>State</code></td><td>leggere l'<code>.esito</code> e lo stderr della fase</td></tr>
+<tr><td><code>BLOCKED (snapshot da generare nel repo)</code></td><td>un test ha bisogno di una snapshot nuova</td><td>generarla lanciando il runner nel repo (non nella copia WSL) e farla rivedere</td></tr>
+<tr><td><code>ciclo-worktree.sh</code> rifiutato: «questa cartella è già un worktree»</td><td><code>--worktree</code> lanciato da un worktree collegato</td><td>lanciare il ciclo dal tree principale, oppure senza <code>--worktree</code> (la cartella è già isolata)</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="decisioni">Decisioni prese</h2>
+<p>Le scelte che hanno dato forma ai flussi, con il loro motivo. Tutte misurate su spec o cicli reali.</p>
+
+<h3>Architettura dei flussi</h3>
+<div class="tablewrap"><table>
+<tr><th>Data</th><th>Decisione</th><th>Motivo</th></tr>
+<tr><td>2026-08-05</td><td>Giro <code>--light</code> della review sempre dopo un'implementazione</td><td>un piano rivisto 7 volte e migliaia di test verdi nascondevano una rotta non protetta</td></tr>
+<tr><td>2026-08-10</td><td>Piano: ventaglio a 3 lenti <b>solo</b> al giro 1, poi un reviewer sul delta, gate occhi nuovi solo quando serve</td><td>compra attesa e contesto; esteso ai giri successivi costerebbe più di prima. Grandi task: −44/−55% di attesa</td></tr>
+<tr><td>2026-08-10</td><td>Delta derivato da snapshot + <code>diff</code>, diff vuoto = errore duro</td><td>chi ha introdotto un difetto non può dichiarare il perimetro in cui cercarlo</td></tr>
+<tr><td>2026-08-10</td><td>Una revisione parziale non è un'approvazione; un solo rilancio gratuito</td><td>l'anti-stallo permetteva un APPROVED su metà mandato</td></tr>
+<tr><td>2026-09-21</td><td>Review legata a uno snapshot; <code>IMPLEMENTED</code> solo con gate richiesti PASS; <code>NEEDS_VERIFICATION</code></td><td>prima BLOCKED valeva PASS e staged/untracked sfuggivano</td></tr>
+<tr><td>2026-09-21</td><td>Superfici a rischio, pavimenti, <code>rosso se:</code>, tracciabilità, <code>plan-check.sh</code></td><td>verifiche non vacue e proporzionate al rischio</td></tr>
+<tr><td>2026-09-21</td><td>Obblighi su superfici critiche non coperte: STOP umano voluto</td><td>prima risultavano VERIFIED senza che nulla avesse toccato la superficie</td></tr>
+<tr><td>2026-09-21</td><td><code>/full-implementation-cycle</code> compone le due skill; nessuno stato né contatore proprio; nessun commit; deviazione = STOP</td><td>regole ricopiate divergono; i contatori della review limitano già il ciclo</td></tr>
+<tr><td>2026-09-21</td><td>Controprove senza <code>git stash</code>: copia + sidecar con hash</td><td>lo stash fallisce sui file nuovi e, se la sessione muore, si porta via la feature</td></tr>
+<tr><td>2026-09-29</td><td>Controprove con <code>counterproof.sh</code>, solo nel mirror; copia + sidecar e coppie backend/frontend ritirate</td><td>una review morta aveva lasciato un file mutato nel working tree; 8 <code>cp-run.sh</code> scritti a mano, uno per ciclo</td></tr>
+<tr><td>2026-09-21</td><td>Fasi in sottosessioni <code>claude -p</code> a contesto vuoto</td><td>la chat principale non accumula il lavoro delle fasi</td></tr>
+</table></div>
+
+<h3>Sicurezza e affidabilità (2026-09-22, tre tornate)</h3>
+<div class="tablewrap"><table>
+<tr><th>Decisione</th><th>Motivo</th></tr>
+<tr><td>Guardia <code>guard.py</code> come hook, lancio rifiutato se l'autotest non nega</td><td>i divieti per prefisso non vedono dentro <code>wsl -- bash -lc</code></td></tr>
+<tr><td>Lock sulle fasi di codice; piani in parallelo</td><td>working tree, ambiente remoto e contesto di prova sono condivisi</td></tr>
+<tr><td><code>Approved basis</code> e <code>Reviewed contract</code></td><td>308 righe aggiunte a mano a un piano approvato avevano 1 blocker e 7 major</td></tr>
+<tr><td><code>cycle-state.sh</code> calcola la ripresa; su IMPLEMENTED ricontrolla il codice</td><td>un «finito» deve voler dire che il codice rivisto è ancora quello nel tree</td></tr>
+<tr><td><code>touched.txt</code> misurato; senza misura nessuna review (R-b)</td><td>la review deve distinguere il codice della feature da quello di altri</td></tr>
+<tr><td>Un path di <code>touched.txt</code> escluso → STOP; recupero senza promozione, diff dall'intera base</td><td>altrimenti un file della feature poteva uscire dalla review</td></tr>
+<tr><td>Reviewer dell'implementazione senza Bash, legge un diff preparato</td><td>la sola lettura come capacità</td></tr>
+<tr><td>Minor/nit mai applicati (tolto il batch dopo l'approvazione)</td><td>~155 optional applicati fuori revisione</td></tr>
+<tr><td>Controprova anche come mutazione nominata</td><td>un file riportato alla base falliva sull'import, non sull'asserzione</td></tr>
+<tr><td>La lettura del DB remoto davvero read-only; l'opzione che applica le migrazioni negata alle sottosessioni (<code>opzioni_negate</code>)</td><td>la «lettura» poteva scrivere</td></tr>
+<tr><td><code>--lock-status</code> fail-closed (<code>sconosciuto</code>)</td><td>con <code>MSYS_NO_PATHCONV=1</code> rispondeva «libero» a lock occupato (misurato)</td></tr>
+</table></div>
+
+<h3>Efficienza (2026-09-22)</h3>
+<div class="tablewrap"><table>
+<tr><th>Proposta</th><th>Decisione</th><th>Motivo</th></tr>
+<tr><td>Batching, letture mirate, reviewer a lotti, niente MCP, test su copia</td><td><span class="tag ok">in vigore</span></td><td>cambiano come si acquisiscono le informazioni, non quante (review indipendente APPROVED)</td></tr>
+<tr><td>Cache a 5 minuti</td><td><span class="tag warn">esperimento</span></td><td>documentata; effetto sulla quota non documentato</td></tr>
+<tr><td>Implementer Sonnet</td><td><span class="tag warn">solo progetto</span></td><td>idoneità storica 0 su 4 feature (tutte con superfici critiche)</td></tr>
+<tr><td>Meno lenti, gate, giri o livelli; effort ridotto per chi giudica</td><td><span class="tag bad">rifiutato</span></td><td>toccano la capacità di trovare difetti</td></tr>
+<tr><td><code>--bare</code></td><td><span class="tag bad">rifiutato</span></td><td>richiede una API key: le sottosessioni usano l'abbonamento</td></tr>
+</table></div>
+
+<h3>Rifiutati, e perché</h3>
+<div class="tablewrap"><table>
+<tr><th>Proposta</th><th>Motivo del rifiuto</th></tr>
+<tr><td>Togliere i livelli min/std/full</td><td>i test frontend su <code>/mnt/c</code> costavano ore; 8 file da toccare per un beneficio non misurato</td></tr>
+<tr><td>Lock anche sul planning; allentare il lock</td><td>i piani non toccano il codice; allentarlo riapre le collisioni sull'ambiente remoto e sul contesto di prova</td></tr>
+<tr><td>Worktree separati per feature, allowlist di capacità</td><td>su Windows nativo non c'è una sandbox; il costo supera il beneficio</td></tr>
+<tr><td>Regola R-a sui pre-tree</td><td>due giri di STOP spuri: semplificare invece di aggiungere eccezioni</td></tr>
+<tr><td>Registro di candidati, smistamento a blocchi, ciclo unificato</td><td>deciso come design futuro, <b>non in vigore</b></td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="rischi">Rischi residui e limiti</h2>
+<div class="tablewrap"><table>
+<tr><th>Rischio</th><th>Stato</th></tr>
+<tr><td>Nessuna sandbox: script scritti e poi eseguiti, payload passati agli involucri remoti, file scritti con Bash nelle fasi di sola lettura sfuggono alla guardia; la sola lettura di un involucro la garantisce l'involucro, non la guardia</td><td>dichiarato nella docstring di <code>guard.py</code></td></tr>
+<tr><td>Skill lanciate a mano: solo la guardia di sessione (regole universali, niente regole per fase); interrogano il lock ma non lo prendono</td><td>dichiarato</td></tr>
+<tr><td>Sovra-inclusione in <code>touched.txt</code> di modifiche altrui fatte durante una fase</td><td>direzione sicura (più review); possibili STOP spuri</td></tr>
+<tr><td>Regola dei file nuovi (due grep) applicata dall'LLM: un file senza riferimenti la supera se il piano non lo nomina</td><td>dichiarato</td></tr>
+<tr><td>Eventi <code>result</code> intermedi possono sembrare la fine di una fase</td><td>chiuso <span class="tag ok">2026-09-29</span>: <code>phase-events.py</code> emette la fine solo con <code>.exit</code></td></tr>
+<tr><td>Misure di efficienza su una sola esecuzione per lato</td><td>da confermare su cicli reali</td></tr>
+<tr><td>Una misura nel mirror WSL mentre <code>counterproof.sh</code> vi applica una mutazione vede codice mutato (dal 2026-09-29 le controprove non toccano più il repo)</td><td>il lock del mirror li serializza, e <code>counterproof.sh</code> lo tiene per tutto il run, gradino 2 compreso: <code>test-fast.sh</code> attende con <code>flock -w</code> ed esce BLOCKED 3 oltre il tetto, senza ripiegare sul repo</td></tr>
+<tr><td>La copia WSL va riallineata quando cambiano le dipendenze</td><td>chiuso: la riallineano da sole <code>test-fast.sh</code> e <code>counterproof.sh</code> dall'origine con le dipendenze (o dalla copia del tree principale, per i worktree che non le hanno); senza fonte, BLOCKED col motivo</td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="file">Dove sta cosa</h2>
+<div class="tablewrap"><table>
+<tr><th>Percorso</th><th>Contenuto</th><th>Tipo</th></tr>
+<tr><td><code>${CLAUDE_PLUGIN_ROOT}/skills/&lt;skill&gt;/SKILL.md</code></td><td>regole di ogni skill del plugin (<code>/maat:&lt;skill&gt;</code>)</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><span class="tag ok">pt14</span> <code>full-implementation-cycle/{orchestratore.md,workers/&lt;fase&gt;.md,riferimento.md}</code> · <code>plan-review-cycle/{autore.md,revisori.md,formato-1.md}</code> · <code>implementation-review-cycle/{prompt-revisore.md,freschezza.md,gate-manuali.md,light.md}</code></td><td>la prosa divisa per chi la legge: ogni fase carica solo la SKILL e il file della sua fase (≤300 righe, <code>driver.py righe</code>); gli altri si leggono solo sul percorso che li richiede; <code>riferimento.md</code> elenca le regole diventate codice con i loro test</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><span class="tag ok">pt14</span> <code>${CLAUDE_PLUGIN_ROOT}/scripts/driver.py</code> · <code>driver.equiv</code></td><td>la macchina a stati del full cycle (<code>next</code>, <code>run</code>, <code>valida</code>, <code>equiv</code>, <code>certificato</code>, <code>righe</code>) e il certificato di equivalenza che attiva la delega degli involucri</td><td><span class="tag">codice</span></td></tr>
+<tr><td><code>${CLAUDE_PLUGIN_ROOT}/agents/*.md</code></td><td>agenti; il frontmatter <code>tools:</code> sono le capacità reali</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><code>full-implementation-cycle/child-rules.md</code></td><td>regole aggiunte al prompt di sistema di ogni sottosessione</td><td><span class="tag">normativo</span></td></tr>
+<tr><td>header di <code>cycle-state.sh</code>, <code>run-phase.sh</code>, <code>guard.py</code>, <code>plan-check.sh</code>, <code>review-surface.sh</code>, <code>test-fast.sh</code>, <code>maat-config.py</code></td><td>comportamento deterministico e sue garanzie</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><code>${CLAUDE_PLUGIN_ROOT}/schemas/</code></td><td>schema di <code>maat.json</code> e dell'esito delle fasi</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><code>${CLAUDE_PLUGIN_ROOT}/profiles/</code> · <code>examples/</code></td><td>moduli pronti per gli stack comuni; configurazioni vere</td><td>riferimento</td></tr>
+<tr><td><code>${CLAUDE_PLUGIN_ROOT}/hooks/hooks.json</code></td><td>la guardia di sessione del plugin</td><td><span class="tag">codice</span></td></tr>
+<tr><td><code>.claude/maat.json</code> (nel progetto)</td><td>tutto ciò che dipende dal progetto</td><td><span class="tag">normativo</span></td></tr>
+<tr><td><code>.claude/.ai-workflow/spec-&lt;nome&gt;.md</code> e <code>.run/</code> (nel progetto)</td><td>le feature e i loro run (cartella <code>cartelle.lavoro</code>)</td><td>dati</td></tr>
+<tr><td><code>CLAUDE.md</code> del progetto</td><td>regole del progetto: accesso remoto, rilascio, produzione, test</td><td>riferimento</td></tr>
+<tr><td>repo maat: <code>README.md</code>, <code>docs/GUIDA-FLUSSI.html</code>, <code>docs/TESTING-harness.md</code>, <code>CHANGELOG.md</code></td><td>installazione e uso; questa guida; come si testa il plugin; le versioni</td><td><span class="tag ok">esplicativo</span></td></tr>
+</table></div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="glossario">Glossario</h2>
+<div class="tablewrap"><table>
+<tr><th>Termine</th><th>Significato</th></tr>
+<tr><td>Àncora</td><td>la prova verificabile di un finding bloccante: codice, riga di spec/piano, assenza, misura</td></tr>
+<tr><td>Lente (L1/L2/L3)</td><td>mandato disgiunto di un reviewer al giro 1 del piano</td></tr>
+<tr><td>Delta</td><td>le righe riscritte dall'ultimo giro, calcolate da script</td></tr>
+<tr><td>Gate occhi nuovi</td><td>un reviewer a scope pieno prima di approvare, con il mandato «quale premessa non è mai stata messa in dubbio?»</td></tr>
+<tr><td>Pavimento</td><td>l'unica verifica dovuta a una superficie critica, fuori dai tetti del livello</td></tr>
+<tr><td>Obbligo</td><td>superficie critica senza pavimento né deroga: si chiude solo con l'evidenza dell'utente</td></tr>
+<tr><td>Superficie di review</td><td>staged + unstaged + untracked non ignorati, come tree git, rispetto alla base</td></tr>
+<tr><td>Snapshot / fingerprint</td><td>base + tree + impronta dei path in scope: ciò a cui è legata una review</td></tr>
+<tr><td>Promozione</td><td>da NEEDS_VERIFICATION a IMPLEMENTED sullo stesso snapshot, eseguendo solo i gate mancanti</td></tr>
+<tr><td>Gate-only</td><td>snapshot cambiato solo per aggiunte pure a file di test veri (non fake, fixture, conftest o setup): se la review registrata era APPROVED, senza gate FAIL né obblighi aperti, si rilanciano i gate senza un nuovo giro. L'idoneità la decide <code>review-surface.sh check</code></td></tr>
+<tr><td>Controprova</td><td>far andare rosso un test togliendo il codice che dovrebbe verificare (revert o mutazione nominata)</td></tr>
+<tr><td>touched.txt</td><td>i path cambiati dalle fasi implement/fix, misurati</td></tr>
+<tr><td>do-not-touch / misto</td><td>lavoro di un altro flusso nel tree / file con modifiche di questa feature e di un altro flusso</td></tr>
+<tr><td>Worker / orchestratore</td><td>la sottosessione che esegue una fase / la chat che le lancia e decide la successiva</td></tr>
+<tr><td>STALE / FRESH / LEGACY</td><td>approvazione non più valida / valida / anteriore al meccanismo</td></tr>
+</table></div>
+
+<p style="color:var(--muted);margin-top:40px">Ultimo aggiornamento: 2026-10-29 (generalizzata per il plugin Maat). Tenere allineata questa guida alle SKILL.md del plugin: se cambia una regola, cambia prima il file normativo, poi qui.</p>
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+(function () {
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem("guida-flussi-tema"); } catch (e) {}
+  if (saved) root.setAttribute("data-theme", saved);
+  function isDark() {
+    var t = root.getAttribute("data-theme");
+    if (t) return t === "dark";
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  var sources = [];
+  document.querySelectorAll("pre.mermaid").forEach(function (el) { sources.push(el.textContent); });
+  function render() {
+    if (!window.mermaid) return;
+    document.querySelectorAll("pre.mermaid").forEach(function (el, i) {
+      el.removeAttribute("data-processed");
+      el.textContent = sources[i];
+    });
+    window.mermaid.initialize({ startOnLoad: false, theme: isDark() ? "dark" : "default", securityLevel: "strict",
+      flowchart: { htmlLabels: true, curve: "basis" }, fontFamily: "system-ui, Segoe UI, sans-serif" });
+    window.mermaid.run({ querySelector: "pre.mermaid" });
+  }
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var next = isDark() ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("guida-flussi-tema", next); } catch (e) {}
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

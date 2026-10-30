@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-label="Maat — Multi-Agent Assurance Toolkit">
+<defs></defs>
+<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+<rect width="64" height="64" fill="#fff"/>
+<rect x="24.8" y="37.6" width="14.4" height="7.2" rx="3.6" fill="#000"/>
+<rect x="20.1" y="31.6" width="23.8" height="19.3" rx="6.6" fill="#000"/>
+<rect x="21.5" y="33" width="21" height="16.5" rx="5.2" fill="#fff"/>
+<rect x="24.8" y="37.6" width="14.4" height="7.2" rx="3.6" fill="#000"/>
+<rect x="28.4" y="20.20" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="23.80" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="27.40" width="7.2" height="1.3" fill="#000"/>
+<rect x="28.4" y="31.40" width="7.2" height="1.6" fill="#000"/>
+</mask>
+<g mask="url(#m)" fill="#0F1B33">
+<polygon points="24.00,34.50 23.16,33.88 22.32,33.28 21.48,32.70 20.62,32.14 19.77,31.59 18.91,31.06 18.04,30.55 17.17,30.06 16.29,29.58 15.41,29.12 14.52,28.68 13.62,28.25 12.73,27.84 11.82,27.45 10.91,27.08 10.00,26.72 9.08,26.38 8.16,26.06 7.23,25.76 6.29,25.47 5.35,25.20 4.41,24.95 3.46,24.72 2.50,24.50 4.60,29.80 5.42,30.06 6.25,30.33 7.07,30.61 7.89,30.91 8.71,31.22 9.53,31.55 10.34,31.89 11.16,32.24 11.97,32.61 12.78,32.99 13.59,33.39 14.40,33.80 15.21,34.22 16.01,34.66 16.82,35.11 17.62,35.58 18.42,36.06 19.23,36.55 20.02,37.06 20.82,37.58 21.62,38.11 22.41,38.66 23.21,39.22 24.00,39.80" stroke-linejoin="round"/>
+<polygon points="40.00,34.50 40.84,33.88 41.68,33.28 42.52,32.70 43.38,32.14 44.23,31.59 45.09,31.06 45.96,30.55 46.83,30.06 47.71,29.58 48.59,29.12 49.48,28.68 50.38,28.25 51.27,27.84 52.18,27.45 53.09,27.08 54.00,26.72 54.92,26.38 55.84,26.06 56.77,25.76 57.71,25.47 58.65,25.20 59.59,24.95 60.54,24.72 61.50,24.50 59.40,29.80 58.58,30.06 57.75,30.33 56.93,30.61 56.11,30.91 55.29,31.22 54.48,31.55 53.66,31.89 52.84,32.24 52.03,32.61 51.22,32.99 50.41,33.39 49.60,33.80 48.79,34.22 47.99,34.66 47.18,35.11 46.38,35.58 45.58,36.06 44.77,36.55 43.98,37.06 43.18,37.58 42.38,38.11 41.59,38.66 40.79,39.22 40.00,39.80" stroke-linejoin="round"/>
+<polygon points="22.82,38.35 20.67,36.88 18.79,50.85 20.94,52.32" stroke-linejoin="round"/>
+<polygon points="41.18,38.35 43.33,36.88 45.21,50.85 43.06,52.32" stroke-linejoin="round"/>
+<polygon points="19.83,36.33 17.66,35.00 14.78,47.87 16.95,49.20" stroke-linejoin="round"/>
+<polygon points="44.17,36.33 46.34,35.00 49.22,47.87 47.05,49.20" stroke-linejoin="round"/>
+<polygon points="16.81,34.51 14.63,33.32 10.94,45.02 13.12,46.21" stroke-linejoin="round"/>
+<polygon points="47.19,34.51 49.37,33.32 53.06,45.02 50.88,46.21" stroke-linejoin="round"/>
+<polygon points="13.78,32.88 11.59,31.84 7.26,42.33 9.46,43.38" stroke-linejoin="round"/>
+<polygon points="50.22,32.88 52.41,31.84 56.74,42.33 54.54,43.38" stroke-linejoin="round"/>
+<polygon points="10.73,31.46 8.52,30.55 3.75,39.83 5.96,40.73" stroke-linejoin="round"/>
+<polygon points="53.27,31.46 55.48,30.55 60.25,39.83 58.04,40.73" stroke-linejoin="round"/>
+<polygon points="7.65,30.22 5.43,29.46 0.40,37.52 2.62,38.29" stroke-linejoin="round"/>
+<polygon points="56.35,30.22 58.57,29.46 63.60,37.52 61.38,38.29" stroke-linejoin="round"/>
+<rect x="21.5" y="33" width="21" height="16.5" rx="5.2"/>
+<path d="M29.4 33 V14.22 C29.4 7.98 35.12 6.68 37.98 10.84 C39.28 12.92 38.76 16.04 37.46 17.86 C37.20 16.04 36.16 14.48 34.60 15.00 V33 Z"/>
+</g>
+<circle cx="29.0" cy="41.0" r="1.7" fill="#0F1B33"/>
+<path d="M27.60 41.20 L25.40 40.70" stroke="#0F1B33" stroke-width="1.1" stroke-linecap="round"/>
+<circle cx="35.0" cy="41.0" r="1.7" fill="#0F1B33"/>
+<path d="M36.40 41.20 L38.60 40.70" stroke="#0F1B33" stroke-width="1.1" stroke-linecap="round"/>
+<text x="72" y="37" fill="#0F1B33" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-weight="800" font-size="34" letter-spacing="-0.5">maat</text>
+<text x="73" y="50" fill="#0F1B33" font-family="Manrope, 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="6.2" textLength="158" lengthAdjust="spacing">MULTI-AGENT ASSURANCE TOOLKIT</text>
+</svg>
