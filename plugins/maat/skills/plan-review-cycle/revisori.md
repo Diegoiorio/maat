@@ -1,7 +1,7 @@
 # Reviewer mandates — read by the spec-plan-reviewer agent
 
 The orchestrator's prompt names your section (`Round 1` with a lens, `Delta`, or `Fresh eyes`) and gives the
-parameters: the spec file, the ranges to read, the context pack, the test level and `Superfici a rischio` in force,
+parameters: the spec file, the ranges to read, the context pack, the test level and `Risk surfaces` in force,
 and for later rounds the resolved, rejected and removed lists and your tool-call budget. Follow your section; the
 placeholders in angle brackets are those parameters.
 
@@ -11,7 +11,10 @@ placeholders in angle brackets are those parameters.
 Use the maat:spec-plan-reviewer agent.
 
 Review the specification and the proposed implementation plan against the local codebase.
-Both live in the same file; the plan is the "## Piano di implementazione" section.
+Both live in the same file; the plan is the "## Implementation plan" section ("## Piano di implementazione" in
+an older spec). Headings and keywords come in English or, in older specs, in Italian ("### Test plan" /
+"### Piano di test", "red if:" / "rosso se:", "[floor:" / "[pavimento:"…): both are valid, never a finding;
+the same section present in BOTH languages is (one of the two would be ignored downstream).
 
 Spec + plan file: .claude/.ai-workflow/spec-<name>.md
 Read these ranges only (never the whole file): spec <offset/limit>, plan <offset/limit>.
@@ -23,9 +26,9 @@ YOUR LENS IS <L1 | L2 | L3>. Cover it; ignore the other two and say which lens y
 
   L1 · Contract & data — missing requirements and conformance to the spec; roles and
        permissions; API/payload/persistence; validation; migrations; backward compatibility.
-       Plus: verify EVERY "nessuna implicazione" the plan declares — do not take one on trust —
-       and, the same way, the "Superfici a rischio" line (a touched surface left undeclared is
-       a finding) and the "Tracciabilità requisiti" table (a requirement with no step, a
+       Plus: verify EVERY "no implication" ("nessuna implicazione") the plan declares — do not take
+       one on trust — and, the same way, the "Risk surfaces" line (a touched surface left undeclared is
+       a finding) and the "Requirement traceability" table (a requirement with no step, a
        significant step serving no requirement, a verification that cannot verify it).
   L2 · Fidelity to the code — every path:line cited exists and is the right one; which file an
        auto-imported UiXxx really resolves to (app wrapper vs packages/ui primitive); blast
@@ -37,18 +40,18 @@ YOUR LENS IS <L1 | L2 | L3>. Cover it; ignore the other two and say which lens y
        test suffices · a whole-suite gate when the level is not `full` · a `/browser-qa`
        prescribed at all. Required change: remove it. Check that the declared level matches
        what the plan actually prescribes: exceeding it is a blocking finding (the length of
-       "### Piano di test" alone is not: it is a lint signal).
-       Still yours: non-vacuity of the gates proposed — every new case must state "rosso se:",
+       "### Test plan" alone is not: it is a lint signal).
+       Still yours: non-vacuity of the gates proposed — every new case must state "red if:",
        and you check that condition is real and reachable; a vacuous test is pure cost — ·
        every string the plan proposes to change, searched in e2e/specs/ and tests/ — a hit in
        e2e/specs/ needs its "[e2e-locator: <spec>]" line, at any level ·
        acceptance criteria actually satisfiable · UI/loading/error/locked states. A line
-       marked "[pavimento: <surface>]" is exempt from the caps and from over-testing: check
+       marked "[floor: <surface>]" is exempt from the caps and from over-testing: check
        only that it is pertinent and can go red; the same for an "[e2e-locator: <spec>]" line (it
        must name a spec whose locator the plan really changes). A counterproof must name its
        file(s) — reverted to base, or a named mutation when the test imports what the feature adds
-       (a revert would fail on the import). A "⚠️ Superficie <critical token>" line means
-       a human STOP downstream: is a floor really unreachable? A "statica sufficiente:" waiver
+       (a revert would fail on the import). A "⚠️ Surface <critical token>" line means
+       a human STOP downstream: is a floor really unreachable? A "static sufficient:" waiver
        holds only if the change leaves that surface's runtime behaviour untouched.
 
 Tool-call budget: ~25, as a SOFT threshold. At the budget, if you hold an unverified lead on a
@@ -90,10 +93,10 @@ still agree with it): <xref line list, or "none">.
 If a rewritten line changes the behaviour or signature of a shared symbol, check its direct
 callers (one hop, no further).
 
-Test level in force: <lvl>. Superfici a rischio in force: <tokens>. State both here EVERY
+Test level in force: <lvl>. Risk surfaces in force: <tokens>. State both here EVERY
 round: those lines are written once at Step 1 and never rewritten, so they never fall inside a
 delta range — without them the level-dependent caps (≤5 cases, whole-suite legality)
-and the [pavimento: exemption are unenforceable from round 2.
+and the [floor: exemption are unenforceable from round 2.
 
 Already resolved — do NOT re-raise: <finding key + anchored symbol/path + one line each>.
 Exception: if a resolved finding's claim holds AGAIN on lines rewritten to resolve it, raise it

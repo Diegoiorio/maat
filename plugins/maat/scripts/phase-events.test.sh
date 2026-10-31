@@ -43,6 +43,12 @@ L2=$T/g.jsonl; cp "$L" "$L2"
 timeout 20 "$FIC_PY" -u "$PE" "$L2" "$X" > "$T/out" 2>&1; rc=$?
 check "lettura unica con .exit -> una sola riga di fine, l'ultima" '[ "$(ends)" = 1 ] && [ "$rc" = 0 ] && tail -1 "$T/out" | grep -q "^■ ESITO FASE 1: OK"'
 
+# 3b. 1.3.0: the English result line (the Italian one above is still read)
+L5=$T/e.jsonl; printf '%s\n' '{"type":"result","is_error":false,"result":"work\nPHASE RESULT implement: OK — done","duration_ms":60000,"num_turns":2}' > "$L5"
+echo 0 > "$T/e.exit"
+timeout 20 "$FIC_PY" -u "$PE" "$L5" "$T/e.exit" > "$T/out" 2>&1; rc=$?
+check "riga «PHASE RESULT … OK» -> la riga di fine la riporta" '[ "$rc" = 0 ] && [ "$(ends)" = 1 ] && tail -1 "$T/out" | grep -q "^■ PHASE RESULT implement: OK — done"'
+
 # 4. .exit without any result: ✖ with no result, exit 1 (unchanged behaviour)
 L3=$T/h.jsonl; head -1 "$L" > "$L3"; echo 1 > "$T/h.exit"
 timeout 20 "$FIC_PY" -u "$PE" "$L3" "$T/h.exit" > "$T/out" 2>&1; rc=$?

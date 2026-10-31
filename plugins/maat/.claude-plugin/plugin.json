@@ -1,6 +1,6 @@
 {
   "name": "maat",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Verified AI development for Claude Code. Maat — Multi-Agent Assurance Toolkit: plan, implementation, review and sign-off cycle, with evidence, metrics and a guard.",
   "author": {
     "name": "Diego Iorio",

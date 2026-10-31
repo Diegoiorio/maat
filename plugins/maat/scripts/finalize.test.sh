@@ -174,6 +174,10 @@ chk "  riepilogo su stdout" 'printf "%s\n" "$out" | grep -q "Evidence composta �
 sed -i 's/^Review status: .*/Review status: APPROVED/; s/^Feature status: .*/Feature status: IMPLEMENTED/' "$SP"
 fin --level std --copertura "$W/review.result.json"
 chk "  una seconda firma sostituisce la tabella (una sola)" '[ "$(grep -c "^Requirement evidence (finalize.sh" "$SP")" = 1 ] && [ "$(grep -c "^| R1 somma |" "$SP")" = 1 ]' "$(cat "$SP")"
+# 1.3.0: the English review heading and the English provisional marker that the review skill now writes
+spec APPROVED IMPLEMENTED; sed -i 's/^## Review implementazione$/## Implementation review/; s/^Verification: VERIFIED$/Verification: VERIFIED (provisional: driver VERIFY in parallel)/' "$SP"
+fin --level std --copertura "$W/review.result.json"
+chk "«## Implementation review» con «(provisional: …)»: firmata IMPLEMENTED, Verification confermata da finalize" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && grep -q "^Finalize: IMPLEMENTED — " "$SP" && grep -q "^Verification: VERIFIED (finalize.sh: gate" "$SP"' "$(cat "$SP")"
 # L2 (harness-pt11): an "assorbita" entry counts only if plan-check.sh l2 confirms it on the current code; this spec
 # is in format 1, so l2 confirms nothing -> the entry is not enough (fail-closed); red on assertion, yes.
 printf '[{"id":"CP-1","assorbita":true,"motivo":"L2"}]\n' > "$RUN/counterproof/mutations.json"

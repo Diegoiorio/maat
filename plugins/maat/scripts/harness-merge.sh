@@ -92,7 +92,7 @@ spec_state() { # <spec> → "<Review status>\t<Feature status>" of the review se
   tr -d '\r' < "$1" | awk '
     /^[ \t]*(```|~~~)/ { f = !f; next }
     f { next }
-    /^## Review implementazione/ { r = 1 }
+    /^## (Review implementazione|Implementation review)/ { r = 1 }
     r && rs == "" && sub(/^Review status:[ \t]*/, "") { rs = $0 }
     r && fs == "" && sub(/^Feature status:[ \t]*/, "") { fs = $0 }
     END { printf "%s\t%s\n", rs, fs }'

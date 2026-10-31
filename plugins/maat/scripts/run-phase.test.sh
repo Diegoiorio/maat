@@ -251,21 +251,26 @@ check "nessun evento result → nessun .esito (l'ESITO letto in un tool_result n
 check "--json-schema passato con lo schema (contenuto compatto, senza barre: MSYS le convertirebbe)" 's=$(sed -n "/^--json-schema$/{n;p;}" "$T/01-plan.args"); printf "%s" "$s" | grep -q "\"deviazioni\"" && ! printf "%s" "$s" | grep -q /'
 check "JSON valido → log/<label>.result.json scritto" 'grep -q "\"fase\": \"implement\"" "$T/run/log/13-implement.result.json"'
 FAKE_RESULT='{"type":"result","result":"fatto\nESITO FASE implement: OK — dichiarato"}' run x 24-implement
-check "JSON assente → .esito STOP «uscita non valida»" 'sed -n 1p "$T/run/log/24-implement.esito" | grep -q "^ESITO FASE implement: STOP — uscita non valida: nessun blocco JSON"'
+check "JSON assente → .esito STOP «uscita non valida»" 'sed -n 1p "$T/run/log/24-implement.esito" | grep -q "^PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON"'
 check "  la riga ESITO del testo e' comunque scritta (originale=), con lo state" 'grep -qx "originale=ESITO FASE implement: OK — dichiarato" "$T/run/log/24-implement.esito" && grep -q "^state=" "$T/run/log/24-implement.esito"'
 check "  nessun result.json e nessun gate (non e' un OK)" '[ ! -f "$T/run/log/24-implement.result.json" ] && [ ! -f "$T/run/log/24-implement.gates" ]'
 FAKE_RESULT='{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"implement","esito":"FORSE","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],"extra":1}}' run x 25-implement
 # the two errors, in any order: jsonschema (if available, e.g. Linux python3) lists them in another order and
 # without the field name compared with the minimal validator (pk08)
-check "JSON fuori schema → STOP «uscita non valida» con gli errori" 'l=$(sed -n 1p "$T/run/log/25-implement.esito"); case "$l" in "ESITO FASE implement: STOP — uscita non valida: "*FORSE*) ;; *) false ;; esac && case "$l" in *"uscita non valida: "*extra*) ;; *) false ;; esac && [ ! -f "$T/run/log/25-implement.result.json" ]'
+check "JSON fuori schema → STOP «uscita non valida» con gli errori" 'l=$(sed -n 1p "$T/run/log/25-implement.esito"); case "$l" in "PHASE RESULT implement: STOP — uscita non valida: "*FORSE*) ;; *) false ;; esac && case "$l" in *"uscita non valida: "*extra*) ;; *) false ;; esac && [ ! -f "$T/run/log/25-implement.result.json" ]'
 FAKE_RESULT='{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"review","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' run x 26-implement
 check "JSON di un'altra fase → STOP «uscita non valida»" 'sed -n 1p "$T/run/log/26-implement.esito" | grep -q "uscita non valida: fase .review. diversa"'
 FAKE_RESULT='{"type":"result","result":"fatto\nESITO FASE implement: OK — r\n```json\n{\"fase\":\"implement\",\"esito\":\"OK\",\"motivo\":\"m\",\"deviazioni\":[\"passo 8 adattato\"],\"bloccato_su\":\"nessuno\",\"file\":[\"a.py\"],\"gate_interni\":[{\"comando\":\"pytest\",\"esito\":\"PASS\"}],\"finding\":[{\"severita\":\"major\",\"file\":\"a.py\",\"riga\":null,\"testo\":\"t\"}]}\n```"}' run x 27-implement
 check "senza structured_output: vale l'ultimo recinto json del testo" 'grep -q "passo 8 adattato" "$T/run/log/27-implement.result.json"'
-check "prosa OK, JSON con deviazioni → .esito STOP (il piu conservativo), prosa sotto originale=" 'sed -n 1p "$T/run/log/27-implement.esito" | grep -q "^ESITO FASE implement: STOP — JSON: deviazioni dichiarate (1): passo 8 adattato" && grep -qx "originale=ESITO FASE implement: OK — r" "$T/run/log/27-implement.esito"'
+check "prosa OK, JSON con deviazioni → .esito STOP (il piu conservativo), prosa sotto originale=" 'sed -n 1p "$T/run/log/27-implement.esito" | grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): passo 8 adattato" && grep -qx "originale=ESITO FASE implement: OK — r" "$T/run/log/27-implement.esito"'
 check "  e nessun gate (non e' un OK)" '[ ! -f "$T/run/log/27-implement.gates" ]'
 FAKE_RESULT='{"type":"result","result":"ESITO FASE implement: STOP — migrazione da applicare","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' run x 28-implement
 check "prosa STOP, JSON OK → .esito resta STOP" 'sed -n 1p "$T/run/log/28-implement.esito" | grep -q "^ESITO FASE implement: STOP — migrazione" && [ -f "$T/run/log/28-implement.result.json" ] && [ ! -f "$T/run/log/28-implement.gates" ]'
+# 1.3.0: the English result line the agents now write, with bloccato_su "none", reads like the Italian one
+FAKE_RESULT='{"type":"result","result":"done\nPHASE RESULT implement: OK — done","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' run x 28b-implement
+check "riga «PHASE RESULT implement: OK» e bloccato_su «none» → .esito OK, gate eseguiti" '[ "$(sed -n 1p "$T/run/log/28b-implement.esito")" = "PHASE RESULT implement: OK — done" ] && [ -f "$T/run/log/28b-implement.gates" ]'
+FAKE_RESULT='{"type":"result","result":"PHASE RESULT implement: STOP — migration to apply","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' run x 28c-implement
+check "  riga inglese STOP con JSON OK → .esito resta STOP, nessun gate" 'sed -n 1p "$T/run/log/28c-implement.esito" | grep -q "^PHASE RESULT implement: STOP — migration to apply" && [ ! -f "$T/run/log/28c-implement.gates" ]'
 
 # 6b-bis. defensive deviations: ALL with "difensiva: " → no STOP, recorded (file, AVVISO, note in the changelog
 # outside the fingerprint); even a single one without the prefix → STOP as before; the review receives the list to judge.
@@ -278,7 +283,7 @@ check "solo deviazioni difensive → .esito OK (l'esito di senza deviazioni), ga
 check "  una riga per deviazione in log/deviazioni-difensive.txt (etichetta, testo)" '[ "$(grep -c . "$DD")" = 1 ] && grep -q "^29-implement	difensiva: stato.ts:42 — ramo per uno stato" "$DD"'
 check "  e un AVVISO in .esito, dopo state=" 'grep -q "^AVVISO: 1 deviazioni difensive dichiarate" "$T/run/log/29-implement.esito" && [ "$(sed -n 2p "$T/run/log/29-implement.esito" | cut -c1-6)" = "state=" ]'
 FAKE_RESULT=$(djson '["difensiva: a.py:1 — ripiego", "passo 3 adattato"]') run x 30-implement
-check "una difensiva e una no → STOP (deviazioni dichiarate, tutte elencate), niente gate" 'sed -n 1p "$T/run/log/30-implement.esito" | grep -q "^ESITO FASE implement: STOP — JSON: deviazioni dichiarate (2): difensiva: a.py:1 — ripiego; passo 3 adattato" && [ ! -f "$T/run/log/30-implement.gates" ]'
+check "una difensiva e una no → STOP (deviazioni dichiarate, tutte elencate), niente gate" 'sed -n 1p "$T/run/log/30-implement.esito" | grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (2): difensiva: a.py:1 — ripiego; passo 3 adattato" && [ ! -f "$T/run/log/30-implement.gates" ]'
 check "  e nessuna riga registrata per la fase ferma" '! grep -q "^30-implement	" "$DD" && ! grep -q "deviazioni difensive" "$T/run/log/30-implement.esito"'
 check "nessun prefisso (27-implement) → STOP come prima, nulla registrato" 'sed -n 1p "$T/run/log/27-implement.esito" | grep -q "STOP — JSON: deviazioni dichiarate" && ! grep -q "^27-implement	" "$DD"'
 FAKE_RESULT=$(djson '["difensiva:ramo"]') run x 31-implement
@@ -298,6 +303,15 @@ b6a=$(bb); s6a=$(bash "$HERE/cycle-state.sh" "$SP6" | sed -n 's/^State: //p')
 FAKE_OUT="$T/33-implement" FAKE_RESULT=$(djson '["difensiva: a.py:9 — default col codice grezzo"]') bash "$RP" "$R6" 33-implement "$T/prompt.md" 2>/dev/null </dev/null
 check "nota «- nota (deviazione difensiva, <etichetta>): …» subito dopo l'ultima riga del changelog, CRLF conservato" 'tr -d "\r" < "$SP6" | grep -A1 "^- giro 1: ok$" | tail -1 | grep -qx -- "- nota (deviazione difensiva, 33-implement): difensiva: a.py:9 — default col codice grezzo" && [ "$(tr -cd "\r" < "$SP6" | wc -c)" = "$(wc -l < "$SP6")" ]'
 check "  impronta Approved basis e State invariati (Status: FRESH), .esito OK" '[ "$(bb)" = "$b6a" ] && bb | grep -qx "Status: FRESH" && [ "$(bash "$HERE/cycle-state.sh" "$SP6" | sed -n "s/^State: //p")" = "$s6a" ] && sed -n 1p "$R6/log/33-implement.esito" | grep -q "^ESITO FASE implement: OK"'
+# 1.3.0: English plan headings («## Implementation plan», «### Plan review changelog»): the note goes into the
+# English changelog (zones as in plan-check.sh annotate), English "defensive: " prefix, fingerprint unchanged
+W7="$T/w7"; SP7="$W7/spec-e.md"; R7="$W7/spec-e.run"; mkdir -p "$R7"
+sp7() { printf '%s\n' "# E" "## Requirements" "1. A." "## Implementation plan" "Plan status: APPROVED" "Test level: std" \
+  "Risk surfaces: none" "$@" "### Steps" "1. Change \`a.py\`." "### Plan review changelog" "- round 1: ok" "" > "$SP7"; }
+sp7; b7=$(bash "$HERE/plan-check.sh" basis "$SP7" | tr -d '\r' | sed -n 's/^Basis: //p'); sp7 "Approved basis: $b7"
+b7a=$(bash "$HERE/plan-check.sh" basis "$SP7" | tr -d '\r')
+FAKE_OUT="$T/34-implement" FAKE_RESULT='{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":["defensive: a.py:9 — raw code default"],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' bash "$RP" "$R7" 34-implement "$T/prompt.md" 2>/dev/null </dev/null
+check "piano inglese: nota della deviazione «defensive: » dopo l'ultima riga di «### Plan review changelog», impronta invariata, .esito OK" 'grep -A1 "^- round 1: ok$" "$SP7" | tail -1 | grep -qx -- "- nota (deviazione difensiva, 34-implement): defensive: a.py:9 — raw code default" && [ "$(bash "$HERE/plan-check.sh" basis "$SP7" | tr -d "\r")" = "$b7a" ] && sed -n 1p "$R7/log/34-implement.esito" | grep -q "^PHASE RESULT implement: OK"'
 
 # 6c. finalize fail-closed (harness-pt08): missing or exit outside 0/1/4 → STOP, and cycle-state never DONE
 mkdir -p "$T/w2"; RSP="$T/w2/spec-r.md"; CS="$(dirname "$RP")/cycle-state.sh"
@@ -306,11 +320,11 @@ printf '%s\n' "# X" "## Piano di implementazione" "Plan status: APPROVED" "Test 
   "Verification: VERIFIED" "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" > "$RSP"
 rrev() { FAKE_OUT="$T/$1" FIC_FINALIZE="$2" bash "$RP" "$T/w2/spec-r.run" "$1" "$T/prompt.md" 2>/dev/null </dev/null; }
 rrev 60-review "$T/non-esiste.sh"
-check "finalize assente → .esito STOP «finalize non eseguito»" 'sed -n 1p "$T/w2/spec-r.run/log/60-review.esito" | grep -q "^ESITO FASE review: STOP — finalize non eseguito"'
+check "finalize assente → .esito STOP «finalize non eseguito»" 'sed -n 1p "$T/w2/spec-r.run/log/60-review.esito" | grep -q "^PHASE RESULT review: STOP — finalize non eseguito"'
 check "  e cycle-state non da' DONE" 'o=$(bash "$CS" "$RSP"); printf "%s\n" "$o" | grep -q "^Next: REVIEW — IMPLEMENTED non firmato"'
 printf '#!/usr/bin/env bash\nexit 2\n' > "$T/fin-2"
 rrev 61-review "$T/fin-2"
-check "finalize exit 2 → .esito STOP «finalize fallito», la riga della review sotto originale=" 'sed -n 1p "$T/w2/spec-r.run/log/61-review.esito" | grep -q "^ESITO FASE review: STOP — finalize fallito (exit 2" && grep -qx "originale=ESITO FASE x: OK — finto" "$T/w2/spec-r.run/log/61-review.esito"'
+check "finalize exit 2 → .esito STOP «finalize fallito», la riga della review sotto originale=" 'sed -n 1p "$T/w2/spec-r.run/log/61-review.esito" | grep -q "^PHASE RESULT review: STOP — finalize fallito (exit 2" && grep -qx "originale=ESITO FASE x: OK — finto" "$T/w2/spec-r.run/log/61-review.esito"'
 check "  e cycle-state non da' DONE" 'o=$(bash "$CS" "$RSP"); printf "%s\n" "$o" | grep -q "^Next: REVIEW — IMPLEMENTED non firmato"'
 cat > "$T/fin-ok" <<'EOF'
 #!/usr/bin/env bash
@@ -534,7 +548,7 @@ check "  un risultato di un giro precedente non sopravvive al run del driver" '[
 FS=$FS FAKE_CP_EXIT=3 prun "$RP" 77-review
 check "  counterproof.sh exit 3 (ambiente): i suoi risultati non valgono, cancellati" 'grep -qx "exit=3" "$L3/77-review.counterproof" && [ ! -f "$R3/counterproof/T1.json" ]'
 FS=$FS FAKE_CP_EXIT=5 prun "$RP" 78-review
-check "  counterproof.sh exit 5 (mirror non ripristinato): .esito STOP" 'sed -n 1p "$L3/78-review.esito" | grep -q "^ESITO FASE review: STOP — counterproof.sh exit 5"'
+check "  counterproof.sh exit 5 (mirror non ripristinato): .esito STOP" 'sed -n 1p "$L3/78-review.esito" | grep -q "^PHASE RESULT review: STOP — counterproof.sh exit 5"'
 # run_cp without FIC_CP_CMD (pk04b-2, step 4-bis): counterproof.sh inside WSL only on Windows and with a mutations
 # module `ambiente: wsl` (maat.json); otherwise direct, with PROJECT_ROOT, without wsl (fake here: records and exits
 # 127, as if it were missing). Counterproof: hard-coded wsl in run_cp -> the native case calls wsl, red.
@@ -655,15 +669,17 @@ crun spec-m 73-chiusura; rc=$?
 check "chiusura senza e2e: fase di codice senza sotto-sessione, esce 0" '[ $rc -eq 0 ] && [ ! -f "$T/c73-chiusura.args" ] && [ ! -d "$FIC_LOCK" ]'
 check "  touched.txt = unione degli anelli, base.txt = quella del primo anello" '[ "$(tr "\n" " " < "$CD/spec-m.run/touched.txt")" = "a.py b.py " ] && [ "$(cat "$CD/spec-m.run/base.txt")" = "$(cat "$CD/spec-m-1-a.run/base.txt")" ]'
 check "  gate a livello full sui file della catena" '[ "$(sed -n 3p "$T/c73-chiusura.gates-args")" = full ] && grep -qx a.py "$T/c73-chiusura.gates-args" && grep -qx b.py "$T/c73-chiusura.gates-args"'
-check "  chiusura.txt IMPLEMENTED con base e tree, .esito OK" 'grep -Eq "^Chiusura: IMPLEMENTED — base [0-9a-f]{40} · tree [0-9a-f]{40} · gates PASS .* · e2e non richiesto · " "$CD/spec-m.run/chiusura.txt" && grep -q "^ESITO FASE chiusura: OK" "$CD/spec-m.run/log/73-chiusura.esito"'
+check "  chiusura.txt IMPLEMENTED con base e tree, .esito OK" 'grep -Eq "^Chiusura: IMPLEMENTED — base [0-9a-f]{40} · tree [0-9a-f]{40} · gates PASS .* · e2e non richiesto · " "$CD/spec-m.run/chiusura.txt" && grep -q "^PHASE RESULT chiusura: OK" "$CD/spec-m.run/log/73-chiusura.esito"'
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "$FAKE_OUT.gates-args"\necho "gates: esito=FAIL chiave=k1 evidence=C:/finto/evidence/k1"\nexit 1\n' > "$T/gates-fail"; chmod +x "$T/gates-fail"
 FIC_GATES="$T/gates-fail" crun spec-m 74-chiusura
-check "chiusura coi gate rossi → NEEDS_VERIFICATION, .esito STOP" 'grep -q "^Chiusura: NEEDS_VERIFICATION — gates FAIL" "$CD/spec-m.run/chiusura.txt" && grep -q "^ESITO FASE chiusura: STOP" "$CD/spec-m.run/log/74-chiusura.esito"'
+check "chiusura coi gate rossi → NEEDS_VERIFICATION, .esito STOP" 'grep -q "^Chiusura: NEEDS_VERIFICATION — gates FAIL" "$CD/spec-m.run/chiusura.txt" && grep -q "^PHASE RESULT chiusura: STOP" "$CD/spec-m.run/log/74-chiusura.esito"'
 printf '%s\n' "- [e2e-locator: e2e-6-goals.spec.ts] il titolo" >> "$CD/spec-m-2-b.md"
 FAKE_RESULT='{"type":"result","result":"e2e verdi\nESITO FASE chiusura: OK — e2e PASS"}' crun spec-m 75-chiusura
 check "figlie con [e2e-locator: → sotto-sessione col prompt E2E DELLA CATENA, senza --json-schema" '[ -f "$T/c75-chiusura.args" ] && grep -qx "E2E DELLA CATENA: e2e-6-goals.spec.ts" "$T/c75-chiusura.stdin" && ! grep -qx -- "--json-schema" "$T/c75-chiusura.args"'
 check "  FIC_PHASE=chiusura (il lock e' della fase: /dev-verify lo vede dentro il ciclo)" 'grep -qx "FIC_PHASE=chiusura" "$T/c75-chiusura.env"'
 check "  e2e OK → chiusura IMPLEMENTED" 'grep -q "^Chiusura: IMPLEMENTED — .* · e2e OK (e2e-6-goals.spec.ts) · " "$CD/spec-m.run/chiusura.txt"'
+FAKE_RESULT='{"type":"result","result":"e2e green\nPHASE RESULT chiusura: OK — e2e PASS"}' crun spec-m 75b-chiusura
+check "  riga inglese «PHASE RESULT chiusura: OK» (1.3.0) → chiusura IMPLEMENTED, .esito PHASE RESULT" 'grep -q "^Chiusura: IMPLEMENTED — .* · e2e OK (e2e-6-goals.spec.ts) · " "$CD/spec-m.run/chiusura.txt" && grep -q "^PHASE RESULT chiusura: OK — catena chiusa" "$CD/spec-m.run/log/75b-chiusura.esito"'
 FAKE_RESULT='{"type":"result","result":"ESITO FASE chiusura: STOP — e2e rosso"}' crun spec-m 76-chiusura
 check "  e2e non riusciti → NEEDS_VERIFICATION" 'grep -q "^Chiusura: NEEDS_VERIFICATION — e2e non riusciti" "$CD/spec-m.run/chiusura.txt"'
 rm -f "$CD/spec-m-1-a.run/base.txt"; crun spec-m 77-chiusura
@@ -736,7 +752,7 @@ check "fix che cambia un file di test PRESCRITTO (scrive: di B1), test_somma inv
 check "  impronta riregistrata: tests.txt = plan-check tests, base in tests.red.txt, basis Tests FRESH, cycle-state non STALE (tests)" '[ "$(cat "$TRUN/test-red/tests.txt")" = "$(bash "$PCK" tests "$TSP" | tr -d "\r")" ] && ! cmp -s "$TRUN/test-red/tests.txt" "$TRUN/test-red/tests.red.txt" && bash "$PCK" basis "$TSP" | grep -qx "Tests status: FRESH" && ! bash "$(dirname "$RP")/cycle-state.sh" "$TSP" | grep -q "STALE (tests)\|test di accettazione cambiati"'
 check "  e i gate del driver (e' un OK)" '[ -f "$TRUN/log/73-fix.gates" ]'
 FAKE_CMD='sed -i "s/somma(1, 2) == 3/somma(2, 2) == 4/" "$FIC_REPO/modules/api/tests/test_calc.py"' FAKE_OUT="$T/73b-fix" bash "$RP" "$TRUN" 73b-fix "$T/prompt.md" 2>/dev/null </dev/null
-check "fix che cambia la FUNZIONE del test di accettazione (file prescritto) → .esito STOP deviazione, a prescindere dal report" 'sed -n 1p "$TRUN/log/73b-fix.esito" | grep -q "^ESITO FASE fix: STOP — deviazione: test di accettazione modificati dopo test-red (modules/api/tests/test_calc.py (test_somma))" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/73b-fix.esito"'
+check "fix che cambia la FUNZIONE del test di accettazione (file prescritto) → .esito STOP deviazione, a prescindere dal report" 'sed -n 1p "$TRUN/log/73b-fix.esito" | grep -q "^PHASE RESULT fix: STOP — deviazione: test di accettazione modificati dopo test-red (modules/api/tests/test_calc.py (test_somma))" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/73b-fix.esito"'
 check "  e nessun gate (non e' un OK), impronta NON riregistrata" '[ ! -f "$TRUN/log/73b-fix.gates" ] && [ "$(cat "$TRUN/test-red/tests.txt")" != "$(bash "$PCK" tests "$TSP" | tr -d "\r")" ]'
 sed -i "s/somma(2, 2) == 4/somma(1, 2) == 3/" "$FIC_REPO/modules/api/tests/test_calc.py"
 FAKE_CMD='printf "\ndef test_terzo():\n    assert True\n" >> "$FIC_REPO/modules/api/tests/test_calc.py"' FAKE_OUT="$T/73c-fix" bash "$RP" "$TRUN" 73c-fix "$T/prompt.md" 2>/dev/null </dev/null
@@ -744,18 +760,18 @@ check "  di nuovo un aiutante dopo la riregistrazione: la base resta test-red (t
 cp "$TSP" "$T/w3/spec-t.prima-fuori"
 sed -i 's/^scrive: `modules\/api\/app\/calc.py`, `modules\/api\/tests\/test_calc.py`$/scrive: `modules\/api\/app\/calc.py`/' "$TSP"
 FAKE_CMD='printf "\ndef test_quarto():\n    assert True\n" >> "$FIC_REPO/modules/api/tests/test_calc.py"' FAKE_OUT="$T/73d-fix" bash "$RP" "$TRUN" 73d-fix "$T/prompt.md" 2>/dev/null </dev/null
-check "file di test di accettazione in nessuno scrive: → STOP deviazione (manomissione), nessun gate" 'sed -n 1p "$TRUN/log/73d-fix.esito" | grep -q "^ESITO FASE fix: STOP — deviazione: test di accettazione modificati dopo test-red (modules/api/tests/test_calc.py);" && [ ! -f "$TRUN/log/73d-fix.gates" ]'
+check "file di test di accettazione in nessuno scrive: → STOP deviazione (manomissione), nessun gate" 'sed -n 1p "$TRUN/log/73d-fix.esito" | grep -q "^PHASE RESULT fix: STOP — deviazione: test di accettazione modificati dopo test-red (modules/api/tests/test_calc.py);" && [ ! -f "$TRUN/log/73d-fix.gates" ]'
 cp "$T/w3/spec-t.prima-fuori" "$TSP"
 mkspec
 FAKE_RED=imp FAKE_CMD="$WRITE_RED" trun 74-test-red
-check "test-red con rosso da import → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — test di accettazione non dimostrato: T1 rosso_import" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
+check "test-red con rosso da import → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — test di accettazione non dimostrato: T1 rosso_import" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
 check "  nessuna impronta dei test registrata, cycle-state STOP" '! grep -q "· tests " "$TSP" && bash "$(dirname "$RP")/cycle-state.sh" "$TSP" | grep -q "^Next: STOP — 74-test-red: test di accettazione non registrati"'
 mkspec
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 75-test-red
-check "test-red con un test verde → STOP" 'sed -n 1p "$TRUN/log/75-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — .*T1 verde"'
+check "test-red con un test verde → STOP" 'sed -n 1p "$TRUN/log/75-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
-check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — scritture fuori dallo scope di test-red .*: a.py$" && [ ! -f "$T/75b-test-red.gates-args" ]'
+check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py$" && [ ! -f "$T/75b-test-red.gates-args" ]'
 (cd "$FIC_REPO" && git checkout -q -- a.py)
 # OTHER FLOWS: an out-of-scope path changed during test-red and NEVER named by the subsession (no tool_use
 # cites it) belongs to another flow: do-not-touch, out of touched.txt, warning, gates as for an OK. Named (75b above:
@@ -774,11 +790,11 @@ check "(e) implement con un file mai nominato → esito OK, resta in touched.txt
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_ALTRO="$ALTRO" FAKE_LOGCMD='sed -n 1p NOTE.md' FAKE_CMD="$WRITE_RED" trun 75e-test-red
-check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
+check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_RESULT='{"type":"system","subtype":"senza-result"}' FAKE_ALTRO="$ALTRO" FAKE_CMD="$WRITE_RED" trun 75f-test-red
-check "(d) test-red finito senza evento result → nessun OK, nessun gate, niente do-not-touch" '! grep -q "^ESITO FASE [^:]*: OK" "$TRUN/log/75f-test-red.esito" 2>/dev/null && [ ! -f "$T/75f-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
+check "(d) test-red finito senza evento result → nessun OK, nessun gate, niente do-not-touch" '! grep -Eq "^(PHASE RESULT|ESITO FASE) [^:]*: OK" "$TRUN/log/75f-test-red.esito" 2>/dev/null && [ ! -f "$T/75f-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
 printf 'docs/NOTE.md\n' > "$T/np"; : > "$T/vuoto.jsonl"
 { grep -v '"type":"result"' "$TRUN/log/75f-test-red.jsonl"; echo '{"type":"result","result":"x"}'; } > "$T/con-result.jsonl"
 bash "$RP" --nominati "$FIC_REPO" "$T/np" "$TRUN/log/75f-test-red.jsonl" > "$T/np1" 2>/dev/null; r1=$?
@@ -790,14 +806,14 @@ check "  --nominati fail-closed: log senza result o vuoto → exit 3, tutti nomi
 # touched.txt and in do-not-touch -> STOP with the reason, it stays in touched.txt
 mkspec; mkdir -p "$TRUN"; echo docs/NOTE.md > "$TRUN/touched.txt"
 FAKE_ALTRO="$ALTRO" FAKE_CMD="$WRITE_RED" trun 75g-test-red
-check "test-red: path gia' in touched.txt cambiato da un altro flusso → STOP col motivo, resta in touched.txt, niente do-not-touch, nessun gate" 'sed -n 1p "$TRUN/log/75g-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — file della feature (gia. in touched.txt prima di test-red) cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): docs/NOTE.md — resta in touched.txt" && grep -qx docs/NOTE.md "$TRUN/touched.txt" && [ ! -f "$TRUN/do-not-touch.txt" ] && [ ! -f "$T/75g-test-red.gates-args" ]'
+check "test-red: path gia' in touched.txt cambiato da un altro flusso → STOP col motivo, resta in touched.txt, niente do-not-touch, nessun gate" 'sed -n 1p "$TRUN/log/75g-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — file della feature (gia. in touched.txt prima di test-red) cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): docs/NOTE.md — resta in touched.txt" && grep -qx docs/NOTE.md "$TRUN/touched.txt" && [ ! -f "$TRUN/do-not-touch.txt" ] && [ ! -f "$T/75g-test-red.gates-args" ]'
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 # «attribuzione non verificabile» branch of verify_red, end-to-end: a Python that fails ONLY on NOMI_PY
 REALPY=$(. "$(dirname "$RP")/python.sh" && printf '%s' "$FIC_PY")
 printf '#!/usr/bin/env bash\nfor a in "$@"; do case "$a" in *"def nominato("*) exit 9 ;; esac; done\nexec "%s" "$@"\n' "$REALPY" > "$T/py-rotto"; chmod +x "$T/py-rotto"
 mkspec
 FIC_PYTHON="$T/py-rotto" FAKE_ALTRO="$ALTRO" FAKE_CMD="$WRITE_RED" trun 75h-test-red
-check "test-red con la ricerca per nome che fallisce → STOP fuori scope «non verificabile», niente do-not-touch, nessun gate" 'sed -n 1p "$TRUN/log/75h-test-red.esito" | grep -q "^ESITO FASE test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md (attribuzione per nome non verificabile" && [ ! -f "$TRUN/do-not-touch.txt" ] && [ ! -f "$T/75h-test-red.gates-args" ]'
+check "test-red con la ricerca per nome che fallisce → STOP fuori scope «non verificabile», niente do-not-touch, nessun gate" 'sed -n 1p "$TRUN/log/75h-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md (attribuzione per nome non verificabile" && [ ! -f "$TRUN/do-not-touch.txt" ] && [ ! -f "$T/75h-test-red.gates-args" ]'
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 # Table of the NOMI_PY branches (--nominati, hand-written jsonl, root C:/repo): for each branch a named one and a never.
 # Counterproof by mutation (by hand, as above): without the loop over the writing commands (ancestors, GLOB, PUNTO,
@@ -842,7 +858,7 @@ rm -rf "$FIC_LOCK"
 check "test-stage gira anche col lock di codice preso (non tocca il tree)" '[ $rc -eq 0 ] && grep -qx "FIC_PHASE=test-stage" "$T/76-test-stage.env"'
 check "  scope = la sola staging/, staging.fp = impronta del piano" 'grep -q "spec-t.run/staging/$" "$TRUN/log/76-test-stage.scope" && [ "$(cat "$TRUN/staging.fp")" = "$PFP" ]'
 FAKE_OUT="$T/77-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-77" bash "$RP" "$TRUN" 77-test-red "$T/prompt.md" 2>"$T/77.err" </dev/null
-check "S3: stessa impronta → test copiati nel tree, nessuna sotto-sessione, verifica eseguita → OK" '[ ! -f "$T/77-test-red.args" ] && [ -f "$FIC_REPO/modules/api/tests/test_calc.py" ] && sed -n 1p "$TRUN/log/77-test-red.esito" | grep -q "^ESITO FASE test-red: OK — test in sosta (S3)" && grep -q "· tests " "$TSP"'
+check "S3: stessa impronta → test copiati nel tree, nessuna sotto-sessione, verifica eseguita → OK" '[ ! -f "$T/77-test-red.args" ] && [ -f "$FIC_REPO/modules/api/tests/test_calc.py" ] && sed -n 1p "$TRUN/log/77-test-red.esito" | grep -q "^PHASE RESULT test-red: OK — test in sosta (S3)" && grep -q "· tests " "$TSP"'
 check "  staging consumato (staging.copiato)" '[ ! -d "$TRUN/staging" ] && [ -d "$TRUN/staging.copiato" ] && grep -q "S3: 2 file in sosta copiati" "$TRUN/log/77-test-red.stderr"'
 mkspec
 TRUN="$TRUN" FAKE_CMD="$STAGE_WRITE" FAKE_OUT="$T/78-test-stage" bash "$RP" "$TRUN" 78-test-stage "$T/prompt.md" 2>/dev/null </dev/null
@@ -880,10 +896,13 @@ eval "nr=\${FAKE_NORESULT_$k:-}"; eval "st=\${FAKE_STOP_$k:-}"; eval "ex=\${FAKE
 # FAKE_JSONONLY_k=OK|STOP: structured output like the real lanes, result = the JSON ONLY (no ESITO line);
 # FAKE_TXTSTOP_k: STOP text line and OK object (in disagreement)
 eval "jo=\${FAKE_JSONONLY_$k:-}"; eval "ts=\${FAKE_TXTSTOP_$k:-}"
+# FAKE_DEV_k: the lane's deviations (JSON strings), with the English result line and "none" (1.3.0)
+eval "dv=\${FAKE_DEV_$k:-}"
 j='{"fase":"'"$FIC_PHASE"'","esito":"'"${jo:-OK}"'","motivo":"corsia '"$k"' solo json","deviazioni":[],"bloccato_su":"nessuno","file":['"${d:+\"$d\"}"'],"gate_interni":[],"finding":[]}'
 if [ -n "$nr" ]; then :
 elif [ -n "$jo" ]; then echo '{"type":"result","result":"'"${j//\"/\\\"}"'","structured_output":'"$j"'}'
 elif [ -n "$ts" ]; then echo '{"type":"result","result":"ESITO FASE implement: STOP — testo discorde '"$k"'","structured_output":'"$j"'}'
+elif [ -n "$dv" ]; then echo '{"type":"result","result":"PHASE RESULT implement: OK — corsia '"$k"'","structured_output":{"fase":"'"$FIC_PHASE"'","esito":"OK","motivo":"corsia '"$k"'","deviazioni":['"$dv"'],"bloccato_su":"none","file":['"${d:+\"$d\"}"'],"gate_interni":[],"finding":[]}}'
 elif [ -n "$st" ]; then echo '{"type":"result","result":"ESITO FASE implement: STOP — corsia '"$k"' ferma","structured_output":{"fase":"implement","esito":"STOP","motivo":"corsia '"$k"' ferma","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}'
 else echo '{"type":"result","result":"ESITO FASE implement: OK — corsia '"$k"'","structured_output":{"fase":"'"$FIC_PHASE"'","esito":"OK","motivo":"corsia '"$k"'","deviazioni":[],"bloccato_su":"nessuno","file":['"${d:+\"$d\"}"'],"gate_interni":[],"finding":[]}}'; fi
 exit "$ex"
@@ -909,12 +928,12 @@ check "  due sotto-sessioni INSIEME (la seconda parte prima che la prima finisca
 check "  FIC_LANE, FIC_WRITE_SCOPE e WSLENV per corsia" 'grep -qx "FIC_LANE=1" "$T/01-implement.corsia-1.env" && grep -qx "FIC_WRITE_SCOPE=a.py" "$T/01-implement.corsia-1.env" && grep -qx "FIC_LANE=2" "$T/01-implement.corsia-2.env" && grep -qx "FIC_WRITE_SCOPE=b.py" "$T/01-implement.corsia-2.env" && grep -q "^WSLENV=FIC_LANE" "$T/01-implement.corsia-2.env"'
 check "  prompt della corsia: il prompt + la riga CORSIA k/2 coi suoi blocchi" 'grep -q "^/full-implementation-cycle" "$T/01-implement.corsia-1.stdin" && grep -q "^CORSIA 1/2 (driver, run-phase.sh): sono tuoi SOLO i blocchi B1 " "$T/01-implement.corsia-1.stdin" && grep -q "^CORSIA 2/2 .*blocchi B2 " "$T/01-implement.corsia-2.stdin"'
 check "  a posteriori: diff diviso per scope" 'grep -qx "posteriori: esito=OK corsia 1: a.py · corsia 2: b.py" "$L4/01-implement.posteriori"'
-check "  esito unito OK e result.json con i file delle due corsie" 'sed -n 1p "$L4/01-implement.esito" | grep -q "^ESITO FASE implement: OK — corsie parallele: corsia 1: corsia 1 · corsia 2: corsia 2" && grep -q "\"a.py\"" "$L4/01-implement.result.json" && grep -q "\"b.py\"" "$L4/01-implement.result.json"'
+check "  esito unito OK e result.json con i file delle due corsie" 'sed -n 1p "$L4/01-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsie parallele: corsia 1: corsia 1 · corsia 2: corsia 2" && grep -q "\"a.py\"" "$L4/01-implement.result.json" && grep -q "\"b.py\"" "$L4/01-implement.result.json"'
 check "  touched.txt con i file delle due corsie; gate del driver UNA volta, a corsie finite, su entrambi" 'grep -qx a.py "$R4/touched.txt" && grep -qx b.py "$R4/touched.txt" && [ "$(wc -l < "$T/01-implement.gates-calls")" = 1 ] && grep -qx a.py "$T/01-implement.gates-args" && grep -qx b.py "$T/01-implement.gates-args"'
 check "  preflight delle corsie unito (sort -u) in do-not-touch.txt e mixed.txt, lette dalle fasi successive" '[ "$(tr "\n" " " < "$R4/do-not-touch.txt")" = "altro1.py altro2.py comune.py " ] && [ "$(tr "\n" " " < "$R4/mixed.txt")" = "misto1.py misto2.py " ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FAKE_TOUCH_1=a.py FAKE_TOUCH_2=a.py FAKE_FILE_2=a.py lrun 02-implement; rc=$?
-check "diff a posteriori: file scritto da entrambe le corsie => STOP, nessun gate" '[ $rc -eq 0 ] && grep -q "scritto da entrambe le corsie" "$L4/02-implement.posteriori" && sed -n 1p "$L4/02-implement.esito" | grep -q "^ESITO FASE implement: STOP — controllo a posteriori delle corsie: a.py scritto da entrambe le corsie" && [ ! -f "$L4/02-implement.gates" ]'
+check "diff a posteriori: file scritto da entrambe le corsie => STOP, nessun gate" '[ $rc -eq 0 ] && grep -q "scritto da entrambe le corsie" "$L4/02-implement.posteriori" && sed -n 1p "$L4/02-implement.esito" | grep -q "^PHASE RESULT implement: STOP — controllo a posteriori delle corsie: a.py scritto da entrambe le corsie" && [ ! -f "$L4/02-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FAKE_TOUCH_2=c.py lrun 03-implement
 check "diff a posteriori: file fuori dall'unione degli scrive: => STOP" 'grep -q "c.py cambiato fuori" "$L4/03-implement.posteriori" && sed -n 1p "$L4/03-implement.esito" | grep -q "STOP — controllo a posteriori"'
@@ -923,29 +942,34 @@ rm -f "$FIC_REPO/c.py"
 printf 'vecchio.py\n' > "$R4/do-not-touch.1.txt"; printf 'vecchio-misto.py\n' > "$R4/mixed.2.txt"   # previous round
 FAKE_STOP_2=1 FAKE_TOUCH_1=a.py lrun 05-implement; rc=$?
 check "liste per corsia di un giro precedente cancellate all'avvio: le corsie senza preflight non le uniscono" '[ ! -f "$R4/do-not-touch.1.txt" ] && [ ! -f "$R4/mixed.2.txt" ] && ! grep -qx vecchio.py "$R4/do-not-touch.txt" && ! grep -qx vecchio-misto.py "$R4/mixed.txt"'
-check "corsia 2 con JSON STOP => .esito STOP, nessun gate" '[ $rc -eq 0 ] && sed -n 1p "$L4/05-implement.esito" | grep -q "^ESITO FASE implement: STOP — corsia 2: corsia 2 ferma" && [ ! -f "$L4/05-implement.gates" ]'
+check "corsia 2 con JSON STOP => .esito STOP, nessun gate" '[ $rc -eq 0 ] && sed -n 1p "$L4/05-implement.esito" | grep -q "^PHASE RESULT implement: STOP — corsia 2: corsia 2 ferma" && [ ! -f "$L4/05-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FAKE_NORESULT_2=1 lrun 06-implement; rc=$?
-check "corsia senza evento result => .esito STOP, nessun result.json, nessun gate" '[ $rc -eq 0 ] && sed -n 1p "$L4/06-implement.esito" | grep -q "^ESITO FASE implement: STOP" && grep -q "corsia 2: nessun evento result" "$L4/06-implement.esito" && [ ! -f "$L4/06-implement.result.json" ] && [ ! -f "$L4/06-implement.gates" ]'
+check "corsia senza evento result => .esito STOP, nessun result.json, nessun gate" '[ $rc -eq 0 ] && sed -n 1p "$L4/06-implement.esito" | grep -q "^PHASE RESULT implement: STOP" && grep -q "corsia 2: nessun evento result" "$L4/06-implement.esito" && [ ! -f "$L4/06-implement.result.json" ] && [ ! -f "$L4/06-implement.gates" ]'
 FAKE_EXIT_2=3 lrun 07-implement; rc=$?
-check "exit != 0 di una corsia => la fase esce con quel codice (.exit), nessun ESITO OK, nessun gate" '[ $rc -eq 3 ] && [ "$(cat "$L4/07-implement.exit")" = 3 ] && ! grep -q "^ESITO FASE implement: OK" "$L4/07-implement.esito" 2>/dev/null && [ ! -f "$L4/07-implement.gates" ]'
-check "  e l'evento result unito e' STOP «corsia 2: uscita 3», non OK" 'tail -1 "$L4/07-implement.jsonl" | grep -q "\"result\": \"ESITO FASE implement: STOP [^\"]*corsia 2: uscita 3\"" && ! tail -1 "$L4/07-implement.jsonl" | grep -q "ESITO FASE implement: OK"'
+check "exit != 0 di una corsia => la fase esce con quel codice (.exit), nessun ESITO OK, nessun gate" '[ $rc -eq 3 ] && [ "$(cat "$L4/07-implement.exit")" = 3 ] && ! grep -Eq "^(PHASE RESULT|ESITO FASE) implement: OK" "$L4/07-implement.esito" 2>/dev/null && [ ! -f "$L4/07-implement.gates" ]'
+check "  e l'evento result unito e' STOP «corsia 2: uscita 3», non OK" 'tail -1 "$L4/07-implement.jsonl" | grep -q "\"result\": \"PHASE RESULT implement: STOP [^\"]*corsia 2: uscita 3\"" && ! tail -1 "$L4/07-implement.jsonl" | grep -Eq "(PHASE RESULT|ESITO FASE) implement: OK"'
 FIC_LANES=0 FAKE_TOUCH_0=a.py lrun 04-implement; rc=$?
 check "FIC_LANES=0: in serie come prima (una sotto-sessione, senza FIC_LANE)" '[ $rc -eq 0 ] && grep -qx "blocks-independent: esito=serie motivo=FIC_LANES=0" "$L4/04-implement.corsie" && [ -f "$T/04-implement.corsia-0.args" ] && [ ! -f "$T/04-implement.corsia-1.args" ] && grep -qx "FIC_WRITE_SCOPE=" "$T/04-implement.corsia-0.env"'
 (cd "$FIC_REPO" && git checkout -q -- .)
 # structured exit: the result of each lane is the ONLY JSON (real case: log/<label>.corsia-1.jsonl of a cycle).
 # Before the fix: «STOP — corsia 1: nessuna riga ESITO» even with valid JSON and OK outcome.
 FAKE_JSONONLY_1=OK FAKE_JSONONLY_2=OK FAKE_TOUCH_1=a.py FAKE_TOUCH_2=b.py FAKE_FILE_1=a.py FAKE_FILE_2=b.py lrun 09-implement; rc=$?
-check "corsie col solo JSON nel result, esito OK → .esito OK (riga ricavata dall'oggetto), gate eseguiti" '[ $rc -eq 0 ] && sed -n 1p "$L4/09-implement.esito" | grep -q "^ESITO FASE implement: OK — corsie parallele: corsia 1: corsia 1 solo json · corsia 2: corsia 2 solo json" && [ -f "$L4/09-implement.result.json" ] && [ -f "$L4/09-implement.gates" ]'
+check "corsie col solo JSON nel result, esito OK → .esito OK (riga ricavata dall'oggetto), gate eseguiti" '[ $rc -eq 0 ] && sed -n 1p "$L4/09-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsie parallele: corsia 1: corsia 1 solo json · corsia 2: corsia 2 solo json" && [ -f "$L4/09-implement.result.json" ] && [ -f "$L4/09-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FAKE_JSONONLY_1=OK FAKE_JSONONLY_2=STOP FAKE_TOUCH_1=a.py FAKE_FILE_1=a.py lrun 10-implement
-check "  solo JSON con esito STOP in una corsia → .esito STOP «corsia 2: <motivo>», nessun gate" 'sed -n 1p "$L4/10-implement.esito" | grep -q "^ESITO FASE implement: STOP — corsia 2: corsia 2 solo json" && [ ! -f "$L4/10-implement.gates" ]'
+check "  solo JSON con esito STOP in una corsia → .esito STOP «corsia 2: <motivo>», nessun gate" 'sed -n 1p "$L4/10-implement.esito" | grep -q "^PHASE RESULT implement: STOP — corsia 2: corsia 2 solo json" && [ ! -f "$L4/10-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FAKE_TXTSTOP_1=1 FAKE_JSONONLY_2=OK FAKE_TOUCH_1=a.py FAKE_FILE_1=a.py lrun 11-implement
-check "  riga di testo STOP e oggetto OK (discordi) → vince lo STOP del testo, nessun gate" 'sed -n 1p "$L4/11-implement.esito" | grep -q "^ESITO FASE implement: STOP — corsia 1: testo discorde 1" && [ ! -f "$L4/11-implement.gates" ]'
+check "  riga di testo STOP e oggetto OK (discordi) → vince lo STOP del testo, nessun gate" 'sed -n 1p "$L4/11-implement.esito" | grep -q "^PHASE RESULT implement: STOP — corsia 1: testo discorde 1" && [ ! -f "$L4/11-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FIC_LANES=0 FAKE_JSONONLY_0=OK FAKE_TOUCH_0=a.py lrun 12-implement; rc=$?
-check "  in serie lo stesso result col solo JSON → OK (VALIDA_PY ricava la riga dall'oggetto)" '[ $rc -eq 0 ] && sed -n 1p "$L4/12-implement.esito" | grep -q "^ESITO FASE implement: OK — corsia 0 solo json" && [ -f "$L4/12-implement.gates" ]'
+check "  in serie lo stesso result col solo JSON → OK (VALIDA_PY ricava la riga dall'oggetto)" '[ $rc -eq 0 ] && sed -n 1p "$L4/12-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsia 0 solo json" && [ -f "$L4/12-implement.gates" ]'
+(cd "$FIC_REPO" && git checkout -q -- .)
+# 1.3.0: lanes with the English result line, "none" and defensive deviations in both languages: the prefix stays
+# at the start of the merged deviation, as written
+FAKE_DEV_1='"defensive: a.py:1 — branch"' FAKE_DEV_2='"difensiva: b.py:1 — ramo"' FAKE_TOUCH_1=a.py FAKE_TOUCH_2=b.py FAKE_FILE_1=a.py FAKE_FILE_2=b.py lrun 13-implement; rc=$?
+check "corsie inglesi con deviazioni «defensive: »/«difensiva: » → .esito OK, prefisso conservato nella deviazione unita, registrate" '[ $rc -eq 0 ] && sed -n 1p "$L4/13-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsie parallele: corsia 1: corsia 1 · corsia 2: corsia 2" && grep -q "\"defensive: corsia 1: a.py:1 — branch\"" "$L4/13-implement.result.json" && grep -q "\"difensiva: corsia 2: b.py:1 — ramo\"" "$L4/13-implement.result.json" && grep -q "^13-implement	defensive: corsia 1: a.py:1 — branch" "$L4/deviazioni-difensive.txt"'
 (cd "$FIC_REPO" && git checkout -q -- .)
 # lock lifetime held by cpid2: lane 1 fast, lane 2 slow, run-phase killed => busy as long as lane 2 lives
 CLAUDE_BIN="$T/claude-corsie" FAKE_OUT="$T/08-implement" FAKE_SLEEP_1=0 FAKE_SLEEP_2=8 bash "$RP" "$R4" 08-implement "$T/prompt.md" 2>/dev/null </dev/null & rp=$!

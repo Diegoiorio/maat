@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # stop-hook.test.sh — tests of stop-hook.py (the sub-sessions' Stop hook) on synthetic transcripts:
-# a turn without `ESITO FASE` is denied; with stop_hook_active it does not loop again; a background job not
+# a turn without `PHASE RESULT` (or the Italian `ESITO FASE` of 1.2.x) is denied; with stop_hook_active it does not loop again; a background job not
 # collected is denied, collected (notification, final TaskOutput, TaskStop) is allowed; broken hook -> lets it close.
 #   bash script/fic/stop-hook.test.sh
 set -uo pipefail
@@ -33,14 +33,21 @@ BG_START() { use tu1 Bash '{"command":"sleep 99","run_in_background":true}'; res
 
 # --- ESITO FASE ---
 { printf '{"type":"user","message":{"content":"/full-implementation-cycle --worker=implement x"}}\n'; txt "ho finito"; } > "$TR"
-hook block "turno senza ESITO FASE negato" false "ESITO FASE"
+hook block "turno senza riga d'esito negato, il motivo cita la forma inglese" false "PHASE RESULT <phase>: OK"
 hook allow "  con stop_hook_active non rientra in loop" true
 { txt "inizio"; txt "$OK_LINE"; } > "$TR"
 hook allow "ultimo messaggio con ESITO FASE ... OK: ammesso"
 txt 'riassunto\nESITO FASE review: STOP — manca una decisione' > "$TR"
 hook allow "ESITO FASE ... STOP: ammesso"
+# 1.3.0: the English result line
+txt 'work done\nPHASE RESULT implement: OK — done' > "$TR"
+hook allow "ultimo messaggio con PHASE RESULT ... OK: ammesso"
+txt 'summary\nPHASE RESULT review: STOP — a decision is missing' > "$TR"
+hook allow "PHASE RESULT ... STOP: ammesso"
+txt 'PHASE RESULT implement: FORSE — x' > "$TR"
+hook block "  controprova: PHASE RESULT senza OK/STOP → negato" false "PHASE RESULT"
 { use tu9 Read '{"file_path":"SKILL.md"}'; res tu9 'esempio: ESITO FASE implement: OK — letto da SKILL.md'; txt "ho letto"; } > "$TR"
-hook block "ESITO solo dentro un tool_result letto: negato" false "ESITO FASE"
+hook block "ESITO solo dentro un tool_result letto: negato" false "PHASE RESULT"
 { txt "$OK_LINE"; use tu8 Bash '{"command":"ls"}'; res tu8 'a b'; } > "$TR"
 hook block "ESITO seguito da altro lavoro, nessun testo finale: negato"
 

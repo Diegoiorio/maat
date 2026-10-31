@@ -11,7 +11,13 @@
 # Reads: the plan with plan-check.sh (contract for Plan status, basis for "Approved basis"); the
 # "## Review implementazione" section outside the fences; for IMPLEMENTED the code with review-surface.sh check
 # on the "Reviewed snapshot" and on the manifest; the run dir <spec without .md>.run/log/ for the outcome of the last
-# phase (<label>.esito, written by run-phase.sh: ESITO line + "state=<hash>" at the end-of-phase state).
+# phase (<label>.esito, written by run-phase.sh: result line + "state=<hash>" at the end-of-phase state).
+#
+# Languages (Maat 1.3.0): the result line is "PHASE RESULT <phase>: OK|STOP — …" (written from 1.3.0 on) or
+# "ESITO FASE <phase>: OK|STOP — …" (old run dirs): both are read. Likewise "## Implementation review" next to
+# "## Review implementazione" (both in one spec: STOP, the same section in two languages), "Children:" next to
+# "Figlie:" (the first line wins), "defensive: " next to "difensiva: ", "none" next to "nessuno". The lines that
+# enter State are not translated: for identical input State is byte for byte the one of 1.2.x.
 #
 # STRUCTURED OUTCOME (harness-pt08): if the last implement/fix phase has log/<label>.result.json (written by
 # run-phase.sh only if valid against script/fic/schemas/phase-result.schema.json) the outcome is read from there, with the
@@ -33,6 +39,8 @@
 # read by the LLM.
 #
 # TABLE — the first matching row wins. It is the authoritative source: SKILL.md points here.
+#   1b (1.3.0, above every other row, chains included) both "## Review implementazione" and "## Implementation
+#      review" in the spec → STOP (the same section in two languages)
 #   1  review section without a plan                            → STOP (nothing to plan on top of)
 #   2  no plan, or Plan status DRAFT without a review             → PLAN
 #   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
@@ -88,7 +96,7 @@
 #   Prints for a ring k>1: "Anelli precedenti: <files of their touched.txt>" (same chain: neither other flows
 #   nor mixed ones, no completion), "Base anello: <.post-tree of k-1>" (never HEAD) and "Diff anello: <path>" (only the
 #   paths changed since the ring's base: the surface of its review).
-# Left to the orchestrator: a phase still running (.running without .exit), an ESITO FASE … STOP,
+# Left to the orchestrator: a phase still running (.running without .exit), a PHASE RESULT … STOP,
 # and «NEEDS_VERIFICATION obtained in THIS invocation → STOP». IMPLEMENTED is signed by script/fic/finalize.sh
 # (run-phase.sh, after every review): here we read the line it left.
 #
@@ -153,9 +161,12 @@ tr -d '\r' < "$SPEC" | awk '
   { isf = ($0 ~ /^[ \t]*(```|~~~)/) }
   isf { inf = !inf; next }
   inf { next }
-  !r && /^## Review implementazione/ { r = 1 }
+  !r && /^## (Review implementazione|Implementation review)/ { r = 1 }
   r { print }' > "$TMP/review"
 has_review=0; [ -s "$TMP/review" ] && has_review=1
+# both headings (1.3.0): the same section in two languages, a reader would take only one of them -> STOP below
+review_both=0
+grep -q '^## Review implementazione' "$TMP/review" && grep -q '^## Implementation review' "$TMP/review" && review_both=1
 line() { sed -n "s/^$1:[[:space:]]*//p" "$TMP/review" | head -1; }
 rstatus=$(line "Review status"); fstatus=$(line "Feature status")
 snap=$(line "Reviewed snapshot"); rcontract=$(line "Reviewed contract"); rounds=$(line "Review rounds")
@@ -168,12 +179,13 @@ list_of() { awk -v h="$1" '
 list_of Scope > "$TMP/scope"; list_of Excluded | sed "s/ — .*//" > "$TMP/excl"
 
 # --- chains (harness-pt12): mother (Figlie: line) or ring (a mother in the same folder lists it) ---
-chead() { # <file> <literal>: the value of the first "<literal> …" line above the plan, outside the fences
-  tr -d '\r' < "$1" | awk -v l="$2" '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
-    /^## (Piano di implementazione|Review implementazione)/ { exit }
-    index($0, l) == 1 { v = substr($0, length(l) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'
+chead() { # <file> <literal> [<English literal>]: the value of the first "<literal> …" line above the plan, outside
+  # the fences; with two literals the first line that has either wins (Figlie:/Children:, 1.3.0)
+  tr -d '\r' < "$1" | awk -v l="$2" -v l2="${3:-$2}" '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
+    /^## (Piano di implementazione|Review implementazione|Implementation plan|Implementation review)/ { exit }
+    index($0, l) == 1 || index($0, l2) == 1 { k = (index($0, l) == 1) ? l : l2; v = substr($0, length(k) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'
 }
-cfiglie() { chead "$1" "Figlie:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
+cfiglie() { chead "$1" "Figlie:" "Children:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
 cclosed() { # <spec>: closed = plan-check.sh closed (a single criterion: fresh Finalize: IMPLEMENTED, no legacy)
   bash "$PC" closed "$1" >/dev/null 2>&1
 }
@@ -193,7 +205,7 @@ if [ -z "$figlie" ]; then
     ring_before=$(printf '%s\n' "$l" | head -n $((k - 1)))
     [ "$k" -gt 1 ] && ring_prev="$CDIR/$(printf '%s\n' "$l" | sed -n "$((k - 1))p").md"
     break
-  done < <(find "$CDIR" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -l '^Figlie:' {} + 2>/dev/null | LC_ALL=C sort)
+  done < <(find "$CDIR" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -lE '^(Figlie|Children):' {} + 2>/dev/null | LC_ALL=C sort)
 fi
 if [ -n "$ring_prev" ]; then
   ring_base=$(cpost "${ring_prev%.md}.run")   # BASE-ANELLO: the recorded .post-tree of k-1, never HEAD
@@ -246,9 +258,9 @@ d = json.load(open(sys.argv[1], encoding="utf-8"))
 one = lambda s: " ".join(str(s).split())[:300]
 dev = [one(x) for x in (d.get("deviazioni") or []) if str(x).strip()]
 bs = one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "(assente)")
-if [x for x in dev if not x.startswith("difensiva: ")]:
+if [x for x in dev if not x.startswith(("difensiva: ", "defensive: "))]:
     print("STOP|deviazioni dichiarate (%d): %s" % (len(dev), one("; ".join(dev))))
-elif bs.lower() != "nessuno":
+elif bs.lower() not in ("nessuno", "none"):
     print("STOP|bloccato su: " + bs)
 elif d.get("esito") != "OK":
     print("STOP|esito %s: %s" % (d.get("esito"), one(d.get("motivo") or "")))
@@ -263,7 +275,7 @@ fi
 # the most conservative wins), and the spec has not changed since
 last_ok() {
   case "$last_label" in *"$1"*) ;; *) return 1 ;; esac
-  case "$last_esito" in "ESITO FASE $1: OK"*) ;; *) return 1 ;; esac
+  case "$last_esito" in "PHASE RESULT $1: OK"*|"ESITO FASE $1: OK"*) ;; *) return 1 ;; esac   # both languages (1.3.0)
   [ -z "$json_esito" ] || [ "$json_esito" = OK ] || return 1
   [ "$last_state" = "$STATE" ]
 }
@@ -460,6 +472,7 @@ mother_next() {
     *) next "STOP — chiusura della catena non riuscita (${cz#Chiusura: }): vedi $RUN/log/*-chiusura.*; corretto il motivo, per rilanciarla rinomina $RUN/chiusura.txt in chiusura.txt.visto" ;;
   esac
 }
+[ $review_both -eq 1 ] && next "STOP — la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione in due lingue. Tieni il titolo che c'era, porta le righe di stato in quella sezione e togli l'altra, poi riprendi"
 [ -n "$figlie" ] && mother_next
 [ $has_review -eq 1 ] && [ $has_plan -eq 0 ] && next "STOP — sezione di review senza piano: niente da pianificare sopra un'implementazione"
 [ $has_plan -eq 0 ] && next "PLAN — nessun piano"

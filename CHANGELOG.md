@@ -2,6 +2,38 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.3.0 — formats in English, Italian still read
+
+The formats that people and agents write and Maat reads are now written in English. Every reader accepts **both**
+forms, so specs, approved plans and run dirs made with earlier versions keep working without changes.
+
+| Italian (still read) | English (written from now on) |
+|---|---|
+| `## Piano di implementazione` · `## Review implementazione` · `### Changelog revisione piano` | `## Implementation plan` · `## Implementation review` · `### Plan review changelog` |
+| `### Piano di test` · `Tracciabilità requisiti` · `File toccati` · `Passi` · `Decisioni` · `Stringhe e data-test` | `### Test plan` · `Requirement traceability` · `Touched files` · `Steps` · `Decisions` · `Strings and data-test` |
+| `#### Blocco` · `scrive:` · `dopo:`, table headers and cells (`asserzione`, `rosso se:`, `(nuovo)`, `verificato`…) | `#### Block` · `writes:` · `after:`, `assertion`, `red if:`, `(new)`, `verified`… |
+| `Superfici a rischio:` (`permessi dati contratto-api …` / `nessuna`), `[pavimento: …]`, `⚠️ Rischio aperto` | `Risk surfaces:` (`permissions data api-contract …` / `none`), `[floor: …]`, `⚠️ Open risk` |
+| `Figlie:` · `Dipende da:` · `Interfaccia per:` · `Taglio: rifiutato` | `Children:` · `Depends on:` · `Interface for:` · `Split: rejected` |
+| `Requisiti funzionali` / `Criteri di accettazione`, ids `RF1` / `CA1` | `Functional requirements` / `Acceptance criteria`, ids `FR1` / `AC1` |
+| `ESITO FASE <fase>: OK\|STOP — …` · `Esito driver:` (`OCCUPATO`, `IN CORSO`) | `PHASE RESULT <phase>: OK\|STOP — …` · `Driver result:` (`BUSY`, `RUNNING`) |
+| agent report lines (`Esito:`, `Deviazione dal piano:`, `Bloccato su:`…), `difensiva: `, `(provvisorio: …)`, `nessuno` | `Result:`, `Plan deviation:`, `Blocked on:`…, `defensive: `, `(provisional: …)`, `none` |
+
+- **Existing sections keep their heading**: the prompts write English only for sections they create. The same
+  section in both languages is an error (plan-check violation; a spec with both review headings stops the cycle).
+- A child spec uses the id family of its parent; `RF1` and `FR1` are different ids.
+- **Don't translate an approved plan**: the headings are part of its fingerprint, the approval would expire.
+- **Unchanged on purpose:** the lines that scripts pass to each other, the run dir file names, the keys of the phase
+  result JSON and of `.claude/maat.json`, the `metrics.csv` header. The text after `STOP — ` and the other runtime
+  messages are still Italian, so a line can be mixed (`PHASE RESULT implement: STOP — …` in Italian): they become
+  English in 1.3.1.
+- **Proof of compatibility:** the Italian test fixtures all stay; English twins give the same results. On the 15
+  closed cycles used for the driver certificate (all in the Italian format) the 1.2.1 code and the 1.3.0 code give
+  the same `State`, `Next` and plan checks, cycle by cycle (each side run from its own plugin tree, with the harness
+  fingerprint of the run dirs regenerated for that tree) (`MAAT_ORACOLO_121=1` runs the same comparison on the
+  plan-check fixtures). The driver certificate is regenerated.
+- **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again.
+
 ## 1.2.1 — cost summary, Linux CI, what is proven
 
 - **Cost summary at the end of every full cycle.** `phase-usage.py --summary <run dir>` prints total cost

@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.2.1**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.3.0**.
 
 ## When to use Maat
 
@@ -72,11 +72,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.3.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.2.1` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.3.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -112,7 +112,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.2.1/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.3.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -131,21 +131,22 @@ The spec is a Markdown file in the `.claude/.ai-workflow/` folder, with a name l
 ```markdown
 # Spec: export customers to CSV
 
-## Contesto
+## Context
 Why it is needed and how it works today (useful files and lines, if you know them).
 
-## Requisiti
-1. What it must do, point by point, in a way that can be verified.
+## Functional requirements
+FR1. What it must do, point by point, in a way that can be verified.
 
-## Fuori ambito
+## Out of scope
 What must not be touched.
 
-## Criteri di accettazione
-How you can tell it is done, for example which tests must pass.
+## Acceptance criteria
+AC1. How you can tell it is done, for example which tests must pass.
 ```
 
-For now the `##` headings must be written exactly as above, in Italian, because Maat reads them: `Contesto`
-(context), `Requisiti` (requirements), `Fuori ambito` (out of scope), `Criteri di accettazione` (acceptance criteria).
+Maat reads two of these headings: `Functional requirements` and `Acceptance criteria`, whose ids (`FR1`, `AC1`…)
+the plan must cover. Specs written for earlier versions, with Italian headings (`Requisiti funzionali`, `Criteri di
+accettazione`, ids `RF1`, `CA1`), keep working: Maat reads both languages.
 
 Don't know where to start? Ask Claude: "use the `maat:spec-author` agent to write the spec for: …", and describe
 the change. The agent reads the code, asks you questions if something is unclear and writes the file.
@@ -190,8 +191,12 @@ edit it by hand. If you want to:
 
 English is the default language. It covers the explanation shown under each permission request, the guard's
 reasons and the progress lines of a cycle. To change it, set `"lingua"` in `.claude/maat.json`, for example
-`"lingua": "it"` for Italian. The key name is Italian for now; an English alias comes in a later release, together
-with English versions of the other runtime messages, which are still in Italian.
+`"lingua": "it"` for Italian.
+
+Since 1.3.0 the formats Maat reads are written in English: spec and plan headings, the outcome line of each phase
+(`PHASE RESULT <phase>: OK`), the report lines of the agents. The Italian forms of earlier versions are still read,
+so existing specs, approved plans and cycles keep working; don't translate an approved plan, or its approval expires.
+Many runtime messages are still in Italian: they become English (with Italian under `"lingua": "it"`) in 1.3.1.
 
 ## Updating to a new version
 

@@ -25,7 +25,7 @@ This skill follows `plan-review-cycle` in structure and rules **with two declare
 
 **Format 2 (every new plan): this branch is decided by the files, not chosen (L5).** After Step 1,
 run `plan-check.sh route <spec>`: only `Percorso: leggero` (plan ≤150 lines, no migration, no surface
-detected, `Superfici a rischio: nessuna`) keeps the plan here; `Percorso: pieno` — any discordance —
+detected, `Risk surfaces: none`) keeps the plan here; `Percorso: pieno` — any discordance —
 continues in `plan-review-cycle` from its Step 2, on the plan already written, and says so in one line.
 In format 2 this branch also takes `lint2` before every round, `gen` at approval and the budget of **4**
 iterations ("Plan format 2" in `plan-review-cycle`); every round stays full scope, with no S2. A
@@ -42,9 +42,13 @@ rules named below (§"Test effort", "Plan format 2", the risk-surface vocabulary
 in `plan-review-cycle/autore.md`, and the plan-check commands in its `SKILL.md`:
 
 - **Single writable artifact**: `.claude/.ai-workflow/spec-<name>.md`. The plan lives inside
-  it as the `## Piano di implementazione` section with a line-anchored, single-occurrence
+  it as the `## Implementation plan` section with a line-anchored, single-occurrence
   `Plan status: DRAFT | APPROVED | NEEDS HUMAN DECISION`. Never modify the specification
-  sections or any `## Review implementazione` section.
+  sections or any `## Implementation review` section.
+- **Languages (Maat 1.3.0)**: headings and keywords are written in English (full branch, autore.md
+  «Languages»); the Italian ones of older specs (`## Piano di implementazione`, `Superfici a rischio:`,
+  `[pavimento:`, `rosso se:`…) are still read. A section that already exists keeps its heading: English only
+  for a section created new, never both.
 - **Resolving `<name>` and ensuring the container exists**: from an existing `spec-<name>.md`
   path (strip `spec-`), or from pasted text (slug from title, else ask a short `<name>` at
   invocation time) — then create `.claude/.ai-workflow/spec-<name>.md` with minimal spec
@@ -60,7 +64,7 @@ in `plan-review-cycle/autore.md`, and the plan-check commands in its `SKILL.md`:
   reasoning), and **optional findings never applied** — they stay in the changelog as notes for
   the implementation.
 - **Approval binds the plan**: at `APPROVED`, the `Approved basis: spec <fp> · plan <fp>` line from
-  `plan-check.sh basis`, right under `Superfici a rischio:`, and `basis` must then say `FRESH`
+  `plan-check.sh basis`, right under `Risk surfaces:`, and `basis` must then say `FRESH`
   (full branch, Step 3). Without it the plan stays legacy and nothing downstream can tell a later
   edit of the spec or plan.
 - **Surgical revision**: each blocking finding applied as one minimal, localized Edit — never a
@@ -69,17 +73,17 @@ in `plan-review-cycle/autore.md`, and the plan-check commands in its `SKILL.md`:
   symbol/path, never a line number; two consecutive runs of the same producer →
   `STOP_HUMAN_DECISION_REQUIRED`; `reintrodotto` is a label, not a stop), never delegated to the
   stateless reviewer.
-- **Risk surfaces**: the single vocabulary of Step 0, the `Superfici a rischio:` line, the
-  `[pavimento:` floor for critical surfaces (or the `⚠️ Superficie <token>` line, an obligation
-  downstream unless waived with `— statica sufficiente: <motivo>`), `rosso se:` on every new case,
-  and `### Tracciabilità requisiti`.
+- **Risk surfaces**: the single vocabulary of Step 0, the `Risk surfaces:` line, the
+  `[floor:` floor for critical surfaces (or the `⚠️ Surface <token>` line, an obligation
+  downstream unless waived with `— static sufficient: <reason>`), `red if:` on every new case,
+  and `### Requirement traceability`.
 - **`plan-check.sh lint --baseline <copy>`** after Step 1 and after every revision — the copy is
   taken in the scratchpad just before writing, exactly as in the full branch; **re-opening** as
   the only way to amend an approved plan (here the re-opened round is a full-scope one, like
   every round).
 - **The metric line** at the end of the changelog.
 - **Plan sized to the change**: a section with nothing to say gets one line,
-  `nessuna implicazione`, not filler prose.
+  `no implication`, not filler prose.
 - **Reading** (full branch, Step 1, "Reading, in this step and in every revision"): targeted first,
   no stale re-reads or quotes by the scoped staleness rule, batch only independent calls.
 - **§"Test effort" in full**: the `--tests=min|std|full` parsing with its Italian aliases, the
@@ -135,7 +139,8 @@ Use the maat:spec-plan-reviewer-light agent.
 
 Review the specification and the proposed implementation plan against the local codebase
 and existing project patterns. Both live in the same file; the plan is the
-"## Piano di implementazione" section. Keep the review concise and pragmatic; do not suggest
+"## Implementation plan" section ("## Piano di implementazione" in an older spec: English and Italian headings
+and keywords are both valid, the same section in both languages is a finding). Keep the review concise and pragmatic; do not suggest
 large refactors unless strictly necessary. Do not implement anything. Do not modify files.
 
 Spec + plan file:
@@ -158,15 +163,15 @@ under-testing: a case duplicating existing coverage, a case on code the plan doe
 e2e where a unit test suffices, a whole-suite gate below `full`, or a `/browser-qa` prescribed at
 all. If the plan prescribes more than its declared level allows, say so.
 
-A line marked "[pavimento: <surface>]" is the one verification owed to a critical surface: it is
-exempt from the caps — check only that it is pertinent and can go red. A "⚠️ Superficie <critical
-token>" line instead of a floor is a human STOP downstream; its "statica sufficiente:" waiver holds
+A line marked "[floor: <surface>]" ("[pavimento:") is the one verification owed to a critical surface: it is
+exempt from the caps — check only that it is pertinent and can go red. A "⚠️ Surface <critical
+token>" line instead of a floor is a human STOP downstream; its "static sufficient:" waiver holds
 only if the change leaves that surface's runtime behaviour untouched. Every new case states
-"rosso se:"; check that the condition is real. Search every string, class or attribute the plan
+"red if:" ("rosso se:"); check that the condition is real. Search every string, class or attribute the plan
 changes in e2e/specs/ and tests/: a hit in e2e/specs/ needs an "[e2e-locator: <spec>]" line (any
 level, outside the caps, at most 2), and a counterproof must name the file(s) it touches — reverted
 to base, or a named mutation when the test imports what the feature adds. The length of
-"### Piano di test" alone is never a finding.
+"### Test plan" alone is never a finding.
 
 minor and nit do NOT block and must not be promoted to major. Every blocker/major carries an
 "Anchor (<kind>):" — code path:line · spec/plan line that contradicts or omits something

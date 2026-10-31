@@ -7,8 +7,8 @@
 # <run-dir> = .claude/.ai-workflow/spec-<name>.run; the spec is <run-dir without .run>.md. run-phase.sh runs it
 # after every review that exits 0 (outcome in log/<label>.finalize), with the level in force.
 #
-# IT ACTS only if the "## Review implementazione" section (outside the fences) has `Review status: APPROVED` and
-# `Feature status: IMPLEMENTED`: it never promotes beyond the review verdict (obligations, e2e and snapshot are
+# IT ACTS only if the "## Review implementazione" (or "## Implementation review") section (outside the fences) has
+# `Review status: APPROVED` and `Feature status: IMPLEMENTED`: it never promotes beyond the review verdict (obligations, e2e and snapshot are
 # known only to the review). Otherwise it touches nothing (exit 4).
 # IT CONFIRMS IMPLEMENTED only if:
 #   1. every REQUIRED gate — the gates.sh list, `maat_gate_richiesti <level> <files of touched.txt>` from
@@ -219,7 +219,7 @@ def review(lines):
             continue
         if inf:
             continue
-        if not on and t.startswith("## Review implementazione"):
+        if not on and t.startswith(("## Review implementazione", "## Implementation review")):
             on = True
         if on:
             out.append(i)
@@ -378,7 +378,7 @@ def cmd_scrivi(spec, stato, det):
             if ri is not None:
                 lines[ri] = "Review status: NEEDS_CHANGES" + lines[ri][len(corpo(lines[ri])):]
         ver = "Verification: PARTIAL (finalize.sh: %s)" % det
-    elif "provvisori" in valore(lines, idx, "Verification:").lower():
+    elif any(w in valore(lines, idx, "Verification:").lower() for w in ("provvisori", "provisional")):
         # provisional verdict of the review in parallel with VERIFY (harness-pt09): confirmed by the merge
         ver = "Verification: VERIFIED (finalize.sh: %s)" % det
     if ver is not None:

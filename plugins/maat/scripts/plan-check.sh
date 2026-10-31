@@ -69,6 +69,17 @@
 #   the file: an H2 inside the plan does NOT close it (it happens, e.g. spec-restyling-ui-soft);
 # - everything inside a code block (``` or ~~~) does not count as structure.
 #
+# Languages (Maat 1.3.0): every heading and keyword the plan author WRITES is read in both forms, the
+# Italian one (existing specs, approved plans) and the English one (written from 1.3.0 on): "## Implementation
+# plan", "## Implementation review", "### Plan review changelog", the H3 sections, "Risk surfaces:", "[floor: …]",
+# "⚠️ Surface", "static sufficient:", "⚠️ Open risk", "Children:", "Depends on:", "Interface for:", "Split:",
+# FR/AC ids, the English table headers and cell words. The comparison stays exact, with the English alternative
+# (no fuzzy matching). Surface tokens are mapped to the Italian canonical token at read time (surf_canon,
+# CANON in the Python): every output, mutations.json included, carries the Italian token. The lines printed
+# for other scripts (Recorded:, Catena:, Impronta piano:, blocco …, L2 …, rossi:, S2:, Percorso:, Scheletro:)
+# do not change. For an Italian spec every output is byte for byte the one of 1.2.1. A section present in
+# BOTH languages (same H2 zone, same H3, Figlie: and Children:) is a VIOLAZIONE of lint.
+#
 # Tests: plan-check.test.sh (every check has its red counterproof).
 
 set -uo pipefail
@@ -83,6 +94,25 @@ XREF_STOP=" std full min true false none null APPROVED DRAFT legacy TODO nessuna
 XREF_MAX_LINES=8
 XREF_MAX_HITS=15   # a token that appears in more lines than this is noise, not a reference
 
+# English surface token = Italian canonical token (Maat 1.3.0); "import" is the same word in both.
+# The same pairs are in CANON of the Python below.
+SURF_PAIRS="permissions=permessi data=dati destructive=distruttiva api-contract=contratto-api shared-logic=logica-condivisa none=nessuna"
+# surf_canon <token>: the canonical (Italian) token; anything else unchanged.
+surf_canon() { local p; for p in $SURF_PAIRS; do [ "${p%%=*}" = "$1" ] && { printf '%s\n' "${p#*=}"; return; }; done; printf '%s\n' "$1"; }
+# surf_en <canonical token>: its English form (for the "⚠️ Surface <token>" line); anything else unchanged.
+surf_en() { local p; for p in $SURF_PAIRS; do [ "${p#*=}" = "$1" ] && { printf '%s\n' "${p%%=*}"; return; }; done; printf '%s\n' "$1"; }
+# Headings that exist in two languages: "<Italian>|<English>" (H2 = zone of the file, H3 = plan sections), for
+# the both-languages check of lint. The readers spell the alternatives in their own regexes.
+H2_PAIRS="Piano di implementazione|Implementation plan
+Review implementazione|Implementation review"
+H3_PAIRS="Piano di test|Test plan
+Tracciabilità requisiti|Requirement traceability
+File toccati|Touched files
+Passi|Steps
+Decisioni|Decisions
+Stringhe e data-test|Strings and data-test
+Changelog revisione piano|Plan review changelog"
+
 die_usage() { echo "uso: $0 delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]" >&2; exit 2; }
 
 # annotate FILE → lines "NR<TAB>zona<TAB>infence<TAB>testo"
@@ -94,9 +124,9 @@ annotate() {
       line = $0
       isfence = (line ~ /^[ \t]*(```|~~~)/)
       if (!infence && !isfence) {
-        if (zone == "above" && line ~ /^## Piano di implementazione/) zone = "plan"
-        else if ((zone == "plan" || zone == "changelog") && line ~ /^## Review implementazione/) zone = "review"
-        else if (zone == "plan" && line ~ /^###[ \t]+([0-9]+\.[ \t]*)?Changelog revisione piano/) zone = "changelog"
+        if (zone == "above" && line ~ /^## (Piano di implementazione|Implementation plan)/) zone = "plan"
+        else if ((zone == "plan" || zone == "changelog") && line ~ /^## (Review implementazione|Implementation review)/) zone = "review"
+        else if (zone == "plan" && line ~ /^###[ \t]+([0-9]+\.[ \t]*)?(Changelog revisione piano|Plan review changelog)/) zone = "changelog"
         else if (zone == "changelog" && line ~ /^##?#?[ \t]/) zone = "plan"
       }
       fl = infence
@@ -112,13 +142,28 @@ above_norm() { sed 's/[[:space:]]*$//' | awk 'NF { for (i = 0; i < b; i++) print
 test_zone() {
   awk -F'\t' '
     $2 != "plan" { if (in_t) exit; next }
-    $3 == 0 && $4 ~ /^###[ \t]+([0-9]+\.[ \t]*)?Piano di test/ { in_t = 1; next }
+    $3 == 0 && $4 ~ /^###[ \t]+([0-9]+\.[ \t]*)?(Piano di test|Test plan)/ { in_t = 1; next }
     in_t && $3 == 0 && $4 ~ /^##?#?[ \t]/ { exit }
     in_t { print $1 "\t" $4 }'
 }
 # A floor line is a LIST ITEM inside "### Piano di test": a mention in prose
 # elsewhere ("coperto dal [pavimento: permessi] sotto") is not a second floor line.
-PAV_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[pavimento:'
+PAV_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[(pavimento|floor):'
+# pav_toks: "NR<TAB>token" for every "[pavimento: <s>]" / "[floor: <s>]" of the floor lines ("NR<TAB>testo" on
+# stdin; every occurrence of the line, as grep -o did), token stripped and mapped to the canonical one.
+pav_toks() {
+  PAV="$PAV_RE" awk -v pairs="$SURF_PAIRS" '
+    BEGIN { n = split(pairs, a, " "); for (i = 1; i <= n; i++) { split(a[i], kv, "="); cm[kv[1]] = kv[2] } }
+    { nr = $0; sub(/\t.*$/, "", nr); t = $0; sub(/^[^\t]*\t/, "", t)
+      if (t !~ ENVIRON["PAV"]) next
+      while (match(t, /\[(pavimento|floor):/)) {
+        x = substr(t, RSTART + RLENGTH); e = index(x, "]")
+        if (!e) break
+        t = substr(x, e + 1); x = substr(x, 1, e - 1)
+        sub(/^[ \t]+/, "", x); sub(/[ \t]+$/, "", x)
+        print nr "\t" ((x in cm) ? cm[x] : x)
+      } }'
+}
 # An [e2e-locator: <spec>] line is the targeted e2e that the plan prescribes AT EVERY LEVEL when an e2e
 # spec changes or a string/class/attribute used by its locators changes: outside the caps like the floor.
 E2E_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[e2e-locator:'
@@ -126,17 +171,26 @@ E2E_RE='^[ \t]*([-*]|[0-9]+\.)[ \t]+\[e2e-locator:'
 # warn_line <token>: "NR<TAB>testo" of the first "⚠️ Superficie <token>" line of the plan, outside the
 # fences (annotate on stdin). The token must follow "⚠️ Superficie" (markdown `, * and _ tolerated):
 # a ⚠️ line on ANOTHER surface does not cover this one.
+# English form (1.3.0): "⚠️ Surface <token>", the token in either language.
 warn_line() {
-  awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "⚠️ Superficie") { print $1 "\t" $4 }' \
-    | grep -E "⚠️ Superficie[[:space:]*_\`]+$1([^[:alnum:]_-]|\$)" | head -1 || true
+  local en; en=$(surf_en "$1")
+  awk -F'\t' '$2 == "plan" && $3 == 0 && (index($4, "⚠️ Superficie") || index($4, "⚠️ Surface")) { print $1 "\t" $4 }' \
+    | grep -E "⚠️ (Superficie|Surface)[[:space:]*_\`]+($1|$en)([^[:alnum:]_-]|\$)" | head -1 || true
 }
-# waiver_of <text of the ⚠️ line>: the reason of the "statica sufficiente: <motivo>" waiver, or empty.
-waiver_of() { printf '%s\n' "$1" | sed -n 's/.*statica sufficiente:[[:space:]]*//p' | sed 's/[[:space:]]*$//'; }
-# declared_surfaces: the valid tokens of "Superfici a rischio:" (annotate on stdin), space separated.
+# waiver_of <text of the ⚠️ line>: the reason of the "statica sufficiente: <motivo>" (or "static sufficient:
+# <reason>") waiver, or empty.
+waiver_of() { printf '%s\n' "$1" | sed -En 's/.*(statica sufficiente|static sufficient):[[:space:]]*//p' | sed 's/[[:space:]]*$//'; }
+# decl_of: the value of the first "Superfici a rischio:" / "Risk surfaces:" line of the plan (annotate on stdin).
+decl_of() {
+  awk -F'\t' '$2 == "plan" && $3 == 0 && (index($4, "Superfici a rischio:") == 1 || index($4, "Risk surfaces:") == 1) {
+    sub(/^(Superfici a rischio|Risk surfaces):[ \t]*/, "", $4); print $4; exit }'
+}
+# declared_surfaces: the valid tokens of the declaration (annotate on stdin), canonical, space separated.
 declared_surfaces() {
   local d s out=""
-  d=$(awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Superfici a rischio:") == 1 { sub(/^Superfici a rischio:[ \t]*/, "", $4); print $4; exit }')
+  d=$(decl_of)
   for s in $(printf '%s' "$d" | tr -d '`' | tr ',·;' '   ' | tr -s ' '); do
+    s=$(surf_canon "$s")
     case " $SURFACES " in *" $s "*) out="$out $s" ;; esac
   done
   printf '%s\n' "$out"
@@ -238,17 +292,19 @@ cmd_lint() {
   fi
 
   # Status lines: a single anchored occurrence in the plan (changelog included), outside fences.
-  local lit n ln prev=""
+  local lit l2 n ln prev=""
   for lit in "Plan status:" "Test level:" "Superfici a rischio:"; do
-    n=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '($2 == "plan" || $2 == "changelog") && $3 == 0 && index($4, l) == 1' | wc -l)
+    # l2: the English form of the literal (the same literal when it is already English)
+    l2=$lit; [ "$lit" = "Superfici a rischio:" ] && l2="Risk surfaces:"
+    n=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '($2 == "plan" || $2 == "changelog") && $3 == 0 && (index($4, l) == 1 || index($4, l2) == 1)' | wc -l)
     if [ "$n" -gt 1 ]; then viol "'$lit' compare $n volte a inizio riga nel piano: dev'essere UNA (i grep a valle prendono la prima)"
     elif [ "$n" -eq 0 ]; then warn "'$lit' assente nel piano (spec legacy?) — in riapertura lo Step 1 la aggiunge"
     fi
-    ln=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '$2 == "plan" && $3 == 0 && index($4, l) == 1 { print $1; exit }')
+    ln=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '$2 == "plan" && $3 == 0 && (index($4, l) == 1 || index($4, l2) == 1) { print $1; exit }')
     if [ -n "$prev" ] && [ -n "$ln" ] && [ "$ln" -ne $((prev + 1)) ]; then warn "'$lit' non sta nella riga subito sotto la precedente riga di stato"; fi
     [ -n "$ln" ] && prev="$ln"
     # In the changelog the literal must not be quoted even mid-line: that is where the duplicate comes from.
-    if printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" '$2 == "changelog" && index($4, l) > 1 { f = 1 } END { exit !f }'; then
+    if printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '$2 == "changelog" && (index($4, l) > 1 || index($4, l2) > 1) { f = 1 } END { exit !f }'; then
       warn "il changelog cita il letterale '$lit' in mezzo a una riga — scrivilo in prosa, e' a un a-capo dal diventare un duplicato"
     fi
   done
@@ -263,14 +319,16 @@ cmd_lint() {
   fi
 
   # Declared surfaces: vocabulary tokens only (backticks are tolerated, notes are not).
-  local decl; decl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Superfici a rischio:") == 1 { sub(/^Superfici a rischio:[ \t]*/, "", $4); print $4; exit }')
-  local declared="" s nnone=0 ntok=0
+  # English tokens (Risk surfaces: permissions, none…) are mapped to the canonical ones (surf_canon).
+  local decl; decl=$(printf '%s\n' "$ann" | decl_of)
+  local declared="" s sc nnone=0 ntok=0
   if [ -n "$decl" ]; then
     for s in $(printf '%s' "$decl" | tr -d '`' | tr ',·;' '   ' | tr -s ' '); do
       ntok=$((ntok + 1))
+      sc=$(surf_canon "$s")
       case " $SURFACES " in
-        *" $s "*) declared="$declared $s" ;;
-        *) if [ "$s" = "nessuna" ]; then nnone=1
+        *" $sc "*) declared="$declared $sc" ;;
+        *) if [ "$sc" = "nessuna" ]; then nnone=1
            else viol "superficie sconosciuta '$s' in 'Superfici a rischio' — solo token nudi del vocabolario: $SURFACES (oppure: nessuna)"; fi ;;
       esac
     done
@@ -279,7 +337,7 @@ cmd_lint() {
 
   # Floor: list item in "### Piano di test", on a CRITICAL and DECLARED surface, one per surface.
   local tz; tz=$(printf '%s\n' "$ann" | test_zone)
-  local pav; pav=$(printf '%s\n' "$tz" | cut -f2- | grep -E "$PAV_RE" | grep -o '\[pavimento:[^]]*\]' | sed 's/^\[pavimento:[[:space:]]*//; s/[[:space:]]*\]$//' || true)
+  local pav; pav=$(printf '%s\n' "$tz" | pav_toks | cut -f2)
   if [ -n "$pav" ]; then
     while IFS= read -r s; do
       case " $CRITICAL " in *" $s "*) ;; *) viol "[pavimento: $s] — il pavimento vale solo per le superfici critiche: $CRITICAL" ;; esac
@@ -301,11 +359,11 @@ cmd_lint() {
       continue
     fi
     wn=${wl%%$'\t'*}; wt=${wl#*$'\t'}
-    if printf '%s\n' "$wt" | grep -q 'statica sufficiente:' && [ -z "$(waiver_of "$wt")" ]; then
+    if printf '%s\n' "$wt" | grep -Eq '(statica sufficiente|static sufficient):' && [ -z "$(waiver_of "$wt")" ]; then
       warn "riga $wn: deroga 'statica sufficiente:' senza motivo sulla stessa riga"
     fi
     nxt=$(printf '%s\n' "$ann" | awk -F'\t' -v n=$((wn + 1)) '$1 == n { print $4; exit }')
-    if printf '%s\n' "$nxt" | grep -Eq '^[[:space:]]*(—|-)?[[:space:]]*(statica|sufficiente)'; then
+    if printf '%s\n' "$nxt" | grep -Eq '^[[:space:]]*(—|-)?[[:space:]]*(statica|sufficiente|static[[:space:]]+sufficient)'; then
       warn "riga $wn: la deroga continua a capo — 'statica sufficiente: <motivo>' va sulla stessa riga di '⚠️ Superficie $s'"
     fi
   done
@@ -317,17 +375,39 @@ cmd_lint() {
   # Length of "### Piano di test" relative to the level (AVVISO: L3 judges it, here it is measured).
   # Not counted: blank lines, floor lines, [e2e-locator: lines and ⚠️ lines: outside the cap.
   local lvl; lvl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Test level:") == 1 { sub(/^Test level:[ \t]*/, "", $4); sub(/[ \t].*$/, "", $4); print $4; exit }')
-  if printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && $4 ~ /^###[ \t]+([0-9]+\.[ \t]*)?Piano di test/ { f = 1 } END { exit !f }'; then
+  if printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && $4 ~ /^###[ \t]+([0-9]+\.[ \t]*)?(Piano di test|Test plan)/ { f = 1 } END { exit !f }'; then
     # Format 2: header and separator of the test table and the "⚠️ Rischio aperto" lines do not count.
     local f2; f2=$(printf '%s\n' "$ann" | fmt2_of)
-    local tlen; tlen=$(printf '%s\n' "$tz" | cut -f2- | grep -vE "$PAV_RE" | grep -vE "$E2E_RE" | grep -v '⚠️ Superficie' \
-      | { if [ "$f2" = 1 ]; then grep -vE '^[[:space:]]*\|[[:space:]]*(ID[[:space:]]*\||:?-)' | grep -v '⚠️ Rischio aperto'; else cat; fi; } \
+    local tlen; tlen=$(printf '%s\n' "$tz" | cut -f2- | grep -vE "$PAV_RE" | grep -vE "$E2E_RE" | grep -vE '⚠️ (Superficie|Surface)' \
+      | { if [ "$f2" = 1 ]; then grep -vE '^[[:space:]]*\|[[:space:]]*(ID[[:space:]]*\||:?-)' | grep -vE '⚠️ (Rischio aperto|Open risk)'; else cat; fi; } \
       | grep -c '[^[:space:]]' || true)
     case "$lvl" in
       min) [ "$tlen" -le 1 ] || warn "'### Piano di test' ha $tlen righe al livello min (tetto 1; righe [pavimento:, [e2e-locator: e ⚠️ escluse)" ;;
       std) [ "$tlen" -le 15 ] || warn "'### Piano di test' ha $tlen righe al livello std (tetto 15; righe [pavimento:, [e2e-locator: e ⚠️ escluse)" ;;
     esac
   fi
+
+  # The same section in BOTH languages (1.3.0): e.g. an author who added the English heading next to the
+  # existing Italian one. The readers would take only one of the two: VIOLAZIONE. H2 zones of the file and H3
+  # sections of the plan, outside fences; "Figlie:" and "Children:" above the plan.
+  local dup
+  dup=$(printf '%s\n' "$ann" | H2P="$H2_PAIRS" H3P="$H3_PAIRS" awk -F'\t' '
+    BEGIN { n2 = split(ENVIRON["H2P"], h2, "\n"); n3 = split(ENVIRON["H3P"], h3, "\n") }
+    $3 != 0 { next }
+    { for (i = 1; i <= n2; i++) { split(h2[i], p, "|"); if (index($4, "## " p[1]) == 1) a2[i]++; if (index($4, "## " p[2]) == 1) b2[i]++ } }
+    ($2 == "plan" || $2 == "changelog") && $4 ~ /^###[ \t]/ { t = $4; sub(/^###[ \t]+([0-9]+\.[ \t]*)?/, "", t)
+      for (i = 1; i <= n3; i++) { split(h3[i], p, "|"); if (index(t, p[1]) == 1) a3[i]++; if (index(t, p[2]) == 1) b3[i]++ } }
+    $2 == "above" && index($4, "Figlie:") == 1 { fi++ }
+    $2 == "above" && index($4, "Children:") == 1 { ch++ }
+    END {
+      for (i = 1; i <= n2; i++) if (a2[i] && b2[i]) { split(h2[i], p, "|"); print "## " p[1] "\t## " p[2] "\t" }
+      for (i = 1; i <= n3; i++) if (a3[i] && b3[i]) { split(h3[i], p, "|"); print "### " p[1] "\t### " p[2] "\t nel piano" }
+      if (fi && ch) print "Figlie:\tChildren:\t sopra il piano"
+    }')
+  local it en where
+  while IFS=$'\t' read -r it en where; do
+    [ -n "$it" ] && viol "'$it' e '$en' insieme$where: la stessa sezione in due lingue (tieni il titolo che c'era; si legge la prima)"
+  done <<< "$dup"
 
   # With baseline: the spec above the plan and the implementation review must not be touched.
   if [ -n "$base" ]; then
@@ -367,15 +447,15 @@ cmd_contract() {
   if [ "$n" -eq 0 ] || { [ "$n" -eq 1 ] && [ -z "$lvl" ]; }; then echo "Test level: legacy (assente)"
   elif [ "$n" -gt 1 ]; then echo "Test level: legacy (duplicata: $n)"
   else echo "Test level: $lvl"; fi
-  decl=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && index($4, "Superfici a rischio:") == 1 { sub(/^Superfici a rischio:[ \t]*/, "", $4); print $4; exit }')
+  # The declaration as written (an English one too: the consumer is a model); the checks below use the
+  # canonical tokens.
+  decl=$(printf '%s\n' "$ann" | decl_of)
   echo "Superfici a rischio: ${decl:-(assente)}"
   local tz; tz=$(printf '%s\n' "$ann" | test_zone)
   for s in $(printf '%s\n' "$ann" | declared_surfaces); do
     case " $CRITICAL " in *" $s "*) ;; *) continue ;; esac
-    # PAV_RE via ENVIRON: `awk -v` would interpret the regex escapes (`\.` `\[`).
-    pl=$(printf '%s\n' "$tz" | PAV="$PAV_RE" awk -F'\t' -v s="$s" '$2 ~ ENVIRON["PAV"] {
-      t = $2; gsub(/\[pavimento:[ \t]*/, "[pavimento: ", t); gsub(/[ \t]*\]/, "]", t)
-      if (index(t, "[pavimento: " s "]")) { print $1; exit } }')
+    # the text up to the first TAB, as awk $2 read it before pav_toks
+    pl=$(printf '%s\n' "$tz" | cut -f1,2 | pav_toks | awk -F'\t' -v s="$s" '$2 == s { print $1; exit }')
     if [ -n "$pl" ]; then echo "Pavimento: $s (riga $pl)"; continue; fi
     wl=$(printf '%s\n' "$ann" | warn_line "$s")
     if [ -z "$wl" ]; then echo "Obbligo: $s — né pavimento né ⚠️"; continue; fi
@@ -386,10 +466,11 @@ cmd_contract() {
   done
   # Format 2: the "⚠️ Rischio aperto" lines (defect found late, with an assigned test) are risk focuses too.
   local f2; f2=$(printf '%s\n' "$ann" | fmt2_of)
-  printf '%s\n' "$ann" | awk -F'\t' -v f2="$f2" '$2 == "plan" && $3 == 0 && (index($4, "⚠️ Superficie") || (f2 == 1 && index($4, "⚠️ Rischio aperto"))) {
+  printf '%s\n' "$ann" | awk -F'\t' -v f2="$f2" '$2 == "plan" && $3 == 0 && (index($4, "⚠️ Superficie") || index($4, "⚠️ Surface") || (f2 == 1 && (index($4, "⚠️ Rischio aperto") || index($4, "⚠️ Open risk")))) {
     t = $4; sub(/^[ \t]*([-*][ \t]+)?/, "", t); print "Rischio: riga " $1 " — " t }'
-  r=$(printf '%s\n' "$ann" | section_range "Piano di test"); echo "Piano di test: ${r:-assente}"
-  r=$(printf '%s\n' "$ann" | section_range "Tracciabilità requisiti"); echo "Tracciabilità requisiti: ${r:-assente}"
+  # the output keys stay Italian (read by the skills); the headings are read in both languages
+  r=$(printf '%s\n' "$ann" | section_range "(Piano di test|Test plan)"); echo "Piano di test: ${r:-assente}"
+  r=$(printf '%s\n' "$ann" | section_range "(Tracciabilità requisiti|Requirement traceability)"); echo "Tracciabilità requisiti: ${r:-assente}"
   [ "$f2" = 1 ] && echo "Plan format: 2"
   return 0
 }
@@ -414,25 +495,29 @@ basis_of() {
   printf 'spec %s · plan %s\n' "$s" "$p"
 }
 # ─────────────────────────────────────────────────────────────────────────── chains (harness-pt12)
-# head_val <file> <letterale>: the value of the first "<letterale> …" line above the plan, outside fences.
-head_val() { annotate "$1" | awk -F'\t' -v l="$2" '$2 != "above" { exit } $3 == 0 && index($4, l) == 1 { v = substr($4, length(l) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'; }
-# figlie_of <madre>: the names (without .md) of the "Figlie:" line, in chain order, one per line.
-figlie_of() { head_val "$1" "Figlie:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
-# req_ids <file>: the IDs (RF<n>, CA<n>, also dotted) DEFINED in "Requisiti funzionali" and "Criteri di
-# accettazione" above the plan, outside fences: at the start of a heading, a list item or a table
-# row (the first one on the line). Unique, in order.
+# head_val <file> <letterale> [<English letterale>]: the value of the first "<letterale> …" line above the plan,
+# outside fences; with two literals the first line that has either wins (Figlie:/Children:, 1.3.0).
+head_val() { annotate "$1" | awk -F'\t' -v l="$2" -v l2="${3:-$2}" '$2 != "above" { exit }
+  $3 == 0 && (index($4, l) == 1 || index($4, l2) == 1) { k = (index($4, l) == 1) ? l : l2; v = substr($4, length(k) + 1); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }'; }
+# figlie_of <madre>: the names (without .md) of the "Figlie:" (or "Children:") line, in chain order, one per line.
+figlie_of() { head_val "$1" "Figlie:" "Children:" | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//' || true; }
+# req_ids <file>: the IDs (RF<n>, CA<n>, and since 1.3.0 FR<n>, AC<n>; also dotted) DEFINED in "Requisiti
+# funzionali" / "Functional requirements" and "Criteri di accettazione" / "Acceptance criteria" above the plan,
+# outside fences: at the start of a heading, a list item or a table row (the first one on the line). Unique, in
+# order. RF1 and FR1 are DISTINCT ids (no alias): a child uses the id family of its mother.
 req_ids() {
   annotate "$1" | awk -F'\t' '
     $2 != "above" { exit }
     $3 == 1 { next }
     $4 ~ /^##[ \t]/ { s = $4; sub(/^##[ \t]+([0-9]+\.[ \t]*)?/, "", s); s = tolower(s)
-      on = (index(s, "requisiti funzionali") == 1 || index(s, "criteri di accettazione") == 1); next }
-    on && match($4, /^(###+[ \t]+|[ \t]*([-*]|[0-9]+\.)[ \t]+|[ \t]*\|[ \t]*)?[*_`]*(RF|CA)[0-9]+(\.[0-9]+)*/) {
-      x = substr($4, RSTART, RLENGTH); match(x, /(RF|CA)[0-9]+(\.[0-9]+)*$/); id = substr(x, RSTART)
+      on = (index(s, "requisiti funzionali") == 1 || index(s, "criteri di accettazione") == 1 ||
+        index(s, "functional requirements") == 1 || index(s, "acceptance criteria") == 1); next }
+    on && match($4, /^(###+[ \t]+|[ \t]*([-*]|[0-9]+\.)[ \t]+|[ \t]*\|[ \t]*)?[*_`]*(RF|CA|FR|AC)[0-9]+(\.[0-9]+)*/) {
+      x = substr($4, RSTART, RLENGTH); match(x, /(RF|CA|FR|AC)[0-9]+(\.[0-9]+)*$/); id = substr(x, RSTART)
       if (!(id in seen)) { seen[id] = 1; print id } }'
 }
 # madre_of <spec>: "<madre><TAB><k><TAB><n><TAB><precedente|->" if a spec in the same folder lists this one
-# in its "Figlie:" line (the first one, in name order); otherwise nothing.
+# in its "Figlie:" (or "Children:") line (the first one, in name order); otherwise nothing.
 madre_of() {
   local d b m k
   d=$(dirname "$1"); b=$(basename "$1" .md)
@@ -444,7 +529,7 @@ madre_of() {
     printf '%s\t%s\t%s\t%s\n' "$m" "$k" "$(grep -c . "$TMPD/figlie")" \
       "$(if [ "$k" -gt 1 ]; then printf '%s/%s.md' "$d" "$(sed -n "$((k - 1))p" "$TMPD/figlie")"; else printf -- -; fi)"
     return 0
-  done < <(find "$d" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -l '^Figlie:' {} + 2>/dev/null | LC_ALL=C sort)
+  done < <(find "$d" -maxdepth 1 -type f -name 'spec-*.md' -exec grep -lE '^(Figlie|Children):' {} + 2>/dev/null | LC_ALL=C sort)
 }
 # closed_why <spec>: prints why the ring is NOT closed (nothing = closed). A single criterion, also used by
 # cycle-state.sh (plan-check.sh closed): Review status APPROVED, Feature status IMPLEMENTED and a FRESH
@@ -454,7 +539,7 @@ madre_of() {
 closed_why() {
   local sec rs fs fz snap fs12 now ts rl rt run="${1%.md}.run"
   sec=$(tr -d '\r' < "$1" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
-    !r && /^## Review implementazione/ { r = 1; next } r { print }')
+    !r && /^## (Review implementazione|Implementation review)/ { r = 1; next } r { print }')
   rs=$(printf '%s\n' "$sec" | sed -n 's/^Review status:[[:space:]]*//p' | head -1)
   fs=$(printf '%s\n' "$sec" | sed -n 's/^Feature status:[[:space:]]*//p' | head -1)
   fz=$(printf '%s\n' "$sec" | sed -n 's/^Finalize:[[:space:]]*//p' | head -1)
@@ -487,11 +572,12 @@ last_post_tree() {
 }
 # code_paths: the backticked paths of the lines on stdin (with a /), without ::name and :line.
 code_paths() { grep -o '`[^`]*`' | tr -d '`' | grep '/' | sed -E 's/::.*//; s/:[0-9]+(-[0-9]+)?$//; s/[[:space:]].*$//' | grep . | LC_ALL=C sort -u || true; }
-# iface_fp <previous spec> <tree> <root>: fingerprint of the files of its "Interfaccia per:" line in that tree
+# iface_fp <previous spec> <tree> <root>: fingerprint of the files of its "Interfaccia per:" (or "Interface
+# for:") line in that tree
 # (path + blob, or ABSENT); nothing if the line names no files.
 iface_fp() {
   local l p out=""
-  l=$(head_val "$1" "Interfaccia per:" | code_paths)
+  l=$(head_val "$1" "Interfaccia per:" "Interface for:" | code_paths)
   [ -n "$l" ] || return 0
   while IFS= read -r p; do
     out="$out$p $(git -C "$3" rev-parse -q --verify "$2:$p" 2>/dev/null || echo ABSENT)
@@ -602,25 +688,47 @@ sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 H3 = re.compile(r"^###[ \t]+(?:[0-9]+\.[ \t]*)?(.*?)[ \t]*$")
 HEAD = re.compile(r"^#{1,3}[ \t]")
-BLOCK = re.compile(r"^####[ \t]+Blocco[ \t]+([A-Za-z0-9._-]+)")
-KV = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(scrive|dopo):[ \t]*(.*)$")
+# Maat 1.3.0: every heading, keyword and table word is read in Italian AND in English (the canonical name in
+# the program stays the Italian one: KEYS, SEC, STR_AZ, STR_TP and CANON map the English forms onto it).
+BLOCK = re.compile(r"^####[ \t]+(?:Blocco|Block)[ \t]+([A-Za-z0-9._-]+)")
+KV = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(scrive|dopo|writes|after):[ \t]*(.*)$")
+KEYS = {"scrive": "scrive", "dopo": "dopo", "writes": "scrive", "after": "dopo"}
 SEP = re.compile(r"^:?-+:?$")
 LIST = re.compile(r"[,;\u00b7]")
-PAV = re.compile(r"^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+\[pavimento:[ \t]*([^\]]*?)[ \t]*\]")
+PAV = re.compile(r"^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+\[(?:pavimento|floor):[ \t]*([^\]]*?)[ \t]*\]")
 E2E = re.compile(r"^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+\[e2e-locator:[ \t]*([^\]]*?)[ \t]*\]")
-RISK = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio aperto")
+RISK = re.compile(r"\u26a0\ufe0f?[ \t]*(?:Rischio aperto|Open risk)")
 # assertion of an existing non-regression test (harness-pt15, D): "resta verde", "rimane verde",
-# "restano verdi", "continua a passare"... at the start of the cell (after any * _ \u00ab " formatting)
-INVARIANZA = re.compile(r"^[\s*_\u00ab\"]*(?:rest(?:a|ano)\s+verd[ei]|riman(?:e|gono)\s+verd[ei]|continu(?:a|ano)\s+a\s+passare)\b", re.I)
+# "restano verdi", "continua a passare"... at the start of the cell (after any * _ \u00ab " formatting); in English
+# "stays/stay green", "remains/remain green", "keeps/keep passing"
+INVARIANZA = re.compile(r"^[\s*_\u00ab\"]*(?:rest(?:a|ano)\s+verd[ei]|riman(?:e|gono)\s+verd[ei]|continu(?:a|ano)\s+a\s+passare"
+                        r"|stays?\s+green|remains?\s+green|keeps?\s+passing)\b", re.I)
 DESTR = re.compile(r"\bDELETE\b|\.delete\(|\bDROP\b|\bTRUNCATE\b|(?<![A-Za-z0-9_])rm ")
 TEST_HDR = ["id", "requisito", "file", "asserzione", "mutazione"]
+TEST_HDRS = (TEST_HDR, ["id", "requirement", "file", "assertion", "mutation"])
 STEP_HDR = ["id", "file", "modifica", "test"]
+STEP_HDRS = (STEP_HDR, ["id", "file", "change", "test"])
 STR_HDR = ["azione", "tipo", "valore"]
-NONE = ("", "-", "\u2014", "nessuna", "nessuno")
+STR_HDRS = [h + v for h in (STR_HDR, ["action", "type", "value"]) for v in ([], ["verificato"], ["verified"])]
+STR_AZ = {"aggiunge": "aggiunge", "toglie": "toglie", "adds": "aggiunge", "removes": "toglie"}
+STR_TP = {"stringa": "stringa", "data-test": "data-test", "string": "stringa"}
+NONE = ("", "-", "\u2014", "nessuna", "nessuno", "none")
 SEC = {"decisioni": "Decisioni", "file toccati": "File toccati", "passi": "Passi",
        "tracciabilit\u00e0 requisiti": "Tracciabilit\u00e0 requisiti", "piano di test": "Piano di test",
-       "stringhe e data-test": "Stringhe e data-test"}
+       "stringhe e data-test": "Stringhe e data-test",
+       "decisions": "Decisioni", "touched files": "File toccati", "steps": "Passi",
+       "requirement traceability": "Tracciabilit\u00e0 requisiti", "test plan": "Piano di test",
+       "strings and data-test": "Stringhe e data-test"}
 VOCAB = ["permessi", "dati", "distruttiva", "contratto-api", "import", "logica-condivisa"]
+# English surface token -> canonical (Italian) token: the same pairs as SURF_PAIRS of the bash
+CANON = {"permissions": "permessi", "data": "dati", "destructive": "distruttiva", "api-contract": "contratto-api",
+         "shared-logic": "logica-condivisa", "none": "nessuna"}
+RED_IF = ("rosso se:", "red if:")
+NEW = ("(nuovo)", "(new)")
+
+
+def canon(t):
+    return CANON.get(t, t)
 MUT_FORM = "`file` \u00b7 `simbolo` \u00b7 `cerca` \u2192 `sostituisci` \u00b7 rosso se: `testo`"
 SKIP = {"node_modules", ".nuxt", ".output", ".venv", "__pycache__", ".turbo", "coverage", "dist", ".git", ".pytest_cache"}
 
@@ -751,7 +859,7 @@ def conf():
     _CONF["cfg"] = cfg
     piano = r.get("piano") or {}
     try:
-        _CONF["sup"] = [(x["superficie"], re.compile(x["regex"])) for x in piano.get("superfici_critiche", [])]
+        _CONF["sup"] = [(canon(x["superficie"]), re.compile(x["regex"])) for x in piano.get("superfici_critiche", [])]
         _CONF["mig"] = [re.compile(x) for x in piano.get("migrazioni", [])]
     except re.error as e:
         sys.stderr.write("plan-check: maat.json: regex non valida in piano: %s\n" % e)
@@ -812,11 +920,11 @@ def parse_mut(cell):
     kinds = [k for k, v in cs]
     if kinds == ["c", "t", "c"] and re.match(r"^(\u2192|->)$", cs[1][1]):
         sost = cs[2][1]
-    elif kinds == ["c", "t"] and re.match(r"^(\u2192|->)[ \t]*\(vuoto\)$", cs[1][1]):
+    elif kinds == ["c", "t"] and re.match(r"^(\u2192|->)[ \t]*\((?:vuoto|empty)\)$", cs[1][1]):
         sost = ""
     else:
         return None, bad
-    if [k for k, v in rs] != ["t", "c"] or rs[0][1].lower() != "rosso se:":
+    if [k for k, v in rs] != ["t", "c"] or rs[0][1].lower() not in RED_IF:
         return None, bad
     m = {"file": f[0][1].strip(), "simbolo": sym[0][1].strip(), "cerca": cs[0][1],
          "sostituisci": sost, "asserzione": rs[1][1]}
@@ -857,18 +965,18 @@ def build(rows, root):
     plan = [(n, t) for n, z, f, t in rows if z == "plan" and not f]
     M["plan"] = plan
     M["plan_all"] = [(n, t) for n, z, f, t in rows if z == "plan"]
-    tg = [t for n, z, f, t in rows if z == "above" and not f and t.startswith("Taglio:")]
-    M["taglio"] = tg[0][len("Taglio:"):].strip() if tg else ""
+    tg = [t for n, z, f, t in rows if z == "above" and not f and (t.startswith("Taglio:") or t.startswith("Split:"))]
+    M["taglio"] = tg[0].split(":", 1)[1].strip() if tg else ""
     M["is2"] = any(re.match(r"^Plan format:[ \t]*2[ \t]*$", t) for n, t in plan)
     fmt = [n for n, t in plan if t.startswith("Plan format:")]
     if len(fmt) > 1:
         E.append("riga %d: Plan format: compare %d volte a inizio riga nel piano, deve essere UNA" % (fmt[1], len(fmt)))
     lvl = [t for n, t in plan if t.startswith("Test level:")]
     M["level"] = (lvl[0][len("Test level:"):].split() or ["legacy"])[0] if lvl else "legacy"
-    dl = [t for n, t in plan if t.startswith("Superfici a rischio:")]
+    dl = [t for n, t in plan if t.startswith("Superfici a rischio:") or t.startswith("Risk surfaces:")]
     M["declared"] = None
     if dl:
-        M["declared"] = [x for x in re.split(r"[,;\u00b7\s]+", dl[0][len("Superfici a rischio:"):].replace("`", "")) if x]
+        M["declared"] = [canon(x) for x in re.split(r"[,;\u00b7\s]+", dl[0].split(":", 1)[1].replace("`", "")) if x]
     sec, dup = sections(plan)
     M["sec"] = sec
     for n, name in dup:
@@ -888,12 +996,12 @@ def build(rows, root):
                 files.append(c)
             # harness-pt11: `path` (new) = file the plan creates (scope of the test-red phase, stub, L2)
             if ("/" in c or "." in c) and i + 1 < len(tk) and tk[i + 1][0] == "t" \
-                    and tk[i + 1][1].strip().lower().startswith("(nuovo)") and c not in newf:
+                    and tk[i + 1][1].strip().lower().startswith(NEW) and c not in newf:
                 newf.append(c)
     M["files"], M["new_files"] = files, newf
 
     tests, order = {}, []
-    tbls = [tb for tb in tables(sec.get("Piano di test", [])) if tb["hdr"] == TEST_HDR]
+    tbls = [tb for tb in tables(sec.get("Piano di test", [])) if tb["hdr"] in TEST_HDRS]
     if "Piano di test" in sec and not tbls:
         G.append("### Piano di test senza la tabella | ID | requisito | file | asserzione | mutazione |")
     for tb in tbls:
@@ -952,7 +1060,7 @@ def build(rows, root):
             if hdr is None:
                 hdr = hnorm(c)
                 continue
-            if is_sep(c) or hdr != STEP_HDR:
+            if is_sep(c) or hdr not in STEP_HDRS:
                 continue
             if len(c) != 4:
                 E.append("riga %d: la riga del passo ha %d colonne, ne servono 4 (id | file | modifica | test)" % (n, len(c)))
@@ -965,8 +1073,8 @@ def build(rows, root):
             continue
         hdr = None
         m = KV.match(t)
-        if m and cur is not None and cur[m.group(1)] is None:
-            cur[m.group(1)] = m.group(2).strip()
+        if m and cur is not None and cur[KEYS[m.group(1)]] is None:
+            cur[KEYS[m.group(1)]] = m.group(2).strip()
     if "Passi" in sec and not steps:
         E.append("### Passi senza la tabella | id | file | modifica | test |")
     if "Passi" in sec and not blocks:
@@ -1102,7 +1210,7 @@ def lint2(M, root):
     covered = set(r for T in tests.values() for r in T["reqs"])
     known = set(r for n, r, v in M["reqs"])
     for n, r, ver in M["reqs"]:
-        if r not in covered and not ver.lower().startswith("non verificabile"):  # CONTROLLO-REQUISITO-SENZA-TEST
+        if r not in covered and not ver.lower().startswith(("non verificabile", "not verifiable")):  # CONTROLLO-REQUISITO-SENZA-TEST
             E.append("riga %d: requisito %s senza test: nessuna riga del piano di test lo nomina (oppure Verifica: non verificabile a test, <motivo>)" % (n, r))
     for tid in M["order"]:
         for r in tests[tid]["reqs"]:
@@ -1134,7 +1242,7 @@ def lint2(M, root):
             E.append("riga %d: rischio aperto senza un test assegnato (un ID della tabella del piano di test)" % n)
     rows = []
     for tb in tables(M["sec"].get("Stringhe e data-test", [])):
-        if tb["hdr"] not in (STR_HDR, STR_HDR + ["verificato"]):
+        if tb["hdr"] not in STR_HDRS:
             E.append("riga %d: ### Stringhe e data-test vuole la tabella | azione | tipo | valore | (piu | verificato | facoltativa)" % tb["n"])
             continue
         for n, c in tb["rows"]:
@@ -1151,6 +1259,7 @@ def lint2(M, root):
                     else:
                         ver = (vf, why)
             az, tp = (c[0].strip().lower(), c[1].strip().lower()) if len(c) == 3 else ("", "")
+            az, tp = STR_AZ.get(az, az), STR_TP.get(tp, tp)
             cs = codes(c[2]) if len(c) == 3 else []
             val = cs[0] if cs else (c[2].strip().strip("\u00ab\u00bb\"") if len(c) == 3 else "")
             if az not in ("aggiunge", "toglie") or tp not in ("stringa", "data-test") or not val:
@@ -1321,7 +1430,7 @@ def gen(M, root, run, fp):
             x, lst = p, other
         if x not in lst:
             lst.append(x)
-    pav = [(PAV.match(t).group(1), t) for n, t in M["sec"].get("Piano di test", []) if PAV.match(t)]
+    pav = [(canon(PAV.match(t).group(1)), t) for n, t in M["sec"].get("Piano di test", []) if PAV.match(t)]
     # L2 (harness-pt11): after the test-red phase (test-red/rossi.json) the mutations of NEW files with the red on
     # the stubbed base proven are marked absorbed; counterproof.sh skips them, finalize.sh rechecks them (l2).
     # Finalize criterion (final=True: stub = symbols exported NOW): when test-red closes the code is the
@@ -1523,7 +1632,7 @@ def skeleton(M):
         over.append("righe del piano %d > %d" % (nl, PLAN_LINES))
     if M["taglio"]:
         print("Taglio: " + M["taglio"])
-    if over and M["taglio"].lower().startswith("rifiutato"):  # DECISIONE-TAGLIO
+    if over and M["taglio"].lower().startswith(("rifiutato", "rejected")):  # DECISIONE-TAGLIO
         print("Scheletro: SOPRA IL TETTO — " + " · ".join(over)
               + ": taglio rifiutato dall utente (riga Taglio:), si prosegue col piano unico, nessuno stop")
         return 0
@@ -1936,11 +2045,11 @@ def cmd_rossi(M, root, run, ev):
     adds = []
     for tb in tables(M["sec"].get("Stringhe e data-test", [])):
         for n, c in tb["rows"]:
-            if len(c) >= 3 and c[0].strip().lower() == "aggiunge" and c[1].strip().lower() in ("stringa", "data-test"):
+            if len(c) >= 3 and STR_AZ.get(c[0].strip().lower()) == "aggiunge" and c[1].strip().lower() in STR_TP:
                 cs = codes(c[2])
                 v = cs[0] if cs else c[2].strip().strip("\u00ab\u00bb\"")
                 if v:
-                    adds.append((c[1].strip().lower(), v))
+                    adds.append((STR_TP[c[1].strip().lower()], v))
     if adds:
         for val, hs in find_hits(root, adds).items():
             for rel, ln, neg in hs:
@@ -2183,6 +2292,10 @@ cmd_split() {
     while IFS= read -r n; do [ -n "$n" ] && kids+=("$d/$n.md"); done < <(figlie_of "$madre")
   fi
   sviol() { echo "VIOLAZIONE: $*"; rc=1; }
+  # both forms of the children line (1.3.0): the first one is read, but the mother is ambiguous
+  if [ -n "$(head_val "$madre" "Figlie:")" ] && [ -n "$(head_val "$madre" "Children:")" ]; then
+    sviol "la madre ha sia 'Figlie:' sia 'Children:': ne basta una (si legge la prima)"
+  fi
   [ ${#kids[@]} -ge 2 ] || { sviol "una catena vuole almeno due figlie (argomenti, oppure la riga Figlie: della madre)"; return 1; }
   for f in "${kids[@]}"; do [ -f "$f" ] || { sviol "figlia assente: $f"; return 1; }; done
   n=$(for f in "${kids[@]}"; do basename "$f" .md; done | LC_ALL=C sort | uniq -d | tr '\n' ' ' | sed 's/ $//')
@@ -2208,7 +2321,7 @@ cmd_split() {
   done < "$TMPD/split.figlie"
   for f in "${kids[@]}"; do
     for lit in "Dipende da:" "Interfaccia per:"; do
-      [ -n "$(head_val "$f" "$lit")" ] || sviol "$(basename "$f" .md): manca la riga '$lit' (sopra il piano, a inizio riga)"
+      [ -n "$(head_val "$f" "$lit" "$([ "$lit" = "Dipende da:" ] && echo "Depends on:" || echo "Interface for:")")" ] || sviol "$(basename "$f" .md): manca la riga '$lit' (sopra il piano, a inizio riga)"
     done
   done
   [ $rc -eq 0 ] && echo "split: OK — $(grep -c . "$TMPD/split.madre") ID della madre in ${#kids[@]} figlie, ciascuno in una sola"

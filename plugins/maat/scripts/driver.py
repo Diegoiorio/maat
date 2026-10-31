@@ -44,7 +44,9 @@ run-phase.sh: `valida`) only if the certificate driver.equiv carries the current
 if equivalence passed on THESE files; otherwise they stay standalone. FIC_DRIVER=0 forces them standalone,
 FIC_DRIVER=1 forces them onto the driver (tests). A driver that fails -> fallback to the standalone code, with an AVVISO.
 
-EXITS of `run`: 0 DONE · 1 STOP · 2 usage · 3 WAIT (chain) · 4 phase running or lock occupato.
+EXITS of `run`: 0 DONE · 1 STOP · 2 usage · 3 WAIT (chain) · 4 phase running (RUNNING) or lock occupato (BUSY).
+The end line is "Driver result: <DONE|STOP|WAIT|BUSY|RUNNING|DRY-RUN> — …" (1.3.0; up to 1.2.x "Esito driver:", with
+OCCUPATO and IN CORSO). The phase result lines are read in both languages (PHASE RESULT / ESITO FASE).
 Events: "driver: …" lines on stdout and in <run-dir>/driver.log.
 
 Variables: FIC_BASH (bash to use) · FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK
@@ -87,7 +89,17 @@ CPK = os.path.join(HERE, "context-pack.sh")
 SCHEMA = os.path.join(ROOT, "schemas", "phase-result.schema.json")
 # PURELY DEFENSIVE deviation (no effect on the cases the plan foresees): its string in "deviazioni" starts
 # like this. If all of them do, the phase does not stop for deviation (run-phase.sh records them, the review judges them).
-DIFENSIVA = "difensiva: "
+# Maat 1.3.0: the English prefix "defensive: " is accepted next to the Italian one (a tuple: str.startswith).
+DIFENSIVA = ("difensiva: ", "defensive: ")
+# "nothing" value of bloccato_su: "nessuno" or, since 1.3.0, "none" (compared lowercase)
+NESSUNO = ("nessuno", "none")
+# The result line of a phase: "PHASE RESULT <phase>: OK|STOP — …" is written since 1.3.0, "ESITO FASE …" (old run
+# dirs, prompts of 1.2.x) is still read. RIGA_OK / RIGA_STOP: the same prefix regexes as run-phase.sh.
+ESITO_PREF = ("PHASE RESULT", "ESITO FASE")
+RIGA_OK = r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK"
+RIGA_STOP = r"(?:PHASE RESULT|ESITO FASE) [^:]*: STOP"
+# Review section heading, both languages
+REVIEW_H = ("## Review implementazione", "## Implementation review")
 
 
 def _cert_path():
@@ -223,7 +235,8 @@ FENCE = re.compile(r"^[ \t]*(```|~~~)")
 
 
 def _review_lines(txt):
-    """The lines of the "## Review implementazione" section downwards, outside the fences (CRs removed)."""
+    """The lines of the "## Review implementazione" (or "## Implementation review") section downwards, outside the
+    fences (CRs removed)."""
     res, inf, r = [], False, False
     for l in _records(txt.replace("\r", "")):
         if FENCE.match(l):
@@ -231,15 +244,16 @@ def _review_lines(txt):
             continue
         if inf:
             continue
-        if not r and l.startswith("## Review implementazione"):
+        if not r and l.startswith(REVIEW_H):
             r = True
         if r:
             res.append(l)
     return res
 
 
-def _chead(path, lit):
-    """The value of the first "<lit> …" line above the plan, outside the fences."""
+def _chead(path, *lits):
+    """The value of the first "<lit> …" line above the plan, outside the fences; with several literals the first
+    line that has any of them wins (Figlie:/Children:, 1.3.0)."""
     t = _read(path)
     if t is None:
         return ""
@@ -250,16 +264,17 @@ def _chead(path, lit):
             continue
         if inf:
             continue
-        if re.match(r"## (Piano di implementazione|Review implementazione)", l):
+        if re.match(r"## (Piano di implementazione|Review implementazione|Implementation plan|Implementation review)", l):
             return ""
-        if l.startswith(lit):
-            return l[len(lit):].strip(" \t")
+        for lit in lits:
+            if l.startswith(lit):
+                return l[len(lit):].strip(" \t")
     return ""
 
 
 def _cfiglie(path):
     res = []
-    for s in re.findall(r"spec-[A-Za-z0-9._-]*", _chead(path, "Figlie:")):
+    for s in re.findall(r"spec-[A-Za-z0-9._-]*", _chead(path, "Figlie:", "Children:")):
         s = re.sub(r"\.md$", "", s)
         res.append(re.sub(r"\.$", "", s))
     return res
@@ -298,7 +313,7 @@ def _json_rule(p):
         bs = one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "(assente)")
         if [x for x in dev if not x.startswith(DIFENSIVA)]:
             s = "STOP|deviazioni dichiarate (%d): %s" % (len(dev), one("; ".join(dev)))
-        elif bs.lower() != "nessuno":
+        elif bs.lower() not in NESSUNO:
             s = "STOP|bloccato su: " + bs
         elif d.get("esito") != "OK":
             s = "STOP|esito %s: %s" % (d.get("esito"), one(d.get("motivo") or ""))
@@ -361,6 +376,8 @@ def _cycle_state(spec_fs, tmp):
     # --- review section ---
     review = _review_lines(_read(spec_fs) or "")
     has_review = bool(review)
+    # both headings (1.3.0): the same section in two languages -> STOP (row 1b of cycle-state.sh)
+    review_both = all(any(l.startswith(h) for l in review) for h in REVIEW_H)
 
     def line(key):
         rx = re.compile("^" + key + r":[ \t\n\r\f\v]*")
@@ -416,7 +433,7 @@ def _cycle_state(spec_fs, tmp):
                 continue
             try:
                 with open(p, "rb") as fh:
-                    if not re.search(rb"(?:^|\n)Figlie:", fh.read()):
+                    if not re.search(rb"(?:^|\n)(?:Figlie|Children):", fh.read()):
                         continue
             except OSError:
                 continue
@@ -655,7 +672,7 @@ def _cycle_state(spec_fs, tmp):
                                                                           RUN, RUN))
 
     def last_ok(ph):
-        if ph not in last_label or not last_esito.startswith("ESITO FASE %s: OK" % ph):
+        if ph not in last_label or not last_esito.startswith(tuple("%s %s: OK" % (p, ph) for p in ESITO_PREF)):
             return False
         if json_esito and json_esito != "OK":
             return False
@@ -758,6 +775,10 @@ def _cycle_state(spec_fs, tmp):
         return ""
 
     try:
+        if review_both:
+            nxt("STOP — la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione "
+                "in due lingue. Tieni il titolo che c'era, porta le righe di stato in quella sezione e togli l'altra, "
+                "poi riprendi")
         if figlie:
             mother_next()
         if has_review and not has_plan:
@@ -889,7 +910,7 @@ def cmd_valida(log, schema_path, phase, out):
         return 0
     text = res.get("result") or ""
     lines = [l.strip() for l in text.splitlines()]
-    riga = next((l for l in reversed(lines) if l.startswith("ESITO FASE")), "")
+    riga = next((l for l in reversed(lines) if l.startswith(ESITO_PREF)), "")
 
     def blocco():
         so = res.get("structured_output")
@@ -918,7 +939,7 @@ def cmd_valida(log, schema_path, phase, out):
         for e in errs:
             print("uscita non valida: " + e, file=sys.stderr)
         msg = "; ".join(errs[:3]).replace("\n", " ")
-        print("ESITO FASE %s: STOP — uscita non valida: %s" % (phase, msg))
+        print("PHASE RESULT %s: STOP — uscita non valida: %s" % (phase, msg))
         if riga:
             print("originale=" + riga)
         return 0
@@ -931,15 +952,15 @@ def cmd_valida(log, schema_path, phase, out):
     jstop = ""
     if [x for x in dev if not x.startswith(DIFENSIVA)]:   # all "difensiva: " -> no STOP for deviation
         jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
-    elif one(obj["bloccato_su"]).lower() != "nessuno":
+    elif one(obj["bloccato_su"]).lower() not in NESSUNO:
         jstop = "bloccato su: " + one(obj["bloccato_su"])
     elif obj["esito"] != "OK":
         jstop = "esito STOP: " + one(obj["motivo"])
     jstop = jstop[:300]
     if not riga:
-        print("ESITO FASE %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
-    elif jstop and re.match(r"ESITO FASE [^:]*: OK", riga):
-        print("ESITO FASE %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
+        print("PHASE RESULT %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
+    elif jstop and re.match(RIGA_OK, riga):
+        print("PHASE RESULT %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
         print("originale=" + riga)
     else:
         print(riga)
@@ -1024,9 +1045,9 @@ def lotti(procedura, root, righe_piano, tetto):
 def _righe_piano(spec_fs):
     n, on = 0, False
     for l in _records((_read(spec_fs) or "").replace("\r", "")):
-        if l.startswith("## Piano di implementazione"):
+        if l.startswith(("## Piano di implementazione", "## Implementation plan")):
             on = True
-        elif on and l.startswith("## Review implementazione"):
+        elif on and l.startswith(REVIEW_H):
             break
         n += on
     return n
@@ -1286,7 +1307,7 @@ def cmd_run(argv):
     entra(spec)
 
     def fine(kind, msg, code):
-        ev("Esito driver: %s — %s" % (kind, msg))
+        ev("Driver result: %s — %s" % (kind, msg))
         return code
 
     while True:
@@ -1299,7 +1320,7 @@ def cmd_run(argv):
             running = sorted(n[:-8] for n in _names(run_fs) if n.endswith(".running")
                              and not os.path.isfile(os.path.join(run_fs, "log", n[:-8] + ".exit")))
             if running:
-                return fine("IN CORSO", "log/%s.running senza .exit: una fase gira ancora (o e' morta senza "
+                return fine("RUNNING", "log/%s.running senza .exit: una fase gira ancora (o e' morta senza "
                             "chiudere); segui il suo log, oppure verifica che nessun processo viva e rimuovi il "
                             ".running" % running[-1], 4)
         out = cycle_state(spec_fs) if usa_driver else _next_da_cycle_state(spec_fs)
@@ -1370,7 +1391,7 @@ def cmd_run(argv):
         ev("■ %s finita: exit %d · %s" % (label, prc, esito or "(nessuna riga ESITO)"))
         err = os.path.join(run_fs, "log", label + ".stderr")
         if prc == 4:
-            return fine("OCCUPATO", "run-phase exit 4 (lock di codice, o lock del piano della stessa spec): %s"
+            return fine("BUSY", "run-phase exit 4 (lock di codice, o lock del piano della stessa spec): %s"
                         % _tail(err), 4)
         if prc == 7:
             t = _tail(err)
@@ -1379,7 +1400,7 @@ def cmd_run(argv):
             why = {2: "uso", 3: "binario claude non trovato", 5: "guardia non attiva: mai rilanciare senza",
                    6: "harness cambiato dal primo lancio del ciclo"}.get(prc, "sotto-sessione uscita %d" % prc)
             return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, _tail(err)), 1)
-        if re.match(r"ESITO FASE [^:]*: STOP", esito):
+        if re.match(RIGA_STOP, esito):
             return fine("STOP", esito, 1)
         rj = os.path.join(run_fs, "log", label + ".result.json")
         if os.path.isfile(rj):

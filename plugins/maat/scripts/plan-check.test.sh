@@ -831,6 +831,12 @@ approve "$B2"
 expect 0 "^Status: FRESH$" "L6: riapprovata dopo il giro delta (interfaccia registrata) = FRESH" -- bash "$PC" basis "$B2"
 printf 'x3\n' > "$G/src/x.py"; (cd "$G" && git add -A && git write-tree) > "$R1/log/05-fix.post-tree"
 expect 0 "^Status: STALE \(interfaccia\)$" "L6: interfaccia reale diversa da quella registrata = STALE" -- bash "$PC" basis "$B2"
+# the same chain with "Interface for:" in place of "Interfaccia per:" gives the same interface fingerprint
+IF1=$(bash "$PC" basis "$B2" 2>/dev/null | grep -o 'interfaccia [0-9a-f]\{12\}')
+IFF=$(grep -rl '^Interfaccia per:' "$G/wf"); sed -i 's/^Interfaccia per:/Interface for:/' $IFF
+IF2=$(bash "$PC" basis "$B2" 2>/dev/null | grep -o 'interfaccia [0-9a-f]\{12\}')
+sed -i 's/^Interface for:/Interfaccia per:/' $IFF
+[ -n "$IFF" ] && [ -n "$IF1" ] && [ "$IF1" = "$IF2" ] && pass=$((pass+1)) || { echo "FAIL [L6: Interface for: = stessa impronta di Interfaccia per: ('$(printf '%s' "$IF1" | paste -sd'|' -)' / '$(printf '%s' "$IF2" | paste -sd'|' -)', file: $(printf '%s' "$IFF" | paste -sd' ' -))]"; fail=$((fail+1)); }
 export PLAN_CHECK_ROOT="$R"
 # ── test-red phase (harness-pt11): scope, test fingerprint in the basis, verification of the reds, stubs and L2 ──────────
 # Counterproofs by mutation (run by hand with PC=<variant>): without CLASSIFICAZIONE-IMPORT the import case becomes
@@ -1002,6 +1008,352 @@ printf 'def somma(a, b):\n    return 0\n' > "$R/modules/api/app/services/calc.py
 printf '\n# cambiato\n' >> "$R/modules/api/tests/test_calc.py"
 expect 0 "^L2 T1: NO — impronta dei test di accettazione cambiata" "l2: test di accettazione cambiato = non assorbita" -- bash "$PC" l2 "$T/f2t.md"
 printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert somma(1, 2) == 3\n' > "$R/modules/api/tests/test_calc.py"
+
+# ── Maat 1.3.0: the English forms (written from 1.3.0 on) next to the Italian ones (still accepted) ──────────
+# For every rule group an English fixture with the same outcome as the Italian one; a mixed spec accepted section
+# by section; the same section in both languages = VIOLAZIONE. The English fixtures live in $E, so the oracle at
+# the end (old script against the new one) runs on the Italian fixtures only.
+E="$T/en"; mkdir -p "$E"
+spec_en() {
+cat <<'EOF'
+# Title
+## Context
+Context of the feature.
+## Functional requirements
+1. The `status` filter applies.
+## Implementation plan
+Plan status: DRAFT
+Test level: std
+Risk surfaces: permissions, shared-logic
+### Steps
+1. Change `modules/api/app/services/foo.py` in `apply_filter()`.
+2. Reuse `modules/api/app/services/foo.py` in the router.
+3. No effect on `std` or `true`.
+```text
+Plan status: APPROVED
+example inside a fence
+```
+## ⚠️ Note inside the plan
+The H2 above does NOT close the plan section.
+### Test plan
+- case 1: `test_foo.py::test_filter` red if: the filter is ignored
+- [floor: permissions] `test_perm.py::test_forbidden` red if: the 403 disappears
+### Plan review changelog
+- Round 1: fixed the path of `apply_filter()`; removed `only_in_changelog`.
+## Implementation review
+Review status: APPROVED
+EOF
+}
+spec_en > "$E/base.md"
+# lint and contract: the same outcomes as the Italian reference spec (same line numbers)
+expect 0 "lint: OK" "en lint: spec di riferimento inglese pulita" -- bash "$PC" lint "$E/base.md"
+expect 0 "lint: OK" "en lint: identica alla baseline" -- bash "$PC" lint "$E/base.md" --baseline "$E/base.md"
+expect 0 "^Superfici a rischio: permissions, shared-logic$" "en contract: la dichiarazione come scritta" -- bash "$PC" contract "$E/base.md"
+expect 0 "^Pavimento: permessi \(riga 22\)$" "en contract: [floor: permissions] = pavimento sulla critica permessi" -- bash "$PC" contract "$E/base.md"
+refute "^Obbligo" "en contract: con [floor:] nessun obbligo" -- bash "$PC" contract "$E/base.md"
+expect 0 "^Piano di test: offset=20 limit=3$" "en contract: range di ### Test plan" -- bash "$PC" contract "$E/base.md"
+sed 's/^Context of the feature\./Context changed./' "$E/base.md" > "$E/above.md"
+expect 1 "sezioni della SPEC" "en lint: spec sopra ## Implementation plan modificata = VIOLAZIONE" -- bash "$PC" lint "$E/above.md" --baseline "$E/base.md"
+sed 's/^Review status: APPROVED/Review status: NEEDS_CHANGES/' "$E/base.md" > "$E/rev.md"
+expect 1 "Review implementazione" "en lint: ## Implementation review toccata = VIOLAZIONE" -- bash "$PC" lint "$E/rev.md" --baseline "$E/base.md"
+sed 's/^- Round 1: fixed/Test level: full\n- Round 1: fixed/' "$E/base.md" > "$E/clog.md"
+expect 1 "'Test level:' compare 2 volte" "en lint: letterale nel ### Plan review changelog = VIOLAZIONE" -- bash "$PC" lint "$E/clog.md"
+sed 's/^Risk surfaces: .*/&\nRisk surfaces: permissions/' "$E/base.md" > "$E/dupdecl.md"
+expect 1 "'Superfici a rischio:' compare 2 volte" "en lint: Risk surfaces: due volte = VIOLAZIONE" -- bash "$PC" lint "$E/dupdecl.md"
+sed 's/^Risk surfaces: .*/&\nSuperfici a rischio: permessi/' "$E/base.md" > "$E/dupdecl2.md"
+expect 1 "'Superfici a rischio:' compare 2 volte" "en lint: Risk surfaces: e Superfici a rischio: insieme = VIOLAZIONE" -- bash "$PC" lint "$E/dupdecl2.md"
+sed 's/^Risk surfaces: permissions, shared-logic/Risk surfaces: permissions, auth/' "$E/base.md" > "$E/voc.md"
+expect 1 "superficie sconosciuta 'auth'" "en lint: token fuori vocabolario = VIOLAZIONE" -- bash "$PC" lint "$E/voc.md"
+sed 's/^Risk surfaces: permissions, shared-logic/Risk surfaces: shared-logic/' "$E/base.md" > "$E/pav.md"
+expect 1 "non dichiarata" "en lint: [floor:] su superficie non dichiarata = VIOLAZIONE" -- bash "$PC" lint "$E/pav.md"
+sed 's/^Risk surfaces: permissions, shared-logic/Risk surfaces: permissions, shared-logic, data/; s/\[floor: permissions\]/[floor: shared-logic]/' "$E/base.md" > "$E/pav2.md"
+expect 1 "solo per le superfici critiche" "en lint: [floor:] su superficie non critica = VIOLAZIONE" -- bash "$PC" lint "$E/pav2.md"
+sed 's/^- \[floor: permissions\].*/&\n- [pavimento: permessi] `test_perm.py::test_other` rosso se: x/' "$E/base.md" > "$E/pav3.md"
+expect 1 "piu' di una riga \[pavimento: permessi\]" "en lint: [floor: permissions] e [pavimento: permessi] = due pavimenti = VIOLAZIONE" -- bash "$PC" lint "$E/pav3.md"
+sed 's/^Risk surfaces: permissions, shared-logic/Risk surfaces: none, permissions/' "$E/base.md" > "$E/none.md"
+expect 1 "'nessuna' insieme" "en lint: 'none' con altre superfici = VIOLAZIONE" -- bash "$PC" lint "$E/none.md"
+sed 's/^Risk surfaces: permissions, shared-logic/Risk surfaces: `permissions`, `shared-logic`/' "$E/base.md" > "$E/bt.md"
+expect 0 "lint: OK" "en lint: token fra backtick = accettati" -- bash "$PC" lint "$E/bt.md"
+# ⚠️ Surface <token> and the "static sufficient:" waiver
+sed 's/\[floor: permissions\] //' "$E/base.md" > "$E/nopav.md"
+expect 0 "AVVISO: superficie critica 'permessi'" "en lint: critica senza [floor:] ne' ⚠️ = AVVISO" -- bash "$PC" lint "$E/nopav.md"
+expect 0 "^Obbligo: permessi — né pavimento né ⚠️$" "en contract: critica scoperta = obbligo" -- bash "$PC" contract "$E/nopav.md"
+sed 's/^- case 1:.*/&\n- ⚠️ Surface permissions not covered by the gates at level std/' "$E/nopav.md" > "$E/warnln.md"
+refute "superficie critica 'permessi'" "en lint: la riga ⚠️ Surface permissions soddisfa la critica" -- bash "$PC" lint "$E/warnln.md"
+expect 0 "^Obbligo: permessi — ⚠️ senza deroga \(riga 22\)$" "en contract: ⚠️ Surface senza deroga = obbligo" -- bash "$PC" contract "$E/warnln.md"
+expect 0 "^Rischio: riga 22 — ⚠️ Surface permissions not covered" "en contract: la riga ⚠️ Surface e' un focus di rischio" -- bash "$PC" contract "$E/warnln.md"
+sed 's/^- case 1:.*/&\n- ⚠️ Surface api-contract not covered by the gates at level std/' "$E/nopav.md" > "$E/warnother.md"
+expect 0 "AVVISO: superficie critica 'permessi'" "en lint: ⚠️ Surface su un'altra superficie non copre la critica" -- bash "$PC" lint "$E/warnother.md"
+sed 's/^- ⚠️ Surface permissions .*/& — static sufficient: rename of a constant/' "$E/warnln.md" > "$E/waiver.md"
+expect 0 "^Statica sufficiente: permessi — rename of a constant \(riga 22\)$" "en contract: deroga static sufficient con motivo" -- bash "$PC" contract "$E/waiver.md"
+refute "deroga" "en lint: deroga con motivo sulla stessa riga = nessun avviso" -- bash "$PC" lint "$E/waiver.md"
+sed 's/^- ⚠️ Surface permissions .*/& — static sufficient:/' "$E/warnln.md" > "$E/wvoid.md"
+expect 0 "AVVISO: riga 22: deroga 'statica sufficiente:' senza motivo" "en lint: static sufficient senza motivo = AVVISO" -- bash "$PC" lint "$E/wvoid.md"
+sed 's/^- ⚠️ Surface permissions .*/& —\n  static sufficient: rename/' "$E/warnln.md" > "$E/wsplit.md"
+expect 0 "AVVISO: riga 22: la deroga continua a capo" "en lint: deroga spezzata a capo = AVVISO" -- bash "$PC" lint "$E/wsplit.md"
+grep -v 'test_perm.py::test_forbidden' "$E/warnln.md" | sed 's/^Test level: std$/Test level: min/' > "$E/minwarn.md"
+refute "righe al livello min" "en lint: a min, 1 caso + riga ⚠️ Surface = entro il tetto" -- bash "$PC" lint "$E/minwarn.md"
+# basis: the English changelog stays out of the plan fingerprint, like the Italian one
+expect 0 "^Status: LEGACY$" "en basis: nessuna Approved basis = LEGACY" -- bash "$PC" basis "$E/base.md"
+cure=$(bash "$PC" basis "$E/base.md" | sed -n 's/^Basis: //p')
+sed "s/^Risk surfaces: .*/&\nApproved basis: $cure/" "$E/base.md" > "$E/ab.md"
+expect 0 "^Status: FRESH$" "en basis: approvata = FRESH" -- bash "$PC" basis "$E/ab.md"
+sed 's/^- Round 1: fixed.*/&\nCycle metric: rounds=1/' "$E/ab.md" > "$E/ab-clog.md"
+expect 0 "^Status: FRESH$" "en basis: solo ### Plan review changelog cambiato = FRESH (fuori dall'impronta)" -- bash "$PC" basis "$E/ab-clog.md"
+sed 's/^Review status: APPROVED/Review status: NEEDS_CHANGES/' "$E/ab.md" > "$E/ab-rev.md"
+expect 0 "^Status: FRESH$" "en basis: solo ## Implementation review cambiata = FRESH" -- bash "$PC" basis "$E/ab-rev.md"
+sed 's/in the router\./in the router and in the job./' "$E/ab.md" > "$E/ab-plan.md"
+expect 0 "^Status: STALE \(plan\)$" "en basis: controprova, corpo del piano cambiato = STALE (plan)" -- bash "$PC" basis "$E/ab-plan.md"
+# the English changelog heading is excluded like the Italian one: same fingerprint whatever its language
+sed 's/^### Changelog revisione piano$/### Plan review changelog/' "$T/base.md" > "$E/it-clog-en.md"
+bit=$(bash "$PC" basis "$T/base.md" | sed -n 's/^Basis: //p'); ben=$(bash "$PC" basis "$E/it-clog-en.md" | sed -n 's/^Basis: //p')
+[ -n "$bit" ] && [ "$bit" = "$ben" ] && pass=$((pass+1)) || { echo "FAIL [en basis: changelog italiano o inglese = stessa impronta ($bit / $ben)]"; fail=$((fail+1)); }
+# mixed spec, accepted section by section: Italian H2 and status lines, English H3, floor and changelog →
+# the contract is the one of the Italian reference spec, line by line
+sed 's/^### Piano di test$/### Test plan/; s/\[pavimento: permessi\]/[floor: permissions]/; s/^### Changelog revisione piano$/### Plan review changelog/' "$T/base.md" > "$E/mix.md"
+expect 0 "lint: OK" "mista lint: titoli italiani e inglesi insieme = pulita" -- bash "$PC" lint "$E/mix.md"
+d=$(diff <(bash "$PC" contract "$T/base.md") <(bash "$PC" contract "$E/mix.md"))
+[ -z "$d" ] && pass=$((pass+1)) || { echo "FAIL [mista contract: uguale a quello della spec italiana]"; printf '%s\n' "$d" | sed 's/^/    /'; fail=$((fail+1)); }
+sed 's/^## Piano di implementazione$/## Implementation plan/; s/^Superfici a rischio: permessi, logica-condivisa$/Risk surfaces: permissions, logica-condivisa/' "$T/base.md" > "$E/mix2.md"
+expect 0 "lint: OK" "mista lint: H2 inglese, H3 italiani, token misti = pulita" -- bash "$PC" lint "$E/mix2.md"
+expect 0 "^Pavimento: permessi \(riga 22\)$" "mista contract: [pavimento: permessi] sotto ## Implementation plan" -- bash "$PC" contract "$E/mix2.md"
+# the same section in both languages = VIOLAZIONE (H2 zone and H3)
+sed 's/^- caso 1:.*/&\n### Test plan\n- case 2/' "$T/base.md" > "$E/dup-h3.md"
+expect 1 "VIOLAZIONE: '### Piano di test' e '### Test plan' insieme nel piano" "doppione: ### Piano di test e ### Test plan = VIOLAZIONE" -- bash "$PC" lint "$E/dup-h3.md"
+sed 's/^- Giro 1: corretto.*/&\n### Plan review changelog\n- Round 2./' "$T/base.md" > "$E/dup-clog.md"
+expect 1 "VIOLAZIONE: '### Changelog revisione piano' e '### Plan review changelog' insieme" "doppione: changelog nelle due lingue = VIOLAZIONE" -- bash "$PC" lint "$E/dup-clog.md"
+sed 's/^Review status: APPROVED/&\n## Implementation review\nReview status: APPROVED/' "$T/base.md" > "$E/dup-rev.md"
+expect 1 "VIOLAZIONE: '## Review implementazione' e '## Implementation review' insieme" "doppione: ## Review implementazione e ## Implementation review = VIOLAZIONE" -- bash "$PC" lint "$E/dup-rev.md"
+sed 's/^Plan status: DRAFT/## Implementation plan\n&/' "$T/base.md" > "$E/dup-h2.md"
+expect 1 "VIOLAZIONE: '## Piano di implementazione' e '## Implementation plan' insieme" "doppione: ## Piano di implementazione e ## Implementation plan = VIOLAZIONE" -- bash "$PC" lint "$E/dup-h2.md"
+sed 's/^# Titolo$/&\nFiglie: spec-a, spec-b\nChildren: spec-a, spec-b/' "$T/base.md" > "$E/dup-figlie.md"
+expect 1 "VIOLAZIONE: 'Figlie:' e 'Children:' insieme sopra il piano" "doppione: Figlie: e Children: = VIOLAZIONE" -- bash "$PC" lint "$E/dup-figlie.md"
+refute "due lingue" "doppione: controprova, la spec di riferimento italiana non ha doppioni" -- bash "$PC" lint "$T/base.md"
+
+# format 2 in English: the same outcomes as spec2, and the SAME generated mutations.json (Italian tokens)
+spec2_en() {
+cat <<'EOF'
+# Title
+## Functional requirements
+1. FR1 — a salesperson does not change the goal.
+2. FR2 — the bar appears.
+3. FR3 — the text of the bar.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: permissions, api-contract
+### Decisions
+The 403 applies to whoever cannot edit.
+| input | output |
+|---|---|
+| salesperson | 403 |
+### Touched files
+- `modules/api/app/routers/goals.py`
+- `modules/api/tests/test_goals.py`
+- `modules/app/apps/admin/components/Bar.vue`
+- `modules/app/apps/admin/tests/bar.test.ts`
+### Steps
+#### Block B1 — backend
+writes: `modules/api/app/routers/goals.py`, `modules/api/tests/test_goals.py`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | `modules/api/app/routers/goals.py` | `update_goal()`: 403 to whoever cannot | T1 |
+| P2 | `modules/api/tests/test_goals.py` | new case | T1 |
+
+#### Block B2 — frontend
+writes: `modules/app/apps/admin/components/Bar.vue`, `modules/app/apps/admin/tests/bar.test.ts`
+after: B1
+
+| id | file | change | test |
+|---|---|---|---|
+| P3 | `modules/app/apps/admin/components/Bar.vue` | the bar | T2 |
+### Requirement traceability
+| Req | Plan steps | Verification |
+|---|---|---|
+| FR1 | P1, P2 | T1 |
+| FR2 | P3 | T2 |
+| FR3 | P3 | not verifiable by a test: text only |
+### Strings and data-test
+| action | type | value |
+|---|---|---|
+| adds | data-test | `goals-company-bar` |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1 | `modules/api/tests/test_goals.py::test_update_denied` (new) | red if: the salesperson updates | `modules/api/app/routers/goals.py` · `update_goal` · `if not can_edit:` → `if False:` · red if: `assert 200 == 403` |
+| T2 | FR2 | `modules/app/apps/admin/tests/bar.test.ts::bar` (new) | red if: the bar is missing, `expected false to be true` | — |
+- [floor: permissions] T1
+### Plan review changelog
+- Round 1: first plan.
+EOF
+}
+spec2_en > "$E/f2.md"
+expect 0 "^lint2: OK$" "en lint2: piano formato 2 inglese pulito (spec FR/AC: tracciabilita OK)" -- bash "$PC" lint2 "$E/f2.md"
+expect 0 "AVVISO: .*goals-company-bar aggiunto dal piano ma gia presente" "en lint2: adds | data-test gia presente = AVVISO" -- bash "$PC" lint2 "$E/f2.md"
+expect 0 "lint: OK" "en lint: il formato 2 inglese passa il lint" -- bash "$PC" lint "$E/f2.md"
+refute "righe al livello" "en lint: intestazione della tabella inglese fuori dal tetto" -- bash "$PC" lint "$E/f2.md"
+sed 's/^| T2 | FR2 |/| T2 | FR1 |/' "$E/f2.md" > "$E/f2-noreq.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: requisito FR2 senza test" "en lint2: requisito senza test = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-noreq.md"
+refute "requisito FR3" "en lint2: 'not verifiable' esenta il requisito" -- bash "$PC" lint2 "$E/f2-noreq.md"
+grep -v '^- `modules/app/apps/admin/components/Bar.vue`$' "$E/f2.md" > "$E/f2-nofile.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: passo P3: modules/app/apps/admin/components/Bar.vue non e nella lista ### File toccati" "en lint2: file di un passo fuori da ### Touched files = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-nofile.md"
+sed 's/^| P3 | \(.*\) | T2 |$/| P3 | \1 | — |/' "$E/f2.md" > "$E/f2-nostep.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: test T2 non compare in nessun passo" "en lint2: test fuori da un passo = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-nostep.md"
+# invariance in English, singular and plural forms
+inv=0
+for w in "stays green:" "**Remain green** with:" "keep passing:" "remains green:" "stay green:" "keeps passing:"; do
+  inv=$((inv + 1))
+  sed "s/^| T2 | FR2 | \(\`[^\`]*\`\) (new) | red if: /| T2 | FR2 | \1 | $w /" "$E/f2.md" > "$E/f2-inv$inv.md"
+  expect 1 "VIOLAZIONE: riga [0-9]+: test T2: asserzione \"resta verde\"" "en lint2: '$w' nel Test plan = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-inv$inv.md"
+done
+sed 's/^| T2 | FR2 | \(`[^`]*`\) (new) | red if: /| T2 | FR2 | \1 (new) | red if: the old case stays green but /' "$E/f2.md" > "$E/f2-inv-mid.md"
+expect 0 "^lint2: OK$" "en lint2: 'stays green' a meta asserzione = pulito" -- bash "$PC" lint2 "$E/f2-inv-mid.md"
+awk '!(/^writes:/ && ++n == 2)' "$E/f2.md" > "$E/f2-nowrites.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: blocco B2 senza scrive:" "en lint2: blocco senza writes: = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-nowrites.md"
+sed 's/^#### Block B1 — backend$/Block B1 — backend/' "$E/f2.md" > "$E/f2-noblock.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: passo P1 fuori da un blocco" "en lint2: passo fuori da un #### Block = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-noblock.md"
+sed 's/^| adds | data-test | `goals-company-bar` |$/&\n| removes | data-test | `goals-old-section` |/' "$E/f2.md" > "$E/f2-rm.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: data-test goals-old-section tolto dal piano ma ancora asserito da modules/app/apps/admin/tests/old.test.ts:1" "en lint2: removes | data-test ancora asserito = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-rm.md"
+sed 's/^| adds | data-test | `goals-company-bar` |$/&\n| removes | string | `Scaduto` |/' "$E/f2.md" > "$E/f2-pos.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: stringa Scaduto tolto dal piano ma ancora asserito da modules/app/apps/admin/tests/pos.test.ts:1" "en lint2: removes | string asserita = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-pos.md"
+sed 's/^| action | type | value |$/| action | type | value | verified |/; s/^| removes | string | `Scaduto` |$/| removes | string | `Scaduto` | `modules\/app\/apps\/admin\/tests\/pos.test.ts` — rewritten by flow X |/' "$E/f2-pos.md" > "$E/f2-ver.md"
+expect 0 "^lint2: OK$" "en lint2: colonna verified sul file = pulito" -- bash "$PC" lint2 "$E/f2-ver.md"
+expect 0 "AVVISO: .*stringa Scaduto tolto dal piano, asserito da modules/app/apps/admin/tests/pos.test.ts:1: deroga verificato \(rewritten by flow X\)" "en lint2: la deroga verified resta un AVVISO col motivo" -- bash "$PC" lint2 "$E/f2-ver.md"
+sed 's/ · red if: `assert 200 == 403` |$/ |/' "$E/f2.md" > "$E/f2-badmut.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: test T1: mutazione illeggibile" "en lint2: mutazione senza red if = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-badmut.md"
+sed 's/^| T2 | FR2 | \(.*\) | — |$/| T2 | FR2 | \1 | `modules\/api\/app\/routers\/goals.py` · `update_goal` · `raise Forbidden()` → (empty) · red if: `expected` |/' "$E/f2.md" > "$E/f2-cross.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: test T2: file e test in moduli diversi" "en lint2: mutazione con (empty) e red if letta (moduli diversi = VIOLAZIONE)" -- bash "$PC" lint2 "$E/f2-cross.md"
+sed 's/^- \[floor: permissions\] T1$/&\n- ⚠️ Open risk: the bar blinks/' "$E/f2.md" > "$E/f2-risk.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: rischio aperto senza un test assegnato" "en lint2: ⚠️ Open risk senza test = VIOLAZIONE" -- bash "$PC" lint2 "$E/f2-risk.md"
+sed 's/^- ⚠️ Open risk: the bar blinks$/& — T2/' "$E/f2-risk.md" > "$E/f2-risk-ok.md"
+expect 0 "^lint2: OK$" "en lint2: ⚠️ Open risk con il suo test = pulito" -- bash "$PC" lint2 "$E/f2-risk-ok.md"
+expect 0 "^Rischio: riga [0-9]+ — ⚠️ Open risk: the bar blinks — T2$" "en contract: ⚠️ Open risk e' un focus di rischio" -- bash "$PC" contract "$E/f2-risk-ok.md"
+sed 's/^### Decisions$/### Decisioni\nx\n### Decisions/' "$E/f2.md" > "$E/f2-dup.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: sezione ### Decisioni ripetuta" "en lint2: ### Decisioni e ### Decisions = sezione ripetuta" -- bash "$PC" lint2 "$E/f2-dup.md"
+expect 1 "VIOLAZIONE: '### Decisioni' e '### Decisions' insieme nel piano" "en lint: ### Decisioni e ### Decisions = VIOLAZIONE" -- bash "$PC" lint "$E/f2-dup.md"
+# gen: the same procedure and the same mutations.json as the Italian plan (canonical tokens, superficie permessi)
+expect 0 "^mutazioni: 1$" "en gen: una mutazione dalla tabella inglese" -- bash "$PC" gen "$E/f2.md"
+expect 0 '"superficie": "permessi"' "en gen: [floor: permissions] = superficie permessi (token canonico) in mutations.json" -- cat "$E/f2.run/counterproof/mutations.json"
+bash "$PC" gen "$T/f2.md" --run-dir "$E/it-f2.run" >/dev/null 2>&1
+cmp -s "$E/it-f2.run/counterproof/mutations.json" "$E/f2.run/counterproof/mutations.json" && pass=$((pass+1)) ||
+  { echo "FAIL [en gen: mutations.json identico a quello del piano italiano]"; diff "$E/it-f2.run/counterproof/mutations.json" "$E/f2.run/counterproof/mutations.json" | sed 's/^/    /'; fail=$((fail+1)); }
+keyl() { grep -E '^(Plan format|Test level|vitest|pytest|altri|mutazioni|blocco [^:]*):' "$1"; }
+d=$(diff <(keyl "$E/it-f2.run/gen/procedura.txt") <(keyl "$E/f2.run/gen/procedura.txt"))
+[ -z "$d" ] && [ -n "$(keyl "$E/f2.run/gen/procedura.txt")" ] && pass=$((pass+1)) || { echo "FAIL [en gen: procedura.txt uguale a quella italiana (livello, liste, blocchi con dopo=nessuno)]"; printf '%s\n' "$d" | sed 's/^/    /'; fail=$((fail+1)); }
+# mixed format 2 plan: Italian traceability and decisions, English steps, blocks and test table
+sed 's/^### Passi$/### Steps/; s/^#### Blocco /#### Block /; s/^scrive:/writes:/; s/^dopo: nessuno$/after: none/; s/^dopo:/after:/; s/^| id | file | modifica | test |$/| id | file | change | test |/; s/^### Piano di test$/### Test plan/; s/^| ID | requisito | file | asserzione | mutazione |$/| ID | requirement | file | assertion | mutation |/' "$T/f2.md" > "$E/f2-mix.md"
+expect 0 "^lint2: OK$" "mista lint2: formato 2 con sezioni italiane e inglesi = pulito" -- bash "$PC" lint2 "$E/f2-mix.md"
+bash "$PC" gen "$E/f2-mix.md" >/dev/null 2>&1
+cmp -s "$E/it-f2.run/counterproof/mutations.json" "$E/f2-mix.run/counterproof/mutations.json" && pass=$((pass+1)) ||
+  { echo "FAIL [mista gen: mutations.json identico a quello del piano italiano]"; fail=$((fail+1)); }
+# route: Risk surfaces in English and the Italian maat.json rules on the same paths = no disagreement
+expect 0 "^Superfici rilevate: permessi, contratto-api$" "en route: superfici rilevate dai percorsi" -- bash "$PC" route "$E/f2.md"
+expect 0 "^Superfici dichiarate: permessi, contratto-api$" "en route: Risk surfaces: permissions, api-contract = dichiarate permessi, contratto-api" -- bash "$PC" route "$E/f2.md"
+refute "^Discordanza" "en route: Risk surfaces inglese + regola maat.json italiana sullo stesso percorso = nessuna discordanza" -- bash "$PC" route "$E/f2.md"
+sed 's/^Risk surfaces: permissions, api-contract$/Risk surfaces: none/' "$E/f2.md" > "$E/f2-decl.md"
+expect 0 "^Discordanza: rilevata e non dichiarata: permessi, contratto-api$" "en route: none con superfici rilevate = discordanza" -- bash "$PC" route "$E/f2-decl.md"
+printf '%s\n' "# T" "## Implementation plan" "Plan status: DRAFT" "Test level: min" "Risk surfaces: none" \
+  "1. In \`modules/app/apps/admin/components/Bar.vue\` change the text." > "$E/light.md"
+expect 0 "^Percorso: leggero" "en route: Risk surfaces: none, piano piccolo = Percorso: leggero" -- bash "$PC" route "$E/light.md"
+# maat.json with English superficie values: mapped to the canonical token → an Italian declaration agrees
+"$FIC_PY" -c 'import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+m = {"permessi": "permissions", "dati": "data", "contratto-api": "api-contract", "logica-condivisa": "shared-logic"}
+for x in c["piano"]["superfici_critiche"]:
+    x["superficie"] = m.get(x["superficie"], x["superficie"])
+json.dump(c, open(sys.argv[2], "w", encoding="utf-8"), indent=1)' "$R/.claude/maat.json" "$E/maat-en.json"
+expect 0 "^Superfici rilevate: permessi, contratto-api$" "en maat.json: superficie inglese mappata al token canonico" -- env MAAT_CONFIG="$E/maat-en.json" bash "$PC" route "$T/f2.md"
+refute "^Discordanza" "en maat.json: superficie inglese + dichiarazione italiana = nessuna discordanza" -- env MAAT_CONFIG="$E/maat-en.json" bash "$PC" route "$T/f2.md"
+grep -q '"permissions"' "$E/maat-en.json" && pass=$((pass+1)) || { echo "FAIL [en maat.json: la configurazione di prova non ha valori inglesi]"; fail=$((fail+1)); }
+# skeleton and the "Split: rejected" decision
+expect 0 "^Scheletro: SOTTO IL TETTO" "en skeleton: sotto il tetto" -- bash "$PC" skeleton "$E/f2.md"
+expect 0 "^Passi: 3 \(tetto 15\)$" "en skeleton: conta i passi di ### Steps" -- bash "$PC" skeleton "$E/f2.md"
+expect 0 "^File: 4 \(tetto 40\)$" "en skeleton: conta i file (Touched files + passi)" -- bash "$PC" skeleton "$E/f2.md"
+expect 0 "^Superfici: permessi, contratto-api$" "en skeleton: superfici canoniche" -- bash "$PC" skeleton "$E/f2.md"
+awk '{ print } /^\| P3 \|/ { for (i = 4; i <= 16; i++) printf "| P%d | `modules/app/apps/admin/components/Bar.vue` | x | T2 |\n", i }' "$E/f2.md" > "$E/sk-passi.md"
+expect 1 "^Scheletro: SOPRA IL TETTO — passi 16 > 15: proposta di taglio" "en skeleton: 16 passi = sopra il tetto" -- bash "$PC" skeleton "$E/sk-passi.md"
+sed 's/^# Title$/&\nSplit: rejected — 2026-10-30, single plan/' "$E/sk-passi.md" > "$E/sk-rejected.md"
+expect 0 "^Scheletro: SOPRA IL TETTO — passi 16 > 15: taglio rifiutato dall utente" "en skeleton: Split: rejected = nessuno stop (uscita 0)" -- bash "$PC" skeleton "$E/sk-rejected.md"
+# chains: Children:, Depends on:, Interface for:, FR/AC ids
+CE="$E/catena"; mkdir -p "$CE"
+printf '%s\n' "# Mother" "Children: spec-n-1-a, spec-n-2-b" "## Context" "Big." "## 2. Functional requirements" "### FR1 — one" "### FR2 — two" \
+  "- **FR2.1** detail" "## Acceptance criteria" "- AC1 — visible" "- AC2 — saved" "## Out of scope" "- FR9 is not a requirement here" > "$CE/spec-n.md"
+kid_en() { # $1 file, $2 Depends on, $3 Interface for, then the ids (any family)
+  local f=$1 dep=$2 itf=$3 i; shift 3
+  { printf '%s\n' "# Child" "Depends on: $dep" "Interface for: $itf" "## Functional requirements"
+    for i in "$@"; do case $i in RF*|FR*) printf '1. %s — text\n' "$i" ;; esac; done
+    printf '%s\n' "## Acceptance criteria"
+    for i in "$@"; do case $i in CA*|AC*) printf -- '- %s — text\n' "$i" ;; esac; done; } > "$f"
+}
+kid_en "$CE/spec-n-1-a.md" none '`src/x.py` — api' FR1 FR2 FR2.1 AC1
+kid_en "$CE/spec-n-2-b.md" spec-n-1-a none AC2
+expect 0 "^split: OK — 5 ID della madre in 2 figlie" "en split: madre FR/AC, figlie dalla riga Children:" -- bash "$PC" split "$CE/spec-n.md" "$CE/spec-n-1-a.md" "$CE/spec-n-2-b.md"
+expect 0 "^split: OK — 5 ID della madre in 2 figlie" "en split: le figlie dalla riga Children: della madre" -- bash "$PC" split "$CE/spec-n.md"
+kid_en "$CE/spec-n-2-b.md" spec-n-1-a none
+expect 1 "VIOLAZIONE: AC2 della madre non sta in nessuna figlia \(perso\)" "en split: un AC perso = STOP" -- bash "$PC" split "$CE/spec-n.md"
+kid_en "$CE/spec-n-2-b.md" spec-n-1-a none AC2; sed -i '/^Depends on:/d' "$CE/spec-n-2-b.md"
+expect 1 "VIOLAZIONE: spec-n-2-b: manca la riga 'Dipende da:'" "en split: figlia senza Depends on: = STOP" -- bash "$PC" split "$CE/spec-n.md"
+kid_en "$CE/spec-n-2-b.md" spec-n-1-a none AC2
+# Italian mother (RF/CA) and children written in English that reuse the mother's ids: OK; FR in their place: STOP
+CI="$E/catena-it"; mkdir -p "$CI"; cp "$C/spec-m.md" "$CI/spec-m.md"
+kid_en "$CI/spec-m-1-a.md" nessuno '`src/x.py` — api' RF1 RF2 RF2.1 CA1
+kid_en "$CI/spec-m-2-b.md" spec-m-1-a none RF3 CA2
+expect 0 "^split: OK — 6 ID della madre in 2 figlie" "split: madre italiana (RF) + figlie inglesi che riusano RF = OK" -- bash "$PC" split "$CI/spec-m.md"
+kid_en "$CI/spec-m-2-b.md" spec-m-1-a none FR3 CA2
+expect 1 "VIOLAZIONE: spec-m-2-b: FR3 non e' un ID della madre" "split: FR3 al posto di RF3 = id distinto, nessun alias (STOP)" -- bash "$PC" split "$CI/spec-m.md"
+kid_en "$CI/spec-m-2-b.md" spec-m-1-a none RF3 CA2
+sed 's/^Children: .*/&\nFiglie: spec-n-1-a, spec-n-2-b/' "$CE/spec-n.md" > "$CE/spec-n2.md"
+expect 1 "VIOLAZIONE: la madre ha sia 'Figlie:' sia 'Children:'" "en split: Figlie: e Children: nella madre = VIOLAZIONE" -- bash "$PC" split "$CE/spec-n2.md" "$CE/spec-n-1-a.md" "$CE/spec-n-2-b.md"
+rm -f "$CE/spec-n2.md"
+# basis of a child found through the mother's Children: line
+{ cat "$CE/spec-n-1-a.md"; printf '%s\n' "## Implementation plan" "Plan status: APPROVED" "1. Change \`src/x.py\`."; } > "$CE/x" && mv "$CE/x" "$CE/spec-n-1-a.md"
+{ cat "$CE/spec-n-2-b.md"; printf '%s\n' "## Implementation plan" "Plan status: APPROVED" "Risk surfaces: none" "1. Use \`src/x.py\`."; } > "$CE/x" && mv "$CE/x" "$CE/spec-n-2-b.md"
+expect 0 "^Catena: anello 2/2 di spec-n · precedente spec-n-1-a \(aperto\)$" "en basis: la figlia trovata dalla riga Children: della madre" -- bash "$PC" basis "$CE/spec-n-2-b.md"
+expect 0 "^Basis: spec [0-9a-f]{12} · plan [0-9a-f]{12} · madre [0-9a-f]{12} · prec [0-9a-f]{12}$" "en basis: madre e prec anche con Children:" -- bash "$PC" basis "$CE/spec-n-2-b.md"
+# closed: the review read under "## Implementation review"
+printf '%s\n' "## Implementation review" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$CE/spec-n-1-a.md"
+expect 1 "^Anello: APERTO — nessuna riga Finalize: IMPLEMENTED$" "en closed: Review status letta sotto ## Implementation review" -- bash "$PC" closed "$CE/spec-n-1-a.md"
+# counterproofs by mutation: without the English alternative of a reader, the English fixture goes red
+if mutpc noen-zone 's/\^## (Piano di implementazione|Implementation plan)\//^## Piano di implementazione\//'; then
+  expect 1 "nessuna sezione" "controprova: senza 'Implementation plan' in annotate la spec inglese non ha piano" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-noen-zone/plan-check.sh" contract "$E/base.md"
+else echo "FAIL [controprova annotate: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc noen-tz 's/(Piano di test|Test plan)\/ { in_t = 1/Piano di test\/ { in_t = 1/'; then
+  expect 0 "^Obbligo: permessi" "controprova: senza 'Test plan' in test_zone il [floor:] inglese non conta (obbligo)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-noen-tz/plan-check.sh" contract "$E/base.md"
+else echo "FAIL [controprova test_zone: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc noen-sec 's/ "test plan": "Piano di test",//'; then
+  expect 1 "manca la sezione ### Piano di test" "controprova: senza 'test plan' in SEC il piano formato 2 inglese perde la sezione" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-noen-sec/plan-check.sh" lint2 "$E/f2.md"
+else echo "FAIL [controprova SEC: la mutazione non si applica]"; fail=$((fail+1)); fi
+
+# ── oracle (safety constraint 2 of the 1.3.0 plan): on every Italian fixture of this file, plan-check.sh of
+# 1.2.1 (a2c5b99) and the current one give the SAME output, byte for byte: basis (plan fingerprint), contract and
+# lint everywhere, lint2 and route on the format 2 fixtures. Opt-in (MAAT_ORACOLO_121=1: it doubles the run time and
+# is tied to that commit); a copy without git or without a2c5b99: motivated SKIP.
+OR="$T/pc-121/plan-check.sh"; mkdir -p "$T/pc-121/lib"; cp "$HERE/lib/maat-paths.sh" "$T/pc-121/lib/"
+if [ "${MAAT_ORACOLO_121:-0}" != 1 ]; then
+  echo "SKIP [oracolo 1.2.1 sulle fixture italiane — attivalo con MAAT_ORACOLO_121=1]"
+elif git -c safe.directory='*' -C "$HERE" cat-file -e a2c5b99:plugins/maat/scripts/plan-check.sh 2>/dev/null; then
+  git -c safe.directory='*' -C "$HERE" show a2c5b99:plugins/maat/scripts/plan-check.sh > "$OR"
+  ord=""; nor=0
+  while IFS= read -r f; do
+    nor=$((nor + 1))
+    for sc in basis contract lint; do
+      a=$(env MAAT_ROOT="$PLUGIN_DIR" bash "$OR" "$sc" "$f" 2>&1; echo "rc=$?"); b=$(bash "$PC" "$sc" "$f" 2>&1; echo "rc=$?")
+      [ "$a" = "$b" ] || ord="$ord $(basename "$f"):$sc"
+    done
+    case $(basename "$f") in f2*.md)
+      for sc in lint2 route; do
+        a=$(env MAAT_ROOT="$PLUGIN_DIR" bash "$OR" "$sc" "$f" 2>&1; echo "rc=$?"); b=$(bash "$PC" "$sc" "$f" 2>&1; echo "rc=$?")
+        [ "$a" = "$b" ] || ord="$ord $(basename "$f"):$sc"
+      done ;;
+    esac
+  done < <(find "$T" "$C" -maxdepth 1 -type f -name '*.md' | LC_ALL=C sort)   # set -f: no glob here
+  [ -z "$ord" ] && [ "$nor" -gt 100 ] && pass=$((pass+1)) || { echo "FAIL [oracolo 1.2.1: output diverso sulle fixture italiane ($nor file):$ord]"; fail=$((fail+1)); }
+else
+  echo "SKIP [oracolo 1.2.1 sulle fixture italiane — nessun a2c5b99:plugins/maat/scripts/plan-check.sh in $HERE]"
+fi
 unset PLAN_CHECK_ROOT FIC_PY
 
 # ── usage ────────────────────────────────────────────────────────────────────────────────────────

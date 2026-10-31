@@ -42,7 +42,7 @@ never touched, so there is nothing to copy, restore or pair by hand:
    a **weak** proof — the review counts it as such and says so; `rosso_import`, `rosso_raccolta`, `rosso_diverso`
    and `verde` are `FAIL`; `bloccato` is `BLOCKED`; `non_eseguita` (the module declares no `controprova` in
    `maat.json`) is `NOT RUN (dichiarato)`, never green nor red. **L2** (harness-pt11):
-   an entry `gen` marked `"assorbita": true` — a **new** file whose test was red on the `rosso se` assertion on
+   an entry `gen` marked `"assorbita": true` — a **new** file whose test was red on the `red if` (`rosso se`) assertion on
    the base with stubs (`test-red`) and is green now — is not run (`esito: "assorbita"`): that pair is its
    counterproof. `finalize.sh` accepts it only if `plan-check.sh l2` confirms it on the current code (`tests`
    fingerprint unchanged, the stubs are exactly the new exported symbols, each of them used by an acceptance

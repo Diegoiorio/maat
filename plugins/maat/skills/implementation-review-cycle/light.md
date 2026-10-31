@@ -44,8 +44,8 @@ Applying this review's findings introduces regressions like any other change:
 in the reference session, fixing one finding broke 5 tests (a module mock that did not
 cover a new export). It is the counterproof of the principle above, in the other direction.
 
-In `--light` the `## Review implementazione` section is not written unless blocking findings
-emerge: the quick round lives in the conversation, and **never** leads to `IMPLEMENTED`. If it
+In `--light` the review section (`## Implementation review`, or the existing `## Review implementazione`) is not
+written unless blocking findings emerge: the quick round lives in the conversation, and **never** leads to `IMPLEMENTED`. If it
 writes it, it does **not** write the `Reviewed snapshot:` line: the quick round looked only at the narrow
 classes, so it is not a basis on which a later review may limit itself to the delta — the full
 round that follows is full-scope. The iteration

@@ -34,7 +34,8 @@ It builds on the plugin's `scripts/phase-usage.py`, which stays as it is. Per cy
   build+controprove+polling minus the reruns · (c) model · rest = file+git/harness+bash+altro.
 - `total_cost_usd` (maximum per phase: it is cumulative), tokens from `modelUsage` (maximum per session and model:
   cumulative, includes the sub-agents), 5h quota before/after (`rate_limit_event`), STOPs by cause (lines
-  `ESITO FASE <fase>: STOP — <causa>` from `.esito`, otherwise from the `result` text or from `.jsonl.result`).
+  `PHASE RESULT <phase>: STOP — <cause>`, or the Italian `ESITO FASE …` of old run dirs, from `.esito`, otherwise
+  from the `result` text or from `.jsonl.result`).
 """
 import argparse
 import csv
@@ -88,7 +89,7 @@ OFF_TURN = ("off_turn", None)  # work (already in the buckets) done while the or
 # id in the tool_result: command launched in background · command moved to background by the timeout · async sub-agent
 BG_ID = re.compile(r"(?:with ID:|\(ID:|agentId:)\s*(\w+)")
 OUT_FILE = re.compile(r"(?:>>?|\btee(?:\s+-a)?)\s*[\"']?[^\s\"'|;&<>]*?([\w.-]+\.(?:txt|log|out|output|json))\b")
-ESITO = re.compile(r"ESITO FASE ([\w-]+):\s*(OK|STOP)\s*(?:[—–-]+\s*)?(.*)")
+ESITO = re.compile(r"(?:PHASE RESULT|ESITO FASE) ([\w-]+):\s*(OK|STOP)\s*(?:[—–-]+\s*)?(.*)")   # both languages (1.3.0)
 CSV_COLS = ["data", "spec", "fasi", "A_min", "B_min", "bucket_a_min", "bucket_b_min", "bucket_c_min",
             "bucket_resto_min", "costo_usd", "token_cache_letti", "token_cache_scritti", "token_output",
             "riesecuzioni", "stop", "stop_cause", "harness"]

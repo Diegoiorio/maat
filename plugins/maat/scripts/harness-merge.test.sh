@@ -52,9 +52,14 @@ echo 0 > "$AW/spec-a.run/log/01-plan.exit"
 mkdir -p "$AW/spec-b.run" "$AW/spec-c.run"
 printf '# B\n## Review implementazione\nReview status: APPROVED\nFeature status: IMPLEMENTED\n' > "$AW/spec-b.md"
 printf '# C\n## Review implementazione\n```\nReview status: APPROVED\n```\nReview status: NEEDS_CHANGES\nFeature status: PLANNED\n' > "$AW/spec-c.md"
+# 1.3.0: the English review heading, closed (d) and open (e)
+mkdir -p "$AW/spec-d.run" "$AW/spec-e.run"
+printf '# D\n## Implementation review\nReview status: APPROVED\nFeature status: IMPLEMENTED\n' > "$AW/spec-d.md"
+printf '# E\n## Implementation review\nReview status: NEEDS_CHANGES\nFeature status: PLANNED\n' > "$AW/spec-e.md"
 hm "$WT"
 check "  con il suo .exit -> via libera" '[ "$(rc)" = 0 ] && grep -q "git merge --ff-only" "$T/out"'
 check "cicli non chiusi dalle righe di stato, senza rifiuto" 'grep -q "spec-a: nessuna review" "$T/out" && grep -q "spec-c: Review status NEEDS_CHANGES · Feature status PLANNED" "$T/out" && ! grep -q "spec-b:" "$T/out"'
+check "  «## Implementation review» letta come l'italiana (chiuso escluso, aperto elencato)" '! grep -q "spec-d:" "$T/out" && grep -q "spec-e: Review status NEEDS_CHANGES · Feature status PLANNED" "$T/out"'
 check "  verdetto e comando PRIMA dell'elenco" '[ "$(grep -n "git merge --ff-only" "$T/out" | cut -d: -f1)" -lt "$(grep -n "^Cicli non chiusi" "$T/out" | cut -d: -f1)" ]'
 FIC_MERGE_NO_LIST=1 hm "$WT"
 check "FIC_MERGE_NO_LIST=1 -> elenco saltato, verdetto invariato" '[ "$(rc)" = 0 ] && grep -q "elenco saltato" "$T/out" && ! grep -q "spec-a:" "$T/out" && grep -q "git merge --ff-only" "$T/out"'

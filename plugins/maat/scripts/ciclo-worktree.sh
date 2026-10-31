@@ -416,7 +416,7 @@ if [ -d "$PL" ]; then
     stop "lock del piano appena preso ($RUN_REL/plan.lock, owner non ancora scritto): una fase di piano sta partendo"
   fi
 fi
-# running phase: log/<label>.running without .exit (the driver reads it as IN CORSO): alive, or dead without closing
+# running phase: log/<label>.running without .exit (the driver reads it as RUNNING): alive, or dead without closing
 running=""
 for f in "$WT/$RUN_REL"/log/*.running; do
   [ -e "$f" ] && [ ! -e "${f%.running}.exit" ] && running="$running $(basename "${f%.running}")"

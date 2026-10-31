@@ -62,7 +62,7 @@ gate is `PASS` with one of these kinds of evidence, and the evidence table says 
 This skill never runs a counterproof itself (it would modify source files): the implementer runs
 it, and its output reaches this skill through one of the two channels above.
 
-A plan gate with `rosso se: <condition>` (plans since 2026-09-21) states the world in which it goes
+A plan gate with `red if: <condition>` (or `rosso se:`) (plans since 2026-09-21) states the world in which it goes
 red: when the evidence is a counterproof, check that the red observed is **that** red.
 
 **Result vocabulary per gate** (keep them distinct — absence of evidence is not evidence):

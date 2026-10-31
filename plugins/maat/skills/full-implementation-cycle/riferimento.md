@@ -16,12 +16,12 @@ permissions, and at the end the rules that have become code. The phases read onl
     to `<run-dir>/touched.txt` (sort -u), then `<tree now>` into `.post-tree` — `<tree now>` is
     `bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-surface.sh" tree`;
   - around an implement/fix: `tree` into `log/<label>.pre-tree` before, and the same closing after;
-  - after each phase: its `ESITO FASE` line and `state=<State of cycle-state.sh>` into
+  - after each phase: its `PHASE RESULT` line and `state=<State of cycle-state.sh>` into
     `log/<label>.esito`. `cycle-state.sh` reads `.esito` as the phase's record; an implement/fix with no
     `.post-tree` is a STOP, never a review;
   - after each review: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize.sh" --level <level in force> <run-dir>`, its output into
     `log/<label>.finalize`, and if it is missing or exits with anything but 0/1/4, the review's `.esito` is
-    `ESITO FASE review: STOP — finalize non eseguito|fallito` (harness-pt08). Without it, in a run directory
+    `PHASE RESULT review: STOP — finalize non eseguito|fallito` (harness-pt08). Without it, in a run directory
     of the new regime `cycle-state.sh` never gives `DONE`: the `Finalize:` line must carry the fingerprint of
     the current `Reviewed snapshot:`, and only finalize writes it.
   ⚠️ **An environment failure never selects this mode by itself.** `run-phase.sh` exit `3` (no `claude`
@@ -72,15 +72,15 @@ outside the project). It holds:
   tree during the cycle: to work in parallel use another worktree
   (`git worktree add ../<repo>-lavoro -b <branch> develop`)», or the cycle itself in its own worktree (`--worktree`,
   «Worktree mode» below);
-- `log/<label>.esito` — the phase's `ESITO FASE` line (from the final `result` event only) and the
+- `log/<label>.esito` — the phase's `PHASE RESULT` line (`ESITO FASE` up to 1.2.x, still read) (from the final `result` event only) and the
   `State` at its end, written by `run-phase.sh`: how `cycle-state.sh` knows an implement or a fix
   finished;
 - `log/<label>.result.json` — the phase's **structured outcome** (harness-pt08), written by `run-phase.sh`
   only when the JSON block of the final `result` event is valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`
   (see "Worker mode"). Missing or invalid output → no file, and `.esito` says `STOP — uscita non valida:
-  <errors>` with the worker's own `ESITO` line kept under `originale=`. **`.esito` is the authority**: when
+  <errors>` with the worker's own `PHASE RESULT` line kept under `originale=`. **`.esito` is the authority**: when
   the prose and the JSON disagree the more conservative wins — prose `OK` with a JSON that is `STOP`, has
-  `deviazioni` (unless all start with `difensiva: `) or a `bloccato_su` → `.esito` is `STOP — JSON: …` (prose under `originale=`); prose `STOP`
+  `deviazioni` (unless all start with `defensive: ` or `difensiva: `) or a `bloccato_su` → `.esito` is `STOP — JSON: …` (prose under `originale=`); prose `STOP`
   stays `STOP`. `cycle-state.sh` counts a phase as `OK` only if both `.esito` and `result.json` say so;
 - `log/<label>.finalize` — after every review that exited 0, `${CLAUDE_PLUGIN_ROOT}/scripts/finalize.sh` **signs the final
   state**: it confirms `Feature status: IMPLEMENTED` only if every gate the level requires has
@@ -201,10 +201,10 @@ The `test-red` that follows copies them if the approved plan has the same finger
 ## Feature paths
 
 Needed by preflight and counterproofs:
-- if a `## Review implementazione` section exists: its manifest (`Scope:` / `Excluded:`);
+- if an `## Implementation review` (`## Review implementazione`) section exists: its manifest (`Scope:` / `Excluded:`);
 - before that: `<run-dir>/touched.txt` (measured), plus dirty paths (`git status --porcelain`) that
   match a file or a directory prefix named by the plan, plus every path the implementer reported
-  under `File toccati:`.
+  under `Touched files:` (`File toccati:`).
 
 A path in `touched.txt` or reported by the implementer is never excluded by you: exclusions are the
 review's decision, with its rules, and the review never excludes a `touched.txt` path. Every other
@@ -214,7 +214,7 @@ dirty path is **another flow's work**.
 
 A spec too large for one plan becomes a **chain**: the plan phase measures the skeleton, `spec-author`
 (mode `split`) proposes the rings, `plan-check.sh split` checks that every `RF`/`CA` of the mother lands in
-one and only one child, and the user approves the cut once. The **mother** then carries `Figlie:
+one and only one child, and the user approves the cut once. The **mother** then carries `Children:
 spec-<nome>-1-…, spec-<nome>-2-…`; each **ring** (child) is a spec with its own run directory, plan, gates,
 review and `finalize.sh` — no ring closes without its `Finalize: IMPLEMENTED`. The rules are code in
 `cycle-state.sh` (rows C1–C4) and `plan-check.sh basis`; here is what they mean for you.
@@ -248,7 +248,7 @@ review and `finalize.sh` — no ring closes without its `Finalize: IMPLEMENTED`.
 
 No counter of this skill's own: the review's counters (rounds, post-approval budget, recurrence) are
 written in its section and bound the loop across invocations. STOP also on a deviation from the
-plan (not on purely defensive ones, `difensiva: `: recorded, judged by the review), a migration to apply, `NEEDS HUMAN DECISION` from either skill, and a `NEEDS_VERIFICATION`
+plan (not on purely defensive ones, `defensive: `: recorded, judged by the review), a migration to apply, `NEEDS HUMAN DECISION` from either skill, and a `NEEDS_VERIFICATION`
 obtained in this invocation, whatever its cause (a later invocation makes one promotion attempt:
 `cycle-state.sh` row 12) — a `BLOCKED` environment gate (tunnel, WSL timeout), `NOT RUN (--no-dev)`,
 `NOT RUN (file misto)`, an approval made stale by the freshness check, gate artefacts the user must
@@ -264,7 +264,7 @@ denies a closed list — anything naming PROD (hosts, IPs, public names, release
 helpers and the remote verification), database writes through the project's helpers, git that changes state, docker, psql, installs, `rm -rf`; in the
 `plan`/`review` phases also Edit/Write outside `.claude/.ai-workflow/`; in the `plan` phase also a full
 suite (vitest, pytest, `run_tests.sh` with no file or selector). Next to it, a **`Stop` hook**
-(`${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.py`) denies the end of a turn whose last message has no `ESITO FASE` line, or while
+(`${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.py`) denies the end of a turn whose last message has no `PHASE RESULT` line, or while
 a background job the transcript shows is not collected; with `stop_hook_active` it always lets the turn
 end, so it cannot loop, and it fails open. It is not a sandbox (none
 exists on native Windows): what it covers and what stays open is written in the docstring of
@@ -289,7 +289,7 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 |---|---|---|
 | Choice of the next phase, resumption table (FIC «Resumption», step 3) | `cycle-state.sh` / `driver.py next` | `cycle-state.test.sh`, `driver.test.sh` §9 |
 | Anti-loop: same phase and same `State:` → STOP (FIC «Resumption») | `driver.py run` | `driver.test.sh` §4, counterproof §6 |
-| `ESITO FASE … STOP` → STOP; run-phase exits 4/5/6/7 as STOP/WAIT (FIC step 5) | `driver.py run` | `driver.test.sh` §4 |
+| `PHASE RESULT … STOP` (or `ESITO FASE … STOP`) → STOP; run-phase exits 4/5/6/7 as STOP/WAIT (FIC step 5) | `driver.py run` | `driver.test.sh` §4 |
 | `NEEDS_VERIFICATION` obtained in this invocation → STOP (FIC «Resumption», «Termination») | `driver.py run` | `driver.test.sh` §4 |
 | Phase still running (`.running` without `.exit`) → no launch (FIC step 2) | `driver.py run` (exit 4) | `driver.test.sh` §4 |
 | Numbered labels, `--worker=<fase>` phase prompt, forwarded flags (FIC step 4) | `driver.py run` | `driver.test.sh` §4 |
@@ -299,20 +299,20 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Phase budget per invocation | `driver.py run --max-fasi` | `driver.test.sh` §4 |
 | Fix budget (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` row 11b | `cycle-state.test.sh` |
 | Structured outcome: JSON valid for the schema, deviazioni/bloccato_su → STOP, the more conservative of prose and JSON wins (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, counterproof §6 |
-| Deviations all `difensiva: ` (purely defensive, no effect on the plan's cases) → no STOP: a line in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, a note in the plan changelog (outside the fingerprint), the list passed to the review (a non-defensive one = major); even one without the prefix → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, line `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |
+| Deviations all `defensive: ` (`difensiva: `) (purely defensive, no effect on the plan's cases) → no STOP: a line in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, a note in the plan changelog (outside the fingerprint), the list passed to the review (a non-defensive one = major); even one without the prefix → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, line `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |
 | Attribution (`touched.txt`, `.pre/.post-tree`) and STOP if not measured (FIC «Run directory», «Resumption») | `run-phase.sh`, `cycle-state.sh` row 7 | `run-phase.test.sh` §5, `cycle-state.test.sh` |
 | Touched file among the excluded ones → STOP (FIC «Resumption») | `cycle-state.sh` 10b | `cycle-state.test.sh` |
 | Level suites run outside the sub-session, evidence by key (FIC «Run directory», IRC Step 2.5) | `run-phase.sh` → `gates.sh` (`--verify`) | `gates.test.sh`, `run-phase.test.sh` |
 | Review ∥ VERIFY, discard on a changed key, driver counterproofs only on a coherent `gen` list (FIC «Run directory», «Worker review», IRC Step 2.5) | `run-phase.sh` | `run-phase.test.sh` §8, §8b-8d |
 | Signing of the final state, verdict = AND, a fresh `Finalize:` for DONE (FIC «Run directory», IRC Step 3) | `finalize.sh`, `cycle-state.sh` 13f | `finalize.test.sh`, `cycle-state.test.sh` |
 | Check of the test-red reds and acceptance tests unchanged after implement/fix; a test file in a block's `scrive:` = prescribed change: acceptance functions unchanged (ast) or not checkable → OK with `AVVISO` and `tests` fingerprint re-recorded, function changed → STOP (FIC «Worker test-red») | `run-phase.sh` (`verify_red`, `tests_guard`), `plan-check.sh rossi` | `run-phase.test.sh` §10, `plan-check.test.sh` |
-| Lanes: block independence, after-the-fact check, merged lists, ESITO line derived from the lane's JSON if missing (FIC «Worker implement») | `blocks-independent.py`, `run-phase.sh` (`launch_lanes`), decision in `driver.py` | `blocks-independent.test.sh`, `run-phase.test.sh` §11, `driver.test.sh` §7 |
+| Lanes: block independence, after-the-fact check, merged lists, PHASE RESULT line derived from the lane's JSON if missing (FIC «Worker implement») | `blocks-independent.py`, `run-phase.sh` (`launch_lanes`), decision in `driver.py` | `blocks-independent.test.sh`, `run-phase.test.sh` §11, `driver.test.sh` §7 |
 | Implementer blocks in format 2 (FIC «Implement, in 2–4 blocks»): lotti with estimated context under the ceiling | `driver.py` (`lotti`, line `LOTTI`) | `driver.test.sh` §7 |
 | Chains: C1–C4, WAIT/STOP, ring diff, closure (FIC «Chains») | `cycle-state.sh`, `run-phase.sh` (exit 7, `ring_prompt`, closure) | `cycle-state.test.sh`, `run-phase.test.sh` §9 |
 | Code lock and per-spec lock (FIC «Sub-session permissions») | `run-phase.sh` | `run-phase.test.sh` §2-3 |
 | Harness fingerprint (FIC step 5, exit 6) | `run-phase.sh`, `cycle-state.sh` row 0 | `run-phase.test.sh` §7, `cycle-state.test.sh` |
 | Sub-session prohibitions: PROD, ssh/rsync, state-changing git, docker, psql, installs (child-rules) | `guard.py` (PreToolUse hook) | `guard.test.sh` |
-| No end of turn without `ESITO FASE` or with uncollected jobs (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
+| No end of turn without `PHASE RESULT` or with uncollected jobs (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
 | Structure of a format-2 plan: traceability ↔ tests ↔ steps ↔ files, blocks, test table, removed strings still asserted, presence/absence by position (PRC «Plan format 2», «Lint») | `plan-check.sh lint2` | `plan-check.test.sh` |
 | EXISTING non-regression tests outside the table of the Piano di test: a row with the assertion «resta verde» (or «rimane verde», «continua a passare») → VIOLAZIONE; they go in the note under the table, traceability «non verificabile a test (invarianza, …)» (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
 | GENERATED files regenerable by implement/fix without a deviation, with their command (FIC «Worker implement», «Worker fix», harness-pt15); a generated file regenerated by a single lane that declares it is that lane's | `generati` of `.claude/maat.json` (`maat-config.py generati [--verifica]`, S9), `blocks-independent.py --posteriori` | `maat-config.test.sh` §8b, `blocks-independent.test.sh` |

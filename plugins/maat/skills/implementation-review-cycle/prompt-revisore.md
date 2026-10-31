@@ -37,10 +37,10 @@ Review the implementation surface below against the approved plan (and specifica
 Do not modify files. Do not fix issues. Do not implement anything. Do not run tests.
 
 Original specification:
-<mode (a): the spec sections above "## Piano di implementazione" | mode (b): NONE — plan-only mode, infer the requirement from the plan>
+<mode (a): the spec sections above "## Implementation plan" (or "## Piano di implementazione") | mode (b): NONE — plan-only mode, infer the requirement from the plan>
 
 Approved plan:
-<mode (a): the "## Piano di implementazione" section of .claude/.ai-workflow/spec-<name>.md | mode (b): the pasted plan text>
+<mode (a): the "## Implementation plan" (or "## Piano di implementazione") section of .claude/.ai-workflow/spec-<name>.md | mode (b): the pasted plan text>
 
 Review surface (base <sha> → working tree, staged + unstaged + untracked):
 <the Changes list for the paths in scope>
@@ -71,7 +71,7 @@ Risk focus from the approved plan (from `plan-check.sh contract`) — look here 
   would (a manual step, a query, an existing test by path).
 
 Requirement list (report Requirement coverage one row per ID, in this order):
-<the plan's "### Tracciabilità requisiti" table as is | legacy plan without it: "derive the
+<the plan's "### Requirement traceability" (or "### Tracciabilità requisiti") table as is | legacy plan without it: "derive the
  requirements from the specification">
 A requirement whose planned steps have no counterpart in the surface is MISSING; a changed path no
 requirement or step explains is scope drift (checklist 14).
@@ -91,7 +91,7 @@ Ask ONLY the classes tests cannot see, and say "class N: nothing" when one is cl
   2. forgotten surfaces — if the change hides or gates something, is there another route to it?
   3. interactions and loops — middleware, redirects, guards that combine into a bounce or a cycle.
   4. test integrity — see "Test signals" above; and for every new test the plan prescribes (its
-     gates and "[pavimento:" lines): would the implemented test really go red in its "rosso se:"
+     gates and "[floor:"/"[pavimento:" lines): would the implemented test really go red in its "red if:"/"rosso se:"
      world? A required gate that cannot fail makes the verdict meaningless.
 Plus requirement coverage: for every requirement, where it is implemented and what evidence
 exists (static | test <name> | runtime | none), and the IDs of the tests that cover it (Test IDs:

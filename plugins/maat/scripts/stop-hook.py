@@ -2,10 +2,11 @@
 """stop-hook.py — `Stop` hook of the /full-implementation-cycle sub-sessions (harness-pt04, 1g).
 
 run-phase.sh passes it with --settings next to guard.py. A `-p` sub-session that ends its turn
-without the `ESITO FASE` line, or while one of its background jobs has not been collected yet, ends there
+without the `PHASE RESULT` line, or while one of its background jobs has not been collected yet, ends there
 ("passive wait": nobody wakes it up). The hook DENIES the end of the turn in two cases:
-  1. the assistant's last message (the text after the last tool call) does not contain an
-     `ESITO FASE <fase>: OK|STOP` line (the JSON format will come with pt08);
+  1. the assistant's last message (the text after the last tool call) does not contain a
+     `PHASE RESULT <phase>: OK|STOP` line (Maat 1.3.0; the Italian `ESITO FASE <fase>: OK|STOP` of 1.2.x is
+     accepted too, the denial quotes the English form);
   2. the transcript shows jobs launched in background (Bash, "running in background with ID: <id>") not
      collected: no `<task-notification>` for that <task-id> with a final <status>, no
      BashOutput/TaskOutput showing its final status, no TaskStop/KillShell on that id.
@@ -21,7 +22,7 @@ import json
 import re
 import sys
 
-ESITO_RE = re.compile(r"(?m)^\s*ESITO FASE \S+: (OK|STOP)\b")
+ESITO_RE = re.compile(r"(?m)^\s*(?:PHASE RESULT|ESITO FASE) \S+: (OK|STOP)\b")   # both languages (1.3.0)
 BG_RE = re.compile(r"in background with ID: ([A-Za-z0-9_-]+)")
 NOTIF_RE = re.compile(r"<task-id>([A-Za-z0-9_-]+)</task-id>(.*?)</task-notification>", re.S)
 DONE_RE = re.compile(r"<status>(completed|failed|killed|stopped|exited|error|cancelled)</status>")
@@ -115,7 +116,7 @@ def main():
                        + " — raccoglili (BashOutput/TaskOutput, finche' non sono finiti) o fermali (TaskStop)"
                        " prima di chiudere: in -p nessuno ti risveglia")
     if not ESITO_RE.search(final):
-        reasons.append("l'ultimo messaggio non ha la riga `ESITO FASE <fase>: OK — …` o `ESITO FASE <fase>: STOP — …`:"
+        reasons.append("l'ultimo messaggio non ha la riga `PHASE RESULT <phase>: OK — …` o `PHASE RESULT <phase>: STOP — …`:"
                        " completa la fase (o fermala con STOP e il motivo) e chiudi con quella riga")
     if reasons:
         sys.stdout.reconfigure(encoding="utf-8")

@@ -7,8 +7,8 @@ Prima di ogni comando Bash o PowerShell, scrivi `description` secondo `${CLAUDE_
 ## Orchestrator
 
 1. **`<name>`**: a spec path → basename without `spec-` and `.md`. Pasted text → a kebab-case slug of its first
-   heading (none → ask now) and the container `.claude/.ai-workflow/spec-<name>.md` with the text as `## Contesto`
-   and `## Requisiti funzionali`.
+   heading (none → ask now) and the container `.claude/.ai-workflow/spec-<name>.md` with the text as `## Context`
+   and `## Functional requirements`.
 2. **S0, before the first phase only** (no `log/*.exit` yet): ask the user now the critical ambiguities (a draft
    spec → the `maat:spec-author` agent in analysis only); say whether the feature needs a migration (a human STOP when
    the implement writes it) and whether the spec may be split into a chain (the plan phase proposes the cut,
@@ -35,18 +35,18 @@ Prima di ogni comando Bash o PowerShell, scrivi `description` secondo `${CLAUDE_
    `▶ <label> avviata` you may arm a second Monitor on the phase:
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/watch-phase.sh" <run-dir> <label>`. Add one line of your own
    only when a phase starts or ends.
-5. **The end** is the driver's line `Esito driver: <DONE|STOP|WAIT|OCCUPATO|IN CORSO> — <motivo>` (exit 0 · 1 ·
-   3 · 4 · 4). It already carries the cause: the `ESITO FASE` line, the tail of `<label>.stderr` for a
+5. **The end** is the driver's line `Driver result: <DONE|STOP|WAIT|BUSY|RUNNING> — <reason>` (exit 0 · 1 ·
+   3 · 4 · 4; a driver of 1.2.x wrote `Esito driver:` with `OCCUPATO` · `IN CORSO`: the same). It already carries the cause: the `PHASE RESULT` line, the tail of `<label>.stderr` for a
    run-phase exit (4 lock busy · 5 guard not active, never relaunch without it · 6 harness changed, the remedy is
    in the line · 7 chain), the anti-loop, the fix budget. Exit 3 of run-phase (no `claude` binary) is a STOP:
-   `CLAUDE_BIN=<path>` or an explicit `--inline` are the user's choice, never yours. `IN CORSO` (a
+   `CLAUDE_BIN=<path>` or an explicit `--inline` are the user's choice, never yours. `RUNNING` (a
    `log/<label>.running` with no `.exit`): arm the Monitor `watch-phase.sh <run-dir> <label>` on that label; if
    its log has not grown for more than 15 minutes, report it as stuck and ask. **Chains**: the driver follows
    them itself — a `WAIT` that names a ring moves it to that ring, a ring's `DONE` back to the mother (the
    `catena:` events); a final `WAIT` means nothing on the chain can run now: report the ring it names.
 6. **Interrupt**: TaskStop the driver and the Monitors, say the sub-session was stopped; re-invoking resumes
    (with `--worktree` again: `crea` resumes the same worktree).
-7. **`--worktree`, at the end** (any `Esito driver`), **with cwd in the main tree** (the driver ran with cwd `<wt>`,
+7. **`--worktree`, at the end** (any `Driver result`), **with cwd in the main tree** (the driver ran with cwd `<wt>`,
    and from a linked worktree `riporta` refuses with exit 3): `cd <main tree> && bash "${CLAUDE_PLUGIN_ROOT}/scripts/ciclo-worktree.sh" riporta
    <name>` (spec and run dir back to `.claude/.ai-workflow/`, never the code; a STOP means the main tree's spec changed
    meanwhile: report it). Tell the user: the changes are on branch `fic/<name>` in `<wt>`, **not committed** (the cycle
@@ -67,7 +67,7 @@ copy its output as it is. If `riporta` stopped, give it the worktree's run dir i
 Full implementation cycle — spec-<name>.md
 Outcome: IMPLEMENTED | NEEDS_VERIFICATION | STOP (<phase>: <reason>)
 Cost:            <the block printed by phase-usage.py --summary, as it is>
-Phases:          <label → ESITO FASE line> one per line (driver.log)
+Phases:          <label → PHASE RESULT line> one per line (driver.log)
 Plan:            Plan status <…> · <metric line of the plan changelog>
 Review:          Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3
 Evidence:        <the review's evidence table, as written in the spec>

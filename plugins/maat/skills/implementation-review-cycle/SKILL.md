@@ -15,7 +15,7 @@ You orchestrate a bounded implementation review: the **review surface** of `revi
 `git diff`) against an approved plan, by the local `implementation-reviewer` agent, plus the gates the plan
 requires. `Feature status: IMPLEMENTED` means both: the static review approved the surface **and** every required
 gate passed on that same surface — absence of evidence is never written as evidence. This skill never modifies
-source files and never applies findings: it writes only the spec's `## Review implementazione` (mode a).
+source files and never applies findings: it writes only the spec's review section (mode a, below).
 Read only when this file sends you there: `freschezza.md` (a section with a `Reviewed snapshot:`),
 `gate-manuali.md` (gates run by the model), `light.md` (`--light`, by hand); the reviewer reads its own mandate
 in `prompt-revisore.md`. What moved into code, with its test: `${CLAUDE_PLUGIN_ROOT}/skills/full-implementation-cycle/
@@ -28,8 +28,8 @@ $ARGUMENTS
 ## Inputs
 
 - **Mode (a), by name**: `.claude/.ai-workflow/spec-<name>.md` with `^Plan status: APPROVED` in its plan
-  section, else stop (complete `/maat:plan-review-cycle` first). Specification = the sections above
-  `## Piano di implementazione`; approved plan = that section; output = the review section of the same file.
+  section, else stop (complete `/maat:plan-review-cycle` first). Specification = the sections above `## Implementation
+  plan` (`## Piano di implementazione`); approved plan = that section; output = the review section of the same file.
 - **Mode (b), pasted plan**: no status preflight; the reviewer runs plan-only; output in the conversation only,
   never a file; declare `Review basis: PLAN_ONLY — requirement completeness NOT verified` and «no persistent
   snapshot: freshness and promotion are not available». Level `legacy` (or `--tests`); the pasted gates are the
@@ -41,7 +41,7 @@ $ARGUMENTS
 ## The section (mode a)
 
 ```text
-## Review implementazione          ← OWNED by this skill
+## Implementation review   ← OWNED by this skill; only when the spec has none: an existing `## Review implementazione` keeps its heading
 Review status: APPROVED | NEEDS_CHANGES | NEEDS HUMAN DECISION
 Feature status: PLANNED | NEEDS_VERIFICATION | IMPLEMENTED
 Verification: VERIFIED | PARTIAL (<required gates not passed>) | NOT RUN (<reason>)
@@ -111,7 +111,7 @@ lines, obligations); the requirement list; the test signals; the green gates wit
 
 Skipped with `--no-dev`. **Required** — one not `PASS`/`SKIPPED` prevents `IMPLEMENTED`: the level's suites on
 the scope (`min`/`std`/`legacy`: tests of the touched modules; `full`: plus lint) · every **plan gate** of
-`### Piano di test` (counterproof, prescribed e2e, DB check, measurement) · one `obligation: <surface>` row per
+`### Test plan` (`### Piano di test`: counterproof, prescribed e2e, DB check, measurement) · one `obligation: <surface>` row per
 `Obbligo:`. Optional, never blocking: importers of changed shared modules, an e2e asked only via `--with-e2e`.
 - `EVIDENZE DEI GATE (driver, run-phase.sh): <dir>` in the context → `bash "${CLAUDE_PLUGIN_ROOT}/scripts/gates.sh" --verify <dir>`:
   `FRESH` → copy each `<gate>.json` `esito` with its summary into the evidence table, evidence
@@ -120,10 +120,10 @@ the scope (`min`/`std`/`legacy`: tests of the touched modules; `full`: plus lint
 - `VERIFY IN PARALLELO (driver, run-phase.sh): …` in the context → do not run nor wait for the level's suites
   (nor the counterproofs the line gives to the driver): their rows say `VERIFY (driver, in parallelo)`; pass the
   reviewer's `Test IDs` per requirement as the phase JSON's `copertura`; `APPROVED` → `IMPLEMENTED` with
-  `Verification: VERIFIED (provvisorio: VERIFY del driver in parallelo)`. Other plan gates keep their rules.
+  `Verification: VERIFIED (provisional: driver VERIFY in parallel)`. Other plan gates keep their rules.
 - Neither line (a review by hand) → `gate-manuali.md`.
 - `DEVIAZIONI DIFENSIVE (driver, run-phase.sh): <file>` in the context → give the reviewer those lines (label,
-  text) to judge against the plan: a deviation declared `difensiva: ` that is not purely defensive (it changes
+  text) to judge against the plan: a deviation declared `defensive: ` (`difensiva: `) not purely defensive (it changes
   observable behaviour, an API contract, an expected visible string, permissions or data written in a case the
   plan foresees) is a **major** finding.
 - **Obligation rows** close **only on user-reported evidence** (their command and output, or their written

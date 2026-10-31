@@ -10,7 +10,7 @@ live and nobody can answer a question.
 - BATCHING. Independent tool calls (reads, searches, read-only commands) go in one message by default; never
   two Edits on the same file, nor a write with what must see it. Never fewer checks to save turns.
 - COLLECT what you launch in background (BashOutput/TaskOutput until it has finished; the Bash tool caps at
-  600000 ms): a `Stop` hook sends back a turn without `ESITO FASE` or with an uncollected job, and a run you
+  600000 ms): a `Stop` hook sends back a turn without `PHASE RESULT` or with an uncollected job, and a run you
   did not collect is `BLOCKED (run non raccolto)`.
 - THE LEVEL'S SUITES ARE THE DRIVER'S (`gates.sh`, evidence in `<run-dir>/evidence/`): you run targeted
   tests; a suite only where the review's Step 2.5 says so. pytest and a frontend runner: both in background in
@@ -18,7 +18,7 @@ live and nobody can answer a question.
 - SHORT REPORTS: the decision, the gate results with the last lines of the real output, `file:line`. The text
   gets shorter, never the work.
 - Your LAST message ends with exactly one line:
-  `ESITO FASE <phase>: OK — <one-line summary>` or `ESITO FASE <phase>: STOP — <reason>`.
+  `PHASE RESULT <phase>: OK — <one-line summary>` or `PHASE RESULT <phase>: STOP — <reason>`.
 - The production machine exists. `guard.py` denies (a denial is final: report it, never look for another
   route): your own ssh/scp/sftp/rsync, deploy or prod scripts, psql and database writes (through the
   project's database helper too: a migration is a STOP), docker, state-changing git, installs — wrapped or not.

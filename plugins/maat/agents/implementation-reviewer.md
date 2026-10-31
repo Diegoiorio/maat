@@ -56,7 +56,7 @@ Review checklist:
     written by the same agent as the test. A changed test is not a finding by itself; a weakened
     assertion on behavior the spec requires is a blocker. Also flag a new test that cannot fail
     ("in which world does this go red?") — above all a test the plan prescribes as a gate or a
-    `[pavimento:` line: check it would really go red in its `rosso se:` world, or the gate's PASS
+    `[floor:` (or `[pavimento:`) line: check it would really go red in its `red if:` (or `rosso se:`) world, or the gate's PASS
     means nothing.
     **Obligations** (the caller lists them: a critical surface no gate covers) are never yours to
     declare covered — they close only on the user's evidence, in the caller's gate table. Name
@@ -113,7 +113,7 @@ Summary:
 <2-4 lines explaining the decision. In plan-only mode add: "Inferred requirement: <...>".>
 
 Requirement coverage:          ← one entry per ID of the caller's requirement list (the plan's
-                                 "Tracciabilità requisiti" table) when given; otherwise derive it
+                                 "Requirement traceability" / "Tracciabilità requisiti" table) when given; otherwise derive it
 - Requirement: <ID> ...
   Status: OK | PARTIAL | MISSING
   Implemented in: <paths/symbols, or "nothing">

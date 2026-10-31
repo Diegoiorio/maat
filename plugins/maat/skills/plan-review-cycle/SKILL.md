@@ -25,10 +25,14 @@ $ARGUMENTS
 
 ## Single writable artifact
 
-- You write only `.claude/.ai-workflow/spec-<name>.md`, and in it only `## Piano di implementazione` with its
-  `### Changelog revisione piano`: never the spec sections above, never `## Review implementazione`.
-- The status lines (`Plan format: 2`, `Plan status:`, `Test level:`, `Superfici a rischio:`, `Approved basis:`)
+- You write only `.claude/.ai-workflow/spec-<name>.md`, and in it only `## Implementation plan` with its
+  `### Plan review changelog`: never the spec sections above, never `## Implementation review`.
+- The status lines (`Plan format: 2`, `Plan status:`, `Test level:`, `Risk surfaces:`, `Approved basis:`)
   are line-anchored and single-occurrence; prose and the changelog never reproduce those prefixes.
+- **Languages (Maat 1.3.0)**: write the English headings and keywords (autore.md, «Languages»); every reader also
+  accepts the Italian ones of older specs (`## Piano di implementazione`, `### Changelog revisione piano`,
+  `Superfici a rischio:`…). A section that already exists keeps its heading: English only for a section created
+  new, never both (`lint` VIOLAZIONE). An approved plan is never translated.
 - **An approved plan is never edited**: only its changelog (notes, metric line). Any other change is a
   re-opening (below); `Approved basis:` makes a hand edit visible (`basis` → `STALE`, and the cycle stops).
 
@@ -41,8 +45,8 @@ $ARGUMENTS
 |---|---|
 | `lint <spec> [--baseline <copy>]` | status lines, sections above untouched, surfaces and floors — before every round |
 | `lint2 <spec>` | format 2: requirements ↔ tests ↔ steps ↔ files, blocks, test table and mutations, removed strings still asserted |
-| `skeleton <spec>` | the size gate (skeleton and full plan); `Taglio: rifiutato` in the spec → exit 0 |
-| `split <mother> <child…>` | a cut: every requirement in exactly one child, `Dipende da:` / `Interfaccia per:` present |
+| `skeleton <spec>` | the size gate (skeleton and full plan); `Split: rejected` (or `Taglio: rifiutato`) in the spec → exit 0 |
+| `split <mother> <child…>` | a cut: every requirement in exactly one child, `Depends on:` / `Interface for:` (or `Dipende da:` / `Interfaccia per:`) present |
 | `route <spec>` | format 2 branch: `Percorso: leggero \| pieno — <motivo>` |
 | `delta <copy> <spec>` | the `range:` lines rewritten since the copy, plus `xref:` lines; empty or whole-file → exit 1: that round runs at full scope |
 | `s2 <spec> --delta <f> --gate <f> [--respinti <n>]` | `S2: APPROVA \| CORREGGI \| RILANCIA \| IMPRONTA DIVERSA \| STOP` |
@@ -51,7 +55,7 @@ $ARGUMENTS
 ## `<name>`, container, re-opening
 
 - A spec path → basename without `spec-`, normalised to `[a-z0-9._-]`. Pasted text → a kebab-case slug of its
-  first heading (none → ask now) and the container, the text as `## Contesto` and `## Requisiti funzionali`. No
+  first heading (none → ask now) and the container, the text as `## Context` and `## Functional requirements`. No
   timestamps, no suffixes: an existing file is refined in place.
 - **Re-opening an approved plan** (the only legal amendment): copy the spec to the scratchpad first (the delta
   baseline); new requirements are written above by the user or `spec-author`, never by you; `Plan status:
@@ -102,8 +106,8 @@ follow it. Copy the spec to the scratchpad (the `lint` baseline), write the **sk
   output; `split <spec> <children…>`; a `VIOLAZIONE` goes back to `maat:spec-author` once, again → report it. Then
   `Plan status: NEEDS HUMAN DECISION`, changelog note «scheletro sopra il tetto: proposta di taglio in N
   anelli», and stop with the proposal: the rings in order, their requirements, what users see between rings.
-  The user decides once; a rejection is recorded above the plan by `spec-author` (`Taglio: rifiutato —
-  <data>`), and from then on `skeleton` lets the single plan go on.
+  The user decides once; a rejection is recorded above the plan by `spec-author` (`Split: rejected —
+  <date>`; `Taglio: rifiutato` in an older spec), and from then on `skeleton` lets the single plan go on.
 
 **Branch.** `--full` always wins. Otherwise `route`: `Percorso: leggero` → the rounds of
 `plan-review-cycle-light`; `pieno` → Step 2 (`--light` is honoured only with `leggero`). Say it in one line.
@@ -113,8 +117,8 @@ follow it. Copy the spec to the scratchpad (the `lint` baseline), write the **sk
 Three `maat:spec-plan-reviewer` agents in a single message, each: «Use the maat:spec-plan-reviewer agent. Read
 `${CLAUDE_PLUGIN_ROOT}/skills/plan-review-cycle/revisori.md`, section «Round 1», and follow it. Lens: <L1|L2|L3>. Spec + plan
 file: <path>. Ranges: spec <offset/limit>, plan <offset/limit>. Context pack: <path | none>. Test level: <lvl>.
-Superfici a rischio: <tokens>.» Aggregate. `APPROVED` outright → Step 3, but first one fresh-eyes reviewer
-alone when a critical surface (`permessi`, `dati`, `distruttiva`) is declared.
+Risk surfaces: <tokens>.» Aggregate. `APPROVED` outright → Step 3, but first one fresh-eyes reviewer
+alone when a critical surface (`permissions`, `data`, `destructive` — `permessi`, `dati`, `distruttiva`) is declared.
 
 ## S2: revise, then delta ∥ fresh eyes (every later round)
 
@@ -134,7 +138,7 @@ alone when a critical surface (`permessi`, `dati`, `distruttiva`) is declared.
 ## Step 3: decide
 
 - **Approved** → `Plan status: APPROVED`; `basis <spec>` and its whole `Basis:` value as `Approved basis: <value>`
-  right under `Superfici a rischio:` (replacing an older one; a ring's `madre`/`prec`/`interfaccia` included);
+  right under `Risk surfaces:` (or `Superfici a rischio:`) (replacing an older one; a ring's `madre`/`prec`/`interfaccia` included);
   `basis` again must say `FRESH`; format 2: `gen <spec>` must exit 0. Never write ` · tests <fp>`: the test-red
   phase does. Then, in the changelog only, the optional findings as notes and the metric line.
 - **Not approved** (budget, stop) → `Plan status: NEEDS HUMAN DECISION`, the open decision, the metric line.
@@ -148,7 +152,7 @@ in that phase over its runs; `giri` = iterations).
 
 `Decision:` · the spec file · `Plan status:` · summary · unresolved blocker/major · rejected findings (key +
 refutation) · optional findings, not applied · `Test level: <lvl> (<default std | esplicito | alias>)` ·
-`Superfici a rischio:` with the floor of each critical surface (or its `⚠️`) · next command: approved →
+`Risk surfaces:` with the floor of each critical surface (or its `⚠️`) · next command: approved →
 `/maat:implementation-review-cycle <name>`, saying plainly that **plan approval does not replace the code review**
 (the quick `--light` round after implementing is always worth it); not approved → the human decision needed. A
 `/browser-qa` suggestion only when the plan changes a multi-step UI journey or wires UI state to persistence with

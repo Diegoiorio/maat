@@ -21,10 +21,13 @@ plan itself (state the inference), then evaluate the plan against it — do NOT 
 requirements the plan does not support.
 
 Do not perform a deep architectural review unless the change touches a risk surface — the
-vocabulary is defined once, in `plan-review-cycle` Step 0: `permessi` (authentication,
-authorization, roles) · `dati` (DB schema, migrations, persistent state) · `distruttiva` ·
-`contratto-api` · `import` · `logica-condivisa`. The plan declares them in its
-`Superfici a rischio:` line; a touched surface left undeclared is a finding.
+vocabulary is defined once, in `plan-review-cycle` Step 0: `permissions` (authentication,
+authorization, roles) · `data` (DB schema, migrations, persistent state) · `destructive` ·
+`api-contract` · `import` · `shared-logic` (in an older plan the Italian tokens `permessi`, `dati`,
+`distruttiva`, `contratto-api`, `logica-condivisa`: the same surfaces). The plan declares them in its
+`Risk surfaces:` (or `Superfici a rischio:`) line; a touched surface left undeclared is a finding. English and
+Italian headings and keywords are both valid (Maat 1.3.0); only the same section present in both languages is a
+finding.
 
 The output must be written directly in the conversation.
 Do not create or update plan files.
@@ -40,7 +43,7 @@ Focus on:
 - Does the plan prescribe MORE tests than its declared `Test level:` allows? Over-testing is a
   finding of the same severity as under-testing.
 - Every string, class or attribute the plan changes: searched in `e2e/specs/` and `tests/`? A hit
-  in `e2e/specs/` needs an `[e2e-locator: <spec>]` line in `### Piano di test` (any level, outside
+  in `e2e/specs/` needs an `[e2e-locator: <spec>]` line in `### Test plan` (any level, outside
   the caps, at most 2) — unit tests cannot see a broken locator.
 
 Keep the review concise and pragmatic.

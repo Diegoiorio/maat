@@ -57,19 +57,19 @@ vcase() { # $1 name, $2 phase, $3 log content · prints the driver output to $V/
 vcase valido implement '{"type":"result","result":"lavoro\nESITO FASE x: OK — finto","structured_output":'"$(ok_json implement OK '[]' nessuno)"'}'
 check "  valido: la riga ESITO del testo e result.json scritto" 'grep -qx "ESITO FASE x: OK — finto" "$V/valido.out" && [ -f "$V/valido.b.json" ]'
 vcase senza implement '{"type":"result","result":"ESITO FASE implement: OK — fatto"}'
-check "  JSON assente → STOP «uscita non valida» con originale=" 'sed -n 1p "$V/senza.out" | grep -q "^ESITO FASE implement: STOP — uscita non valida: nessun blocco JSON" && grep -qx "originale=ESITO FASE implement: OK — fatto" "$V/senza.out"'
+check "  JSON assente → STOP «uscita non valida» (scritta come PHASE RESULT) con originale= (la riga italiana letta)" 'sed -n 1p "$V/senza.out" | grep -q "^PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON" && grep -qx "originale=ESITO FASE implement: OK — fatto" "$V/senza.out"'
 vcase fuori implement '{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"implement","esito":"FORSE","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],"extra":1}}'
 # Errors in any order and format: minimal validator ("$.esito … FORSE", "extra") or jsonschema ("'extra' was
 # unexpected; 'FORSE' is not one of …"), depending on whether the interpreter has jsonschema.
-check "  JSON fuori schema → STOP con gli errori, niente result.json" 'l=$(sed -n 1p "$V/fuori.out"); case "$l" in "ESITO FASE implement: STOP — uscita non valida: "*) e=${l#"ESITO FASE implement: STOP — uscita non valida: "}; case "$e" in *FORSE*) ;; *) false ;; esac && case "$e" in *extra*) ;; *) false ;; esac ;; *) false ;; esac && [ ! -f "$V/fuori.b.json" ]'
+check "  JSON fuori schema → STOP con gli errori, niente result.json" 'l=$(sed -n 1p "$V/fuori.out"); case "$l" in "PHASE RESULT implement: STOP — uscita non valida: "*) e=${l#"PHASE RESULT implement: STOP — uscita non valida: "}; case "$e" in *FORSE*) ;; *) false ;; esac && case "$e" in *extra*) ;; *) false ;; esac ;; *) false ;; esac && [ ! -f "$V/fuori.b.json" ]'
 vcase altra implement '{"type":"result","result":"ESITO FASE implement: OK","structured_output":'"$(ok_json review OK '[]' nessuno)"'}'
 check "  JSON di un'altra fase → STOP" 'grep -q "uscita non valida: fase .review. diversa" "$V/altra.out"'
 vcase dev implement '{"type":"result","result":"ESITO FASE implement: OK — fatto","structured_output":'"$(ok_json implement OK '["passo 8 adattato"]' nessuno)"'}'
-check "  prosa OK ma deviazioni nel JSON → STOP (il piu conservativo)" 'grep -q "^ESITO FASE implement: STOP — JSON: deviazioni dichiarate (1): passo 8 adattato" "$V/dev.out" && grep -qx "originale=ESITO FASE implement: OK — fatto" "$V/dev.out"'
+check "  prosa OK ma deviazioni nel JSON → STOP (il piu conservativo)" 'grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): passo 8 adattato" "$V/dev.out" && grep -qx "originale=ESITO FASE implement: OK — fatto" "$V/dev.out"'
 vcase difensive implement '{"type":"result","result":"ESITO FASE implement: OK — fatto","structured_output":'"$(ok_json implement OK '["difensiva: a.py:3 — ramo per un caso escluso dal CHECK"]' nessuno)"'}'
 check "  solo deviazioni «difensiva: » → resta OK (nessuno STOP per deviazione)" '[ "$(tr -d "\r" < "$V/difensive.out")" = "ESITO FASE implement: OK — fatto" ]'
 vcase miste implement '{"type":"result","result":"ESITO FASE implement: OK — fatto","structured_output":'"$(ok_json implement OK '["difensiva: a.py:3 — ramo", "passo 8 adattato"]' nessuno)"'}'
-check "  una difensiva e una no → STOP, tutte elencate" 'grep -q "^ESITO FASE implement: STOP — JSON: deviazioni dichiarate (2): difensiva: a.py:3 — ramo; passo 8 adattato" "$V/miste.out"'
+check "  una difensiva e una no → STOP, tutte elencate" 'grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (2): difensiva: a.py:3 — ramo; passo 8 adattato" "$V/miste.out"'
 vcase scartato review "$(printf '%s\n' '{"type":"result","result":"ESITO FASE review: OK","structured_output":'"$(ok_json review OK '[]' nessuno)"'}' '{"type":"system","subtype":"fic_scartato"}')"
 check "  evento fic_scartato dopo il result → nessun esito" '[ ! -s "$V/scartato.out" ]'
 vcase errore implement '{"type":"result","is_error":true,"result":"ESITO FASE implement: OK"}'
@@ -79,7 +79,16 @@ check "  JSON nel recinto json del testo → valido" 'grep -qx "ESITO FASE fix: 
 vcase rotto fix '{"type":"result","result":"```json\n{rotto\n```\nESITO FASE fix: OK"}'
 check "  recinto illeggibile → STOP" 'grep -q "uscita non valida: blocco JSON illeggibile" "$V/rotto.out"'
 vcase noriga plan '{"type":"result","result":"niente riga","structured_output":'"$(ok_json plan STOP '[]' "migrazione da applicare")"'}'
-check "  senza riga ESITO: la compone dal JSON (bloccato_su)" 'grep -qx "ESITO FASE plan: STOP — bloccato su: migrazione da applicare" "$V/noriga.out"'
+check "  senza riga ESITO: la compone dal JSON (bloccato_su), in inglese" 'grep -qx "PHASE RESULT plan: STOP — bloccato su: migrazione da applicare" "$V/noriga.out"'
+# 1.3.0: the English forms written by the agents (PHASE RESULT, "defensive: ", "none"), read by both validators
+vcase valido_en implement '{"type":"result","result":"work\nPHASE RESULT implement: OK — done","structured_output":'"$(ok_json implement OK '[]' none)"'}'
+check "  riga «PHASE RESULT … OK» e bloccato_su «none» → la riga del testo, result.json scritto" 'grep -qx "PHASE RESULT implement: OK — done" "$V/valido_en.out" && [ -f "$V/valido_en.b.json" ]'
+vcase dev_en implement '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":'"$(ok_json implement OK '["step 8 adapted"]' none)"'}'
+check "  prosa inglese OK ma deviazioni → STOP, prosa sotto originale=" 'grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): step 8 adapted" "$V/dev_en.out" && grep -qx "originale=PHASE RESULT implement: OK — done" "$V/dev_en.out"'
+vcase difensive_en implement '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":'"$(ok_json implement OK '["defensive: a.py:3 — branch", "difensiva: b.py:1 — ramo"]' none)"'}'
+check "  deviazioni tutte «defensive: »/«difensiva: » → resta OK" '[ "$(tr -d "\r" < "$V/difensive_en.out")" = "PHASE RESULT implement: OK — done" ]'
+vcase bloccato_en implement '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":'"$(ok_json implement OK '[]' "migration to apply")"'}'
+check "  bloccato_su diverso da «none» → STOP" 'grep -q "^PHASE RESULT implement: STOP — JSON: bloccato su: migration to apply" "$V/bloccato_en.out"'
 
 # --- throwaway repo for wrappers, run and equiv ---
 W=$T/repo; mkdir -p "$W"; cd "$W" || exit 2
@@ -142,7 +151,7 @@ rp() { # $1 = FIC_DRIVER, $2 = label
     FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 bash "$FC/run-phase.sh" "$T/rp.run" "$2" "$T/prompt.md" >/dev/null 2>&1 </dev/null
 }
 rp 1 01-implement
-check "run-phase.sh, FIC_DRIVER=1: esito validato dal driver (spia) → STOP «uscita non valida»" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/01-implement.esito" | grep -q "^ESITO FASE implement: STOP — uscita non valida: .*FORSE"'
+check "run-phase.sh, FIC_DRIVER=1: esito validato dal driver (spia) → STOP «uscita non valida»" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/01-implement.esito" | grep -q "^PHASE RESULT implement: STOP — uscita non valida: .*FORSE"'
 rp 0 02-implement
 check "run-phase.sh, FIC_DRIVER=0: validatore interno (spia muta), stesso esito" '[ ! -f "$SPY" ] && [ "$(sed -n 1p "$T/rp.run/log/01-implement.esito")" = "$(sed -n 1p "$T/rp.run/log/02-implement.esito")" ]'
 printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" "$(h "$FC/run-phase.sh")" > "$T/cert-rp-ok"
@@ -168,6 +177,7 @@ st() { FIC_DRIVER=0 bash "$FC/cycle-state.sh" "$spec" 2>/dev/null | sed -n 's/^S
 case "$FAKE_MODE" in
   nulla) exit 0 ;;
   esito-stop) printf 'ESITO FASE implement: STOP — migrazione da applicare\nstate=x\n' > "$d/log/$l.esito"; exit 0 ;;
+  esito-stop-en) printf 'PHASE RESULT implement: STOP — migration to apply\nstate=x\n' > "$d/log/$l.esito"; exit 0 ;;
   exit4) echo "lock occupato: un'altra fase di codice e' in corso — run=altro" > "$d/log/$l.stderr"; exit 4 ;;
   exit6) echo "STOP: harness cambiato dal 2026-09-30T00:00:00Z" > "$d/log/$l.stderr"; exit 6 ;;
   exit7) echo "WAIT — catena: l'implement dell'anello 2 aspetta l'anello 1 — fase non lanciata" > "$d/log/$l.stderr"; exit 7 ;;
@@ -200,33 +210,35 @@ drun() { # $1 FAKE_MODE, then the run arguments · exit code in rc, output in $T
 }
 calls() { local c; c=$(grep -c . "$FAKE_CALLS" 2>/dev/null); echo "${c:-0}"; }
 drun nulla "$SP"
-check "run: fase che non cambia lo stato → STOP anti-loop (exit 1) dopo UN lancio" '[ $rc -eq 1 ] && grep -q "Esito driver: STOP — anti-loop" "$T/run.out" && [ "$(calls)" = 1 ]'
+check "run: fase che non cambia lo stato → STOP anti-loop (exit 1) dopo UN lancio" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — anti-loop" "$T/run.out" && [ "$(calls)" = 1 ]'
 check "  etichetta 01-implement e prompt della fase" '[ "$(cat "$FAKE_CALLS")" = 01-implement ] && [ "$(cat "$RUN/prompts/01-implement.md")" = "/maat:full-implementation-cycle --worker=implement x" ]'
 check "  context-pack.sh lanciato prima della fase, sulla spec" 'grep -q "spec-x.md" "$FAKE_CALLS.cp"'
-check "  eventi anche in <run-dir>/driver.log" 'grep -q "▶ 01-implement avviata" "$RUN/driver.log" && grep -q "Esito driver: STOP" "$RUN/driver.log"'
+check "  eventi anche in <run-dir>/driver.log" 'grep -q "▶ 01-implement avviata" "$RUN/driver.log" && grep -q "Driver result: STOP" "$RUN/driver.log"'
 drun esito-stop "$SP"
-check "run: ESITO FASE … STOP → STOP con quella riga" '[ $rc -eq 1 ] && grep -q "Esito driver: STOP — ESITO FASE implement: STOP — migrazione da applicare" "$T/run.out"'
+check "run: ESITO FASE … STOP → STOP con quella riga" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — ESITO FASE implement: STOP — migrazione da applicare" "$T/run.out"'
+drun esito-stop-en "$SP"
+check "run: «PHASE RESULT … STOP» (1.3.0) → STOP con quella riga" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — PHASE RESULT implement: STOP — migration to apply" "$T/run.out"'
 drun exit4 "$SP"
-check "run: run-phase exit 4 (lock) → OCCUPATO, exit 4" '[ $rc -eq 4 ] && grep -q "Esito driver: OCCUPATO — .*lock occupato" "$T/run.out"'
+check "run: run-phase exit 4 (lock) → BUSY, exit 4" '[ $rc -eq 4 ] && grep -q "Driver result: BUSY — .*lock occupato" "$T/run.out"'
 drun exit6 "$SP"
 check "run: run-phase exit 6 (harness) → STOP" '[ $rc -eq 1 ] && grep -q "run-phase exit 6 (harness cambiato" "$T/run.out"'
 drun exit7 "$SP"
-check "run: run-phase exit 7 con WAIT — catena → WAIT, exit 3" '[ $rc -eq 3 ] && grep -q "Esito driver: WAIT — .*WAIT — catena" "$T/run.out"'
+check "run: run-phase exit 7 con WAIT — catena → WAIT, exit 3" '[ $rc -eq 3 ] && grep -q "Driver result: WAIT — .*WAIT — catena" "$T/run.out"'
 drun json-rotto "$SP"
 check "run: result.json non valido dopo la fase → STOP (fail-closed)" '[ $rc -eq 1 ] && grep -q "result.json di 01-implement non valido" "$T/run.out"'
 drun avanza "$SP"
-check "run: implement OK → review → DONE (exit 0), etichette in ordine" '[ $rc -eq 0 ] && grep -q "Esito driver: DONE" "$T/run.out" && [ "$(tr "\n" " " < "$FAKE_CALLS")" = "01-implement 02-review " ]'
+check "run: implement OK → review → DONE (exit 0), etichette in ordine" '[ $rc -eq 0 ] && grep -q "Driver result: DONE" "$T/run.out" && [ "$(tr "\n" " " < "$FAKE_CALLS")" = "01-implement 02-review " ]'
 check "  prompt della review" '[ "$(cat "$RUN/prompts/02-review.md")" = "/maat:full-implementation-cycle --worker=review x" ]'
 caso_nv() { # pk09: the reason says cycle finished and what to verify (from the Finalize: line, without the final time « · …Z»)
   drun nv "$SP"
-  [ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi; la promozione" "$T/run.out" && [ "$(calls)" = 2 ]
+  [ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi; la promozione" "$T/run.out" && [ "$(calls)" = 2 ]
 }
 check "run: review che da' NEEDS_VERIFICATION in questa invocazione → STOP (exit 1), il motivo dice ciclo finito e cosa verificare" 'caso_nv'
 check "  l'ora finale della riga Finalize: (« · 2026-10-29T10:00:00Z») non entra nel motivo" '! grep -q "2026-10-29T10:00:00Z" "$T/run.out"'
 drun nv-ver "$SP"
-check "  solo la riga Verification: PARTIAL (nessuna Finalize:) → il dettaglio viene da lì" '[ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-y: NOT RUN (solo la riga Verification); la promozione" "$T/run.out"'
+check "  solo la riga Verification: PARTIAL (nessuna Finalize:) → il dettaglio viene da lì" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-y: NOT RUN (solo la riga Verification); la promozione" "$T/run.out"'
 drun nv-vuoto "$SP"
-check "  nessuna delle due righe → «dettaglio non trovato», sempre STOP (exit 1)" '[ $rc -eq 1 ] && grep -qF "Esito driver: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: dettaglio non trovato nella spec (righe Finalize:/Verification:)" "$T/run.out"'
+check "  nessuna delle due righe → «dettaglio non trovato», sempre STOP (exit 1)" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: dettaglio non trovato nella spec (righe Finalize:/Verification:)" "$T/run.out"'
 # counterproof (pk09, on a copy): the old reason «riprovare ora troverebbe…» turns the case above red
 sed 's/"ciclo finito: firma NEEDS_VERIFICATION — da verificare: %s; /"la review di questa invocazione ha dato NEEDS_VERIFICATION: riprovare ora troverebbe lo stesso ambiente bloccato (%s); /' "$DRV" > "$T/drv-nv-vecchio.py"
 check "controprova NEEDS_VERIFICATION: la mutazione e' applicata" 'grep -q "riprovare ora troverebbe" "$T/drv-nv-vecchio.py"'
@@ -239,15 +251,15 @@ drun esito-stop "$SP" -- --tests=std
 check "run: i flag dopo -- arrivano nel prompt" '[ "$(cat "$RUN/prompts/01-implement.md")" = "/maat:full-implementation-cycle --worker=implement x --tests=std" ]'
 rm -rf "$RUN"; spec_approved; mkdir -p "$RUN/log"; date > "$RUN/log/01-plan.running"; : > "$FAKE_CALLS"
 FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK="$T/cp-finto" "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
-check "run: fase in corso (.running senza .exit) → exit 4, niente lanci" '[ $rc -eq 4 ] && grep -q "IN CORSO" "$T/run.out" && [ "$(calls)" = 0 ]'
+check "run: fase in corso (.running senza .exit) → exit 4, niente lanci" '[ $rc -eq 4 ] && grep -q "Driver result: RUNNING — " "$T/run.out" && [ "$(calls)" = 0 ]'
 rm -rf "$RUN"; spec_approved; printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$SP"; : > "$FAKE_CALLS"
 FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK="$T/cp-finto" "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
-check "run: spec gia' DONE → exit 0 senza lanci" '[ $rc -eq 0 ] && grep -q "Esito driver: DONE" "$T/run.out" && [ "$(calls)" = 0 ]'
+check "run: spec gia' DONE → exit 0 senza lanci" '[ $rc -eq 0 ] && grep -q "Driver result: DONE" "$T/run.out" && [ "$(calls)" = 0 ]'
 # M1: without a valid certificate Next/State come from standalone cycle-state.sh (here a fake one that answers differently)
 printf '#!/usr/bin/env bash\necho "Plan status: finto"; echo "State: 000000000000"; echo "Next: STOP — finto da cycle-state"\n' > "$T/cs-finto"; chmod +x "$T/cs-finto"
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER_CERT="$T/cert-ko" FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
-check "run: certificato scaduto → segue cycle-state.sh (il finto dice STOP), evento nel log" '[ $rc -eq 1 ] && grep -q "Esito driver: STOP — STOP — finto da cycle-state" "$T/run.out" && grep -q "certificato scaduto: next da cycle-state.sh" "$RUN/driver.log" && [ "$(calls)" = 0 ]'
+check "run: certificato scaduto → segue cycle-state.sh (il finto dice STOP), evento nel log" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — STOP — finto da cycle-state" "$T/run.out" && grep -q "certificato scaduto: next da cycle-state.sh" "$RUN/driver.log" && [ "$(calls)" = 0 ]'
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER=1 FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
 check "  controprova: col driver in vigore (FIC_DRIVER=1) il finto non e' consultato" 'grep -q "Next: IMPLEMENT" "$T/run.out" && ! grep -q "finto da cycle-state\|certificato scaduto" "$T/run.out"'
@@ -264,7 +276,7 @@ mk_catena() {
 }
 crun() { : > "$FAKE_CALLS"; FAKE_MODE=nulla FIC_DRIVER=1 FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$1" > "$T/run.out" 2>&1; rc=$?; }
 mk_catena; crun $CW/spec-m.md
-check "catena: la madre in WAIT sull'anello 1 → il driver lavora sull'anello 1 (01-implement nella sua run dir)" '[ "$(cat "$FAKE_CALLS")" = 01-implement ] && [ "$(cat $CW/spec-m-1-a.run/prompts/01-implement.md)" = "/maat:full-implementation-cycle --worker=implement m-1-a" ] && grep -q "catena: WAIT — passo a spec-m-1-a" $CW/spec-m.run/driver.log && grep -q "Esito driver: STOP — anti-loop" "$T/run.out"'
+check "catena: la madre in WAIT sull'anello 1 → il driver lavora sull'anello 1 (01-implement nella sua run dir)" '[ "$(cat "$FAKE_CALLS")" = 01-implement ] && [ "$(cat $CW/spec-m-1-a.run/prompts/01-implement.md)" = "/maat:full-implementation-cycle --worker=implement m-1-a" ] && grep -q "catena: WAIT — passo a spec-m-1-a" $CW/spec-m.run/driver.log && grep -q "Driver result: STOP — anti-loop" "$T/run.out"'
 mk_catena
 EFP=$(printf '' | sha256sum | cut -c1-12)
 printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" \
@@ -279,8 +291,15 @@ rm -rf "$RUN"; spec_approved; mkdir -p "$RUN/log"
 printf '%s\n' '{"type":"result","result":"ESITO FASE implement: OK","structured_output":{"fase":"implement","esito":"OK","motivo":"m","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$RUN/log/01-implement.jsonl"
 printf '%s\n' '{"type":"result","result":"ESITO FASE review: OK"}' > "$RUN/log/02-review.jsonl"
 cp "$SP" .claude/.ai-workflow/spec-y.md; mkdir -p .claude/.ai-workflow/spec-y.run
+# 1.3.0: a spec with BOTH review headings (the same STOP from cycle-state.sh and driver.py next) and an English
+# phase result line in its run dir
+{ cat "$SP"; printf '%s\n' "## Review implementazione" "Review status: NEEDS_CHANGES" "Feature status: PLANNED" \
+    "## Implementation review" "Review status: APPROVED"; } > .claude/.ai-workflow/spec-z.md
+mkdir -p .claude/.ai-workflow/spec-z.run/log
+printf '%s\n' '{"type":"result","result":"PHASE RESULT fix: OK — done","structured_output":{"fase":"fix","esito":"OK","motivo":"m","deviazioni":["defensive: a.py:1 — branch"],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' > .claude/.ai-workflow/spec-z.run/log/03-fix.jsonl
 drv equiv .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
-check "equiv: due run dir, next e valida uguali → exit 0" '[ $rc -eq 0 ] && grep -q "^equiv: spec=2 diverse=0 · jsonl=2 diversi=0$" "$T/eq.out"'
+check "equiv: tre run dir, next e valida uguali → exit 0" '[ $rc -eq 0 ] && grep -q "^equiv: spec=3 diverse=0 · jsonl=3 diversi=0$" "$T/eq.out"'
+check "  spec con «## Review implementazione» e «## Implementation review»: lo stesso STOP da cycle-state.sh e driver.py" 'grep -q "^UGUALE spec-z · Next: STOP — la spec ha sia .## Review implementazione. sia .## Implementation review." "$T/eq.out"'
 FIC_DRIVER_CERT="$T/cert" drv equiv --certifica .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv --certifica: scrive il certificato con gli hash attuali" '[ $rc -eq 0 ] && grep -qx "driver $(h "$DRV")" "$T/cert" && grep -qx "cycle-state $(h "$FC/cycle-state.sh")" "$T/cert" && grep -qx "run-phase $(h "$FC/run-phase.sh")" "$T/cert"'
 FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
@@ -290,7 +309,7 @@ check "  hash del driver diverso → SCADUTO (exit 1)" '[ $rc -eq 1 ] && grep -q
 sed 's/"IMPLEMENT — piano approvato, nessuna review"/"IMPLEMENT — diverso"/' "$DRV" > "$T/drv-diverso.py"
 "$FIC_PY" "$T/drv-diverso.py" equiv .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv: un driver che risponde diverso → DIVERSO, exit 1, niente certificato" '[ $rc -eq 1 ] && grep -q "^DIVERSO spec-x" "$T/eq.out" && grep -q "diverse=2" "$T/eq.out"'
-rm -rf .claude/.ai-workflow/spec-y.md .claude/.ai-workflow/spec-y.run
+rm -rf .claude/.ai-workflow/spec-y.md .claude/.ai-workflow/spec-y.run .claude/.ai-workflow/spec-z.md .claude/.ai-workflow/spec-z.run
 
 # --- 6. plan counterproofs (mutations on a copy; the case must turn red) ---
 sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"

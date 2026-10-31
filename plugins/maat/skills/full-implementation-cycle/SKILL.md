@@ -30,8 +30,8 @@ $ARGUMENTS
 - Never pass `--light` to the implementation review. A deviation from the approved plan is a human STOP, except
   a **purely defensive** one (a robustness branch, a fallback for a case the plan or the schema exclude, an
   internal helper — no effect on any case the plan foresees: behaviour, API contract, expected visible string,
-  permissions, data written): declared as `difensiva: <file:riga> — <cosa fa> — <perché non tocca i casi
-  previsti>` it does not stop the cycle; `run-phase.sh` records it and the next code review judges it. In doubt it
+  permissions, data written): declared as `defensive: <file:line> — <what it does> — <why the foreseen cases do
+  not change>` it does not stop the cycle; `run-phase.sh` records it and the next code review judges it. In doubt it
   is not defensive.
 
 ## Flags
@@ -46,20 +46,20 @@ refuses `--with-e2e` (DEV checks later, from the main tree) — `orchestratore.m
 ## Worker contract
 
 Nobody can answer you: a needed decision is a STOP. Write a `▶ ` line (one line, in the language of `lingua` in `.claude/maat.json`, default English) at each milestone.
-The last line is `ESITO FASE <fase>: OK — <summary>` or `ESITO FASE <fase>: STOP — <reason>`, then, in the same
+The last line is `PHASE RESULT <phase>: OK — <summary>` or `PHASE RESULT <phase>: STOP — <reason>`, then, in the same
 message, one fenced `json` block valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`:
 
 ```json
-{"fase": "<plan|test-red|test-stage|implement|review|fix|probe>", "esito": "OK", "motivo": "<the ESITO summary>",
+{"fase": "<plan|test-red|test-stage|implement|review|fix|probe>", "esito": "OK", "motivo": "<the PHASE RESULT summary>",
  "deviazioni": [], "bloccato_su": "nessuno", "file": ["<path>"],
  "gate_interni": [{"comando": "<command>", "esito": "PASS", "dettaglio": "<last line>"}],
  "finding": [{"severita": "major", "file": "<path>", "riga": 12, "testo": "<claim>"}]}
 ```
 
 Every deviation from the plan goes in `deviazioni` («adapted», «minor» and «equivalent» ones too); a purely
-defensive one starts with `difensiva: ` (Hard rules). A skill you
+defensive one starts with `defensive: ` (Hard rules). A skill you
 invoke with the Skill tool: its final response and its «stop» are an intermediate report, its prohibitions
 scope its own steps, and its verdict is read from the status lines it wrote in the spec, never from its prose.
 **probe** (`--worker=probe <name>`): changes nothing; `▶` lines with whether the spec exists, its status lines
-and the `Next:` of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cycle-state.sh" <spec>`; end `ESITO FASE probe: OK — <next phase>`.
+and the `Next:` of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/cycle-state.sh" <spec>`; end `PHASE RESULT probe: OK — <next phase>`.
 

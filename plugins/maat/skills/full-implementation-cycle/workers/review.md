@@ -18,7 +18,7 @@
    ring's `touched.txt` is never excluded.
    With `VERIFY IN PARALLELO` do not run nor wait for the level's suites and do not cite their results; with
    gates run by the model (you, the declared remote verification (`verifica_remota` in `.claude/maat.json`), a sub-agent) a static review in parallel is **forbidden**.
-4. `ESITO FASE review: OK — Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3`
+4. `PHASE RESULT review: OK — Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3`
    (OK even for `NEEDS_CHANGES`: the driver decides what follows), then the JSON with the blocker/major in
    `finding` and, for every requirement, the IDs of the tests that cover it in `copertura`
    (`[{"requisito": "<ID>", "test": ["<pytest node id | frontend test file path | counterproof id>"]}]` — IDs,

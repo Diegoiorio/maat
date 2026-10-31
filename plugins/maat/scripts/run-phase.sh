@@ -19,7 +19,7 @@
 #   <prompt-file> the phase prompt, passed on stdin (no line-length limits)
 #
 # Writes to <run-dir>/log/: <label>.jsonl (log), .stderr, .running (while running), .exit (code),
-# .esito ("ESITO FASE …" line of the result event + "state=<hash>" from cycle-state.sh, only if the
+# .esito ("PHASE RESULT …" line of the result event + "state=<hash>" from cycle-state.sh, only if the
 # subsession exits 0: this is what moves cycle-state from implement/fix to review).
 # implement/fix phases: .pre-tree/.post-tree and <run-dir>/touched.txt (below, ATTRIBUTION).
 # GATES (harness-pt04): after an implement/fix finished OK and before every review, script/fic/gates.sh (level
@@ -31,11 +31,15 @@
 # JSON block of the last result event (structured_output, otherwise the last ```json fence of the text) is revalidated with the
 # same schema: jsonschema if available, otherwise the minimal validator below; "fase" must be that
 # of the label. Valid -> log/<label>.result.json (read by cycle-state.sh). Missing or invalid -> no
-# result.json and .esito = "ESITO FASE <fase>: STOP — uscita non valida: <errori>", with the ESITO line of the text
+# result.json and .esito = "PHASE RESULT <fase>: STOP — uscita non valida: <errori>", with the result line of the text
 # kept under "originale=". The ESITO line is always written (compatibility and revert). Prose and JSON
 # disagree: the most conservative wins (prose OK but JSON STOP, deviations or bloccato_su -> .esito STOP with
 # originale=; prose STOP -> stays STOP). .esito is the authority.
-# DEFENSIVE DEVIATIONS: a deviation starting with "difensiva: " (robustness branch, fallback for a case that
+# LANGUAGES (Maat 1.3.0): the result lines this script WRITES are "PHASE RESULT <phase>: OK|STOP — …"; every reader
+# accepts "ESITO FASE …" too (old run dirs, prompts of 1.2.x); the text after "STOP — " stays Italian (1.3.1).
+# Likewise "## Implementation plan|review", "### Plan review changelog", "Children:", "defensive: " and "none" are
+# read next to the Italian forms. Lines between scripts, run-dir file names and result.json keys do not change.
+# DEFENSIVE DEVIATIONS: a deviation starting with "difensiva: " or "defensive: " (robustness branch, fallback for a case that
 # plan or schema exclude, internal helper: no effect on the expected cases) does not stop the phase; if ALL are,
 # the outcome is what it would be without deviations. An implement/fix finished OK records them: a
 # "<label><TAB><text>" line in <run-dir>/log/deviazioni-difensive.txt, an AVVISO in .esito and a note in the plan's
@@ -43,7 +47,7 @@
 # appended to the prompt ("DEVIAZIONI DIFENSIVE (driver, run-phase.sh): …" line): one that is not purely defensive is a major.
 # FINALIZE (harness-pt08): after a review that exited 0, script/fic/finalize.sh signs the final state (confirms
 # IMPLEMENTED only with the evidence at the current key, otherwise NEEDS_VERIFICATION): outcome in .finalize.
-# Fail-closed: finalize missing or exited with a code other than 0/1/3/4 -> .esito = "ESITO FASE review: STOP —
+# Fail-closed: finalize missing or exited with a code other than 0/1/3/4 -> .esito = "PHASE RESULT review: STOP —
 # finalize non eseguito|fallito"; and cycle-state.sh does not give DONE without a recent Finalize: IMPLEMENTED line.
 # Finalize runs after result.json is written and receives --copertura log/<label>.result.json (harness-pt09).
 # REVIEW IN PARALLEL WITH VERIFICATION (harness-pt09). Review phase: the tree key is computed (review-surface.sh
@@ -80,8 +84,8 @@
 # scope with blocks-independent.py --posteriori (log/<label>.posteriori): a file outside the union, attributed to
 # both lanes (in its scope and declared by the other in the JSON "file") or shared/generated -> STOP. Then
 # in <label>.jsonl a single MERGED result event (ESITO, JSON: union of file/deviazioni/gate, bloccato_su), which the
-# usual validation reads. A lane with only JSON in the result (structured exit, no "ESITO FASE" line): the
-# line is derived from the valid object ("ESITO FASE implement: <OK|STOP> — <motivo>"), as in series; text line and
+# usual validation reads. A lane with only JSON in the result (structured exit, no "PHASE RESULT" line): the
+# line is derived from the valid object ("PHASE RESULT implement: <OK|STOP> — <motivo>"), as in series; text line and
 # object disagree -> STOP wins. The lanes' preflight lists (do-not-touch.<k>.txt, mixed.<k>.txt) are merged
 # (sort -u) into do-not-touch.txt and mixed.txt, the only ones read by later phases. The gates stay the driver's
 # on the whole tree, once the lanes are done (below).
@@ -107,7 +111,7 @@
 #   needed: touched.txt = union of the rings' touched.txt, base.txt = that of the first ring, gates at
 #   full level (script/fic/gates.sh) on the final tree. If the children have [e2e-locator: <spec>] lines and the gates are
 #   green, the subsession starts with the prompt plus the "E2E DELLA CATENA: <spec…>" line (closing worker:
-#   /dev-verify, under the same guard) and its "ESITO FASE chiusura: OK" line counts (no --json-schema:
+#   /dev-verify, under the same guard) and its "PHASE RESULT chiusura: OK" line counts (no --json-schema:
 #   the phase is not in the outcome schema). Writes <run-dir>/chiusura.txt: "Chiusura: IMPLEMENTED — base <b> ·
 #   tree <t> · gates PASS · e2e <…> · <ora UTC>" or "Chiusura: NEEDS_VERIFICATION — <motivo> · <ora UTC>", and
 #   log/<label>.esito. The mother is DONE (cycle-state.sh) only with the former, on the current code.
@@ -189,7 +193,7 @@
 # driver's verification: targeted gates.sh (std level, the plan's test files + touched.txt; outcome in .gates) and
 # `plan-check.sh rossi` on the evidence (.rossi, <run-dir>/test-red/rossi.json): every test red on its own
 # assertion, no import/collection errors, no green, no existing suite in conflict; otherwise .esito =
-# "ESITO FASE test-red: STOP — …" (originale= below). Closing OK: test-red/stubs.json, test-red/tests.txt,
+# "PHASE RESULT test-red: STOP — …" (originale= below). Closing OK: test-red/stubs.json, test-red/tests.txt,
 # " · tests <fp>" in the Approved basis (plan-check.sh basis --write-tests) and gen (absorbed counterproofs, L2).
 # After implement and fix OK: the acceptance test files compared with test-red/tests.txt; different ->
 # .esito STOP «deviazione: test di accettazione modificati» regardless of the report (stubs do not count), except for a
@@ -363,7 +367,8 @@ if res is None or res.get("is_error"):
     sys.exit(0)
 text = res.get("result") or ""
 lines = [l.strip() for l in text.splitlines()]
-riga = next((l for l in reversed(lines) if l.startswith("ESITO FASE")), "")
+# the result line: "PHASE RESULT" (1.3.0) or "ESITO FASE" (old prompts and run dirs), both read
+riga = next((l for l in reversed(lines) if l.startswith(("PHASE RESULT", "ESITO FASE"))), "")
 
 KEYS = {"type", "enum", "required", "properties", "additionalProperties", "items", "minLength", "minimum"}
 ANNOT = {"$schema", "$id", "title", "description"}
@@ -433,7 +438,7 @@ if errs:
     for e in errs:
         print("uscita non valida: " + e, file=sys.stderr)
     msg = "; ".join(errs[:3]).replace("\n", " ")
-    print("ESITO FASE %s: STOP — uscita non valida: %s" % (phase, msg))
+    print("PHASE RESULT %s: STOP — uscita non valida: %s" % (phase, msg))
     if riga:
         print("originale=" + riga)
     sys.exit(0)
@@ -445,17 +450,17 @@ os.replace(out + ".tmp", out)
 one = lambda s: " ".join(str(s).split())
 dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
 jstop = ""
-if [x for x in dev if not x.startswith("difensiva: ")]:   # all "difensiva: " -> no STOP for deviation
+if [x for x in dev if not x.startswith(("difensiva: ", "defensive: "))]:   # all defensive -> no STOP for deviation
     jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
-elif one(obj["bloccato_su"]).lower() != "nessuno":
+elif one(obj["bloccato_su"]).lower() not in ("nessuno", "none"):
     jstop = "bloccato su: " + one(obj["bloccato_su"])
 elif obj["esito"] != "OK":
     jstop = "esito STOP: " + one(obj["motivo"])
 jstop = jstop[:300]
 if not riga:
-    print("ESITO FASE %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
-elif jstop and re.match(r"ESITO FASE [^:]*: OK", riga):
-    print("ESITO FASE %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
+    print("PHASE RESULT %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
+elif jstop and re.match(r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK", riga):
+    print("PHASE RESULT %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
     print("originale=" + riga)
 else:
     print(riga)
@@ -872,7 +877,7 @@ if [ ${#DENY[@]} -eq 0 ]; then
   echo "guardia non attiva: lista DENY vuota ($HOOK_CMD --deny-list)" | tee -a "$err" >&2
   finish 5
 fi
-# Stop hook (harness-pt04, 1g): denies the end of turn without `ESITO FASE` or with background jobs not
+# Stop hook (harness-pt04, 1g): denies the end of turn without `PHASE RESULT` or with background jobs not
 # collected; stop_hook_active against the loop. Fails open (lets it close): that is the safe direction.
 STOP_PY="$MAAT_SCRIPTS/stop-hook.py"
 STOP_CMD=""
@@ -916,7 +921,7 @@ wslp() { local w; w=$(maat_cygm "$1" 2>/dev/null || printf '%s' "$1")
 sq() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
 review_status() { # Review status: recorded in the spec's review section (empty if missing)
   [ -f "${dir%.run}.md" ] || return 0
-  tr -d '\r' < "${dir%.run}.md" | sed -n '/^## Review implementazione/,$ s/^Review status: *//p' | head -1
+  tr -d '\r' < "${dir%.run}.md" | sed -nE '/^## (Review implementazione|Implementation review)/,$ s/^Review status: *//p' | head -1
 }
 verify_key() { # tree key: review-surface.sh tree + (driver counterproofs) sha256 of mutations.json
   local t; t=$(tree_now) && [ -n "$t" ] || return 1
@@ -1008,8 +1013,8 @@ launch() { # $1 = stdin file, $2 = ">" or ">>" on the log; sets code
 }
 
 # --- chain (harness-pt12, see CHAINS): at the start of a ring, before measuring its .pre-tree ---
-is_ring() { # is the spec of this run dir listed in the Figlie: line of a mother in the same folder?
-  [ -f "${dir%.run}.md" ] && grep -ls '^Figlie:' "$(dirname "$dir")"/spec-*.md 2>/dev/null | xargs -r grep -lF -- "$(basename "${dir%.run}")" >/dev/null 2>&1
+is_ring() { # is the spec of this run dir listed in the Figlie: (Children:) line of a mother in the same folder?
+  [ -f "${dir%.run}.md" ] && grep -lsE '^(Figlie|Children):' "$(dirname "$dir")"/spec-*.md 2>/dev/null | xargs -r grep -lF -- "$(basename "${dir%.run}")" >/dev/null 2>&1
 }
 if [ "$phase" = implement ] && ! ls "$dir/log" 2>/dev/null | grep -q '\.pre-tree$' && is_ring; then
   cn=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r' | sed -n 's/^Next: //p')
@@ -1022,7 +1027,7 @@ chiusura_prep() {
   d=$(dirname "$m")
   [ -f "$m" ] || { chz_fail="spec madre assente: $m"; return; }
   kids=$(tr -d '\r' < "$m" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
-    /^## (Piano di implementazione|Review implementazione)/ { exit } /^Figlie:/ { print; exit }' | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//')
+    /^## (Piano di implementazione|Review implementazione|Implementation plan|Implementation review)/ { exit } /^(Figlie|Children):/ { print; exit }' | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//')
   [ -n "$kids" ] || { chz_fail="la madre non ha la riga Figlie:"; return; }
   : > "$dir/touched.txt.chiusura"
   for c in $kids; do
@@ -1042,7 +1047,7 @@ chiusura_prep() {
 verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
   local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why=""
   e1=$(printf '%s\n' "$1" | sed -n 1p)
-  printf '%s\n' "$e1" | grep -q '^ESITO FASE [^:]*: OK' || { printf '%s\n' "$1"; return 0; }
+  printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' || { printf '%s\n' "$1"; return 0; }
   # writes of the phase outside its scope (also via Bash, which the guard does not see): tree before and after
   local t0 t1 fuori c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi" nm="" nrc=0 p
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
@@ -1109,7 +1114,7 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       why="chiusura di test-red non registrata (stub, impronta dei test o gen: log/$label.rossi)"
   fi
   if [ -z "$why" ]; then printf '%s\n' "$1"
-  else printf 'ESITO FASE test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
+  else printf 'PHASE RESULT test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
 }
 # --- after implement/fix: the acceptance tests are those of test-red (harness-pt11) ---
 # PRESCRIBED CHANGE (typical case: a plan step changes a helper in a file that also contains an acceptance
@@ -1211,7 +1216,7 @@ tests_guard() { # $1 = outcome; prints the outcome, STOP if an acceptance test f
   e1=$(printf '%s\n' "$1" | sed -n 1p)
   ch=$(diff <(tr -d '\r' < "$TR/tests.txt") <(printf '%s\n' "$now") | sed -n 's/^[<>] [0-9A-Za-z]*  //p' | LC_ALL=C sort -u)
   # only for an OK outcome: a STOP stays such, and no fingerprint is re-recorded
-  if printf '%s\n' "$e1" | grep -q '^ESITO FASE [^:]*: OK' && [ -n "$ch" ]; then
+  if printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' && [ -n "$ch" ]; then
     bt="$TR/tests.red.txt"; [ -f "$bt" ] || bt="$TR/tests.txt"
     while IFS= read -r f; do [ -n "$f" ] && trees+=("$(tr -d '\r' < "$f")"); done < <(ls "$dir"/log/*test-red.post-tree 2>/dev/null | LC_ALL=C sort -r)
     rm -rf "$t"; mkdir -p "$t" && printf '%s\n' "$ch" > "$t/cambiati"
@@ -1235,15 +1240,15 @@ tests_guard() { # $1 = outcome; prints the outcome, STOP if an acceptance test f
         done
         printf '%s\n' "$1"; return 0
       fi
-      printf "ESITO FASE %s: STOP — modifica prescritta di test di accettazione (%s), ma impronta dei test non riregistrata (plan-check.sh tests/basis --write-tests: vedi log/%s.stderr)\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, -)" "$label" "$e1"
+      printf "PHASE RESULT %s: STOP — modifica prescritta di test di accettazione (%s), ma impronta dei test non riregistrata (plan-check.sh tests/basis --write-tests: vedi log/%s.stderr)\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, -)" "$label" "$e1"
       return 0
     fi
     if [ -n "$camb" ]; then
-      printf "ESITO FASE %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$camb" "$e1"
+      printf "PHASE RESULT %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$camb" "$e1"
       return 0
     fi
   fi
-  printf "ESITO FASE %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, - | sed 's/^$/?/')" "$e1"
+  printf "PHASE RESULT %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, - | sed 's/^$/?/')" "$e1"
 }
 
 # --- lanes (harness-pt13): see LANES at the top ---
@@ -1302,10 +1307,10 @@ def riga(res, o):
     # With --json-schema the result field often carries ONLY the JSON, without the text line: then the line is derived
     # from the structured object (already shape-checked), like VALIDA_PY in series. Text line present: it wins,
     # and if it contradicts the object STOP wins (text STOP below; object STOP via m["esito"] and VALIDA_PY).
-    l = next((l.strip() for l in reversed((res.get("result") or "").splitlines()) if l.strip().startswith("ESITO FASE")), "")
+    l = next((l.strip() for l in reversed((res.get("result") or "").splitlines()) if l.strip().startswith(("PHASE RESULT", "ESITO FASE"))), "")
     if l or not forma(o):
         return l
-    return "ESITO FASE implement: %s — %s" % ("OK" if o["esito"] == "OK" else "STOP", " ".join(o["motivo"].split()) or "-")
+    return "PHASE RESULT implement: %s — %s" % ("OK" if o["esito"] == "OK" else "STOP", " ".join(o["motivo"].split()) or "-")
 if sys.argv[1] == "estrai":
     r = ultimo(sys.argv[2]); o = blocco(r) if r else None
     with open(sys.argv[3], "w", encoding="utf-8", newline="\n") as fh:
@@ -1328,11 +1333,14 @@ for k, log in enumerate(logs, 1):
     else:
         objs.append((k, o)); righe.append((k, riga(r, o)))
 if prob:
-    print(json.dumps({"type": "result", "result": "ESITO FASE implement: STOP — " + "; ".join(prob + ([stop] if stop else []))}))
+    print(json.dumps({"type": "result", "result": "PHASE RESULT implement: STOP — " + "; ".join(prob + ([stop] if stop else []))}))
     sys.exit(0)
-def dev_corsia(k, d):   # "difensiva: " stays at the start (DEFENSIVE DEVIATIONS): "difensiva: corsia k: …"
+def dev_corsia(k, d):   # the defensive prefix stays at the start (DEFENSIVE DEVIATIONS): "difensiva: corsia k: …"
     s = " ".join(str(d).split())
-    return "difensiva: corsia %d: %s" % (k, s[len("difensiva: "):]) if s.startswith("difensiva: ") else "corsia %d: %s" % (k, d)
+    for pre in ("difensiva: ", "defensive: "):   # the prefix as written (1.3.0: the English one too)
+        if s.startswith(pre):
+            return "%scorsia %d: %s" % (pre, k, s[len(pre):])
+    return "corsia %d: %s" % (k, d)
 m = {"fase": "implement", "esito": "OK", "motivo": " · ".join("corsia %d: %s" % (k, o["motivo"]) for k, o in objs),
      "deviazioni": [dev_corsia(k, d) for k, o in objs for d in o["deviazioni"]], "bloccato_su": "nessuno",
      "file": [], "gate_interni": [g for k, o in objs for g in o["gate_interni"]], "finding": [f for k, o in objs for f in o["finding"]]}
@@ -1340,7 +1348,7 @@ for k, o in objs:
     m["file"] += [f for f in o["file"] if f not in m["file"]]
     if o["esito"] != "OK":
         m["esito"] = "STOP"
-    if " ".join(o["bloccato_su"].split()).lower() != "nessuno" and m["bloccato_su"] == "nessuno":
+    if " ".join(o["bloccato_su"].split()).lower() not in ("nessuno", "none") and m["bloccato_su"] == "nessuno":
         m["bloccato_su"] = "corsia %d: %s" % (k, o["bloccato_su"])
     if isinstance(o.get("fase"), str) and o["fase"] != "implement":
         m["fase"] = o["fase"]   # the usual validation rejects it: phase different from the one of the label
@@ -1349,13 +1357,13 @@ for k, o in objs:
 if stop:
     m["esito"] = "STOP"
     m["bloccato_su"] = stop if m["bloccato_su"] == "nessuno" else m["bloccato_su"] + "; " + stop
-ko = [(k, l) for k, l in righe if not re.match(r"ESITO FASE implement: OK", l)]
+ko = [(k, l) for k, l in righe if not re.match(r"(?:PHASE RESULT|ESITO FASE) implement: OK", l)]
 if stop:
-    testo = "ESITO FASE implement: STOP — " + stop
+    testo = "PHASE RESULT implement: STOP — " + stop
 elif ko:
-    testo = "ESITO FASE implement: STOP — corsia %d: %s" % (ko[0][0], re.sub(r"^ESITO FASE [^:]*:\s*(STOP\s*—\s*)?", "", ko[0][1]) or "nessuna riga ESITO")
+    testo = "PHASE RESULT implement: STOP — corsia %d: %s" % (ko[0][0], re.sub(r"^(?:PHASE RESULT|ESITO FASE) [^:]*:\s*(STOP\s*—\s*)?", "", ko[0][1]) or "nessuna riga ESITO")
 else:
-    testo = "ESITO FASE implement: OK — corsie parallele: " + m["motivo"]
+    testo = "PHASE RESULT implement: OK — corsie parallele: " + m["motivo"]
 print(json.dumps({"type": "result", "subtype": "fic_corsie", "result": testo, "structured_output": m}, ensure_ascii=False))'
 launch_lanes() { # two subsessions together (one per lane), then after-the-fact check and merged result event
   local k b s o p c="$dir/log/$label.corsie" c1 c2 pids=() pre post lf=()
@@ -1452,7 +1460,7 @@ stdin_file=$prompt
 # relaunch in sequence after a discard (harness-pt09), so the diff is always that of the reviewed tree.
 # DEFENSIVE DEVIATIONS: the review receives the list to judge appended to the starting prompt (the ring's too).
 if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-difensive.txt" ]; then
-  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — deviazioni dal piano dichiarate «difensiva: » da implement/fix, che non hanno fermato il ciclo (etichetta, testo). Passale a implementation-review-cycle da giudicare: se una di queste deviazioni non e' puramente difensiva (cambia un comportamento osservabile, un contratto API, una stringa visibile prevista, i permessi o i dati scritti nei casi previsti dal piano), e' un finding major."; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
+  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — deviazioni dal piano dichiarate «defensive: » (o «difensiva: ») da implement/fix, che non hanno fermato il ciclo (etichetta, testo). Passale a implementation-review-cycle da giudicare: se una di queste deviazioni non e' puramente difensiva (cambia un comportamento osservabile, un contratto API, una stringa visibile prevista, i permessi o i dati scritti nei casi previsti dal piano), e' un finding major."; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
   prompt="$dir/log/$label.prompt-difensive" stdin_file="$dir/log/$label.prompt-difensive"
 fi
 ring_stop() { echo "$1" | tee -a "$err" >&2; rm -f "$dir/log/$label.running"; finish 7; }
@@ -1534,7 +1542,7 @@ if [ "$mode" = parallelo ]; then
   stdin_file="$dir/log/$label.prompt"
   if [ $cp_driver -eq 1 ]; then cpn="le controprove di counterproof/mutations.json (generata da plan-check.sh gen, coerente col piano) le esegue il DRIVER ora (non riscrivere mutations.json, non lanciare counterproof.sh: i risultati saranno counterproof/<id>.json)"
   else cpn="le controprove restano tue, come sempre (Worker review, passo 2: scrivi o rigenera counterproof/mutations.json e lancia counterproof.sh)"; fi
-  { cat "$prompt"; printf '\n%s\n' "VERIFY IN PARALLELO (driver, run-phase.sh): gates.sh gira ORA, fuori da questa sessione, sui file di touched.txt; $cpn. Non aspettare e non eseguire le suite del livello, non citarne i risultati: per ogni requisito scrivi nel campo copertura del JSON gli ID dei test che lo coprono. Il verdetto e' provvisorio (Verification: VERIFIED (provvisorio: …)): finalize.sh fa l'AND con i risultati e compone la tabella Evidence."; } > "$stdin_file"
+  { cat "$prompt"; printf '\n%s\n' "VERIFY IN PARALLELO (driver, run-phase.sh): gates.sh gira ORA, fuori da questa sessione, sui file di touched.txt; $cpn. Non aspettare e non eseguire le suite del livello, non citarne i risultati: per ogni requisito scrivi nel campo copertura del JSON gli ID dei test che lo coprono. Il verdetto e' provvisorio (Verification: VERIFIED (provisional: …)): finalize.sh fa l'AND con i risultati e compone la tabella Evidence."; } > "$stdin_file"
   ( run_gates >/dev/null; [ $cp_driver -eq 1 ] && run_cp ) & vpid=$!
   [ $owned -eq 1 ] && echo "vpid=$vpid" >> "$held/owner"   # lock_alive: a live VERIFY holds the lock
   launch "$stdin_file" ">"
@@ -1569,7 +1577,7 @@ if [ "$mode" = sequenza ]; then   # the previous sequence: gates, then the revie
   fi
   launch "$stdin_file" "$([ "${relaunch:-0}" = 1 ] && echo '>>' || echo '>')"
 elif [ $staged -eq 1 ]; then   # S3 (harness-pt11): the parked tests are in the tree, no subsession; the verification is below
-  printf '%s\n' '{"type":"result","result":"ESITO FASE test-red: OK — test in sosta (S3) copiati dallo staging","structured_output":{"fase":"test-red","esito":"OK","motivo":"test in sosta (S3) copiati dallo staging","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$log"
+  printf '%s\n' '{"type":"result","result":"PHASE RESULT test-red: OK — test in sosta (S3) copiati dallo staging","structured_output":{"fase":"test-red","esito":"OK","motivo":"test in sosta (S3) copiati dallo staging","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$log"
   code=0
 elif [ $lanes -eq 1 ]; then   # lanes (harness-pt13): implement only, after S3 and before the single launch
   launch_lanes
@@ -1596,7 +1604,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 one = lambda s: " ".join(str(s).split())
 if sys.argv[1] == "estrai":
     dev = [one(x) for x in json.load(open(sys.argv[2], encoding="utf-8")).get("deviazioni") or [] if str(x).strip()]
-    if dev and all(x.startswith("difensiva: ") for x in dev):
+    if dev and all(x.startswith(("difensiva: ", "defensive: ")) for x in dev):
         print("\n".join(dev))
     sys.exit(0)
 spec, label, elenco = sys.argv[2:5]
@@ -1607,9 +1615,9 @@ zona, fence, ultima = "above", False, -1
 for i, l in enumerate(righe):
     isf = re.match(r"^[ \t]*(```|~~~)", l) is not None
     if not fence and not isf:
-        if zona == "above" and l.startswith("## Piano di implementazione"): zona = "plan"
-        elif zona in ("plan", "changelog") and l.startswith("## Review implementazione"): zona = "review"
-        elif zona == "plan" and re.match(r"^###[ \t]+([0-9]+\.[ \t]*)?Changelog revisione piano", l): zona = "changelog"
+        if zona == "above" and re.match(r"^## (Piano di implementazione|Implementation plan)", l): zona = "plan"
+        elif zona in ("plan", "changelog") and re.match(r"^## (Review implementazione|Implementation review)", l): zona = "review"
+        elif zona == "plan" and re.match(r"^###[ \t]+([0-9]+\.[ \t]*)?(Changelog revisione piano|Plan review changelog)", l): zona = "changelog"
         elif zona == "changelog" and re.match(r"^##?#?[ \t]", l): zona = "plan"
     if isf:
         fence = not fence
@@ -1673,7 +1681,7 @@ fi
 if [ $code -eq 0 ]; then
   if [ -n "$fin_fail" ]; then
     orig=$(printf '%s\n' "$esito" | sed -n '1p')
-    esito="ESITO FASE review: STOP — $fin_fail${orig:+
+    esito="PHASE RESULT review: STOP — $fin_fail${orig:+
 originale=$orig}"
   fi
   if [ -n "$esito" ]; then   # harness-pt11: red-test verification (test-red), acceptance tests unchanged (implement/fix)
@@ -1683,7 +1691,7 @@ originale=$orig}"
     esac
   fi
   case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)
-    printf '%s\n' "$esito" | sed -n 1p | grep -q '^ESITO FASE [^:]*: OK' && difensive ;;
+    printf '%s\n' "$esito" | sed -n 1p | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' && difensive ;;
   esac
   if [ -n "$esito" ]; then
     st=""
@@ -1702,7 +1710,7 @@ if [ "$phase" = chiusura ]; then
   chz_e2e_st="non richiesto"
   if [ -z "$chz_why" ] && [ -n "$chz_e2e" ]; then
     chz_res=$(grep '"type":"result"' "$log" 2>/dev/null | tail -1)
-    if [ $code -eq 0 ] && printf '%s' "$chz_res" | grep -q 'ESITO FASE chiusura: OK' && ! printf '%s' "$chz_res" | grep -q '"is_error":true'; then
+    if [ $code -eq 0 ] && printf '%s' "$chz_res" | grep -Eq '(PHASE RESULT|ESITO FASE) chiusura: OK' && ! printf '%s' "$chz_res" | grep -q '"is_error":true'; then
       chz_e2e_st="OK ($chz_e2e)"
     else chz_why="e2e non riusciti ($chz_e2e): exit $code, vedi log/$label.jsonl"; fi
   fi
@@ -1710,17 +1718,17 @@ if [ "$phase" = chiusura ]; then
   chz_tree=""; [ -z "$chz_why" ] && { chz_tree=$(tree_now) || chz_tree=""; [ -n "$chz_tree" ] || chz_why="tree finale non calcolato"; }
   if [ -z "$chz_why" ]; then
     printf 'Chiusura: IMPLEMENTED — base %s · tree %s · gates PASS (%s) · e2e %s · %s\n' "$(cat "$dir/base.txt")" "$chz_tree" "${chz_ev:--}" "$chz_e2e_st" "$chz_now" > "$dir/chiusura.txt"
-    chz_esito="ESITO FASE chiusura: OK — catena chiusa: gate full PASS, e2e $chz_e2e_st"
+    chz_esito="PHASE RESULT chiusura: OK — catena chiusa: gate full PASS, e2e $chz_e2e_st"
   else
     printf 'Chiusura: NEEDS_VERIFICATION — %s · %s\n' "$chz_why" "$chz_now" > "$dir/chiusura.txt"
-    chz_esito="ESITO FASE chiusura: STOP — $chz_why"
+    chz_esito="PHASE RESULT chiusura: STOP — $chz_why"
   fi
   st=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | sed -n 's/^State: //p')
   printf '%s\nstate=%s\n' "$chz_esito" "$st" > "$dir/log/$label.esito"
 fi
 # gates after an implement/fix finished OK, still under the lock (the following review reuses them with an identical key)
 case "$phase" in implement|fix)
-  [ $code -eq 0 ] && grep -q '^ESITO FASE [^:]*: OK' "$dir/log/$label.esito" 2>/dev/null && run_gates >/dev/null ;;
+  [ $code -eq 0 ] && grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' "$dir/log/$label.esito" 2>/dev/null && run_gates >/dev/null ;;
 esac
 
 release   # before .exit: whoever sees the phase finished finds the lock already free

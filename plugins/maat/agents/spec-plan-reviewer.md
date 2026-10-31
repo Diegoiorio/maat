@@ -78,14 +78,14 @@ rest and say which lens you were given.
 | 6 | Role and permission implications | **L1** |
 | 8 | API / payload / data persistence implications | **L1** |
 | 10 | Backward compatibility | **L1** |
-| — | Verify **every** `nessuna implicazione` the plan declares (do not take it on trust) | **L1** |
-| — | The `Superfici a rischio:` line is complete (a touched surface left undeclared is a finding: it silently skips the verification floor and the fresh-eyes gate) · the `### Tracciabilità requisiti` table: no requirement without steps, no significant step serving no requirement, each verification able to verify its requirement (a plan approved before 2026-09-21 and re-opened has no table: that is not a finding) | **L1** |
+| — | Verify **every** `no implication` (`nessuna implicazione`) the plan declares (do not take it on trust) | **L1** |
+| — | The `Risk surfaces:` line is complete (a touched surface left undeclared is a finding: it silently skips the verification floor and the fresh-eyes gate) · the `### Requirement traceability` table: no requirement without steps, no significant step serving no requirement, each verification able to verify its requirement (a plan approved before 2026-09-21 and re-opened has no table: that is not a finding) | **L1** |
 | 4 | Does the plan reuse existing project patterns? | **L2** |
 | 5 | Does the plan change more code than necessary? | **L2** |
 | — | Every `path:line` cited exists and is the right one; which file an auto-imported `UiXxx` really resolves to (app wrapper vs `packages/ui` primitive); blast radius of shared files; **every declared count must be re-counted, never trusted** | **L2** |
 | 7 | UI state implications | **L3** |
 | 9 | Error / loading / locked states | **L3** |
-| — | The test set is minimal AND sufficient — see "L3: the bidirectional rule" below; plus non-vacuity of every gate prescribed (each new case states `rosso se: <condition>` — check that the condition is real and reachable, *"in which world does this test go red?"*), every string the plan proposes to change searched in `e2e/specs/` and `tests/`, acceptance criteria actually satisfiable | **L3** |
+| — | The test set is minimal AND sufficient — see "L3: the bidirectional rule" below; plus non-vacuity of every gate prescribed (each new case states `red if: <condition>` — check that the condition is real and reachable, *"in which world does this test go red?"*), every string the plan proposes to change searched in `e2e/specs/` and `tests/`, acceptance criteria actually satisfiable | **L3** |
 | 2 | Ambiguous assumptions | **L1** at full scope · the **fresh-eyes gate** when one is running |
 | 3 | Hidden side effects | same as 2 |
 
@@ -102,7 +102,7 @@ not change · an e2e where a unit test suffices · a whole-suite gate when the d
 `Required change:` remove it.
 
 The plan declares a level (`Test level: min | std | full`) with per-level caps — 0 / ≤5 / uncapped
-new cases, counterproof on none / the central gate / every case. The length of `### Piano di test`
+new cases, counterproof on none / the central gate / every case. The length of `### Test plan`
 (~1 / ~15 lines / free) is a lint signal, never a finding by itself: judge what the lines prescribe. **Check that what the plan prescribes matches what it declares: exceeding the
 declared level is a blocking finding.** A whole suite is permitted but never required at `full`,
 and forbidden below it.
@@ -111,20 +111,20 @@ Tie-break, because this rule can oscillate across rounds: a case already removed
 must NOT be re-added in a later round without NEW evidence. The caller carries removals forward in
 the "do NOT re-add" list; treat that list as binding.
 
-**The verification floor is not over-testing.** A line marked `[pavimento: <surface>]` is the one
-verification the plan owes each critical surface it declares (`permessi`, `dati`, `distruttiva`),
+**The verification floor is not over-testing.** A line marked `[floor: <surface>]` is the one
+verification the plan owes each critical surface it declares (`permissions`, `data`, `destructive`),
 at any level: it is outside the caps and outside the "do NOT re-add" list. Check only that it is
-**pertinent** (for `permessi`: the denied role is denied) and **can go red**. A critical surface
-declared with neither a floor line nor a `⚠️ Superficie <token> … non coperta` line naming it is
+**pertinent** (for `permissions`: the denied role is denied) and **can go red**. A critical surface
+declared with neither a floor line nor a `⚠️ Surface <token> … not covered` line naming it is
 under-testing. Downstream a `⚠️` on a critical surface is an obligation — a human STOP before
 `IMPLEMENTED` — so check that a floor was really unreachable. A waiver on that line
-(`— statica sufficiente: <motivo>`, same physical line) removes the obligation: accept it only if
+(`— static sufficient: <reason>`, same physical line) removes the obligation: accept it only if
 the change leaves that surface's runtime behaviour untouched; otherwise it is under-testing.
 
 **An e2e bound to a locator is not over-testing either.** When the plan changes a file in
 `e2e/specs/`, or a string, class or attribute an e2e spec uses as a locator (your search of the
-changed strings finds it), `### Piano di test` carries one `[e2e-locator: <spec>]` list item per
-affected spec, with its `rosso se:`, at any level and outside the caps — at most 2; beyond that,
+changed strings finds it), `### Test plan` carries one `[e2e-locator: <spec>]` list item per
+affected spec, with its `red if:`, at any level and outside the caps — at most 2; beyond that,
 one `⚠️` line. A hit with no such line is under-testing; an `[e2e-locator:` line on a spec whose
 locators the plan does not change is over-testing. A counterproof must name the file(s) it
 touches — reverted to base, or a named mutation (file · symbol · what is removed) when the test
@@ -142,20 +142,29 @@ whole-feature or `git stash` counterproof cannot run downstream.
 - **Consistency-only lines.** Unchanged lines that cite what the rewrite touched: check only that
   they still agree with it.
 
+## Languages of headings and keywords
+
+From Maat 1.3.0 plans are written with English headings and keywords (`## Implementation plan`, `### Test plan`,
+`Risk surfaces: permissions`, `[floor: permissions]`, `red if:`, `#### Block`, `writes:`…); a spec or plan written
+before keeps the Italian ones (`## Piano di implementazione`, `### Piano di test`, `Superfici a rischio: permessi`,
+`[pavimento: permessi]`, `rosso se:`, `#### Blocco`, `scrive:`…) and Maat reads both. The language of a heading
+is never a finding, nor is a mix of sections in the two languages. The SAME section present in both languages
+is (one of the two would be ignored downstream): `plan-check.sh lint` already flags it.
+
 ## Format 2 plans (`Plan format: 2` under the plan heading)
 
 The format is defined in `plan-review-cycle` ("Plan format 2"): decisions with input → output
-examples, steps `id | file | modifica | test` in `#### Blocco` blocks with `scrive:` / `dopo:`, the test
-table `ID | requisito | file | asserzione | mutazione`, `### Stringhe e data-test`. What it changes for you:
+examples, steps `id | file | change | test` in `#### Block` blocks with `writes:` / `after:`, the test
+table `ID | requirement | file | assertion | mutation`, `### Strings and data-test`. What it changes for you:
 - **the structure is already checked**: `plan-check.sh lint2` ran before you. Judge the content — is the mutation
-  the right one, does the example table say what the requirement says, does `scrive:` really cover
+  the right one, does the example table say what the requirement says, does `writes:` really cover
   what the block writes — not the shape;
 - **procedure findings never block**: commands, runner paths, selectors and `mutations.json` are
   generated from the table (`plan-check.sh gen`), not written. A remark on them is `minor` at most;
 - **two sections that contradict each other are always blocking** (a decision's example vs a step, a
-  step vs the test table, `dopo:` vs what a block needs), at any round;
+  step vs the test table, `after:` vs what a block needs), at any round;
 - in a **late round** (3 or 4) a product defect you find is still a blocker/major: the caller turns it
-  into a test row and a `⚠️ Rischio aperto` line instead of reopening the design. Give it a
+  into a test row and a `⚠️ Open risk` line instead of reopening the design. Give it a
   `Required change:` a test can check.
 
 ## Output format (canonical reviewer contract)

@@ -10,16 +10,17 @@
 . "$(dirname "$0")/_lib.sh"
 [ $# -eq 0 ] || die "nessuna opzione prevista"
 [ -f "$SPEC" ] || die "spec assente nel worktree: $SPEC"
-start=$(grep -n '^## Piano di implementazione' "$SPEC" | head -1 | cut -d: -f1)
-[ -n "$start" ] || die "la spec non ha '## Piano di implementazione'"
-grep -n '^###* .*Piano di test' "$SPEC" | awk -F: -v s="$start" '$1 > s' | grep -q . ||
+# headings in both languages (Maat 1.3.0): Italian or English plan and test plan
+start=$(grep -nE '^## (Piano di implementazione|Implementation plan)' "$SPEC" | head -1 | cut -d: -f1)
+[ -n "$start" ] || die "la spec non ha '## Piano di implementazione' (ne' '## Implementation plan')"
+grep -nE '^###* .*(Piano di test|Test plan)' "$SPEC" | awk -F: -v s="$start" '$1 > s' | grep -q . ||
   die "nessun titolo 'Piano di test' dentro il piano della spec"
-insert_line "$SPEC" '^###* .*Piano di test' before "
+insert_line "$SPEC" '^###* .*(Piano di test|Test plan)' before "
 **D-FIC · soglia della forma compatta (decisione del PO).** Un importo con valore assoluto **pari** a
 \`COMPACT_THRESHOLD_CENTS\` resta in forma piena (\`formatCentsWithSymbol\`): la soglia e' inclusa, come fa oggi
 \`utils/goals.ts\` (\`Math.abs(cents) <= COMPACT_THRESHOLD_CENTS\`). Nessun passo del piano la cambia.
 " "$start"
-insert_line "$SPEC" '^###* .*Piano di test' after "
+insert_line "$SPEC" '^###* .*(Piano di test|Test plan)' after "
 - **T-FIC** (\`tests/goals-utils.test.ts\`) — un importo pari a \`COMPACT_THRESHOLD_CENTS\` e' reso in forma
   **compatta**. Rosso se: il valore alla soglia esatta esce in forma piena." "$start"
 inj_done "$(basename "$SPEC"): decisione D-FIC e caso T-FIC in contraddizione"

@@ -133,6 +133,34 @@ expect "fix inline OK → REVIEW" "^REVIEW — correzione finita \(04-fix\)"
 rm -f "$RUN/log/04-fix.post-tree"; expect "fix inline senza misura → STOP" "^STOP — attribuzione non misurata"
 reset
 
+# --- 1.3.0: the English formats are read, the Italian ones still are (constraint 5: an old run dir resumes as before) ---
+{ above; plan APPROVED; } > "$SP"; with_basis
+esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"
+expect "vincolo 5: run dir vecchio, .esito «ESITO FASE implement: OK» → lo stesso Next di 1.2.1 (REVIEW)" "^REVIEW — implementazione finita \(02-implement\)"
+esito 02-implement "PHASE RESULT implement: OK — done" "$(state)"
+expect "riga inglese «PHASE RESULT implement: OK» → REVIEW" "^REVIEW — implementazione finita \(02-implement\)"
+esito 02-implement "PHASE RESULT implement: STOP — migrazione" "$(state)"; expect "riga inglese STOP → IMPLEMENT" "^IMPLEMENT"
+esito 02-implement "PHASE RESULT fix: OK — done" "$(state)"; expect "  controprova: la riga di un'altra fase non vale" "^IMPLEMENT"
+esito 02-implement "PHASE RESULT implement: OK — done" "$(state)"
+rjson 02-implement implement OK '["defensive: a.py:3 — branch for a case the CHECK excludes", "difensiva: helper interno"]' none
+expect "deviazioni «defensive: » (e «difensiva: ») con bloccato_su «none» → REVIEW" "^REVIEW — implementazione finita"
+rjson 02-implement implement OK '["defensive:branch"]' none
+expect "  prefisso inglese storpiato («defensive:» senza spazio) → STOP" "^STOP — 02-implement: deviazioni dichiarate \(1\)"
+rjson 02-implement implement STOP '[]' "migration to apply — m.sql"
+expect "  bloccato_su diverso da «none» → STOP" "^STOP — 02-implement: bloccato su: migration to apply"
+reset
+# review section with the English heading; both headings → STOP (the same in driver.py: section 9 of driver.test.sh)
+{ above; plan APPROVED; review NEEDS_CHANGES PLANNED | sed 's/^## Review implementazione$/## Implementation review/'; } > "$SP"
+expect "«## Implementation review» letta come sezione di review" "^FIX"
+{ above; plan APPROVED; review NEEDS_CHANGES PLANNED; printf '%s\n' "## Implementation review" "Review status: APPROVED"; } > "$SP"
+expect "«## Review implementazione» e «## Implementation review» insieme → STOP" "^STOP — la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione in due lingue"
+{ above; plan APPROVED; review NEEDS_CHANGES PLANNED; printf '%s\n' '```text' "## Implementation review" '```'; } > "$SP"
+expect "  controprova: la seconda intestazione dentro un recinto non conta → FIX" "^FIX"
+{ above; plan APPROVED | sed 's/^## Piano di implementazione$/## Implementation plan/; s/^### Changelog revisione piano$/### Plan review changelog/'
+  review APPROVED IMPLEMENTED | sed 's/^## Review implementazione$/## Implementation review/'; } > "$SP"
+expect "spec con piano e review in inglese → DONE (legacy, senza snapshot)" "^DONE — sezione senza snapshot"
+reset
+
 # --- review ---
 { review APPROVED IMPLEMENTED; } > "$SP"; expect "review senza piano" "^STOP — sezione di review senza piano"
 { above; plan DRAFT; review APPROVED IMPLEMENTED; } > "$SP"; expect "piano riaperto dopo la review" "^STOP — piano riaperto"
@@ -289,6 +317,32 @@ printf 'Chiusura: IMPLEMENTED — base %s · tree %s · gates PASS · e2e non ri
 expect "chiusura IMPLEMENTED sul codice attuale → DONE" "^DONE — catena chiusa"
 printf 'cambiato dopo\n' > src/a.py; expect "codice della catena cambiato dopo la chiusura → CHIUSURA" "^CHIUSURA — codice della catena cambiato"
 rm -rf "$RA" "$RB" "$RM" "$MA" "$KA" "$KB"; SP=.claude/.ai-workflow/spec-x.md; reset
+
+# --- 1.3.0: "Children:" next to "Figlie:" (mother and ring discovery; both lines: the first one wins) ---
+printf '%s\n' "# M" "Children: spec-m-1-a, spec-m-2-b" "## Functional requirements" "1. FR1 — a" > "$MA"
+ring "$KA" DRAFT src/a.py; printf '%s\n' "# Anello 2" "Depends on: spec-m-1-a" "Interface for: none" > "$KB"
+SP=$MA; expect "madre con «Children:» → WAIT sull'anello 1" "^WAIT — catena: anello 1/2 \(spec-m-1-a\) non chiuso"
+SP=$KB; expect "anello 2 di una madre «Children:» (scoperta dell'anello) → WAIT (L6)" "^WAIT — catena: il piano dell'anello 2 parte quando il piano dell'anello 1 \(spec-m-1-a\) e' APPROVED"
+out_has "$KB" "  e la riga Catena dell'anello" "^Catena: anello 2/2 di spec-m$"
+printf '%s\n' "# M" "Figlie: spec-m-1-a" "Children: spec-m-1-a, spec-m-2-b" "## Requisiti funzionali" "1. RF1 — a" > "$MA"
+out_has "$MA" "«Figlie:» e «Children:» insieme: vale la prima riga (1 anello)" "^Catena: madre di 1 anelli"
+rm -f "$MA" "$KA" "$KB"; SP=.claude/.ai-workflow/spec-x.md; reset
+
+# --- constraint 1 (1.3.0): State unchanged for identical input. Fixture: a chain mother (chain_state: an open ring,
+# an absent one, chiusura.txt) with plan and review section, "Verification: VERIFIED (provvisorio: …)" included.
+# 1d0181258ccc = the State printed by cycle-state.sh AND driver.py next of a2c5b99 (1.2.1) on this same fixture,
+# computed once from `git archive a2c5b99 plugins` (FIC_DRIVER=0): a fixed value, never recomputed by the new code.
+SS=$CW/spec-s.md
+printf '%s\n' "# M" "Figlie: spec-s-1-a, spec-s-2-b" "## Requisiti funzionali" "1. RF1 — a" "## Piano di implementazione" \
+  "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" "### Passi" "1. Modificare \`src/a.py\`." \
+  "## Review implementazione" "Review status: APPROVED" "Feature status: NEEDS_VERIFICATION" \
+  "Verification: VERIFIED (provvisorio: VERIFY del driver in parallelo)" "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" \
+  "" "Scope:" "src/a.py" "" "Excluded:" "src/b.py — stessa catena, anello precedente (spec-s-1-a)" > "$SS"
+printf '%s\n' "# A" "## Requisiti funzionali" "1. RF1 — a" > $CW/spec-s-1-a.md
+mkdir -p $CW/spec-s.run; printf 'Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-09-29T00:00:00Z\n' > $CW/spec-s.run/chiusura.txt
+out_has "$SS" "vincolo 1: State della fixture italiana = quello di 1.2.1 (1d0181258ccc)" "^State: 1d0181258ccc$"
+out_has "$SS" "  e la fixture copre la catena (madre, anello aperto, assente, chiusura)" "^Catena: madre di 2 anelli · spec-s-1-a aperto; spec-s-2-b assente; Chiusura: NEEDS_VERIFICATION"
+rm -rf "$SS" $CW/spec-s-1-a.md $CW/spec-s.run; reset
 
 # --- row 7t: test-red phase (harness-pt11), format 2 only, between APPROVED plan and implement ---
 plan2() { # $1 Plan status — format-2 plan with a new acceptance test

@@ -530,5 +530,16 @@ fb=$( ( FIC_REPLAY_LIB=1; export MAAT_CONFIG=$MSS; . "$RP" || { echo "sorgente d
 ) 2>&1)
 [ -z "$fb" ] && ok || ko "impronta delle dipendenze su cartelle sintetiche" "$fb"
 
+# --- 1.3.0: the outcome line in both languages (PHASE RESULT written since 1.3.0, ESITO FASE of old run dirs) ---
+EL="$W/esiti"; mkdir -p "$EL"
+printf 'PHASE RESULT implement: STOP — deviazione dal piano: passo 3\nstate=x\n' > "$EL/01-implement.esito"
+printf 'ESITO FASE implement: STOP — deviazione dal piano: passo 3\nstate=x\n' > "$EL/02-implement.esito"
+eo=$(cd "$EL" && "$FIC_PY" -B -c 'import importlib.util, sys   # -B: no __pycache__ in the plugin (maat-doctor checks it)
+s = importlib.util.spec_from_file_location("cr", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+for b in ("01-implement", "02-implement"):
+    e, why = m.esito_of(b + ".jsonl", [])
+    print(b, e, m.stop_class(why))' "$(cygpath -m "$CR" 2>/dev/null || printf '%s' "$CR")" 2>&1 | tr -d '\r')
+[ "$eo" = "$(printf '01-implement STOP deviazione\n02-implement STOP deviazione')" ] && ok || ko "riga d'esito inglese e italiana: stesso STOP e stessa causa" "$eo"
+
 echo "cycle-report.test.sh: $pass ok, $fail falliti"
 [ $fail -eq 0 ]

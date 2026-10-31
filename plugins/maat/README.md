@@ -6,7 +6,7 @@ measurements and a guard. Version in `.claude-plugin/plugin.json`; what's new in
 Installation, from the main folder of the project:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.2.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.3.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 

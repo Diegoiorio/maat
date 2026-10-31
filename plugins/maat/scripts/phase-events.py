@@ -143,7 +143,7 @@ def handle(ev, agents):
                 emit(short(f"    ← {agents.pop(b.get('tool_use_id'))} → {dec or 'finito'}"))
     elif t == "result":
         res = ev.get("result") or ""
-        esito = next((l.strip() for l in reversed(res.splitlines()) if l.strip().startswith("ESITO FASE")), None)
+        esito = next((l.strip() for l in reversed(res.splitlines()) if l.strip().startswith(("PHASE RESULT", "ESITO FASE"))), None)
         mins = round((ev.get("duration_ms") or 0) / 60000, 1)
         cost = ev.get("total_cost_usd")
         extra = f" · {mins} min · {ev.get('num_turns', '?')} turni" + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")

@@ -91,6 +91,9 @@ wsl -- bash -lc 'cd ~/maat-linux && PATH=/usr/local/sbin:/usr/local/bin:/usr/sbi
   clone.
 - `comandi-equivalenza.test.sh` runs **only** from the Linux clone: the `.git` of a worktree created from Windows
   points to `C:/`.
+- `MAAT_ORACOLO_121=1 bash plugins/maat/scripts/plan-check.test.sh` also compares, on every Italian fixture, the
+  output of `plan-check.sh` of 1.2.1 (commit `a2c5b99`, read with git) with the current one, byte for byte: the proof
+  that 1.3.0 reads the Italian formats as before. Off by default (it doubles the run time).
 
 **The full run** (all suites, Linux first then Windows, one at a time, with a summary per platform):
 `bash tools/giro-completo.sh <results folder> <worktree> <branch>`, from Git Bash. `<worktree>` is the Windows folder

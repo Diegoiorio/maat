@@ -6,9 +6,10 @@ A format-1 plan is never converted. Everything of `SKILL.md` holds, with these d
 - **No S2**: after round 1 the rounds are one delta reviewer (below), and the fresh-eyes gate runs once at the end,
   under its triggers. `lint2`, `gen`, `skeleton`, `route` say `non si applica`.
 
-   the legacy plan lacks, and — if a critical surface is declared — its `[pavimento:` or `⚠️`
-   line. A plan approved before 2026-09-21 is **not** retrofitted with a
-   `### Tracciabilità requisiti` table: its absence is not a finding (rebuilding a whole plan in
+   the legacy plan lacks, and — if a critical surface is declared — its `[floor:` or `⚠️`
+   line (a legacy plan keeps its Italian headings; the lines you add may use either form, autore.md
+   «Languages»). A plan approved before 2026-09-21 is **not** retrofitted with a
+   `### Requirement traceability` (`### Tracciabilità requisiti`) table: its absence is not a finding (rebuilding a whole plan in
    the new format to add one constraint would cost rounds for nothing). The added lines fall in
    the delta, so the delta reviewer checks them — tell it to verify the surface line as L1 would;
 
@@ -70,7 +71,7 @@ Each gate run is an iteration.
 1. **at least one delta round happened** — the gate offsets the delta's narrowing (on
    `spec-company-prefill` four clean delta rounds were followed by a blocker in areas none of
    them had in its perimeter);
-2. **round 1 approved outright AND `Superfici a rischio` declares a critical surface** — three
+2. **round 1 approved outright AND `Risk surfaces` (`Superfici a rischio`) declares a critical surface** — three
    lenses of one model can share one unexamined premise, and there it is expensive. Rare (2 plans
    out of 61 approved at round 1) and productive (20 first gate runs out of 26 found a major);
 3. **a blocker/major was rejected** at any point (see "Verify before applying").

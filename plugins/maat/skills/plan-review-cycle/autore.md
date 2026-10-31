@@ -18,27 +18,36 @@ file does not yet exist; the plan section is owned by this skill):
 
 ```text
 # <Title>
-## Contesto ...
-## Requisiti funzionali ...
+## Context ...
+## Functional requirements ...
 ...spec sections...
 
-## Piano di implementazione        ← OWNED by this skill
+## Implementation plan             ← OWNED by this skill
 Plan format: 2                                    ← new plans only (see "Plan format 2")
 Plan status: DRAFT | APPROVED | NEEDS HUMAN DECISION
 Test level: min | std | full
-Superfici a rischio: <vocabulary tokens («Risk surfaces»), or: nessuna>
+Risk surfaces: <vocabulary tokens («Risk surfaces»), or: none>
 Approved basis: spec <fp12> · plan <fp12>        ← written at approval only (Step 3); format 2: the
                                                     driver appends " · tests <fp12>" when test-red closes OK
-<plan content, incl. ### Tracciabilità requisiti and ### Piano di test>
-### Changelog revisione piano
+<plan content, incl. ### Requirement traceability and ### Test plan>
+### Plan review changelog
 <blocker/major finding → change applied · rejected findings · optional notes · metric line>
 ```
 
+**Languages (Maat 1.3.0).** Write every heading, status line, keyword and table word in the English form shown in
+this file. Maat also reads the Italian forms of the same table (specs and approved plans written before 1.3.0:
+`## Piano di implementazione`, `### Piano di test`, `Superfici a rischio:`, `[pavimento:`, `rosso se:`…) and never
+asks to translate them. **A section that already exists keeps its heading**: re-opening or revising a plan whose
+headings are Italian, you edit under those headings and keep their keywords; the English form is only for a
+section you create new. Never add the English heading next to an existing Italian one: the same section in both
+languages is a `plan-check.sh lint` VIOLAZIONE. An approved plan is never translated — its headings are inside the
+`Approved basis:` fingerprint and it would become `STALE`.
+
 Hard rules on writing:
 - The ONLY file you may write/edit is `.claude/.ai-workflow/spec-<name>.md`.
-- You may create/update ONLY the `## Piano di implementazione` section (and its
-  `### Changelog revisione piano` sub-section). **Never** modify the specification sections
-  above it, and never touch any `## Review implementazione` section (owned by
+- You may create/update ONLY the `## Implementation plan` section (`## Piano di implementazione` in an older spec)
+  and its `### Plan review changelog` sub-section. **Never** modify the specification sections
+  above it, and never touch any `## Implementation review` (or `## Review implementazione`) section (owned by
   `implementation-review-cycle`).
 - `Plan status:` must be a **line-anchored, single-occurrence** line (downstream greps
   `^Plan status: APPROVED`). The changelog MUST NOT reproduce the literal `Plan status:`
@@ -48,8 +57,8 @@ Hard rules on writing:
   quoted into the plan MUST NOT reproduce the literal `Test level:` prefix — write "livello
   di test" in prose. This matters because lens L3 now raises findings *about the test level*,
   and that text lands in the changelog.
-- `Superfici a rischio:` follows the SAME rule again: line-anchored, single-occurrence,
-  immediately under `Test level:`; in prose write "superfici a rischio" in lower case.
+- `Risk surfaces:` follows the SAME rule again: line-anchored, single-occurrence,
+  immediately under `Test level:`; in prose write "risk surfaces" in lower case.
 - **An approved plan is never edited.** After `Plan status: APPROVED` only the changelog is written
   (notes, metric line). Any other change — a new constraint, an amendment, a "small fix" — goes
   through a re-opening (SKILL.md, «re-opening»). Measured: 308 lines added to an approved plan by
@@ -62,20 +71,21 @@ Hard rules on writing:
 
 **The risk-surface vocabulary — the single list; every other mention points here:**
 
-| Token | Covers | Critical |
-|---|---|---|
-| `permessi` | authentication, authorization, roles, visibility by role | **yes** |
-| `dati` | DB schema, migrations, persistent state, data written or deleted in bulk | **yes** |
-| `distruttiva` | an operation that deletes or overwrites data/state irreversibly | **yes** |
-| `contratto-api` | request/response shape, status codes, routes consumed by others | no |
-| `import` | the import pipelines | no |
-| `logica-condivisa` | shared business logic, shared components/stores/composables | no |
+| Token | Italian token (older plans) | Covers | Critical |
+|---|---|---|---|
+| `permissions` | `permessi` | authentication, authorization, roles, visibility by role | **yes** |
+| `data` | `dati` | DB schema, migrations, persistent state, data written or deleted in bulk | **yes** |
+| `destructive` | `distruttiva` | an operation that deletes or overwrites data/state irreversibly | **yes** |
+| `api-contract` | `contratto-api` | request/response shape, status codes, routes consumed by others | no |
+| `import` | `import` | the import pipelines | no |
+| `shared-logic` | `logica-condivisa` | shared business logic, shared components/stores/composables | no |
 
-The plan declares the touched ones in `Superfici a rischio:` — bare tokens separated by commas,
-or `nessuna`; no notes on that line (`plan-check.sh lint` rejects an unknown token). **Critical** surfaces drive two things and nothing else: the verification floor
+The plan declares the touched ones in `Risk surfaces:` — bare tokens separated by commas,
+or `none`; no notes on that line (`plan-check.sh lint` rejects an unknown token). The two columns are the same
+token: `plan-check.sh` maps the English one to the Italian one, and prints the Italian one (`Pavimento: permessi`). **Critical** surfaces drive two things and nothing else: the verification floor
 (see "Test effort") and the fresh-eyes gate after a round-1 approval (Step 2-ter). No
 LOW/MEDIUM/HIGH grading: no behaviour needs it. Lens L1 verifies the declaration like any
-`nessuna implicazione` — under-declaring would silently skip both.
+`no implication` — under-declaring would silently skip both.
 
 ## Test effort: `--tests=min|std|full`
 
@@ -90,19 +100,20 @@ Write the resolved level into the plan as `Test level: <lvl>`, immediately under
 |---|---|---|---|
 | Suite | existing gates of the **touched modules only** | same | modules' suites + lint (the CI's gates; build only if the plan prescribes it) |
 | New test cases in the plan | **0**, unless a bug regression (1 case) | **≤5**, only on the behavior the plan changes | no cap |
-| `[pavimento:` line per declared critical surface | 1, outside the caps | 1, outside the caps | 1, outside the caps |
+| `[floor:` line per declared critical surface | 1, outside the caps | 1, outside the caps | 1, outside the caps |
 | Counterproof (the file(s) it names reverted to base, or a named mutation; expected red) | none | on the **central gate** only (1, max 2) | every new case |
 | e2e prescribed in the plan | only `[e2e-locator:` (below) | only `[e2e-locator:` (below) | at most 1 targeted spec, plus `[e2e-locator:` |
 | `/browser-qa` | never | never | **never** — explicit request only |
-| Length of `### Piano di test` (a signal, never a finding by itself) | ~1 line | ~15 lines | free |
+| Length of `### Test plan` (a signal, never a finding by itself) | ~1 line | ~15 lines | free |
 
 **A whole-suite gate is permitted but never required at `full`; it is forbidden at `min` and
 `std`.** This is the criterion L3 uses to decide whether a gate is over-testing, so it must be
 unambiguous.
 
-**Section name.** The canonical heading is `### Piano di test` (numbering optional, e.g.
-`### 9. Piano di test`). Existing specs use both forms; the length rule targets this heading. All plan headings
-and keywords stay in Italian as written here (`### Tracciabilità requisiti`, `rosso se:`…), whatever the language.
+**Section name.** The canonical heading is `### Test plan` (numbering optional, e.g.
+`### 9. Test plan`; `### Piano di test` in an older plan, kept as it is). The length rule targets this heading.
+Plan headings and keywords are written in English as shown here (`### Requirement traceability`, `red if:`…),
+whatever the language of the prose — see «Languages» above for the sections that already exist.
 
 **The length is measured, not enforced.** `plan-check.sh lint` prints an `AVVISO` above it; a
 reviewer never raises a blocker/major on the line count alone — what blocks is what the lines
@@ -112,20 +123,20 @@ prescribe (a case over the level's cap, a duplicate, a whole suite below `full`)
 **Risk surfaces do NOT raise the level — but a critical one gets a floor.** The level is the
 verification *budget*; it never turns `min` into `full`. Yet at `min` a permission change could
 otherwise reach approval with no verification of the permission at all. So, for **each critical
-surface declared** (`permessi`, `dati`, `distruttiva` — vocabulary in «Risk surfaces»), `### Piano di test`
+surface declared** (`permissions`, `data`, `destructive` — vocabulary in «Risk surfaces»), `### Test plan`
 names **exactly one** pertinent verification, as a list item of its own, marked:
 
 ```text
-- [pavimento: permessi] <an existing test cited by path, OR 1 new case, OR a read-only DB check of the declared remote verification> rosso se: <condition>
+- [floor: permissions] <an existing test cited by path, OR 1 new case, OR a read-only DB check of the declared remote verification> red if: <condition>
 ```
 
-- for `permessi`, the pertinent verification is the **negative** one (the denied role is denied);
-- a `[pavimento:` line is **exempt** from the level's caps (new cases, `### Piano di test` length),
+- for `permissions`, the pertinent verification is the **negative** one (the denied role is denied);
+- a `[floor:` line (`[pavimento:` in an older plan) is **exempt** from the level's caps (new cases, `### Test plan` length),
   from the L3 over-testing rule and from the "do NOT re-add" list — at most one per critical
   surface, which `plan-check.sh lint` enforces;
 - if no pertinent verification is reachable, the plan writes the old **one line** instead —
-  `⚠️ Superficie <token> non coperta dai gate al livello <lvl>`, with the vocabulary token right
-  after `Superficie` (a `⚠️` line about another surface does not cover this one) — and continues.
+  `⚠️ Surface <token> not covered by the gates at level <lvl>`, with the vocabulary token right
+  after `Surface` (a `⚠️` line about another surface does not cover this one) — and continues.
   One line, not a paragraph, and outside the caps too. **Downstream it is an obligation**: the
   feature cannot reach `IMPLEMENTED` until the user reports a verification of that surface — i.e.
   in `/full-implementation-cycle` a `⚠️` on a critical surface **is a human STOP**. That is the
@@ -133,14 +144,14 @@ names **exactly one** pertinent verification, as a list item of its own, marked:
   touched the surface at runtime. So look hard for a floor first;
 - **the waiver**: when the change does not alter the surface's runtime behaviour at all (a rename,
   a message, a refactor that leaves the check itself untouched), append on the **same physical
-  line** `— statica sufficiente: <motivo>`. Then no obligation arises downstream; the surface stays
+  line** `— static sufficient: <reason>`. Then no obligation arises downstream; the surface stays
   a risk focus. L3 judges the motive: a waiver on a change that does alter the behaviour is
   under-testing. After approval the line is frozen (`Approved basis:`);
-- non-critical surfaces (`contratto-api`, `logica-condivisa`, `import`) get no floor and no
+- non-critical surfaces (`api-contract`, `shared-logic`, `import`) get no floor and no
   obligation: their risk is blast radius, which is L1/L2's job, not a test's. A `⚠️` line on them
   is only a risk focus.
 
-**Every new test case states `rosso se: <condition>`** — the world in which it goes red. One
+**Every new test case states `red if: <condition>`** — the world in which it goes red. One
 clause per case, no new cap: it makes L3's non-vacuity check checkable instead of inferred.
 
 **A counterproof names the file(s) it touches** — either reverted to the base, or a **named
@@ -153,14 +164,14 @@ gate names and records a gate that names none as `NOT RUN` — a STOP.
 
 **An e2e bound to a locator, at any level.** When the plan changes a file in `e2e/specs/`, or a
 string, class or attribute that an e2e spec uses as a locator (L3 searches every changed string
-there), `### Piano di test` carries one list item per affected spec:
+there), `### Test plan` carries one list item per affected spec:
 
 ```text
-- [e2e-locator: e2e-6-customer.spec.ts] <the locator or string that changes> rosso se: <condition>
+- [e2e-locator: e2e-6-customer.spec.ts] <the locator or string that changes> red if: <condition>
 ```
 
 At most 2 such lines; beyond that, one `⚠️` line and the regression watch. They are outside the
-level's caps like a `[pavimento:` line (`plan-check.sh lint` does not count them, the
+level's caps like a `[floor:` line (`plan-check.sh lint` does not count them, the
 `Approved basis:`
 fingerprint freezes them), and downstream each is a required gate: the declared remote verification (`verifica_remota` in `.claude/maat.json`) with `--e2e <spec>` on DEV, so with
 `--no-dev` the feature stops at `NEEDS_VERIFICATION` — on purpose. Measured: unit tests green while the real DOM broke a locator (`spec-partita-iva-unica-context`), and a selector changed at `std` whose e2e never ran (`spec-opzioni-offerta-salvataggio`).
@@ -171,121 +182,129 @@ hand when needed (and it stays a mandatory gate only at the porting cutover).
 **Downstream contract — these lines are consumed, not just read.** `/implementation-review-cycle`
 parses the approved plan with `plan-check.sh contract` and does NOT re-derive what the plan already
 decided:
-- every gate written in `### Piano di test` becomes a **required gate** of the implementation
+- every gate written in `### Test plan` becomes a **required gate** of the implementation
   review (a feature cannot reach `IMPLEMENTED` until it has passed on the reviewed code). So write
   each gate as something that can be executed and observed — a test file, a command, a counterproof
   with its expected red — never as a wish ("verify that it works");
-- every `⚠️ Superficie <token> non coperta…` line becomes a **risk focus** the implementation reviewer
+- every `⚠️ Surface <token> not covered…` line becomes a **risk focus** the implementation reviewer
   must look at first: keep it to the surfaces that are really uncovered;
-- the surfaces of `Superfici a rischio:` are a risk focus too, a `[pavimento:` or `[e2e-locator:`
+- the surfaces of `Risk surfaces:` are a risk focus too, a `[floor:` or `[e2e-locator:`
   line is a required gate like any other, a critical surface with neither a floor nor a waiver is an
-  **obligation** closed only by the user's evidence, and `### Tracciabilità requisiti` is the
+  **obligation** closed only by the user's evidence, and `### Requirement traceability` is the
   requirement list the implementation reviewer reports coverage against.
 Over-prescribing here therefore costs twice: once in the plan, once as a gate that must pass.
 
 ## Plan format 2
 
-A plan whose section opens with the line `Plan format: 2` — right under `## Piano di implementazione`,
+A plan whose section opens with the line `Plan format: 2` — right under `## Implementation plan`,
 above `Plan status:`, line-anchored, single occurrence — is in **format 2**. **Every plan this skill
 writes from scratch is in format 2.** A plan without the line is **format 1** and follows the rest of
 this file exactly as before — a format-1 plan re-opened later included: it is never converted.
-Everything above (status lines, level, surfaces, floors, `rosso se:`, `Approved basis:`) holds in both.
+Everything above (status lines, level, surfaces, floors, `red if:`, `Approved basis:`) holds in both.
 
 **Structure.** H3 sections (numbering optional); the table headers are fixed — `plan-check.sh` reads
 them:
 
 ```text
-## Piano di implementazione
+## Implementation plan
 Plan format: 2
 Plan status: DRAFT
 Test level: std
-Superfici a rischio: permessi, contratto-api
+Risk surfaces: permissions, api-contract
 
-### Decisioni
+### Decisions
 <one short paragraph per decision, then its examples>
 | input | output |
 |---|---|
 | target €1,000,000, assigned €950,000 | `near` (boundary: remainder = threshold) |
 
-### File toccati
+### Touched files
 - `backend/app/routers/goals.py`
 - `backend/tests/test_goals.py`
 
-### Passi
-#### Blocco B1 — backend
-scrive: `backend/app/routers/goals.py`, `backend/tests/test_goals.py`
-dopo: nessuno
+### Steps
+#### Block B1 — backend
+writes: `backend/app/routers/goals.py`, `backend/tests/test_goals.py`
+after: none
 
-| id | file | modifica | test |
+| id | file | change | test |
 |---|---|---|---|
 | P1 | `backend/app/routers/goals.py` | `update_goal()`: 403 for whoever cannot edit | T1 |
 
-#### Blocco B2 — frontend
-scrive: `frontend/components/goals/PlanTable.vue`
-dopo: B1
+#### Block B2 — frontend
+writes: `frontend/components/goals/PlanTable.vue`
+after: B1
 
-### Tracciabilità requisiti
-| Req | Passi del piano | Verifica |
+### Requirement traceability
+| Req | Plan steps | Verification |
 |---|---|---|
-| RF1 | P1 | T1 |
-| RF2 | P2 | non verificabile a test: <reason> |
+| FR1 | P1 | T1 |
+| FR2 | P2 | not verifiable by a test: <reason> |
 
-### Stringhe e data-test
-| azione | tipo | valore |
+### Strings and data-test
+| action | type | value |
 |---|---|---|
-| toglie | data-test | `goals-company-section` |
-| aggiunge | stringa | `Modifica obiettivo aziendale` |
+| removes | data-test | `goals-company-section` |
+| adds | string | `Edit company goal` |
 
-### Piano di test
-| ID | requisito | file | asserzione | mutazione |
+### Test plan
+| ID | requirement | file | assertion | mutation |
 |---|---|---|---|---|
-| T1 | RF1 | `backend/tests/test_goals.py::test_update_denied` (nuovo) | rosso se: a salesperson updates the target | `backend/app/routers/goals.py` · `update_goal` · `if not can_edit:` → `if False:` · rosso se: `assert 200 == 403` |
-- [pavimento: permessi] T1
+| T1 | FR1 | `backend/tests/test_goals.py::test_update_denied` (new) | red if: a salesperson updates the target | `backend/app/routers/goals.py` · `update_goal` · `if not can_edit:` → `if False:` · red if: `assert 200 == 403` |
+- [floor: permissions] T1
 ```
 
+The Italian forms of an older format-2 plan, kept where the section already exists: `## Piano di implementazione`,
+`### Decisioni` · `### File toccati` · `### Passi` · `### Tracciabilità requisiti` · `### Stringhe e data-test` ·
+`### Piano di test`, `#### Blocco <id>` with `scrive:` / `dopo:` (`nessuno`), the headers `id | file | modifica |
+test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`, column `verificato`),
+`ID | requisito | file | asserzione | mutazione`, `rosso se:`, `(vuoto)`, `(nuovo)`, `[pavimento: <token>]`,
+`⚠️ Rischio aperto`. Each reader accepts both.
+
 - **Paths** are relative to the repository, everywhere (their first segment exists at the root).
-- **New files**: in `### File toccati`, `(nuovo)` right after the path's code span (`` - `path` (nuovo) ``)
+- **New files**: in `### Touched files`, `(new)` right after the path's code span (`` - `path` (new) ``)
   marks a file the plan creates. Downstream (harness-pt11) it is the `test-red` phase's write scope with the
   test files, where the stubs of the new symbols go, and the only kind of file whose counterproof can be
   absorbed (L2).
-- **Acceptance tests (test-red)**: every row of `### Piano di test` is written and proven red on the base with
+- **Acceptance tests (test-red)**: every row of `### Test plan` is written and proven red on the base with
   stubs before the implementation. The red must hit the row's assertion, at a position in the test file: put
-  the expected failure text between backticks in `asserzione` (else the mutation's `rosso se:` is used) — a row
+  the expected failure text between backticks in `assertion` (else the mutation's `red if:` is used) — a row
   with neither is a `lint2` VIOLATION, and a red with no text or no position is not proven; every string or `data-test` the plan
-  adds must be listed as `aggiunge` in `### Stringhe e data-test` — an existing test asserting its absence is
+  adds must be listed as `adds` in `### Strings and data-test` — an existing test asserting its absence is
   a conflict that stops the phase.
-- **Decisioni** stay prose; the input → output examples are what the implementer and the tests read.
-- **Passi**: every step is a row `id | file | modifica | test` inside a `#### Blocco <id>`; each block
-  declares `scrive:` (the files it writes) and `dopo:` (the blocks it depends on, or `nessuno`).
-- **Piano di test**: one row per case. `file` = the test, as the first code span: `path` or
-  `path::name` (pytest node id, or vitest full name — required when the row has a mutation); `(nuovo)`
-  after the span marks a new case, the one the level's caps count. `asserzione` = the case's
-  `rosso se:`. `requisito` = the IDs of `### Tracciabilità requisiti` it verifies.
-- **Existing non-regression tests are NOT rows of `### Piano di test`.** A test that already exists and must
-  only stay green («resta verde», «rimane verde», «continua a passare») cannot be proven red on the base with
-  stubs, so as a row it stops the cycle at test-red — `lint2` gives a VIOLATION for a row whose `asserzione`
-  starts that way. Put them in a note right under the table, one item each: «Test ESISTENTI di
-  non-regressione (non sono righe del Piano di test: non si possono dimostrare rossi sulla base con stub):» —
-  `path` (or `path::name`), what stays true, the requirement IDs, and the explicit command when the test is
-  outside the gate of the touched modules. A requirement covered only by such a test is written in
-  `### Tracciabilità requisiti` as ``non verificabile a test (invarianza, non dimostrabile rossa): la copre il
-  test esistente `<path>` `` (the `non verificabile` prefix is what `lint2` accepts); the step's `test` column
-  then names no ID for it (`—`). A test the plan **updates** is not «resta verde»: it is a row with its `rosso se:`.
-- **mutazione** = the counterproof, in `counterproof.sh`'s form, or `—`:
-  `` `file` · `simbolo` · `cerca` → `sostituisci` · rosso se: `testo del messaggio d'errore` ``.
-  `(vuoto)` in place of the replacement removes `cerca`; `cerca` must occur **once** in the file
+- **Decisions** stay prose; the input → output examples are what the implementer and the tests read.
+- **Steps**: every step is a row `id | file | change | test` inside a `#### Block <id>`; each block
+  declares `writes:` (the files it writes) and `after:` (the blocks it depends on, or `none`).
+- **Test plan**: one row per case. `file` = the test, as the first code span: `path` or
+  `path::name` (pytest node id, or vitest full name — required when the row has a mutation); `(new)`
+  after the span marks a new case, the one the level's caps count. `assertion` = the case's
+  `red if:`. `requirement` = the IDs of `### Requirement traceability` it verifies.
+- **Existing non-regression tests are NOT rows of `### Test plan`.** A test that already exists and must
+  only stay green («stays green», «remains green», «keeps passing» — or the Italian «resta verde», «rimane verde»,
+  «continua a passare») cannot be proven red on the base with stubs, so as a row it stops the cycle at test-red —
+  `lint2` gives a VIOLATION for a row whose `assertion` starts that way. Put them in a note right under the table,
+  one item each: «EXISTING non-regression tests (not rows of the Test plan: they cannot be proven red on the base
+  with stubs):» — `path` (or `path::name`), what stays true, the requirement IDs, and the explicit command when the
+  test is outside the gate of the touched modules. A requirement covered only by such a test is written in
+  `### Requirement traceability` as ``not verifiable by a test (invariance, cannot be proven red): covered by the
+  existing test `<path>` `` (the `not verifiable` prefix — or `non verificabile` — is what `lint2` accepts); the
+  step's `test` column then names no ID for it (`—`). A test the plan **updates** is not «stays green»: it is a row
+  with its `red if:`.
+- **mutation** = the counterproof, in `counterproof.sh`'s form, or `—`:
+  `` `file` · `symbol` · `search` → `replace` · red if: `text of the error message` ``.
+  `(empty)` in place of the replacement removes `search`; `search` must occur **once** in the file
   *after* the implementation; a `|` is written `\|`, a backtick needs a double-backtick span. File and
   test in the same module of `.claude/maat.json` (a test under the `radice` of the file's module). Which rows
   carry one follows the level (none at `min`, the central gate at `std`, every new case at `full`).
-- `[pavimento:`, `[e2e-locator:` and `⚠️` lines stay list items under the table, as in format 1; a
+- `[floor:`, `[e2e-locator:` and `⚠️` lines stay list items under the table, as in format 1; a
   floor that is a row of the table names its ID.
-- **Stringhe e data-test**: every string or `data-test` the plan removes (`toglie`) or adds (`aggiunge`).
+- **Strings and data-test**: every string or `data-test` the plan removes (`removes`) or adds (`adds`).
   `lint2` searches the existing tests for them and decides, by the literal's position, whether a match asserts
   presence (a `VIOLAZIONE` unless the file is one the plan touches — an e2e spec: its `[e2e-locator:` line) or
-  absence (an `AVVISO`). An optional fourth column `verificato` — `` `<file>` — <motivo> `` — waives that row's
-  match in that file: `| toglie | stringa | `Attivo` | `frontend/tests/x.test.ts` — rewritten by flow X |`.
+  absence (an `AVVISO`). An optional fourth column `verified` — `` `<file>` — <reason> `` — waives that row's
+  match in that file: `| removes | string | `Active` | `frontend/tests/x.test.ts` — rewritten by flow X |`.
 - **A product defect found late** (round 3 or 4) does not reopen the design: it becomes one test row, with its
-  step, and one list item `⚠️ Rischio aperto: <claim> — <test ID>` under the table.
+  step, and one list item `⚠️ Open risk: <claim> — <test ID>` under the table.
 
 **Generated, never written.** The plan carries **no** command line, no `test-fast.sh` path list, no
 pytest selector, no counterproof recipe: `plan-check.sh gen <spec>` derives them from the test table and
@@ -297,8 +316,8 @@ mutation). A procedure written by hand cannot be wrong, because there is none.
 
 A plan too large does not converge (the reviewers sample it instead of exhausting it). Asked for the skeleton:
 1. **Skeleton first.** Write only the skeleton into the plan section: `Plan format: 2` and the status lines
-   (`Plan status: DRAFT`), `### File toccati`, and `### Passi` with its `#### Blocco` blocks and one row per
-   step (`| id | file | modifica | test |` — a few words in `modifica`, `test` may be `—`). No decisions, no
+   (`Plan status: DRAFT`), `### Touched files`, and `### Steps` with its `#### Block` blocks and one row per
+   step (`| id | file | change | test |` — a few words in `change`, `test` may be `—`). No decisions, no
    traceability, no test plan yet. Then `plan-check.sh skeleton <spec>`:
    - `Scheletro: SOTTO IL TETTO` (≤15 steps, ≤40 files) → write the full plan **starting from the skeleton**
      (it is its backbone: nothing is thrown away);
@@ -308,17 +327,18 @@ A plan too large does not converge (the reviewers sample it instead of exhaustin
 
 ## Writing the plan
 
-Analyze the local codebase and write the `## Piano di implementazione` section into
+Analyze the local codebase and write the `## Implementation plan` section into
 `.claude/.ai-workflow/spec-<name>.md` with `Plan status: DRAFT`, `Test level: <lvl>` and
-`Superfici a rischio: <tokens | nessuna>`. Copy the spec to the scratchpad **before** writing
+`Risk surfaces: <tokens | none>`. Copy the spec to the scratchpad **before** writing
 (the `lint` baseline), and after writing run `plan-check.sh lint <spec> --baseline <copy>`.
 
-**`### Tracciabilità requisiti`** — one row per requirement, with the ID as the spec writes it
-(`RF1`, `D3`, `Requisito A`…) or `RF<n>` by position when the spec has none:
+**`### Requirement traceability`** — one row per requirement, with the ID as the spec writes it
+(`FR1`, `RF1` in an older spec, `D3`, `Requirement A`…) or `FR<n>` by position when the spec has none. Cite the
+spec's ids literally: `RF1` and `FR1` are **different** ids (no alias), and a chain ring uses its mother's family:
 
 ```text
-| Req | Passi del piano | Verifica |
-| RF1 | 2, 3 | test_x.py::test_y · or: non verificabile a test, <reason> |
+| Req | Plan steps | Verification |
+| FR1 | 2, 3 | test_x.py::test_y · or: not verifiable by a test, <reason> |
 ```
 
 One row each, no prose: a small feature gets a three-row table. L1 checks it (not a script: real
@@ -331,10 +351,10 @@ persistence implications; risks; requirement traceability (below); test plan **a
 level** (see "Test effort"); rollback considerations; explicit out-of-scope.
 
 **Size the plan to the change — these sections are conditional, not mandatory prose.**
-A section with nothing to say gets **one line, `nessuna implicazione`** — never a paragraph of
+A section with nothing to say gets **one line, `no implication`** — never a paragraph of
 filler. Measured: plans average ~700 lines and reach 1314, and that volume is the surface every
-round rewrites, which is where self-inflicted defects come from. An explicit `nessuna
-implicazione` is a verifiable claim; filler prose is indistinguishable from real content, to a
+round rewrites, which is where self-inflicted defects come from. An explicit `no
+implication` is a verifiable claim; filler prose is indistinguishable from real content, to a
 human reader and to a reviewer alike.
 
 Lens **L1** is required to check every one of those declarations, so writing one without
