@@ -24,6 +24,9 @@
 #   8. (1.5.0) the public equivalence corpus tools/esempi-equiv/ (models, states, manifests, builder) does not name the
 #      guide project: the full list NOMI, local reserved names included, no exception. Counterproof on a copy: the fake
 #      reserved name in a model => red; copy restored => green. Outside the repo (no tools/esempi-equiv/) SALTATO.
+#   9. (1.5.0) the frozen reference tests/comandi-equivalenza/riferimento.txt does not name the guide project: reserved
+#      names and the fake one only (its modules/app/... paths come from examples/nuxt-fastapi.maat.json). Counterproof on
+#      a copy: the fake name => red. Part of the plugin: checked inside and outside the repo.
 # The R11 reminder in the main-session skills (pk05) is already checked by guard.test.sh, a plugin suite.
 #   bash plugins/maat/scripts/genericita.test.sh          (Git Bash or WSL)
 set -uo pipefail
@@ -198,6 +201,20 @@ if [ -d "$EQ" ]; then
   [ -z "$(eq_residui "$Q")" ] && ok || ko "copia del corpus ripristinata: dovrebbe tornare verde" "$(eq_residui "$Q")"
 else
   echo "SALTATO [corpus pubblico]: $EQ non esiste (plugin installato, fuori dal repo)"
+fi
+
+# --- 9. the frozen reference of comandi-equivalenza (1.5.0) ---
+# Only the reserved names and the fake one: the modules/app/... paths are those of examples/nuxt-fastapi.maat.json (declared).
+RIFF=$PLUGIN/tests/comandi-equivalenza/riferimento.txt
+RISN="$FINTO${RIS:+|$RIS}"
+rif_residui() { grep -niE -- "$RISN" "$1" 2>/dev/null; }   # $1 file -> «line:text»
+if [ -f "$RIFF" ]; then
+  r=$(rif_residui "$RIFF")
+  [ -z "$r" ] && ok || ko "tests/comandi-equivalenza/riferimento.txt: nomi del progetto guida ($(printf '%s\n' "$r" | grep -c .) righe)" "$r"
+  cp "$RIFF" "$W/riferimento.txt"; printf '%s\n' 'NPX <repo>/Progetto-Riservato|vitest run' >> "$W/riferimento.txt"
+  [ -n "$(rif_residui "$W/riferimento.txt")" ] && ok || ko "controprova: «Progetto-Riservato» in una copia di riferimento.txt non fa rosso"
+else
+  ko "manca $RIFF (riferimento congelato di comandi-equivalenza, parte del plugin)"
 fi
 
 echo "genericita.test.sh: $pass ok, $fail falliti"
