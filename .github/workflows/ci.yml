@@ -1,4 +1,11 @@
 # CI: all the plugin suites on Linux (tools/suite.sh), one at a time. Windows and macOS come later (1.5.3).
+# 1.5.0: tools/esempi-equiv.test.sh proves the driver on the public corpus with the two validators (D14): the system
+# Python (minimal validator) and a venv of its own with jsonschema at a fixed version (MAAT_PY_JSONSCHEMA; the same
+# version tools/certifica.sh --scrivi requires). The strict check of the certificate (MAAT_CERT_RICHIESTO=1:
+# driver.equiv VALIDO with the fingerprint of the corpus built and «validatori minimo,jsonschema») runs on pushes to
+# main, on tags and on pull requests to main: a PR to main that touches a certified file (driver.py, cycle-state.sh,
+# run-phase.sh, messages.tsv, maat-msg.sh, maat_msg.py) or changes the corpus is red until the same PR commits the
+# driver.equiv rewritten with `bash tools/certifica.sh --scrivi` from Linux. Other branches: no strict check.
 name: CI
 on:
   push:
@@ -8,7 +15,7 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # the Linux run measured about 15 min in a clean clone: twice that
+    timeout-minutes: 45   # about 15 min in 1.4.0, plus the corpus with two validators: to be revised on the measure
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +30,14 @@ jobs:
         run: |
           git config --global user.name "Maat CI"
           git config --global user.email "ci@example.invalid"
+      - name: jsonschema in a venv of its own (the second validator)
+        run: |
+          python -m venv "$RUNNER_TEMP/maat-venv"
+          "$RUNNER_TEMP/maat-venv/bin/python" -m pip install --disable-pip-version-check --quiet "jsonschema==4.23.0"
+          echo "MAAT_PY_JSONSCHEMA=$RUNNER_TEMP/maat-venv/bin/python" >> "$GITHUB_ENV"
       - name: Suites
+        env:
+          MAAT_CERT_RICHIESTO: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) || (github.event_name == 'pull_request' && github.base_ref == 'main')) && '1' || '0' }}
         run: bash tools/suite.sh esiti
       - name: Results
         if: always()

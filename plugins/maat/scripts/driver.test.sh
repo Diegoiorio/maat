@@ -13,7 +13,8 @@
 #   5 equiv and certificate · 6 plan counterproofs: anti-loop removed, JSON validation removed
 #   7 batches and lanes decided by the driver (step 5) · 8 lines loaded per phase (step 4, cap on the base load)
 #   9 port of cycle-state.test.sh: every call compares the whole output of cycle-state.sh (standalone) and of
-#     `driver.py next`; the cases must pass AND the two outputs must match
+#     `driver.py next`; the cases must pass AND the two outputs must match (1.5.0: in it and in en, each with a Next:
+#     line on both sides; the counterproofs of the comparison run even with DRIVER_TEST_RAPIDO=1)
 #  10 L2 promotion before the review: assorbita only if it holds finalize's check (plan-check.sh l2)
 #  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
 set -uo pipefail
@@ -504,21 +505,53 @@ check "righe: il carico BASE di ogni fase e' <=300 righe di istruzioni" '[ $rc -
 check "  e le letture a parte sono riportate (scrittura del piano con autore.md, revisori con il loro agente), senza file mancanti" 'grep "^righe plan:" "$T/righe.out" | grep -q "con la scrittura del piano: [0-9]* (base plan-review-cycle/autore.md=[0-9]*)" && grep "^righe plan:" "$T/righe.out" | grep -q "revisore del piano: [0-9]* (plan-review-cycle/revisori.md=[0-9]* agents/spec-plan-reviewer.md=[0-9]*)" && grep "^righe review:" "$T/righe.out" | grep -q "revisore: [0-9]* (implementation-review-cycle/prompt-revisore.md=[0-9]* agents/implementation-reviewer.md=[0-9]*)" && ! grep -q "=None" "$T/righe.out"'
 
 # --- 9. port of cycle-state.test.sh: same cases, output compared with standalone cycle-state.sh ---
+# 1.5.0 (D): the comparison in both languages. Called with MAAT_LINGUA=it (the direct calls of cycle-state.test.sh) it
+# compares the two sides in it AND in en; called by en_twin (MAAT_LINGUA=en already) only in the language received, not
+# to pay en twice. So en also covers the cases with harness.fp that en_twin skips. Every difference in cs-diff carries
+# its language; a comparison where a side has no «Next:» line goes to cs-nonext (two failures without output are not
+# «the same»). CSC_DRV, CSC_CS, CSC_OUT: the driver, the cycle-state.sh and the folder of the counterproofs below.
+cat > "$T/cs-confronto.sh" <<EOF
+#!/usr/bin/env bash
+DRVC=\${CSC_DRV:-$DRV}; CSC=\${CSC_CS:-$FC/cycle-state.sh}; OD=\${CSC_OUT:-$T}
+confronta() { # \$1 language, then the arguments of cycle-state.sh; sets b (the driver's output)
+  local l=\$1 a; shift
+  a=\$(MAAT_LINGUA=\$l FIC_DRIVER=0 bash "\$CSC" "\$@" 2>/dev/null)
+  b=\$(MAAT_LINGUA=\$l "$FIC_PY" "\$DRVC" next "\$@" 2>&1)
+  [ "\$a" = "\$b" ] || printf '=== [%s] %s\n--- cycle-state.sh\n%s\n--- driver.py next\n%s\n' "\$l" "\$*" "\$a" "\$b" >> "\$OD/cs-diff"
+  { printf '%s\n' "\$a" | grep -q '^Next: ' && printf '%s\n' "\$b" | grep -q '^Next: '; } || printf '[%s] %s\n' "\$l" "\$*" >> "\$OD/cs-nonext"
+}
+l0=\${MAAT_LINGUA:-it}
+confronta "\$l0" "\$@"; out=\$b
+[ "\$l0" = it ] && confronta en "\$@"
+printf '%s\n' "\$out"
+EOF
+# counterproofs of the comparison, on one spec (IMPLEMENT — plan approved, no review), in every run of the suite:
+# (f) a driver wrong only in en (the en text of cycle-state.impl changed in the catalog of a copy) → cs-diff with [en]
+# only; (g) a driver and a cycle-state.sh that both exit 1 without output → the same outputs, but cs-nonext not empty
+CF=.claude/.ai-workflow/spec-confronto.md; SP_PRIMA=$SP
+(cd "$W" && SP=$CF && spec_approved); SP=$SP_PRIMA
+mkdir -p "$T/c9" "$T/c9f/lib" "$T/c9g"
+(cd "$W" && CSC_OUT="$T/c9" bash "$T/cs-confronto.sh" "$CF" > "$T/c9/out")
+check "§9 premessa: sulla spec di prova il confronto in it e in en non registra niente, e il driver dice IMPLEMENT" '[ ! -e "$T/c9/cs-diff" ] && [ ! -e "$T/c9/cs-nonext" ] && grep -q "^Next: IMPLEMENT — piano approvato, nessuna review" "$T/c9/out"'
+cp "$DRV" "$HERE/maat_paths.py" "$HERE/maat_msg.py" "$T/c9f/"; cp "$HERE/lib/maat-msg.sh" "$T/c9f/lib/"
+awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "cycle-state.impl" { $2 = "plan approved, NO review" } { print }' "$HERE/lib/messages.tsv" > "$T/c9f/lib/messages.tsv"
+check "controprova (f): la mutazione e' applicata (testo en di cycle-state.impl nel catalogo della copia)" 'grep -q "^cycle-state.impl	plan approved, NO review	" "$T/c9f/lib/messages.tsv"'
+(cd "$W" && CSC_OUT="$T/c9f" CSC_DRV="$T/c9f/$(basename "$DRV")" bash "$T/cs-confronto.sh" "$CF" > /dev/null)
+check "controprova (f): un driver che sbaglia solo in en → cs-diff non vuoto, con la lingua en (e solo en)" 'grep -q "^=== \[en\] " "$T/c9f/cs-diff" && ! grep -q "^=== \[it\] " "$T/c9f/cs-diff"'
+printf 'import sys\nsys.exit(1)\n' > "$T/c9g/driver-muto.py"; printf '#!/usr/bin/env bash\nexit 1\n' > "$T/c9g/cs-muto.sh"
+(cd "$W" && CSC_OUT="$T/c9g" CSC_DRV="$T/c9g/driver-muto.py" CSC_CS="$T/c9g/cs-muto.sh" bash "$T/cs-confronto.sh" "$CF" > /dev/null)
+check "controprova (g): due lati che escono 1 senza stampare → uscite uguali (cs-diff vuoto) ma cs-nonext non vuoto, in it e in en" '[ ! -e "$T/c9g/cs-diff" ] && grep -q "^\[it\] " "$T/c9g/cs-nonext" && grep -q "^\[en\] " "$T/c9g/cs-nonext"'
+rm -rf "$W/$CF" "$T/c9" "$T/c9f" "$T/c9g"
 if [ "${DRIVER_TEST_RAPIDO:-0}" = 1 ]; then
   echo "driver.test.sh: sezione 9 saltata (DRIVER_TEST_RAPIDO=1)"
 else
-  cat > "$T/cs-confronto.sh" <<EOF
-#!/usr/bin/env bash
-a=\$(FIC_DRIVER=0 bash "$FC/cycle-state.sh" "\$@" 2>/dev/null)
-b=\$("$FIC_PY" "$DRV" next "\$@" 2>&1)
-[ "\$a" = "\$b" ] || printf '=== %s\n--- cycle-state.sh\n%s\n--- driver.py next\n%s\n' "\$*" "\$a" "\$b" >> "$T/cs-diff"
-printf '%s\n' "\$b"
-EOF
   CS="$T/cs-confronto.sh" bash "$FC/cycle-state.test.sh" > "$T/cs.out" 2>&1; rc=$?
   tail -1 "$T/cs.out"
   check "cycle-state.test.sh sul driver: tutti i casi passano" '[ $rc -eq 0 ]'
   check "  e a ogni chiamata l'output del driver e' identico a cycle-state.sh" '[ ! -s "$T/cs-diff" ]'
   [ -s "$T/cs-diff" ] && head -40 "$T/cs-diff"
+  check "  1.5.0: ogni confronto, in it e in en, ha una riga Next: sui due lati (cs-nonext vuoto)" '[ ! -s "$T/cs-nonext" ]'
+  [ -s "$T/cs-nonext" ] && head -20 "$T/cs-nonext"
 fi
 
 # --- 10. L2 promotion before the review (harness-pt15): absorption with the same criterion as finalize.sh ---
