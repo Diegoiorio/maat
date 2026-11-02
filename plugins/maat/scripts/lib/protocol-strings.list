@@ -81,6 +81,7 @@ scripts/*	\bAVVISO\b	9: parola chiave (D2)
 scripts/driver.py	\b(UGUALE|DIVERSO)\b|equiv: spec=%d diverse=%d · jsonl=%d diversi=%d|certificato: (VALIDO|ASSENTE|SCADUTO)|"certificato"	10: uscita di equiv/certificato, letta da driver.test.sh:301 e dal flusso H
 scripts/driver.py	^"(# driver\.equiv — certificato di equivalenza|--certifica`\.\\n# Gli involucri|driver\.py e loro stessi hanno).*"$	10: intestazione di driver.equiv, scritta da equiv --certifica (strumento del certificato)
 scripts/driver.py	valida %s/log/%s: |^"(uguale|diverso)"$	10: riga DIVERSO di equiv per valida (uscita del certificato)
+scripts/driver.py	equiv: aperte=%d · impronta-non-uguale=%d| · impronta %s · validatori %s|^"--impronta"$|^"ASSENTE"$	10 (1.5.0): riga di equiv dopo quella congelata (D6) e campi impronta/validatori della riga corpus del certificato (D3), letti da tools/certifica.sh e dai test; l'opzione --impronta; ASSENTE, campo di una riga dell'impronta del corpus
 
 # --- 11. run-phase.sh --lock-status tokens (read by harness-merge.sh:51 with an unquoted case, and by the skills)
 scripts/run-phase.sh	^"libero( \(|"$)|^"occupato: |^"sconosciuto: |^"dentro il ciclo \(fase 	11: token di --lock-status, letti da harness-merge.sh:51 e implementation-review-cycle/SKILL.md:80

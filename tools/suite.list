@@ -1,6 +1,9 @@
 # The plugin suites, one per line, in the order they run (short ones first, the long ones last).
 # Read by tools/suite.sh (CI) and tools/giro-completo.sh. A name is plugins/maat/scripts/<name>.test.sh, except
-# test-review-surface (plugins/maat/scripts/test-review-surface.sh). tools/suite.sh refuses a list that misses a suite.
+# test-review-surface (plugins/maat/scripts/test-review-surface.sh); an entry with a / is a path from the repo root
+# (tools/<name>.test.sh: the tests that make sense only in the repo). Resolved by suite_file, tools/lib/guardia-plugin.sh.
+# tools/suite.sh refuses a list that misses a suite (of the plugin or tools/*.test.sh) or names a file that does not exist.
+tools/suite.test.sh
 maat-paths
 maat-config
 messages
