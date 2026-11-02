@@ -12,9 +12,11 @@
 # same placeholders, no Italian in the en column, keys used in the code present, no unused key) · 8 static anti-leak:
 # no Italian literal outside the catalog and protocol-strings.list, except the TEMPORARY exemptions per file (below)
 # · 9 counterproofs on a copy: Italian echo in a script, a placeholder taken from the en column, a list entry deleted,
-# maat_lingua that ignores the environment — each red, then green again on the restored copy.
-# Sections 7 (Italian detector) and 8-9 (scanner) need tools/lingua-inventario.py of the repo: outside the repo (plugin
-# installed in the cache) they are SKIPPED with the reason.
+# maat_lingua that ignores the environment — each red, then green again on the restored copy · 10 (1.5.0) the
+# conversion tables: tools/lingua-converti.py copertura on all of them and check on each, with two counterproofs.
+# Sections 7 (Italian detector) and 8-9 (scanner) need tools/lingua-inventario.py of the repo, section 10
+# tools/lingua-converti.py and the tag v1.3.0: outside the repo (plugin installed in the cache) they are SKIPPED with
+# the reason.
 set -uo pipefail
 export MAAT_LINGUA=it
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -352,6 +354,48 @@ if [ "$SC" != - ]; then
   cp "$T/bak" "$CP/scripts/lib/maat-msg.sh"
   o=$(antifuga "$CP"); oc=$(catalogo "$CP/scripts"); orr=$(risoluzione "$CP/scripts/lib" "$CP/scripts/maat_msg.py")
   check "copia ripristinata: di nuovo verde" '[ -z "$o" ] && [ -z "$oc" ] && [ -z "$orr" ]' "$o $oc $orr"
+fi
+
+# ---------------------------------------------------------------- 10. the conversion tables: copertura and check
+# D9 of the 1.5.0 plan: tools/lingua-converti.py `copertura` on all the tables at once, and `check` on each one (it
+# guards «MAAT_LINGUA=it = the output of v1.3.0»). Repo only, like the anti-leak test: SKIPPED with the reason outside
+# the repo (plugin installed) or when the repo has no tag v1.3.0 (a shallow clone; the CI fetches the tags,
+# fetch-depth: 0) — and on GitHub Actions a skip is a FAIL (exit criterion of the plan: not skipped in CI).
+# Counterproofs on copies of the tables, the tool untouched: a #n moved to another literal of the same line (row
+# maat-doctor.not_found_fix_project, maat-doctor.sh:850#4 → #3, the case of the 1.4.0 review) → copertura red; the
+# en column of a row changed → check red.
+CONV=$(cd "$PLUGIN/../.." && pwd)/tools/lingua-converti.py
+TAB=$(dirname "$CONV")/lingua-conversioni
+salta10=
+if [ ! -f "$CONV" ] || [ ! -d "$TAB" ]; then salta10="tools/lingua-converti.py fuori dal plugin installato"
+elif ! git -C "$(dirname "$CONV")/.." rev-parse -q --verify 'v1.3.0^{commit}' >/dev/null 2>&1; then
+  salta10="il repo non ha il tag v1.3.0 (clone poco profondo?)"
+fi
+if [ -n "$salta10" ]; then
+  skip=$((skip + 1)); echo "SALTATO: copertura e check delle tabelle di conversione ($salta10)"
+  [ "${GITHUB_ACTIONS:-}" = true ] && check "sezione 10 non saltata in CI" false "$salta10"
+else
+  conv() { co=$("$FIC_PY" "$CONV" "$@" 2>&1); crc=$?; co=$(printf '%s\n' "$co" | tr -d '\r'); }
+  conv copertura "$TAB"/*.tsv
+  check "copertura su tutte le tabelle ($(ls "$TAB"/*.tsv | wc -l)) → exit 0, 0 errori" '[ $crc -eq 0 ] && printf "%s\n" "$co" | tail -1 | grep -q " 0 errors$"' "$co"
+  for t in "$TAB"/*.tsv; do
+    conv check "$t"
+    check "check $(basename "$t") → exit 0" '[ $crc -eq 0 ] && printf "%s\n" "$co" | tail -1 | grep -q " 0 errors$"' "$co"
+  done
+  mkdir -p "$T/tab"; cp "$TAB"/*.tsv "$T/tab/"
+  DOC=$T/tab/blocco-d.doctor.tsv
+  sed 's/^\(maat-doctor\.not_found_fix_project	scripts\/maat-doctor\.sh:850\)#4!pytail	/\1#3!pytail	/' "$TAB/blocco-d.doctor.tsv" > "$DOC"
+  conv copertura "$T/tab"/*.tsv
+  check "controprova: #4 → #3 sulla riga maat-doctor.sh:850 (copia della tabella) → copertura rossa" \
+    'grep -q "^maat-doctor.not_found_fix_project	scripts/maat-doctor.sh:850#3!pytail	" "$DOC" && [ $crc -eq 1 ] && printf "%s\n" "$co" | grep -q "maat-doctor.sh:850"' "rc=$crc $co"
+  cp "$TAB/blocco-d.doctor.tsv" "$DOC"
+  B1=$T/tab/blocco-b.tsv
+  awk -F'\t' 'BEGIN { OFS = "\t" } !done && !/^#/ && NF == 6 { $6 = $6 " (mutata)"; done = 1 } { print }' "$TAB/blocco-b.tsv" > "$B1"
+  conv check "$B1"
+  check "controprova: la colonna en di una riga cambiata (copia di blocco-b.tsv) → check rosso" \
+    'grep -q " (mutata)$" "$B1" && [ $crc -eq 1 ]' "rc=$crc $co"
+  cp "$TAB/blocco-b.tsv" "$B1"; conv copertura "$T/tab"/*.tsv; c1=$crc; conv check "$B1"
+  check "copie ripristinate: copertura e check di nuovo verdi" '[ $c1 -eq 0 ] && [ $crc -eq 0 ]' "$co"
 fi
 
 echo "messages.test.sh: $((n - fail))/$n PASS · $fail FAIL · $skip SALTATI"

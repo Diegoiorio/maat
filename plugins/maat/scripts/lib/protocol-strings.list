@@ -116,6 +116,7 @@ scripts/driver.py	chiusura\.txt|\.corsie-driver|^"w:chiusura"$|workers/contropro
 scripts/driver.py	^"righe %s: 	uscita di `driver.py righe` (nome del sottocomando), letta da driver.test.sh sez. 8
 scripts/run-phase.sh	\.claude/maat\.json ASSENTE|impronta=%s\\nversione=%s\\nradice=%s	4: righe dell'impronta del harness e formato di harness.fp (hfp_impronta_di)
 scripts/run-phase.sh	^"--valida"$|^"deviazioni"$|\{"fase":"test-red","esito":"OK","motivo":"%s","deviazioni":\[\],"bloccato_su":"nessuno"	opzione; chiavi di result.json (1.4.x)
+scripts/lib/fixture-cicli.sh	\{"fase":"%s","esito":"%s","motivo":"m","deviazioni":%s,"bloccato_su":"%s","file":\[\],"gate_interni":\[\],"finding":\[\]\}	chiavi di result.json (1.4.x): fixture dei test (rjson, spostata da cycle-state.test.sh nella 1.5.0)
 scripts/run-phase.sh	\.(cambiati-fase|altri-flussi|corsie|cambiati|posteriori|rossi|anello\.diff|prompt-anello|difensive)\b|deviazioni-difensive\.txt|\$t/cambiati|corsia-[12]\.file|rossi\.json|\.gen-corsie	nome di file del run dir
 scripts/run-phase.sh	^"(fuori|cambiato)\\t|^"\$fuori"$	token fra TG_PY e tests_guard; nome di variabile
 scripts/run-phase.sh	modo=parallelo controprove=%s chiave=%s|^"scartato: 	registro log/<label>.parallelo, citato da full-implementation-cycle/riferimento.md:114-115

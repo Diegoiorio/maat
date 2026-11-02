@@ -49,7 +49,9 @@ done
 echo FINE >> "$OUT/linux/riepilogo.txt"
 
 # 2. Windows: worktree (comandi-equivalenza only from the Linux clone: the worktree's .git points to C:/)
-WSL_SUITE=" test-fast counterproof vitest-classify "
+# tools/oracolo.test.sh in WSL: ~70 min per side in Git Bash; the ref cases are SKIPPED there (the .git of the
+# worktree points to C:/) and run in the Linux loop, on the clone.
+WSL_SUITE=" test-fast counterproof vitest-classify tools/oracolo.test.sh "
 MAAT_DIR=$WT MAAT_W=/mnt/c${WT#/c}
 prima=$(guardia_impronta "$WT/plugins/maat")
 for s in $TUTTE; do
