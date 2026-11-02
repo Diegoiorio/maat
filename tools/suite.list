@@ -30,6 +30,7 @@ test-fast
 counterproof
 comandi-equivalenza
 vitest-classify
+tools/esempi-equiv.test.sh
 cycle-state
 run-phase
 driver

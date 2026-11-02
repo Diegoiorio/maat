@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Two options, both valid.\nPHASE RESULT plan: STOP — open decision: how long to keep the old values", "structured_output": {"fase": "plan", "esito": "STOP", "motivo": "open decision", "deviazioni": [], "bloccato_su": "decision on how long to keep the old values", "file": [], "gate_interni": [], "finding": []}, "total_cost_usd": 0.42, "num_turns": 7}

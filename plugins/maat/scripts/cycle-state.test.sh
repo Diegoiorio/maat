@@ -51,30 +51,8 @@ plan() { # $1 Plan status
   printf '%s\n' "## Piano di implementazione" "Plan status: $1" "Test level: std" "Superfici a rischio: nessuna" \
     "### Passi" "1. Modificare \`src/a.py\`." "### Changelog revisione piano" "- giro 1: ok"
 }
-with_basis() { # writes the Approved basis line into the current spec
-  local cur; cur=$(bash "$PC" basis "$SP" | sed -n 's/^Basis: //p')
-  sed -i "s/^Superfici a rischio: .*/&\nApproved basis: $cur/" "$SP"
-}
-review() { # $1 Review status, $2 Feature status, [$3 snapshot line], [$4 contract line]
-  printf '%s\n' "## Review implementazione" "Review status: $1" "Feature status: $2" "Verification: VERIFIED"
-  [ -n "${3:-}" ] && printf '%s\n' "$3"
-  [ -n "${4:-}" ] && printf '%s\n' "$4"
-  printf '%s\n' "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" "" "<details><summary>Manifest (1 paths)</summary>" "" \
-    "Scope:" "src/a.py" "" "Excluded:" "src/b.py" "" "</details>"
-}
-esito() { # $1 label, $2 ESITO line, $3 state — like run-phase: .jsonl, .esito and, if attribution is measured, pre/post-tree
-  mkdir -p "$RUN/log"; : > "$RUN/log/$1.jsonl"; printf '%s\nstate=%s\n' "$2" "$3" > "$RUN/log/$1.esito"
-  case "$1" in *implement*|*fix*) echo x > "$RUN/log/$1.pre-tree"; echo y > "$RUN/log/$1.post-tree" ;; esac
-}
-esito_inline() { # like the --inline mode: no .jsonl
-  mkdir -p "$RUN/log"; printf '%s\nstate=%s\n' "$2" "$3" > "$RUN/log/$1.esito"
-  echo x > "$RUN/log/$1.pre-tree"; echo y > "$RUN/log/$1.post-tree"
-}
+. "$HERE/lib/fixture-cicli.sh"   # with_basis, review, esito, esito_inline, rjson (1.5.0: shared with tools/esempi-equiv)
 reset() { rm -rf "$RUN"; git checkout -q -- src; git clean -qfd src; }
-rjson() { # $1 label, $2 phase, $3 esito, $4 deviazioni (JSON list), $5 bloccato_su — like run-phase: valid result.json
-  printf '{"fase":"%s","esito":"%s","motivo":"m","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}\n' \
-    "$2" "$3" "$4" "$5" > "$RUN/log/$1.result.json"
-}
 
 # --- plan ---
 above > "$SP"; expect "nessun piano" "^PLAN"

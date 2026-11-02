@@ -1,0 +1,53 @@
+# righe.list — the rows of the resume table of plugins/maat/scripts/cycle-state.sh (TABLE and CHAINS, in its header)
+# and of its result.json rules, one label per distinct outcome (Maat 1.5.0). Format: <label><TAB><Next word> — <what>.
+# Every label has at least one spec in casi.tsv (tools/esempi-equiv.test.sh). A row added to the table → a label here
+# and a case in the corpus.
+1b	STOP — both «## Review implementazione» and «## Implementation review» (the same section in two languages)
+1	STOP — review section without a plan
+2-nessun-piano	PLAN — no plan
+2-draft	PLAN — Plan status DRAFT, no review
+3	STOP — plan DRAFT or NEEDS HUMAN DECISION with a review (plan reopened after the review)
+4	STOP — Plan status NEEDS HUMAN DECISION (open decision)
+5	STOP — non-standard Plan status
+6-stale-spec	STOP — Approved basis STALE (spec)
+6-stale-plan	STOP — Approved basis STALE (plan)
+6-stale-tests	STOP — STALE (tests): an acceptance test changed after test-red
+7t	TEST-RED — format-2 plan, no code phase, tests not recorded
+7t-stop	STOP — the last test-red has an .esito with unchanged state
+7s	STOP — no review, last implement with a STOP result.json, unchanged state
+7-review	REVIEW — no review, last implement OK with unchanged state and measured attribution
+7-implement	IMPLEMENT — no review, no implement closed OK on the current state
+7-attribuzione	STOP — implement OK but attribution not measured (no .post-tree, or an open .pre-tree of a lower label)
+8	REVIEW — legacy review section without state lines
+9	STOP — Review status NEEDS HUMAN DECISION
+10	REVIEW — Reviewed contract different from the current basis
+10b	STOP — a touched.txt path listed under Excluded:
+11s	STOP — NEEDS_CHANGES, last fix with a STOP result.json, unchanged state
+11-review	REVIEW — NEEDS_CHANGES, last fix OK with unchanged state
+11b-fix	FIX — NEEDS_CHANGES, budget n < 3 and k < 1
+11b-budget-esaurito	STOP — fix budget exhausted
+11b-budget-illeggibile	STOP — Review rounds line missing or unreadable
+12	REVIEW — Feature status NEEDS_VERIFICATION
+13f	REVIEW — new regime, no fresh Finalize: IMPLEMENTED on the current snapshot (here: older than the last review)
+13-fresh	DONE — APPROVED + IMPLEMENTED, code FRESH
+13-stale	REVIEW — APPROVED + IMPLEMENTED, code STALE
+13-unknown	REVIEW — APPROVED + IMPLEMENTED, code UNKNOWN
+13-legacy	DONE — APPROVED + IMPLEMENTED without a snapshot (legacy)
+14	STOP — any other combination
+0-cambiato	STOP — harness.fp CAMBIATO
+0-formato-precedente	STOP — harness.fp FORMATO-PRECEDENTE
+0-illeggibile	STOP — harness.fp ILLEGGIBILE
+0-non-calcolabile	STOP — harness fingerprint NON-CALCOLABILE
+json-illeggibile	STOP — result.json of the last implement/fix unreadable
+json-visto	IMPLEMENT — result.json renamed .result.json.visto: the ESITO line decides
+C1-primo-assente	STOP — mother: a child spec missing
+C1-anello-aperto	WAIT — mother: the first ring not closed
+C2-chiusura-assente	CHIUSURA — mother, all rings closed, no chiusura.txt
+C2-done	DONE — mother, «Chiusura: IMPLEMENTED» and the chain code FRESH
+C2-codice-cambiato	CHIUSURA — mother, chain code changed after the closing
+C2-chiusura-fallita	STOP — mother, closing failed
+C3	WAIT — ring k>1 towards PLAN, the plan of k-1 not APPROVED
+C4-anello-aperto	WAIT — ring k>1 towards IMPLEMENT, k-1 not closed
+C4-nessuna-base	STOP — ring k>1, k-1 closed without a .post-tree
+C4-albero-cambiato	STOP — ring k>1, working tree different from the .post-tree of k-1
+C4-albero-uguale	IMPLEMENT — ring k>1, working tree = the .post-tree of k-1 (Anelli precedenti, Base anello, Diff anello)

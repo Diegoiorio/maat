@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Fatto.\nESITO FASE implement: OK — fatto", "total_cost_usd": 0.42, "num_turns": 7}

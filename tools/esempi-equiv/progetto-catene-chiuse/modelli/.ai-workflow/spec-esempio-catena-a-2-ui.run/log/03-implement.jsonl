@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "PHASE RESULT implement: OK — b() returns 20", "structured_output": {"fase": "implement", "esito": "OK", "motivo": "b() returns 20", "deviazioni": [], "bloccato_su": "none", "file": ["src/b.py"], "gate_interni": [], "finding": []}, "total_cost_usd": 0.42, "num_turns": 7}

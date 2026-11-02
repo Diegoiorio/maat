@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "fic_corsie"}
+{"type": "result", "subtype": "fic_corsie", "result": "PHASE RESULT implement: OK — lanes merged: lane 1: a() returns 20 · lane 2: b() returns 21", "structured_output": {"fase": "implement", "esito": "OK", "motivo": "lane 1: a() returns 20 · lane 2: b() returns 21", "deviazioni": ["defensive: lane 1: a.py:2 — guard for a None input"], "bloccato_su": "nessuno", "file": ["src/a.py", "src/b.py"], "gate_interni": [{"comando": "pytest src", "esito": "PASS"}, {"comando": "pytest src", "esito": "PASS"}], "finding": []}}
