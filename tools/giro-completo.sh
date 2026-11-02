@@ -48,14 +48,14 @@ for s in $TUTTE; do
 done
 echo FINE >> "$OUT/linux/riepilogo.txt"
 
-# 2. Windows: worktree (comandi-equivalenza only from the Linux clone: the worktree's .git points to C:/)
-# tools/oracolo.test.sh in WSL: ~70 min per side in Git Bash; the ref cases are SKIPPED there (the .git of the
-# worktree points to C:/) and run in the Linux loop, on the clone.
-WSL_SUITE=" test-fast counterproof vitest-classify tools/oracolo.test.sh "
+# 2. Windows: worktree. In WSL on the worktree (/mnt/c/…): the suites that need rsync and flock (test-fast,
+# counterproof, vitest-classify, comandi-equivalenza: since 1.5.0 it reads no git history, only its frozen reference,
+# so the .git of the worktree pointing to C:/ no longer matters) and tools/oracolo.test.sh (~70 min on the corpus in
+# Git Bash; its ref cases are SKIPPED there, the .git of the worktree points to C:/, and run in the Linux loop).
+WSL_SUITE=" test-fast counterproof vitest-classify comandi-equivalenza tools/oracolo.test.sh "
 MAAT_DIR=$WT MAAT_W=/mnt/c${WT#/c}
 prima=$(guardia_impronta "$WT/plugins/maat")
 for s in $TUTTE; do
-  [ "$s" = comandi-equivalenza ] && continue
   f=$(suite_file "$s")
   t0=$(date +%s)
   case "$WSL_SUITE" in

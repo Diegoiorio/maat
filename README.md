@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.4.0**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.5.0**.
 
 ## When to use Maat
 
@@ -72,11 +72,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.4.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.5.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.4.0` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.5.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -112,7 +112,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.4.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.5.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -215,15 +215,18 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.4.0`, from the project folder:
+`v1.5.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.4.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.5.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.4.x to 1.5.0 a cycle does and prints the same: the release is about how the driver is proven. The one change
+of behaviour: a `MAAT_LINGUA` set by hand now also reaches the commands a phase runs in WSL (see `CHANGELOG.md`).
 
 From 1.3.x to 1.4.0 the messages of the scripts become English; to keep them Italian, add `"lingua": "it"` to
 `.claude/maat.json` (see «Language»).
@@ -261,8 +264,11 @@ Proven, and where to check it:
   they also run on Windows before each release (`docs/TESTING-harness.md`).
 - **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
   remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
-- **The Python driver behaves like the original bash code** on 15 real, closed cycles of a private project
-  (`plugins/maat/scripts/driver.equiv`, line `corpus`; the cycles themselves are not public).
+- **The Python driver behaves like the original bash code**: certified on public examples, reproducible. The
+  examples (`tools/esempi-equiv/`) cover every row of the resume table and every branch of the outcome validator;
+  `bash tools/certifica.sh` builds them and repeats the proof in a few minutes on Linux, and the CI repeats it at
+  every push. The `corpus` line of `plugins/maat/scripts/driver.equiv` names the examples it was made on (their
+  fingerprint) and the validators proven (`docs/TESTING-harness.md`, «Recertifying the driver»).
 
 One example, not a measurement: on a second private project, which has no tests, a pilot cycle of an early version
 (0.3.0) went from the spec to `NEEDS_VERIFICATION` with no human step during the cycle: plan and review approved at the

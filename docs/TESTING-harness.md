@@ -1,7 +1,7 @@
 # Harness tests
 
 Applies to the `plugins/maat` plugin of this repo: how to run the suites on Windows and on Linux, the genericity
-test and the driver certificate.
+test, the driver certificate and its public examples, and the old-against-new oracle.
 
 ## The two roots
 
@@ -42,7 +42,10 @@ passed whole, not just one script.
 **Message language (`MAAT_LINGUA`, 1.4.0).** The messages the scripts print for a person come from the catalog
 `scripts/lib/messages.tsv` (`msg` in bash, `lib/maat-msg.sh`; `T` in Python, `maat_msg.py`). The language is
 `MAAT_LINGUA` (`it|en`; any other value: `en`; empty: unset), otherwise `lingua` of `.claude/maat.json`, otherwise
-`en`; `guard.py` follows the same precedence. The section below says how the two languages are tested.
+`en`; `guard.py` follows the same precedence. Since 1.5.0 `run-phase.sh` adds `MAAT_LINGUA` to `WSLENV` (no
+duplicate, the entries and flags already there kept), so a value set by hand also reaches what the phase session and
+each lane run in `wsl`, instead of the `lingua` read again there from `.claude/maat.json`. The section below says how
+the two languages are tested.
 
 ## The two languages (1.4.0)
 
@@ -72,6 +75,15 @@ passed whole, not just one script.
   declared in `non-messaggi.list` or `protocol-strings.list` (a wrong `#n` index passes `check`, not `copertura`).
   Run both, on all the tables, after any change to a table; a one-word literal outside the scanner vocabulary is
   seen by neither, so check those rows by hand.
+- **The conversion tables in the suite (1.5.0).** Section 10 of `messages.test.sh` runs `copertura` on all the
+  tables and `check` on each one, so nobody has to remember it. Like the anti-leak test it works in the repo only: it
+  is SKIPPED, with the reason, from the installed plugin or in a clone without the tag `v1.3.0` (a shallow clone).
+  On GitHub Actions a skip is a FAIL (the CI clones with `fetch-depth: 0`, tags included).
+- **Driver against bash in both languages (1.5.0).** Section 9 of `driver.test.sh` runs every case of
+  `cycle-state.test.sh` and compares the output of `cycle-state.sh` with that of `driver.py next`, now in `it` **and**
+  in `en` at every call (the calls `en_twin` already makes in English are compared only in English). A difference is
+  recorded with its language; a comparison where one side prints no `Next:` line is a failure too, so two sides that
+  both fail silently do not count as «the same».
 - **Frozen lines.** `protocol-strings.list` says, line by line, which Italian text stays in every language and why
   (the lines that scripts pass to each other, the keywords `VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`,
   `Scheletro:`, `S2:`). A new Italian literal goes either into the catalog or into the list, with its reason.
@@ -93,9 +105,12 @@ bash plugins/maat/scripts/<name>.test.sh
   also on Linux, from the clone in WSL with `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin FIC_WT_WSL=0`).
 - Long (run them together, in the background): `cycle-state`, `run-phase`, `driver` (section 9 of `driver.test.sh`
   runs all of `cycle-state.test.sh`; `DRIVER_TEST_RAPIDO=1` skips it).
-- In WSL: `test-fast.test.sh`, `vitest-classify.test.sh`, `counterproof.test.sh`. `comandi-equivalenza.test.sh`
-  uses git inside WSL: it does not run from a worktree created from Windows (its `.git` points to `C:/`, which Linux
-  git cannot resolve); run it from a clone in WSL (`git clone -b <branch> /mnt/c/…/maat ~/maat-linux`).
+- In WSL (they need `rsync` and `flock`): `test-fast.test.sh`, `vitest-classify.test.sh`, `counterproof.test.sh`,
+  `comandi-equivalenza.test.sh`. Since 1.5.0 `comandi-equivalenza.test.sh` reads no git history, so it also runs in
+  WSL on a worktree created from Windows (see «The commands of the gates: frozen reference»).
+- Tests of the repo, in `tools/` (they make sense only in the repo, not from the installed plugin):
+  `tools/suite.test.sh`, `tools/esempi-equiv.test.sh` (the public examples of the driver certificate),
+  `tools/oracolo.test.sh` (the old-against-new oracle). Run them from the repo root: `bash tools/<name>.test.sh`.
 - Skipped with a declared reason (specific to the guide project): part 2 of `vitest-classify.test.sh`.
   `guard.test.sh` (pk05) tests the plugin hook (`guard-hook.sh`) and its equivalence with the guide project's guard
   on the fixture `tests/guard-esempio.cases`.
@@ -126,8 +141,8 @@ wsl -- bash -lc 'cd ~/maat-linux && PATH=/usr/local/sbin:/usr/local/bin:/usr/sbi
 - `FIC_WT_WSL=0` tells the worktree tests not to go through WSL: on Linux they are already at home.
 - The clone must be realigned to the branch before every run (files copied by hand disappear): no changes inside the
   clone.
-- `comandi-equivalenza.test.sh` runs **only** from the Linux clone: the `.git` of a worktree created from Windows
-  points to `C:/`.
+- Git cannot read a worktree created from Windows from inside WSL (its `.git` points to `C:/`): the few cases that
+  need the history of this repo (the oracle with git refs) are SKIPPED there and run on the Linux clone.
 - `MAAT_ORACOLO_121=1 bash plugins/maat/scripts/plan-check.test.sh` also compares, on every Italian fixture, the
   output of `plan-check.sh` of 1.2.1 (commit `a2c5b99`, read with git) with the current one, byte for byte: the proof
   that 1.3.0 reads the Italian formats as before. Off by default (it doubles the run time).
@@ -140,9 +155,36 @@ always `~/maat-linux` (another one with `MAAT_LINUX_CLONE`). For example:
 `<folder>/<linux|windows>/<name>.log` and one line in `riepilogo.txt` (exit code, seconds, last line). Duration: a few
 hours, because of the long suites.
 
+- In the Windows part most suites run in Git Bash on the worktree; the suites that need `rsync` and `flock`
+  (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) and `tools/oracolo.test.sh` run in WSL on
+  the same worktree (`/mnt/c/…`). `tools/esempi-equiv.test.sh` stays in Git Bash on purpose: it is the proof of the
+  driver on Windows (see «Recertifying the driver»).
+- **Guard of the run (1.5.0).** Don't touch the plugin while the run is going: the harness fingerprint changes and
+  the suites that check it fail for no real reason. `giro-completo.sh` and `tools/suite.sh` take a fingerprint of the
+  plugin files (the list of `run-phase.sh --harness-paths`, content without CR) before the first suite and after each
+  one; a suite after which it changed gets `PLUGIN CAMBIATO` in its line of `riepilogo.txt`, and the exit is 1. On
+  Linux the fingerprint is taken on the clone.
+- At the top of both `riepilogo.txt`, an `AVVISO` line when the Linux clone is not at the commit of the worktree, or
+  when the worktree has uncommitted changes under `plugins/` or `tools/`: the two parts would not test the same tree.
+
+**Times on Windows and on Linux** (measured for 1.5.0). The proof on the public examples is slow in Git Bash:
+`review-surface.sh` runs `git add -A` on a temporary index for every check, and process start-up costs much more on
+Windows.
+
+| what | Git Bash (Windows) | WSL or Linux |
+|---|---|---|
+| `tools/esempi-equiv.test.sh` | about 56 minutes | about 2 minutes (CI: about 128 s per validator) |
+| `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes | a few minutes |
+
+The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
+not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why
+the certificate is written from Linux.
+
 **The list of suites** is `tools/suite.list`, one name per line, in the order they run; `giro-completo.sh` and
-`tools/suite.sh` both read it. A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
-`*.test.sh` or names a file that does not exist.
+`tools/suite.sh` both read it. A plain name is `plugins/maat/scripts/<name>.test.sh`; an entry with a `/` is a path
+from the repo root (`tools/esempi-equiv.test.sh`). Both scripts resolve an entry with the same function (`suite_file`,
+`tools/lib/guardia-plugin.sh`). A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
+`*.test.sh` of the plugin or a `tools/*.test.sh`, or names a file that does not exist.
 
 ## CI
 
@@ -152,10 +194,46 @@ time, with `FIC_WT_WSL=0` like the Linux run. The job fails if a suite exits wit
 `riepilogo.txt` are kept as the `esiti` artifact. Locally the same run is
 `bash tools/suite.sh <results folder>` from a Linux clone.
 
+**The two validators (1.5.0).** The outcome validator of `run-phase.sh --valida` and `driver.py valida` uses the
+`jsonschema` module when the interpreter has it, a minimal validator otherwise. The CI proves both: the system Python
+has no `jsonschema` (minimal validator), and a step creates a venv of its own with `jsonschema==4.23.0` and exports
+`MAAT_PY_JSONSCHEMA` to its interpreter. `tools/esempi-equiv.test.sh` runs the proof once per validator.
+
+**Strict check of the certificate.** With `MAAT_CERT_RICHIESTO=1`, `tools/esempi-equiv.test.sh` also requires
+`driver.equiv` VALIDO, the fingerprint of its `corpus` line equal to that of the corpus just built, `validatori
+minimo,jsonschema`, and no validator skipped. The CI sets it on pushes to `main`, on tags and on pull requests to
+`main`; on other branches the check is off, so half-done work can still be pushed. So **a pull request to `main` that
+touches a certified file** (`driver.py`, `cycle-state.sh`, `run-phase.sh`, `lib/messages.tsv`, `lib/maat-msg.sh`,
+`maat_msg.py`) is red (certificate SCADUTO) until the same pull request commits the `driver.equiv` rewritten with
+`bash tools/certifica.sh --scrivi` from Linux. The same holds for a pull request that changes the examples, or what
+computes them (`plan-check.sh basis`, `review-surface.sh snapshot` and `fingerprint`): red because the fingerprint
+differs, same remedy.
+
 What CI does not cover: Windows (Git Bash and WSL) and macOS, which come with multi-platform CI (1.5.3). Until then
 the Windows part of `giro-completo.sh` runs before each release. What skips with a declared reason, as in the Linux
-clone: part 2 of `vitest-classify.test.sh` (specific to the guide project) and `comandi-equivalenza.test.sh`, which
-needs a commit of the private history.
+clone: part 2 of `vitest-classify.test.sh` (specific to the guide project). Since 1.5.0 `comandi-equivalenza.test.sh`
+and section 10 of `messages.test.sh` run in CI too.
+
+## The commands of the gates: frozen reference
+
+`comandi-equivalenza.test.sh` compares the commands the gates run (`gates.sh`, `finalize.sh`) on a synthetic
+repository with those of the reference harness, the last one with hard-wired commands (a commit of the private
+development history). Until 1.4.0 it read that commit with git, so it was SKIPPED everywhere the commit was missing,
+which means everywhere outside the private repo.
+
+Since 1.5.0 the output of the reference side is **frozen** in `plugins/maat/tests/comandi-equivalenza/riferimento.txt`
+(one section per case and view, already normalized). The test compares the current plugin with that file and reads
+no git history, so it runs in WSL and on Linux, in CI included. It needs `rsync` and `flock`.
+
+- The synthetic repository is deterministic: fixed git identity and dates, no git configuration of the machine, a fake
+  `node` that prints `v20.0.0`, `TZ=UTC`. The normalizations are declared at the top of the test: `<repo>`, `<copia>`,
+  `<report>`, the base commit as `<base>` and, in the view `chiave`, `tree=<40 hex digits>` as `tree=<tree>`.
+- A **hygiene** case checks the reference itself: no `node=v` other than the fake's, no `tz_wsl=` other than the fixed
+  one, no 40-digit sha.
+- **Regenerating it** needs the private history: `MAAT_RIF_REPO=<repo with the reference commit> bash
+  plugins/maat/scripts/comandi-equivalenza.test.sh --rigenera` runs the reference side, rewrites
+  `riferimento.txt` and then compares. Do it only when a normalization changes; the file changes only together with
+  the test.
 
 ## Genericity
 
@@ -229,9 +307,134 @@ Outside a repository the command exits with 1 and leaves the file **empty**: the
 
 ## Recertifying the driver (`driver.equiv`)
 
-`driver.equiv` carries the hash of `driver.py`, `cycle-state.sh` and `run-phase.sh`: if one of the three changes,
-the certificate has expired and the wrappers fall back to the bash code (it works, it is just slower). It is
-recertified on the real run dirs of a project, from its main folder and **read-only**:
+`driver.equiv` carries the hash of `driver.py`, `cycle-state.sh`, `run-phase.sh`, `lib/messages.tsv`,
+`lib/maat-msg.sh` and `maat_msg.py` (CR removed): if one of them changes, the certificate has expired (SCADUTO) and
+the wrappers fall back to the bash code (it works, it is just slower). Its last line says what it was proven on:
+
+```text
+corpus spec=<N> jsonl=<M> · lingue it,en · <date> · impronta <12 hex> · validatori minimo,jsonschema
+```
+
+`impronta` is the fingerprint of the examples (below) and `validatori` the outcome validators proven (1.5.0; the
+part before ` · impronta` is the one of 1.4.0).
+
+**The reference, since 1.5.0:** the certificate is made on the public examples, from Linux, in one command:
+
+```bash
+bash tools/certifica.sh            # verify: build, prove, write the certificate to a temporary file only
+bash tools/certifica.sh --scrivi   # the same, then copy it to plugins/maat/scripts/driver.equiv (Linux only)
+```
+
+The script builds the examples in a temporary folder, runs `driver.py equiv --certifica` on them once per validator
+(first the minimal one, then `jsonschema`), checks that `driver.py certificato` says VALIDO and that the `corpus` line
+carries the fingerprint of the examples just built. It prints the duration: a few minutes on Linux. Never run it
+together with anything else (suites, the full run, the other proof).
+
+- **Only from Linux.** `--scrivi` refuses (exit 2) outside Linux: Linux is where the CI checks the certificate. On
+  Windows run it in WSL on the path of the worktree, so the file lands directly in the worktree:
+  `wsl -- bash -lc 'cd /mnt/c/<worktree path> && bash tools/certifica.sh --scrivi'`.
+- **Two interpreters.** `--scrivi` also refuses without both validators, or with a `jsonschema` of a version other
+  than the one fixed in `.github/workflows/ci.yml` (today `4.23.0`):
+  - for `jsonschema`: `MAAT_PY_JSONSCHEMA=<python with jsonschema==4.23.0>`, otherwise `~/maat-venv/bin/python`;
+  - for the minimal validator: an interpreter **without** `jsonschema`, `MAAT_PY_MINIMO=<python>`, otherwise the
+    Python that `scripts/python.sh` finds, if it does not import `jsonschema`. In WSL the system `python3` may well
+    have it (an older version, from the distribution's packages): then it cannot be the minimal one, and it is not the
+    CI's version either.
+- **Preparing them is an installation**, done once and by hand (Maat never installs anything by itself):
+
+  ```bash
+  python3 -m venv ~/maat-venv && ~/maat-venv/bin/pip install jsonschema==4.23.0   # validator jsonschema
+  python3 -m venv ~/maat-venv-minimo                                              # validator minimo: no packages
+  MAAT_PY_MINIMO=~/maat-venv-minimo/bin/python bash tools/certifica.sh --scrivi
+  ```
+
+  A new venv does not see the packages of the system Python, so `~/maat-venv-minimo` has no `jsonschema`. When a
+  validator is missing, `certifica.sh` prints the command to create it.
+- After `--scrivi`: `driver.equiv` is under `MAAT_ROOT`, so recertifying changes the harness fingerprint. Commit it
+  in the same pull request as the change that made it expire (see «CI»).
+- **The guarantee for Windows** is not the certificate but `tools/esempi-equiv.test.sh` in the Windows part of the
+  full run, in Git Bash: there the branches that exist only on Windows (the `cygpath` paths of the driver, the
+  `C:/…` forms) are proven too. It is slow there (about 56 minutes), and it is a step of every release.
+
+**In two languages (1.4.0).** `equiv` runs the whole proof twice, first with `MAAT_LINGUA=it` and then with
+`MAAT_LINGUA=en` (a line `equiv: lingua <l>` opens each pass), and writes the certificate only if both say
+`diverse=0 · diversi=0`; the `corpus` line then says `lingue it,en`. The `harness.fp` files are left as they are,
+never regenerated for the proof; the language inside the fingerprint is proven by the suites (`run-phase.test.sh`,
+`cycle-state.test.sh`).
+
+**Cycles not closed (1.5.0).** For each spec whose `Next` is not `DONE`, `equiv` prints a line `equiv: AVVISO — <spec>
+not closed (Next: <word>)`: the proof on that spec covers the row that decides that word, not the path to `DONE`.
+When the spec has a `harness.fp` whose verdict is not `UGUALE`, the warning says the proof covers only the fingerprint
+branch. Each pass ends with `equiv: aperte=<n> · impronta-non-uguale=<k>`, after the usual summary line. The warnings
+do not block `--certifica`: the examples have open cycles on purpose, because their rows are the ones to prove.
+`driver.py equiv --impronta <folders>` prints only the fingerprint of the examples, without the proof.
+
+### The public examples (`tools/esempi-equiv/`)
+
+Seven small git repositories, built from models, with 65 specs and 49 counted jsonl: Italian (1.2.x) and English
+(1.3+) formats, single cycles and chains (closed, open, with code or tree changed after the closing).
+
+- **What they cover**, as two closed lists: `righe.list`, every row of the resume table of `cycle-state.sh` (and of
+  the chains and of the `result.json` rules), one label per distinct outcome; `rami-valida.list`, every branch of the
+  outcome validator and every phase. The manifest `casi.tsv` gives each spec the expected first word of `Next` and the
+  row that decides it, and each jsonl the branches it goes through.
+- **The builder**, `bash tools/esempi-equiv/costruisci.sh <empty folder>`, creates the repositories, copies the
+  models and fills a closed list of computed placeholders (commit and tree sha, Approved basis, snapshots,
+  `Finalize`, `state=`) with the same plugin scripts that compute them in a real cycle. It is deterministic: no git
+  configuration of the machine, fixed identity, dates, permissions and line endings. Two builds give the same
+  fingerprint, on Windows and on Linux. Last it prints `impronta <64 hex>`.
+- **The test**, `bash tools/esempi-equiv.test.sh`: two builds with the same fingerprint; every label of the two lists
+  has a case, every spec and jsonl built is in `casi.tsv` and vice versa, no counted jsonl is empty; then `equiv`
+  with each validator available: every spec `UGUALE`, `diverse=0 · diversi=0` in `it` and `en`, and the word of `Next`
+  of every spec equal to `casi.tsv` in both languages.
+- **Adding a case:** the spec and its run dir go under `tools/esempi-equiv/<mini-repo>/modelli/.ai-workflow/` (code
+  states under `stati/<n>/`), one line in `casi.tsv` for the spec and one for each jsonl; a new row of the table also
+  gets a label in `righe.list`, a new validator branch one in `rami-valida.list`. Use only generic names (the
+  genericity test checks the folder). A change to the examples changes their fingerprint: the certificate must be
+  rewritten (`tools/certifica.sh --scrivi`), or the strict check is red.
+
+### Variables of the tests of the repo
+
+| variable or option | where | what it does |
+|---|---|---|
+| `MAAT_PY_JSONSCHEMA` | `esempi-equiv.test.sh`, `certifica.sh` | the interpreter with `jsonschema` (second validator); without it: `SALTATO: jsonschema` (`certifica.sh` also looks for `~/maat-venv`) |
+| `MAAT_PY_MINIMO` | `esempi-equiv.test.sh`, `certifica.sh` | an interpreter without `jsonschema` (first validator), when the one of `python.sh` has it |
+| `MAAT_CERT_RICHIESTO=1` | `esempi-equiv.test.sh` | the strict check of `driver.equiv` (see «CI») |
+| `MAAT_ESEMPI_DETERMINISMO=completo\|ridotto` | `esempi-equiv.test.sh` | the second build of the determinism case: the whole corpus (`completo`, default on Linux) or one mini-repo (`ridotto`, default elsewhere: a whole build costs about 15 minutes on Windows) |
+| `MAAT_ORACOLO_TEST=completo\|ridotto` | `oracolo.test.sh` | the case with both sides from a git ref, on the whole corpus or on two small mini-repos (same defaults) |
+| `MAAT_ORACOLO_REPO` | `oracolo.sh` | the repository the git refs are read from (default: this one) |
+| `oracolo.sh --esiti <folder>` | `oracolo.sh` | keeps the records of each side and language (`<folder>/<side>-<language>/<project>/<spec>.txt`) |
+| `--rigenera` with `MAAT_RIF_REPO` | `comandi-equivalenza.test.sh` | rewrites the frozen reference from the private history (see «The commands of the gates») |
+
+### The old-against-new oracle (`tools/oracolo.sh`)
+
+A check of each release, separate from the certificate: two versions of the plugin on the same projects, the output of
+the resume table compared.
+
+```bash
+bash tools/oracolo.sh [--esiti <folder>] <old> <new> <project>…
+```
+
+- `<old>`, `<new>`: a plugin folder or a git ref of this repository (for example `v1.4.0` and `HEAD`).
+  `<project>`: a project root with `.claude/.ai-workflow/`, for example a mini-repo of the examples built.
+- The projects are never written: each side works on a fresh copy, and the two sides run in turn **in the same
+  paths**, so the plugin root and the paths that appear in the output are the same by construction. For each side and
+  language the valid `harness.fp` files are rewritten for that side (except the fixtures listed in
+  `.claude/oracolo-conserva`), keeping their mtime.
+- Compared, for every spec: in `it` the whole output of `cycle-state.sh`, `plan-check.sh basis` and `contract`; in
+  `en` the `State`, the last code phase, the first word of `Next`, `basis` and `contract`. Last line `oracolo: spec=N ·
+  it uguali=… · en uguali=… · diverse=…`, the diffs below. Exit 0 identical, 1 a difference, 2 usage.
+- `tools/oracolo.test.sh` runs it on the examples (same plugin on both sides: identical) with three mutations that must
+  be red. About 70 minutes in Git Bash: the full run sends it to WSL.
+
+### Optional: the private corpus
+
+Until 1.4.0 the reference proof was made on the real run dirs of a private project: 15 closed cycles and 83 jsonl.
+It is no longer required. It is still worth doing when a release changes the **logic** of `next` or `valida`: real
+data (agent prose, rare jsonl events, real lengths) can show a difference that nobody thought to model in the
+examples. The certificate written stays the public one.
+
+From the main folder of the project, **read-only**:
 
 ```bash
 cd <project>
@@ -244,38 +447,21 @@ PYTHONDONTWRITEBYTECODE=1 GIT_OPTIONAL_LOCKS=0 GIT_OBJECT_DIRECTORY="$O" \
 `review-surface.sh tree` runs `git add -A` and `write-tree` on a temporary index: without `GIT_OBJECT_DIRECTORY` the
 objects would end up in the project's `.git`; `GIT_OPTIONAL_LOCKS=0` keeps git from updating the real index.
 
-- Required outcome `diverse=0 · diversi=0`; a `DIVERSO` (different) is a STOP with the diff, it is not recertified by
-  hand.
+- Required outcome `diverse=0 · diversi=0`; a `DIVERSO` (different) is a STOP with the diff, it is not fixed by hand.
 - Before and after, a snapshot (list and sha256) of `.claude/.ai-workflow/spec-*.md` and `.claude/.ai-workflow/*.run/`:
   it must be identical.
-- Then the file is copied to `scripts/driver.equiv` and `driver.py certificato` must say VALIDO (valid).
-  `driver.equiv` is under `MAAT_ROOT`: recertifying changes the harness fingerprint.
+- The certificate goes to a temporary file (`FIC_DRIVER_CERT`) and is not copied into the plugin.
 
-**In two languages (1.4.0).** `equiv` runs the whole proof twice, first with `MAAT_LINGUA=it` and then with
-`MAAT_LINGUA=en` (a line `equiv: lingua <l>` opens each pass), and writes the certificate only if both say
-`diverse=0 · diversi=0`; the `corpus` line of `driver.equiv` then ends with `lingue it,en`. The run dirs are the
-same for both passes, so each `harness.fp` is read once in its own language and once in the other: a cycle that is
-not closed gets, in each pass, the same fingerprint verdict on both sides (that is what is compared), and a closed
-cycle does not read it. The `harness.fp` files are left as they are, never regenerated for the proof; the language
-inside the fingerprint is proven by the suites (`run-phase.test.sh`, `cycle-state.test.sh`). The old-against-new
-comparison with fingerprints regenerated per language is a separate check of each release, on copies of the run
-dirs, never on the project.
-
-### Variant: certifying on a copy of the project
-
-This is the form used on 2026-10-29 (certificate of 0.3.0): the real project stays completely out, not even read
-with the variables above.
+**On a copy of the project.** This keeps the real project completely out, not even read with the variables above:
 
 1. **The copy:** a clone of the project branch in a temporary folder, with `git -c core.longpaths=true clone …`
    (on Windows the run dir paths exceed 260 characters), plus the specs and run dirs of **closed** cycles
-   (`.claude/.ai-workflow/spec-*.md` and `*.run/`), copied from the project. On 2026-10-29: 15 closed cycles (chains,
-   single cycles, one cycle in STOP, three from the old regime).
+   (`.claude/.ai-workflow/spec-*.md` and `*.run/`), copied from the project.
 2. **Before:** snapshot (list and sha256) of the specs and run dirs of the real project.
-3. **The certification:** the command above, run from the root of the **copy** (git objects in the temporary folder
-   as above). Required outcome `diverse=0 · diversi=0`; on 2026-10-29: `spec=15 diverse=0 · jsonl=83 diversi=0`.
+3. **The proof:** the command above, run from the root of the **copy** (git objects in the temporary folder as
+   above). Required outcome `diverse=0 · diversi=0`.
 4. **After:** the same snapshot of the real project, identical to the one taken before.
-5. The certificate is copied to `scripts/driver.equiv` and `driver.py certificato` must say VALIDO.
 
-Duration: about **3 hours on Windows**, almost all of it in the `review-surface.sh check` controls in bash. The copy
-can be kept for the next certification (only the plugin changes); if the temporary folder has been emptied, it is
-redone, never on the project's tree.
+Duration: about **3–4 hours on Windows**, almost all of it in the `review-surface.sh check` controls in bash, whose
+cost grows with the size of the project's tree. The copy can be kept for the next time (only the plugin changes); if
+the temporary folder has been emptied, it is redone, never on the project's tree.
