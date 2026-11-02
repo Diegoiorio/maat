@@ -17,8 +17,11 @@ missing transcript or any exception -> it lets the session close (exit 0 with no
 
 Usage: stdin = JSON of the Stop event (transcript_path, stop_hook_active). Denial = JSON
 {"decision": "block", "reason": ...} on stdout, exit 0. Tests: the plugin's scripts/stop-hook.test.sh.
+The reasons come from the message catalog next to this file (maat_msg.py, 1.4.0), imported only for a denial: the
+sub-session inherits MAAT_LINGUA from run-phase.sh, so no maat.json is read here.
 """
 import json
+import os
 import re
 import sys
 
@@ -110,14 +113,19 @@ def main():
             final, open_jobs = analyze(f)
     except Exception:   # a broken hook must never hold a session back
         return
+    if not open_jobs and ESITO_RE.search(final):
+        return
+    try:
+        sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from maat_msg import T
+    except Exception:   # a broken hook must never hold a session back
+        return
     reasons = []
     if open_jobs:
-        reasons.append("job in background non raccolti: " + ", ".join(open_jobs)
-                       + " — raccoglili (BashOutput/TaskOutput, finche' non sono finiti) o fermali (TaskStop)"
-                       " prima di chiudere: in -p nessuno ti risveglia")
+        reasons.append(T("stop-hook.jobs") + ", ".join(open_jobs) + " — " + T("stop-hook.jobs_fix"))
     if not ESITO_RE.search(final):
-        reasons.append("l'ultimo messaggio non ha la riga `PHASE RESULT <phase>: OK — …` o `PHASE RESULT <phase>: STOP — …`:"
-                       " completa la fase (o fermala con STOP e il motivo) e chiudi con quella riga")
+        reasons.append(T("stop-hook.no_result"))
     if reasons:
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stdout.write(json.dumps({"decision": "block", "reason": "hook Stop: " + " · ".join(reasons)},

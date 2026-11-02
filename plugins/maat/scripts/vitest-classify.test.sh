@@ -8,11 +8,14 @@
 # apps/admin/.nuxt if present, otherwise from the WSL copy of this root (it exists after a run of vitest-fast.sh).
 # Mutation counterproof, run here: the components rule switched off -> the GoalsUserPanelBody case turns red.
 set -u
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 PY=$(command -v python3 || command -v python) || { echo "vitest-classify.test.sh: serve python3"; exit 2; }
 VC=${VC:-$HERE/vitest-classify.py}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# the mutant written in $T imports the message catalog next to itself (1.4.0: maat_msg.py and lib/messages.tsv)
+mkdir -p "$T/lib" && cp "$HERE/maat_msg.py" "$T/" && cp "$HERE/lib/messages.tsv" "$T/lib/"
 n=0; fail=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
 kind() { awk -F'\t' -v f="$2" '$2 == f { print $1 }' "$1"; }
@@ -85,9 +88,16 @@ check "pacchetto @repo risolto e puro -> unit" '[ "$(kind "$T/out" tests/repo-pk
 check "docblock node e puro -> unit" '[ "$(kind "$T/out" tests/docblock-node.test.ts)" = unit ]'
 check "docblock node ma con un auto-import -> nuxt" '[ "$(kind "$T/out" tests/docblock-node-auto.test.ts)" = nuxt ]'
 check "docblock di un altro environment -> nuxt" '[ "$(kind "$T/out" tests/docblock-other.test.ts)" = nuxt ]'
+# 1.4.0, English (MAAT_LINGUA=en): same classes and TAB lines, the reasons and the usage from the catalog
+MAAT_LINGUA=en "$PY" "$VC" "$A" > "$T/out.en" 2>&1; rce=$?
+check "en: stesse classi di it, motivi in inglese, niente italiano" '[ $rce = 0 ] && [ "$(cut -f1,2 "$T/out.en")" = "$(cut -f1,2 "$T/out")" ] && grep -q "comp-direct.test.ts.*auto-imported component GoalsUserPanelBody" "$T/out.en" && grep -q "unresolved.test.ts.*unresolvable import" "$T/out.en" && ! grep -qE "importa|componente|globale|non risolvibile|di Nuxt|assente" "$T/out.en"'
+MAAT_LINGUA=en "$PY" "$VC" > "$T/out.en" 2>&1; rce=$?
+check "en: uso in inglese, exit 2" '[ $rce = 2 ] && grep -q "^usage: vitest-classify.py" "$T/out.en"'
 "$PY" "$VC" "$T/nessuna" > /dev/null 2>&1; r1=$?
 rm "$A/.nuxt/components.d.ts"; "$PY" "$VC" "$A" > /dev/null 2>&1; r2=$?
 check "uso errato o dichiarazioni generate assenti -> exit 2, niente classificazione" '[ "$r1" = 2 ] && [ "$r2" = 2 ]'
+MAAT_LINGUA=en "$PY" "$VC" "$A" > "$T/out.en" 2>&1; rce=$?
+check "en: dichiarazioni generate assenti -> exit 2, motivo in inglese" '[ $rce = 2 ] && grep -q "^vitest-classify: missing .*components.d.ts (npx nuxi prepare, or a vitest run in the copy)$" "$T/out.en"'
 cp "$T/out" "$T/out.fixture"
 printf "interface _GlobalComponents {\n      'GoalsUserPanelBody': typeof import('x')['default']\n}\n" > "$A/.nuxt/components.d.ts"
 

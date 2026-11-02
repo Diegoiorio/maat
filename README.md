@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.3.0**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.4.0**.
 
 ## When to use Maat
 
@@ -72,11 +72,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.3.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.4.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.3.0` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.4.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -112,14 +112,16 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.3.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.4.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
 
 - `OK`: all good;
-- `ATTENZIONE` (warning): it works, but there is something you should know;
-- `MANCA` (missing): needs fixing, and the line says how.
+- `WARNING`: it works, but there is something you should know;
+- `MISSING`: needs fixing, and the line says how.
+
+With `"lingua": "it"` (see «Language») the same lines say `OK`, `ATTENZIONE` and `MANCA`.
 
 ## Usage
 
@@ -189,27 +191,42 @@ edit it by hand. If you want to:
 
 ## Language
 
-English is the default language. It covers the explanation shown under each permission request, the guard's
-reasons and the progress lines of a cycle. To change it, set `"lingua"` in `.claude/maat.json`, for example
-`"lingua": "it"` for Italian.
+English is the default language. It covers what Maat prints for a person: the explanation shown under each
+permission request, the guard's reasons, the progress lines of a cycle and, since 1.4.0, the messages of the scripts
+(the text after `STOP — `, errors and remedies, the reports of `maat-doctor`, `cycle-report` and `phase-usage`).
+For Italian, add `"lingua": "it"` to `.claude/maat.json`: the output is then the same as in 1.3.0. A project with
+no `lingua` gets English: since 1.4.0 this changes the output of projects that never set it.
+
+The environment variable `MAAT_LINGUA` (`it` or `en`) wins over `.claude/maat.json`, for one command or one test run:
+`MAAT_LINGUA=it bash <MAAT_ROOT>/scripts/maat-doctor.sh`. The order is `MAAT_LINGUA`, then `lingua` of
+`.claude/maat.json`, then English.
+
+Some words stay Italian in every language, because scripts, skills and tests read them: `VIOLAZIONE`, `AVVISO`,
+`ERRORE DURO`, `Percorso:`, `Scheletro:`, `S2:`, and the lines the scripts pass to each other (the full list is
+`plugins/maat/scripts/lib/protocol-strings.list`). The explanation after them follows the language.
+
+The language is part of the harness fingerprint: changing `lingua` (or running with a different `MAAT_LINGUA`)
+while a cycle is in progress stops it with «harness changed», as an update does (see «Updating to a new version»).
 
 Since 1.3.0 the formats Maat reads are written in English: spec and plan headings, the outcome line of each phase
 (`PHASE RESULT <phase>: OK`), the report lines of the agents. The Italian forms of earlier versions are still read,
 so existing specs, approved plans and cycles keep working; don't translate an approved plan, or its approval expires.
-Many runtime messages are still in Italian: they become English (with Italian under `"lingua": "it"`) in 1.3.1.
 
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.3.0`, from the project folder:
+`v1.4.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.3.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.4.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.3.x to 1.4.0 the messages of the scripts become English; to keep them Italian, add `"lingua": "it"` to
+`.claude/maat.json` (see «Language»).
 
 ## Uninstalling
 

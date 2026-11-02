@@ -11,7 +11,8 @@
 #                                                      /maat:setup to propose the nativo environment); read-only
 #
 # One line per check: «OK|ATTENZIONE|MANCA <cosa> — <come si risolve>», then «maat-doctor: <n> OK, <n> ATTENZIONE,
-# <n> MANCA». Exit: 0 no MANCA · 1 at least one MANCA · 64 wrong usage.
+# <n> MANCA». Exit: 0 no MANCA · 1 at least one MANCA · 64 wrong usage. The text follows the language (1.4.0): in
+# English the levels are OK|WARNING|MISSING; --piattaforma prints the same three values in every language.
 #
 # Checks:
 #   versions       bash >= 4, Python >= 3.10 (python.sh), git >= 2.35, Claude Code (CLAUDE_BIN, then the VS Code
@@ -49,6 +50,11 @@ export PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 SELF=${BASH_SOURCE[0]}
 HERE=$(cd "$(dirname "$SELF")" && pwd)
 CLAUDE_MIN=2.1.285   # the version tested in pk01
+# Messages (1.4.0): the catalog next to this script (lib/maat-msg.sh), English by default, Italian with "lingua": "it";
+# the language is resolved once and exported, the Python part imports maat_msg.py from MAAT_MSG_PY. The levels travel
+# between the two parts as OK|ATTENZIONE|MANCA in every language: only `riga` prints them in the language (D3).
+. "$HERE/lib/maat-msg.sh"; maat_msg_carica; maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+MAAT_MSG_PY=$(cygpath -m "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
 usage() { sed -n '2,/^set -uo/p' "$SELF" | sed '$d; s/^# \{0,1\}//'; }
 
 prova=0 piattaforma=0
@@ -57,7 +63,7 @@ for a in "$@"; do
     --prova-test) prova=1 ;;
     --piattaforma) piattaforma=1 ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "maat-doctor: opzione sconosciuta: $a (--prova-test | --piattaforma | --help)" >&2; exit 64 ;;
+    *) echo "maat-doctor: $(msg maat-doctor.bad_option a="$a")" >&2; exit 64 ;;
   esac
 done
 
@@ -87,16 +93,17 @@ if . "$HERE/python.sh" >/dev/null 2>&1 && [ -n "${FIC_PY:-}" ]; then py_ok=1; fi
 py() { sed '1,/^#__PYTHON__$/d' "$SELF" | "$FIC_PY" -I -B -X utf8 - "$@"; }
 
 if [ "$piattaforma" = 1 ]; then
-  [ -n "$py_ok" ] || { echo "maat-doctor: Python non trovato: piattaforma non determinabile" >&2; exit 2; }
+  [ -n "$py_ok" ] || { echo "maat-doctor: $(msg maat-doctor.no_python_platform)" >&2; exit 2; }
   py piattaforma
   exit $?
 fi
 
-[ "$prova" = 1 ] && echo "--prova-test: il comando di test può scrivere cache e coverage (questa esecuzione non è in sola lettura)"
+[ "$prova" = 1 ] && echo "--prova-test: $(msg maat-doctor.prova_writes)"
 nok=0 natt=0 nman=0
-riga() { # <OK|ATTENZIONE|MANCA> <text>
+msg -v LIV_ATT maat-doctor.level_warning; msg -v LIV_MAN maat-doctor.level_missing
+riga() { # <OK|ATTENZIONE|MANCA> <text>: the level printed in the language (en WARNING|MISSING)
   case $1 in OK) nok=$((nok + 1)) ;; ATTENZIONE) natt=$((natt + 1)) ;; *) nman=$((nman + 1)) ;; esac
-  printf '%s %s\n' "$1" "$2"
+  case $1 in OK) printf 'OK %s\n' "$2" ;; ATTENZIONE) printf '%s %s\n' "$LIV_ATT" "$2" ;; *) printf '%s %s\n' "$LIV_MAN" "$2" ;; esac
 }
 LAVORO=.claude/.ai-workflow VALIDA=""
 emetti() { # lines from the Python part: «OK|ATTENZIONE|MANCA …» or meta «#chiave<TAB>valore»
@@ -115,20 +122,20 @@ emetti() { # lines from the Python part: «OK|ATTENZIONE|MANCA …» or meta «#
 
 # --- versions ---------------------------------------------------------------------------------------------------------
 if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then riga OK "bash $BASH_VERSION"
-else riga MANCA "bash $BASH_VERSION sotto la 4 — installa bash 4 o superiore (Git Bash recente su Windows)"; fi
+else riga MANCA "$(msg maat-doctor.bash_old v="$BASH_VERSION")"; fi
 
 pyv=""
 [ -n "$py_ok" ] && pyv=$("$FIC_PY" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null | tr -d '\r' | head -1)
 if [ -z "$py_ok" ] || [ -z "$pyv" ]; then
-  riga MANCA "Python non trovato — installa Python 3.10 o superiore, o imposta FIC_PYTHON"; py_ok=""
+  riga MANCA "$(msg maat-doctor.no_python)"; py_ok=""
 elif ! ver_ge "$pyv" 3.10; then
-  riga MANCA "Python $pyv sotto la 3.10 ($FIC_PY) — installa Python 3.10 o superiore, o imposta FIC_PYTHON"; py_ok=""
+  riga MANCA "$(msg maat-doctor.python_old pyv="$pyv" py="$FIC_PY")"; py_ok=""
 else riga OK "Python $pyv ($FIC_PY)"; fi
 
 gv=$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-if [ -z "$gv" ]; then riga MANCA "git non trovato — installa git 2.35 o superiore"
+if [ -z "$gv" ]; then riga MANCA "$(msg maat-doctor.no_git)"
 elif ver_ge "$gv" 2.35; then riga OK "git $gv"
-else riga MANCA "git $gv sotto la 2.35 — aggiorna git"; fi
+else riga MANCA "$(msg maat-doctor.git_old gv="$gv")"; fi
 
 # The same order as run-phase.sh (`Binario:`), so the binary checked is the one the cycle will use: CLAUDE_BIN, then the
 # most recent version inside the VS Code extension (the path changes at every update), then claude on PATH.
@@ -139,22 +146,22 @@ if [ -z "$CL" ]; then
 fi
 [ -n "$CL" ] || CL=$(command -v claude 2>/dev/null || true)
 if [ -z "$CL" ]; then
-  riga ATTENZIONE "Claude Code non trovato: versione non verificata — imposta CLAUDE_BIN o metti claude nel PATH"
+  riga ATTENZIONE "$(msg maat-doctor.no_claude)"
 else
   if command -v timeout >/dev/null 2>&1; then cv=$(timeout 30 "$CL" --version 2>/dev/null </dev/null | head -1)
   else cv=$("$CL" --version 2>/dev/null </dev/null | head -1); fi
   cv=$(printf '%s' "$cv" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ -z "$cv" ]; then riga ATTENZIONE "Claude Code ($CL) non dice la sua versione: versione non verificata"
+  if [ -z "$cv" ]; then riga ATTENZIONE "$(msg maat-doctor.claude_no_version cl="$CL")"
   elif ver_ge "$cv" "$CLAUDE_MIN"; then riga OK "Claude Code $cv"
-  else riga ATTENZIONE "Claude Code $cv sotto la $CLAUDE_MIN provata — aggiorna Claude Code"; fi
+  else riga ATTENZIONE "$(msg maat-doctor.claude_old cv="$cv" min="$CLAUDE_MIN")"; fi
 fi
 
 # --- project, configuration, WSL, modules -----------------------------------------------------------------------------
 ROOT=${FIC_REPO:-}
 [ -n "$ROOT" ] || ROOT=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
 if [ -z "$ROOT" ]; then
-  riga MANCA "repository git non trovato da $(pwd) — lancia il doctor dalla cartella del progetto (o imposta FIC_REPO)"
-  echo "maat-doctor: $nok OK, $natt ATTENZIONE, $nman MANCA"
+  riga MANCA "$(msg maat-doctor.no_repo dir="$(pwd)")"
+  echo "maat-doctor: $(msg maat-doctor.summary nok="$nok" natt="$natt" nman="$nman")"
   exit 1
 fi
 ROOT=$(winp "$ROOT")
@@ -165,7 +172,7 @@ case $CFG in /*|[A-Za-z]:/*) ;; *) CFG=$(winp "$PWD/$CFG") ;; esac
 export MAAT_CONFIG=$CFG
 
 if [ -z "$py_ok" ]; then
-  riga MANCA "configurazione, moduli e guardia non verificati: serve Python 3.10 o superiore — installa Python o imposta FIC_PYTHON"
+  riga MANCA "$(msg maat-doctor.no_python_config)"
 else
   emetti < <(py config)
 fi
@@ -177,23 +184,23 @@ prova_guardia() { # <command>: 0 if denied in a phase (exit 2) and asked in the 
   local j rc out
   j=$(gjson "$1")
   printf '%s' "$j" | FIC_PHASE=implement FIC_REPO=$ROOT MAAT_CONFIG=$CFG "$FIC_PY" "$HERE/guard.py" >/dev/null 2>&1; rc=$?
-  [ "$rc" = 2 ] || { GMOT="in fase non negato (uscita $rc, attesa 2)"; return 1; }
+  [ "$rc" = 2 ] || { GMOT="$(msg maat-doctor.guard_phase_not_denied rc="$rc")"; return 1; }
   out=$(printf '%s' "$j" | env -u FIC_PHASE CLAUDE_PROJECT_DIR="$ROOT" MAAT_CONFIG="$CFG" "$FIC_PY" "$HERE/guard.py" --universal 2>/dev/null | tr -d '\r')
-  printf '%s' "$out" | grep -qE '"permissionDecision": *"ask"' || { GMOT="in sessione non chiesto (atteso ask)"; return 1; }
+  printf '%s' "$out" | grep -qE '"permissionDecision": *"ask"' || { GMOT="$(msg maat-doctor.guard_session_not_asked)"; return 1; }
 }
 if [ -n "$py_ok" ]; then
   if [ "$VALIDA" != 0 ]; then
-    riga MANCA "guardia non provata: configurazione non valida — correggi maat.json, poi rilancia il doctor"
+    riga MANCA "$(msg maat-doctor.guard_not_tested)"
   else
     for c in "git push --force origin prova"; do
-      if prova_guardia "$c"; then riga OK "guardia: «$c» negato in fase e chiesto in sessione"
-      else riga MANCA "guardia: «$c» $GMOT — la guardia non protegge: controlla guard.py e la sezione guardia di maat.json"; fi
+      if prova_guardia "$c"; then riga OK "$(msg maat-doctor.guard_ok c="$c")"
+      else riga MANCA "$(msg maat-doctor.guard_ko c="$c" why="$GMOT")"; fi
     done
     sonda=$("$FIC_PY" "$HERE/maat-config.py" sonda-produzione 2>/dev/null | tr -d '\r' | head -1); src=$?
-    if [ "$src" = 3 ]; then riga OK "nessuna sonda di produzione: provato solo il nucleo"
-    elif [ "$src" != 0 ] || [ -z "$sonda" ]; then riga MANCA "sonda di produzione non calcolabile (maat-config.py sonda-produzione uscito $src) — controlla guardia.sonde"
-    elif prova_guardia "$sonda"; then riga OK "guardia: sonda di produzione «$sonda» negata in fase e chiesta in sessione"
-    else riga MANCA "guardia: sonda di produzione «$sonda» $GMOT — controlla guardia.produzione e guardia.sonde"; fi
+    if [ "$src" = 3 ]; then riga OK "$(msg maat-doctor.no_probe)"
+    elif [ "$src" != 0 ] || [ -z "$sonda" ]; then riga MANCA "$(msg maat-doctor.probe_failed src="$src")"
+    elif prova_guardia "$sonda"; then riga OK "$(msg maat-doctor.probe_ok sonda="$sonda")"
+    else riga MANCA "$(msg maat-doctor.probe_ko sonda="$sonda" why="$GMOT")"; fi
   fi
   emetti < <(py aggancio)
 fi
@@ -201,13 +208,13 @@ fi
 # --- working folder ---------------------------------------------------------------------------------------------------
 LAVORO=${LAVORO%/}
 W="$ROOT/$LAVORO"
-if [ ! -d "$W" ]; then riga MANCA "cartella di lavoro $LAVORO assente — creala (mkdir -p $LAVORO) o correggi cartelle.lavoro"
-elif [ ! -w "$W" ]; then riga MANCA "cartella di lavoro $LAVORO non scrivibile — dai i permessi di scrittura"
+if [ ! -d "$W" ]; then riga MANCA "$(msg maat-doctor.work_missing lav="$LAVORO" lav="$LAVORO")"
+elif [ ! -w "$W" ]; then riga MANCA "$(msg maat-doctor.work_readonly lav="$LAVORO")"
 elif git -C "$ROOT" check-ignore -q -- "$LAVORO" 2>/dev/null || git -C "$ROOT" check-ignore -q -- "$LAVORO/" 2>/dev/null; then
-  riga OK "cartella di lavoro $LAVORO scrivibile, ignorata da git"
-else riga OK "cartella di lavoro $LAVORO scrivibile, NON ignorata da git: spec e run dir compaiono in git status (aggiungila a .gitignore se non vuoi versionarle)"; fi
+  riga OK "$(msg maat-doctor.work_ignored lav="$LAVORO")"
+else riga OK "$(msg maat-doctor.work_tracked lav="$LAVORO")"; fi
 
-echo "maat-doctor: $nok OK, $natt ATTENZIONE, $nman MANCA"
+echo "maat-doctor: $(msg maat-doctor.summary nok="$nok" natt="$natt" nman="$nman")"
 [ "$nman" = 0 ]
 exit $?
 
@@ -233,6 +240,12 @@ for _s in (sys.stdout, sys.stderr):
 
 ROOT = os.environ.get("DR_ROOT", "").replace("\\", "/").rstrip("/")
 PLUGIN = os.environ["MAAT_ROOT"].replace("\\", "/").rstrip("/")
+# the message catalog (1.4.0), next to this doctor; the tests load this part with MAAT_ROOT only, hence the fallback
+_s = importlib.util.spec_from_file_location(
+    "maat_msg", os.environ.get("MAAT_MSG_PY") or posixpath.join(PLUGIN, "scripts", "maat_msg.py"))
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T
 WIN = os.environ.get("DR_WIN") == "1"
 BASH = os.environ.get("DR_BASH") or "bash"
 PROVA = os.environ.get("DR_PROVA") == "1"
@@ -261,16 +274,16 @@ def wsl_stato():
     """(present, reason, executable). Missing = wsl.exe not on PATH, or `wsl -- true` failed or exceeded the limit."""
     w = shutil.which("wsl") or shutil.which("wsl.exe")
     if not w:
-        return False, "wsl.exe fuori dal PATH", None
+        return False, T("maat-doctor.wsl_not_on_path"), None
     try:
         r = subprocess.run([w, "--", "true"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=TIMEOUT_WSL)
     except subprocess.TimeoutExpired:
-        return False, "`wsl -- true` oltre %d s" % TIMEOUT_WSL, None
+        return False, T("maat-doctor.wsl_timeout", n=TIMEOUT_WSL), None
     except OSError as e:
-        return False, "`wsl -- true` non eseguibile: %s" % e, None
+        return False, T("maat-doctor.wsl_cannot_run", e=e), None
     if r.returncode != 0:
-        return False, "`wsl -- true` uscito %d" % r.returncode, None
+        return False, T("maat-doctor.wsl_exit", rc=r.returncode), None
     return True, "", w
 
 
@@ -447,28 +460,27 @@ def cmd_config():
             rc, msg = u.codice, u.messaggio
     if rc == 4:
         meta("valida", 4)
-        riga("MANCA", "maat.json assente (%s)" % mc.percorso_config(), "lancia /maat:setup")
+        riga("MANCA", T("maat-doctor.config_missing", p=mc.percorso_config()), T("maat-doctor.run_setup"))
         return
     if rc != 0:
         meta("valida", rc)
         dett = [l.replace("maat-config: ", "") for l in buf.getvalue().splitlines() if l.strip()][:3]
-        riga("MANCA", "maat.json non valido: %s" % ("; ".join(dett) or msg),
-             "correggi il file (python maat-config.py valida) o rilancia /maat:setup")
+        riga("MANCA", T("maat-doctor.config_invalid", d="; ".join(dett) or msg), T("maat-doctor.config_invalid_fix"))
         return
     meta("valida", 0)
     r = mc.risolto(cfg)
     meta("lavoro", r.get("cartelle", {}).get("lavoro", ".claude/.ai-workflow"))
-    riga("OK", "maat.json valido (%s)" % p)
+    riga("OK", T("maat-doctor.config_valid", p=p))
     vp = versione_plugin()
     h = cfg.get("harness")
     if h:
         if vp and tupla(vp)[:2] >= tupla(h)[:2]:
-            riga("OK", "versione del plugin %s compatibile con harness %s" % (vp, h))
+            riga("OK", T("maat-doctor.version_ok", vp=vp, h=h))
         else:
-            riga("MANCA", "versione del plugin %s non compatibile con harness %s" % (vp or "ignota", h),
-                 "aggiorna il plugin o correggi harness in maat.json")
+            riga("MANCA", T("maat-doctor.version_ko", vp=vp or T("maat-doctor.version_unknown"), h=h),
+                 T("maat-doctor.version_fix"))
     else:
-        riga("OK", "versione del plugin %s (harness non dichiarato)" % (vp or "ignota"))
+        riga("OK", T("maat-doctor.version_no_harness", vp=vp or T("maat-doctor.version_unknown")))
 
     piano = []          # functions that print, called after all probes have been registered
     locale = Sonde([BASH, "-s"])
@@ -483,16 +495,15 @@ def cmd_config():
             wsl, wsl_motivo, wexe = wsl_stato()
             if not wsl:
                 if copia_wsl == "sì":
-                    riga("MANCA", "WSL assente (%s) ma piattaforma.copia_wsl: sì" % wsl_motivo,
-                         "installa WSL, o metti piattaforma.copia_wsl: auto")
+                    riga("MANCA", T("maat-doctor.wsl_required", why=wsl_motivo), T("maat-doctor.wsl_required_fix"))
                 elif not wsl_mod:
-                    riga("OK", "WSL assente: copia veloce dei test non disponibile (%s)" % wsl_motivo)
+                    riga("OK", T("maat-doctor.wsl_missing_ok", why=wsl_motivo))
                 else:
-                    riga("ATTENZIONE", "WSL assente (%s)" % wsl_motivo, "i moduli wsl sono elencati sotto")
+                    riga("ATTENZIONE", T("maat-doctor.wsl_missing", why=wsl_motivo), T("maat-doctor.wsl_missing_below"))
         else:
-            riga("OK", "WSL non richiesto (piattaforma.copia_wsl: no, nessun modulo wsl)")
+            riga("OK", T("maat-doctor.wsl_not_required"))
     else:
-        riga("OK", "piattaforma non Windows: WSL non serve")
+        riga("OK", T("maat-doctor.not_windows"))
     inwsl = Sonde([wexe, "--", "bash", "-l", "-s"] if wsl else None)
     if wsl:
         node = r.get("piattaforma", {}).get("node_wsl")
@@ -500,14 +511,14 @@ def cmd_config():
         inode = inwsl.prova("[ -x %s ]" % sq(node)) if node and "/" in node else esiste_cmd(inwsl, node or "node")
 
         def wsl_righe(ib=ib, inode=inode, node=node):
-            riga("OK", "WSL raggiungibile")
+            riga("OK", T("maat-doctor.wsl_reachable"))
             if not inwsl[ib]:
-                riga("MANCA", "bash non trovato in WSL", "installa bash nella distribuzione predefinita di WSL")
+                riga("MANCA", T("maat-doctor.wsl_no_bash"), T("maat-doctor.wsl_no_bash_fix"))
             if inwsl[inode]:
                 riga("OK", "Node in WSL (%s)" % (node or "node"))
             else:
-                riga("MANCA" if wsl_mod else "ATTENZIONE", "Node non trovato in WSL (%s)" % (node or "node"),
-                     "installa Node in WSL, o imposta piattaforma.node_wsl")
+                riga("MANCA" if wsl_mod else "ATTENZIONE", T("maat-doctor.wsl_no_node", node=node or "node"),
+                     T("maat-doctor.wsl_no_node_fix"))
         piano.append(wsl_righe)
 
     copie = [m for m in mods if m.get("copia")]
@@ -528,13 +539,13 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
     sonde = inwsl if amb == "wsl" else locale
     maat = PLUGIN   # the {maat} scripts are looked up here: they are the same files even as seen from WSL (/mnt/…)
     if amb == "wsl" and not WIN:
-        out.append(lambda: riga("MANCA", "modulo %s ambiente: wsl fuori da Windows: i suoi gate saranno BLOCKED" % nome,
-                                "metti ambiente: nativo"))
+        out.append(lambda: riga("MANCA", T("maat-doctor.mod_wsl_not_windows", nome=nome),
+                                T("maat-doctor.mod_wsl_not_windows_fix")))
     elif amb == "wsl" and not wsl:
-        out.append(lambda: riga("MANCA", "modulo %s ambiente: wsl ma WSL assente: i suoi gate saranno BLOCKED" % nome,
-                                "metti `ambiente: nativo` o installa WSL"))
+        out.append(lambda: riga("MANCA", T("maat-doctor.mod_wsl_missing", nome=nome), T("maat-doctor.mod_wsl_missing_fix")))
     if not os.path.isdir(rad_abs):
-        out.append(lambda: riga("MANCA", "radice del modulo %s assente: %s" % (nome, rad or "."), "correggi moduli[].radice"))
+        out.append(lambda: riga("MANCA", T("maat-doctor.mod_root_missing", nome=nome, rad=rad or "."),
+                                T("maat-doctor.mod_root_fix")))
         return out
 
     # --- {python}
@@ -564,17 +575,17 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             def py_righe(idx=idx):
                 trovati = [p for p, i in idx if inwsl[i]]
                 if trovati:
-                    riga("OK", "python del modulo %s in WSL: %s" % (nome, trovati[0]))
+                    riga("OK", T("maat-doctor.py_wsl_ok", nome=nome, p=trovati[0]))
                     py["wsl"] = trovati[0]
                 else:
                     py["ok"] = False
-                    riga("MANCA", "python assente per il modulo %s in WSL (cercati: %s)" % (nome, ", ".join(p for p, _ in idx)),
-                         "crea il venv del modulo dentro WSL o correggi moduli[].python")
+                    riga("MANCA", T("maat-doctor.py_wsl_missing", nome=nome, cand=", ".join(p for p, _ in idx)),
+                         T("maat-doctor.py_wsl_fix"))
             out.append(py_righe)
         else:
             p = mc.risolvi_python(cfg, m, ROOT)
             ok = p is not None and (os.path.isfile(p) or os.path.isfile(p + ".exe") or shutil.which(p) is not None)
-            if ok:   # un interprete che c'e' ma non parte (es. lo stub dello Store senza Python) vale come assente
+            if ok:   # an interpreter that is there but does not start (e.g. the Store stub without Python) counts as missing
                 try:
                     ok = subprocess.run([p, "-c", "import sys"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                         stderr=subprocess.DEVNULL, timeout=20).returncode == 0
@@ -583,15 +594,15 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
 
             def py_righe(p=p, ok=ok):
                 if ok:
-                    riga("OK", "python del modulo %s: %s" % (nome, p))
+                    riga("OK", T("maat-doctor.py_ok", nome=nome, p=p))
                 else:
                     py["ok"] = False
-                    riga("MANCA", "python assente per il modulo %s (%s)" % (nome, p or "nessun candidato"),
-                         "crea il venv del modulo o correggi moduli[].python / piattaforma.python")
+                    riga("MANCA", T("maat-doctor.py_missing", nome=nome, p=p or T("maat-doctor.py_no_candidate")),
+                         T("maat-doctor.py_fix"))
             out.append(py_righe)
 
     def eseguibile(etichetta, txt, cart_abs, se_presente=None, livello="MANCA", rimedio=""):
-        """Registra la prova del primo eseguibile di txt; ritorna la funzione che stampa la riga."""
+        """Registers the probe of the first executable of txt; returns the function that prints the line."""
         exe, script, cd = primo(mc, txt, maat)
         base = assoluto(cd, cart_abs) if cd else cart_abs
         i = None
@@ -632,13 +643,13 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             if exe == "{python}" and not py["ok"] and not mancanti:
                 return   # the missing interpreter already has its MANCA line: the command cannot be checked, no OK
             if not mancanti:
-                riga("OK", "%s: %s" % (etichetta, exe or "comando della shell"))
+                riga("OK", "%s: %s" % (etichetta, exe or T("maat-doctor.shell_command")))
             elif se_presente:
-                riga("ATTENZIONE", "%s: controllo saltato, %s assente" % (etichetta, ", ".join(mancanti)),
-                     "installa %s se vuoi il controllo" % ", ".join(mancanti))
+                riga("ATTENZIONE", T("maat-doctor.check_skipped", et=etichetta, miss=", ".join(mancanti)),
+                     T("maat-doctor.check_skipped_fix", miss=", ".join(mancanti)))
             else:
-                riga(livello, "%s: %s non trovato" % (etichetta, ", ".join(mancanti)),
-                     rimedio or "installalo o correggi il comando in maat.json")
+                riga(livello, T("maat-doctor.not_found", et=etichetta, miss=", ".join(mancanti)),
+                     rimedio or T("maat-doctor.not_found_fix"))
         return stampa
 
     # --- comandi (commands)
@@ -647,30 +658,30 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
         quale = c.get("cartella", "radice")
         cart = mc.cartella_di(m, quale)
         cart_abs = posixpath.join(ROOT, cart) if cart else ROOT
-        et = "comando %s del modulo %s" % (tipo, nome)
+        et = T("maat-doctor.command_of", tipo=tipo, nome=nome)
         if not os.path.isdir(cart_abs):
             out.append(lambda et=et, cart=cart, quale=quale: riga(
-                "MANCA", "%s: cartella %s (%s) assente" % (et, cart or ".", quale), "correggi radice o radice_pacchetti"))
+                "MANCA", T("maat-doctor.folder_missing", et=et, cart=cart or ".", quale=quale), T("maat-doctor.folder_fix")))
             continue
         if c.get("se_presente") and not mc.presente(c["se_presente"], rad_abs):
-            out.append(lambda et=et, sp=c["se_presente"]: riga("OK", "%s: NOT RUN (dichiarato), %s assente" % (et, sp)))
+            out.append(lambda et=et, sp=c["se_presente"]: riga("OK", T("maat-doctor.not_run_present", et=et, sp=sp)))
             continue
         out.append(eseguibile(et, c["comando"], cart_abs))
 
     # --- controlli (checks)
     for j, v in enumerate(m.get("controlli", [])):
-        out.append(eseguibile("controllo %s del modulo %s (%s)" % (j, nome, v["glob"]), v["comando"], rad_abs,
+        out.append(eseguibile(T("maat-doctor.check_of", j=j, nome=nome, glob=v["glob"]), v["comando"], rad_abs,
                               se_presente=v.get("se_presente")))
 
     # --- controprova (counterproof)
     cp = m.get("controprova")
     if not cp or not cp.get("comando"):
-        out.append(lambda: riga("OK", "controprove del modulo %s: NOT RUN (dichiarato)" % nome))
+        out.append(lambda: riga("OK", T("maat-doctor.cp_not_run", nome=nome)))
     else:
         if cp.get("runner") == "comando":
-            out.append(eseguibile("controprova del modulo %s" % nome, cp["comando"], rad_abs))
+            out.append(eseguibile(T("maat-doctor.cp_of", nome=nome), cp["comando"], rad_abs))
         elif "{python}" in cp["comando"]:
-            out.append(eseguibile("controprova del modulo %s" % nome, "{python}", rad_abs))
+            out.append(eseguibile(T("maat-doctor.cp_of", nome=nome), "{python}", rad_abs))
         if usabile:
             # the tools of counterproof.sh (pk08): rsync and flock have a fallback (tar, mkdir), the others do not
             st = [(s, esiste_cmd(sonde, s)) for s in ("rsync", "flock", "tar", "sha256sum", "timeout")]
@@ -679,18 +690,19 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                 ha = {s: sonde[i] for s, i in st}
                 manca = [s for s in ("sha256sum", "timeout") if not ha[s]]
                 if not ha["rsync"] and not ha["tar"]:
-                    manca.append("rsync e tar")
+                    manca.append(T("maat-doctor.rsync_and_tar"))
                 assenti = [s for s in ("rsync", "flock") if not ha[s]]
                 if manca:
-                    riga("ATTENZIONE", "controprove del modulo %s non disponibili (BLOCKED): manca %s"
-                         % (nome, ", ".join(manca)), "installa %s %s" % (", ".join(manca), "in WSL" if amb == "wsl" else "qui"))
+                    riga("ATTENZIONE", T("maat-doctor.cp_blocked", nome=nome, miss=", ".join(manca)),
+                         T("maat-doctor.cp_blocked_fix", miss=", ".join(manca),
+                           where="in WSL" if amb == "wsl" else T("maat-doctor.here")))
                 elif assenti:
-                    cosa = {("rsync",): "rsync assente: copia di ripiego, più lenta",
-                            ("flock",): "flock assente: lock di ripiego, più lento",
-                            ("rsync", "flock"): "rsync/flock assenti: copia e lock di ripiego, più lenti"}
-                    riga("OK", "controprove del modulo %s: %s" % (nome, cosa[tuple(assenti)]))
+                    cosa = {("rsync",): T("maat-doctor.no_rsync"), ("flock",): T("maat-doctor.no_flock"),
+                            ("rsync", "flock"): T("maat-doctor.no_rsync_flock")}
+                    riga("OK", T("maat-doctor.cp_tools", nome=nome, what=cosa[tuple(assenti)]))
                 else:
-                    riga("OK", "controprove del modulo %s: rsync e flock %s" % (nome, "in WSL" if amb == "wsl" else "presenti"))
+                    riga("OK", T("maat-doctor.cp_tools_ok", nome=nome,
+                                 where="in WSL" if amb == "wsl" else T("maat-doctor.present")))
             out.append(strumenti)
 
     # --- WSL copy of the module
@@ -704,13 +716,11 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
 
         def copia(i=i, i_semina=i_semina, setup=setup):
             if inwsl[i]:
-                riga("OK", "copia WSL del modulo %s presente" % nome)
+                riga("OK", T("maat-doctor.copy_ok", nome=nome))
             elif inwsl[i_semina]:
-                riga("ATTENZIONE", "copia WSL del modulo %s assente in questo worktree: si seminerà al primo uso dalla "
-                     "copia del tree principale (node_modules in hardlink), se le dipendenze coincidono" % nome,
-                     "niente da fare; se le dipendenze sono diverse: %s" % setup)
+                riga("ATTENZIONE", T("maat-doctor.copy_seed", nome=nome), T("maat-doctor.copy_seed_fix", setup=setup))
             else:
-                riga("MANCA", "copia WSL del modulo %s assente" % nome, "creala una volta: %s" % setup)
+                riga("MANCA", T("maat-doctor.copy_missing", nome=nome), T("maat-doctor.copy_missing_fix", setup=setup))
         out.append(copia)
 
     # --- preparati: the guide file (the first glob without wildcards)
@@ -718,16 +728,15 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
     if guida:
         ok = os.path.exists(posixpath.join(rad_abs, guida))
         out.append(lambda ok=ok, guida=guida: riga(
-            "OK", "preparato del modulo %s presente (%s)" % (nome, guida)) if ok else riga(
-            "ATTENZIONE", "preparato assente nel modulo %s (%s)" % (nome, guida),
-            "lancia `%s` nella radice del modulo" % m.get("preparazione", "la preparazione")))
+            "OK", T("maat-doctor.prep_ok", nome=nome, guida=guida)) if ok else riga(
+            "ATTENZIONE", T("maat-doctor.prep_missing", nome=nome, guida=guida),
+            T("maat-doctor.prep_fix", prep=m.get("preparazione", T("maat-doctor.prep_default")))))
 
     # --- copia_anche: repo folders that the counterproofs copy
     for d in m.get("copia_anche", []):
         ok = os.path.isdir(posixpath.join(ROOT, mc.norm(d)))
-        out.append(lambda ok=ok, d=d: riga("OK", "copia_anche del modulo %s: %s" % (nome, d)) if ok else riga(
-            "MANCA", "copia_anche del modulo %s: %s non esiste (le controprove del modulo fallirebbero)" % (nome, d),
-            "correggi moduli[].copia_anche"))
+        out.append(lambda ok=ok, d=d: riga("OK", T("maat-doctor.also_ok", nome=nome, d=d)) if ok else riga(
+            "MANCA", T("maat-doctor.also_missing", nome=nome, d=d), T("maat-doctor.also_fix")))
 
     # --- collega_nel_worktree: the folders present in the main tree
     for v in m.get("collega_nel_worktree", []):
@@ -736,9 +745,9 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
         pat = posixpath.join(ROOT, cart, v["percorso"]) if cart else posixpath.join(ROOT, v["percorso"])
         ok = any(os.path.isdir(x) for x in glob.glob(pat))
         dov = posixpath.join(cart, v["percorso"]) if cart else v["percorso"]
-        out.append(lambda ok=ok, dov=dov: riga("OK", "collega_nel_worktree del modulo %s: %s presente" % (nome, dov))
-                   if ok else riga("ATTENZIONE", "dipendenze non installate: i worktree del modulo %s non avranno %s"
-                                   % (nome, dov), "installa le dipendenze nel tree principale"))
+        out.append(lambda ok=ok, dov=dov: riga("OK", T("maat-doctor.link_ok", nome=nome, dov=dov))
+                   if ok else riga("ATTENZIONE", T("maat-doctor.link_missing", nome=nome, dov=dov),
+                                   T("maat-doctor.link_fix")))
 
     # --- file_dipendenze: every glob finds at least one tracked file
     for v in m.get("file_dipendenze", []):
@@ -751,9 +760,9 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             ok = bool(g.stdout.strip())
         except (OSError, subprocess.TimeoutExpired):
             ok = False
-        out.append(lambda ok=ok, spec=spec: riga("OK", "file_dipendenze del modulo %s: %s" % (nome, spec[7:])) if ok
-                   else riga("ATTENZIONE", "file_dipendenze del modulo %s: glob senza file tracciati: %s" % (nome, spec[7:]),
-                             "correggi il glob in maat.json"))
+        out.append(lambda ok=ok, spec=spec: riga("OK", T("maat-doctor.deps_ok", nome=nome, g=spec[7:])) if ok
+                   else riga("ATTENZIONE", T("maat-doctor.deps_untracked", nome=nome, g=spec[7:]),
+                             T("maat-doctor.deps_fix")))
 
     # --- --prova-test
     if PROVA and "test" in m.get("comandi", {}) and usabile:
@@ -782,8 +791,8 @@ def prova_test(mc, cfg, m, py):
     nome = m["nome"]
     t = scegli_test(mc, m)
     if t is None:
-        riga("ATTENZIONE", "prova test del modulo %s: nessun file di test trovato dalla regola %s"
-             % (nome, m.get("regola_test", "accanto")), "aggiungi un test o correggi regola_test")
+        riga("ATTENZIONE", T("maat-doctor.trial_no_test", nome=nome, rule=m.get("regola_test", "accanto")),
+             T("maat-doctor.trial_no_test_fix"))
         return
     wsl = m.get("ambiente") == "wsl"
     salva = {k: os.environ.get(k) for k in ("MAAT_ROOT", "FIC_GATES_VENV_PY")}
@@ -794,8 +803,7 @@ def prova_test(mc, cfg, m, py):
                 os.environ["FIC_GATES_VENV_PY"] = py["wsl"]
         cart, line = mc.comando(cfg, nome, "test", test=[t], root=ROOT)[0]
     except mc.Uscita as u:
-        riga("MANCA", "prova test del modulo %s: comando non risolto (%s)" % (nome, u.messaggio or u.codice),
-             "correggi comandi.test")
+        riga("MANCA", T("maat-doctor.trial_unresolved", nome=nome, why=u.messaggio or u.codice), T("maat-doctor.trial_fix"))
         return
     finally:
         for k, v in salva.items():
@@ -806,8 +814,10 @@ def prova_test(mc, cfg, m, py):
     cart_abs = posixpath.join(ROOT, cart) if cart else ROOT
     try:
         if wsl:
-            s = "export MAAT_MODULO=%s MAAT_CONFIG=%s\ncd %s && %s\n" % (
-                sq(nome), sq(wslp(os.environ.get("MAAT_CONFIG", ""))), sq(wslp(cart_abs)), line)
+            # MAAT_LINGUA too (resolved at the top): wsl.exe does not pass the environment, and the last line of the
+            # trial (a message of test-fast.sh) goes into maat-doctor.trial_ko
+            s = "export MAAT_MODULO=%s MAAT_CONFIG=%s MAAT_LINGUA=%s\ncd %s && %s\n" % (
+                sq(nome), sq(wslp(os.environ.get("MAAT_CONFIG", ""))), sq(_m.lingua()), sq(wslp(cart_abs)), line)
             w = shutil.which("wsl") or shutil.which("wsl.exe")
             res = subprocess.run([w, "--", "bash", "-l", "-s"], input=s.encode("utf-8"), stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, timeout=900)
@@ -816,14 +826,14 @@ def prova_test(mc, cfg, m, py):
             res = subprocess.run([BASH, "-c", "cd %s && %s" % (sq(cart_abs), line)], stdin=subprocess.DEVNULL,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900, env=env)
     except subprocess.TimeoutExpired:
-        riga("MANCA", "prova test del modulo %s: %s oltre 900 s" % (nome, t), "lancia il comando a mano e guarda dove si ferma")
+        riga("MANCA", T("maat-doctor.trial_timeout", nome=nome, t=t), T("maat-doctor.trial_timeout_fix"))
         return
     ultima = ([l for l in res.stdout.decode("utf-8", "replace").replace("\r", "").splitlines() if l.strip()] or [""])[-1]
     if res.returncode == 0:
-        riga("OK", "prova test del modulo %s: %s, uscita 0" % (nome, t))
+        riga("OK", T("maat-doctor.trial_ok", nome=nome, t=t))
     else:
-        riga("MANCA", "prova test del modulo %s: %s, uscita %d (%s)" % (nome, t, res.returncode, ultima[:160]),
-             "correggi comandi.test o l'ambiente del modulo")
+        riga("MANCA", T("maat-doctor.trial_ko", nome=nome, t=t, rc=res.returncode, last=ultima[:160]),
+             T("maat-doctor.trial_ko_fix"))
 
 
 def controlli_progetto(mc, cfg, r, locale):
@@ -831,8 +841,7 @@ def controlli_progetto(mc, cfg, r, locale):
 
     def comando_progetto(etichetta, txt):
         if re.fullmatch(r"/[A-Za-z0-9:_-]+", txt.strip()):
-            out.append(lambda: riga("OK", "%s: comando di sessione %s (si lancia in Claude Code, non verificabile qui)"
-                                    % (etichetta, txt.strip())))
+            out.append(lambda: riga("OK", T("maat-doctor.session_command", et=etichetta, cmd=txt.strip())))
             return
         exe, script, cd = primo(mc, txt, PLUGIN)
         base = assoluto(cd, ROOT) if cd else ROOT
@@ -847,9 +856,10 @@ def controlli_progetto(mc, cfg, r, locale):
             if script and not os.path.isfile(assoluto(script, base)):
                 manca.append(script)
             if manca:
-                riga("MANCA", "%s: %s non trovato" % (etichetta, ", ".join(manca)), "installalo o correggi maat.json")
+                riga("MANCA", T("maat-doctor.not_found", et=etichetta, miss=", ".join(manca)),
+                     T("maat-doctor.not_found_fix_project"))
             else:
-                riga("OK", "%s: %s" % (etichetta, exe or "comando della shell"))
+                riga("OK", "%s: %s" % (etichetta, exe or T("maat-doctor.shell_command")))
         out.append(stampa)
 
     c = r.get("contesto", {}).get("schema_db_comando")
@@ -869,7 +879,7 @@ def controlli_progetto(mc, cfg, r, locale):
             nome = s["script"].replace("\\", "/").strip()
             ok = any(t == nome or t.endswith("/" + nome) for t in tracciati) or os.path.isfile(assoluto(nome, ROOT))
             out.append(lambda ok=ok, nome=nome: riga("OK", "guardia.suite: %s" % nome) if ok else riga(
-                "ATTENZIONE", "guardia.suite: script %s non trovato nel repo" % nome, "correggi guardia.suite"))
+                "ATTENZIONE", T("maat-doctor.suite_missing", nome=nome), T("maat-doctor.suite_fix")))
 
     # production probes and regexes
     prod, sonde = g.get("produzione", []), g.get("sonde", [])
@@ -878,18 +888,17 @@ def controlli_progetto(mc, cfg, r, locale):
         try:
             rx.append((p, re.compile(p, re.I)))
         except re.error as e:
-            out.append(lambda p=p, e=e: riga("MANCA", "guardia.produzione: regex non valida %s (%s)" % (p, e),
-                                             "correggi la regex"))
+            out.append(lambda p=p, e=e: riga("MANCA", T("maat-doctor.regex_invalid", p=p, e=e), T("maat-doctor.regex_fix")))
     for s in sonde:
         cmd = "curl -s https://%s/" % s
         ok = any(x.search(cmd) for _p, x in rx)
-        out.append(lambda ok=ok, s=s: riga("OK", "sonda %s coperta da guardia.produzione" % s) if ok else riga(
-            "MANCA", "sonda non coperta dalla guardia: %s" % s, "aggiungi a guardia.produzione una regex che la copra"))
+        out.append(lambda ok=ok, s=s: riga("OK", T("maat-doctor.probe_covered", s=s)) if ok else riga(
+            "MANCA", T("maat-doctor.probe_uncovered", s=s), T("maat-doctor.probe_uncovered_fix")))
     if sonde:
         for p, x in rx:
             if not any(x.search("curl -s https://%s/" % s) for s in sonde):
-                out.append(lambda p=p: riga("ATTENZIONE", "regola di produzione non provata: %s" % p,
-                                            "aggiungi a guardia.sonde un host che le corrisponda"))
+                out.append(lambda p=p: riga("ATTENZIONE", T("maat-doctor.rule_untested", p=p),
+                                            T("maat-doctor.rule_untested_fix")))
     return out
 
 
@@ -926,27 +935,25 @@ def cmd_aggancio():
                 hook = True
     rel = lambda f: f[len(ROOT) + 1:] if f.startswith(ROOT + "/") else f
     if abilitato and hook:
-        riga("ATTENZIONE", "hook di guardia doppio: plugin maat abilitato (%s) e hook PreToolUse di progetto in .claude/settings.json"
-             % rel(dove), "togli l'hook di progetto: la guardia del plugin basta")
+        riga("ATTENZIONE", T("maat-doctor.hook_double", dove=rel(dove)), T("maat-doctor.hook_double_fix"))
     elif abilitato:
-        riga("OK", "guardia agganciata: plugin maat%s abilitato (%s)" % ("@" + mk if mk else "", rel(dove)))
+        riga("OK", T("maat-doctor.hook_plugin", mk="@" + mk if mk else "", dove=rel(dove)))
     elif hook:
-        riga("OK", "guardia agganciata: hook PreToolUse di progetto in .claude/settings.json")
+        riga("OK", T("maat-doctor.hook_project"))
     else:
-        riga("MANCA", "guardia non agganciata: né plugin maat abilitato né hook di progetto", "abilita il plugin (/plugin)")
+        riga("MANCA", T("maat-doctor.hook_none"), T("maat-doctor.hook_none_fix"))
     if abilitato and mk:
         km = leggi_json(posixpath.join(home, ".claude", "plugins", "known_marketplaces.json")).get(mk, {})
         ex = leggi_json(progetto).get("extraKnownMarketplaces", {})
         ex = ex.get(mk, {}) if isinstance(ex, dict) else {}
         fonti = [x.get("source") for x in (km, ex) if isinstance(x, dict)]
         if any((s.get("source") if isinstance(s, dict) else s) == "directory" for s in fonti):
-            riga("ATTENZIONE", "plugin installato da un marketplace da cartella (%s): il codice gira dalla cartella sorgente, "
-                 "ogni modifica arriva subito" % mk, "installa da git con un ref")
+            riga("ATTENZIONE", T("maat-doctor.marketplace_dir", mk=mk), T("maat-doctor.marketplace_dir_fix"))
 
 
 MODI = {"piattaforma": cmd_piattaforma, "config": cmd_config, "aggancio": cmd_aggancio}
 if __name__ == "__main__":   # otherwise loaded by the tests (maat-doctor.test.sh, «unità» section), without running anything
     if len(sys.argv) < 2 or sys.argv[1] not in MODI:
-        sys.stderr.write("maat-doctor (python): modo sconosciuto\n")
+        sys.stderr.write("maat-doctor (python): %s\n" % T("maat-doctor.bad_mode"))
         sys.exit(64)
     sys.exit(MODI[sys.argv[1]]() or 0)

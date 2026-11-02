@@ -8,14 +8,17 @@
 #   bash script/fic/gates.test.sh
 #   GT=/path/variant.sh bash script/fic/gates.test.sh   # the suite on a variant
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 GT=${GT:-$HERE/gates.sh}
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
-# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
-mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
+# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT;
+# 1.4.0: also the message catalog and its two readers (lib/messages.tsv, lib/maat-msg.sh, maat_msg.py)
+mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$HERE/lib/maat-msg.sh" "$HERE/lib/messages.tsv" "$W/lib/" &&
+  cp "$HERE/maat_msg.py" "$W/"; export MAAT_ROOT=$ROOT
 export HOME="$W/home"; mkdir -p "$HOME"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
@@ -42,6 +45,7 @@ cat > "$HP/scripts/test-fast.sh" <<'EOF'
 echo "VF $*" >> "$GLOG"
 echo "MOD ${MAAT_MODULO:-}" >> "$GLOG"
 echo "CONF ${MAAT_CONFIG:-}" >> "$GLOG"
+echo "LINGUA ${MAAT_LINGUA:-}" >> "$GLOG"
 [ -n "${FAKE_VF_TOUCH:-}" ] && echo cambiato >> "$FAKE_VF_TOUCH"
 [ -n "${FAKE_VF_STDERR:-}" ] && echo "$FAKE_VF_STDERR" >&2
 lint=0; [ "${1:-}" = --lint ] && lint=1
@@ -60,8 +64,9 @@ EOF
 cat > "$FB/wsl" <<EOF
 #!/usr/bin/env bash
 c=\${1//\/mnt\//\/}
-# like wsl.exe, which passes to WSL only the variables in WSLENV: MAAT_CONFIG does not arrive unless the command exports it
-env -u MAAT_CONFIG PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
+# like wsl.exe, which passes to WSL only the variables in WSLENV: MAAT_CONFIG and MAAT_LINGUA do not arrive unless the
+# command exports them
+env -u MAAT_CONFIG -u MAAT_LINGUA PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
 EOF
 printf '#!/usr/bin/env bash\necho "${FAKE_NODE:-v18.19.0}"\n' > "$FB/node"
 printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
@@ -167,6 +172,15 @@ chk "  .vue senza test omonimo: tests-fe SKIPPED" '[ "$(jget "$RUN/evidence/$KF/
 chk "  esito complessivo PASS, uscita 0" '[ $rc -eq 0 ] && printf "%s\n" "$out" | tail -1 | grep -q "esito=PASS"' "$out"
 rm -f "$RUN/base.txt"
 
+# --- 7en. 1.4.0, English (MAAT_LINGUA=en): reasons, summaries and the «not covered» line from the catalog; the
+#     prefix "gates: esito=", the outcome words and the tokens eseguito|riuso stay ---
+printf 'x\n' > "$R/nota-en.md"
+out=$(MAAT_LINGUA=en bash "$GT" --run-dir "$RUN" full modules/app/apps/admin/components/goals/Riga.vue modules/api/app/services/senza_test.py nota-en.md 2>&1); rc=$?; KE=$(key)
+chk "7en: in inglese esito PASS, prefisso e parola d'esito di sempre" '[ $rc -eq 0 ] && [ -n "$KE" ] && printf "%s\n" "$out" | tail -1 | grep -q "^gates: esito=PASS chiave=$KE evidence="' "$out"
+chk "  motivo di SKIPPED e riga «not covered» in inglese" 'printf "%s\n" "$out" | grep -q "^tests-be: SKIPPED (eseguito) — no existing test for: modules/api/app/services/senza_test.py$" && printf "%s\n" "$out" | grep -qx "not covered: nota-en.md (outside every module of maat.json)" && jget "$RUN/evidence/$KE/tests-be.json" motivo | grep -q "^no existing test for: "' "$out"
+chk "  niente italiano del catalogo nell'uscita" '! printf "%s\n" "$out" | grep -qE "nessun test esistente|non coperto|fuori da ogni modulo|voci eseguite"' "$out"
+rm -f "$R/nota-en.md"
+
 # --- 8. --verify ---
 bash "$GT" --verify "$RUN/evidence/$K9" >/dev/null 2>&1; r=$?
 chk "--verify sulla chiave attuale: FRESH (0)" '[ $r -eq 0 ]'
@@ -237,13 +251,31 @@ if PATH="$NOPYPATH" command -v git >/dev/null 2>&1 && PATH="$NOPYPATH" command -
   chk "14 python non trovato (modulo nativo): tests-be BLOCKED, uscita 3, mai NOT RUN" '[ $rc -eq 3 ] && printf "%s
 " "$out" | grep -q "^tests-be: BLOCKED.*python non trovato" && ! printf "%s
 " "$out" | grep -q "^tests-be: NOT RUN"' "$out"
-  M="$W/mut-nopy.sh"; sed 's/^senza_python() { case \$C_ERR in \*"python non trovato"\*) return 0 ;; esac; return 1; }$/senza_python() { return 1; }/' "$GT" > "$M"
+  M="$W/mut-nopy.sh"; sed 's/^senza_python() { case \$C_ERR in \*"python non trovato"\*|\*"python not found"\*) return 0 ;; esac; return 1; }$/senza_python() { return 1; }/' "$GT" > "$M"
   if cmp -s "$GT" "$M"; then ko "14 controprova: la mutazione non si applica"
   else nopy mut "$M"
     if printf '%s
 ' "$out" | grep -q "^tests-be: NOT RUN"; then ok   # expected red: it goes back to NOT RUN «dichiarato»
     else ko "14 controprova: senza il ramo BLOCKED l'esito non torna NOT RUN (il test non discrimina)" "$out"; fi
   fi
+  # 14en (1.4.0): from block D on maat-config.py writes «python not found» in English (catalog keys
+  # maat-config.python_unresolved and maat-config.python_not_found_for). MAAT_LINGUA=en -> BLOCKED as in Italian.
+  # Counterproof: the case of gates.sh that reads only the Italian text -> NOT RUN «declared» again (red).
+  HPE="$W/plugin-en"; rm -rf "$HPE"; cp -r "$HP" "$HPE"
+  nopy_en() { RUN="$W/spec-nopy-en-$1.run"; rm -rf "$RUN"; mkdir -p "$RUN"
+    out=$(PATH="$NOPYPATH" FIC_PYTHON="$FIC_PY" MAAT_LINGUA=en FIC_GATES_HARNESS="$HPE" MAAT_CONFIG="$W/nopy.maat.json" FIC_GATES_VENV_PY= bash "$2" --run-dir "$RUN" std modules/api/app/services/goals.py 2>&1); rc=$?; }
+  if grep -q 'T("maat-config.python_unresolved")' "$HPE/scripts/maat-config.py" && ! grep -q 'python non trovato' "$HPE/scripts/maat-config.py" &&
+     grep -q '^maat-config\.python_unresolved	python not found: ' "$HPE/scripts/lib/messages.tsv"; then
+    nopy_en orig "$GT"
+    chk "14en python not found (lettore in inglese, MAAT_LINGUA=en): tests-be BLOCKED, uscita 3, mai NOT RUN" '[ $rc -eq 3 ] && printf "%s\n" "$out" | grep -q "^tests-be: BLOCKED (eseguito) — test command of be: python not found" && ! printf "%s\n" "$out" | grep -q "^tests-be: NOT RUN"' "$out"
+    M="$W/mut-nopy-it.sh"
+    sed 's/^senza_python() { case \$C_ERR in \*"python non trovato"\*|\*"python not found"\*) return 0 ;; esac; return 1; }$/senza_python() { case $C_ERR in *"python non trovato"*) return 0 ;; esac; return 1; }/' "$GT" > "$M"
+    if cmp -s "$GT" "$M"; then ko "14en controprova: la mutazione non si applica"
+    else nopy_en mut "$M"
+      if printf '%s\n' "$out" | grep -q "^tests-be: NOT RUN"; then ok   # expected red: the English text is not recognised
+      else ko "14en controprova: col lettore solo italiano l'esito inglese non torna NOT RUN (il test non discrimina)" "$out"; fi
+    fi
+  else ko "14en: la copia del lettore dice ancora «python non trovato»"; fi
 else
   echo "SKIP [14: nessun PATH senza python3 che abbia ancora git e sed]"
 fi
@@ -261,6 +293,23 @@ if cmp -s "$GT" "$M"; then ko "15 controprova: la mutazione non si applica"
 else conf15 mut "$M"
   if [ -z "$CONFV" ]; then ok   # expected red: test-fast.sh does not see MAAT_CONFIG
   else ko "15 controprova: senza l'export test-fast.sh vede ancora MAAT_CONFIG (il test non discrimina)" "CONF=$CONFV"; fi
+fi
+: > "$GLOG"
+
+# --- 15b. MAAT_LINGUA (resolved by gates.sh) reaches test-fast.sh inside WSL: its messages follow the language of the
+#     caller. Counterproof: without the export in the WSL command, test-fast.sh does not see it. ---
+lingua15() { RUN="$W/spec-lingua15-$1.run"; rm -rf "$RUN"; mkdir -p "$RUN"; : > "$GLOG"
+  out=$(MAAT_LINGUA=${3:-it} bash "$2" --run-dir "$RUN" std modules/app/apps/admin/utils/goals.ts 2>&1); rc=$?
+  LINGV=$(sed -n 's/^LINGUA //p' "$GLOG" | tail -1); }
+lingua15 orig "$GT"
+chk "15b MAAT_LINGUA in WSL: test-fast.sh la riceve (it)" '[ $rc -eq 0 ] && [ "$LINGV" = it ]' "$out LINGUA=$LINGV"
+lingua15 orig-en "$GT" en
+chk "15b MAAT_LINGUA in WSL: test-fast.sh la riceve (en)" '[ $rc -eq 0 ] && [ "$LINGV" = en ]' "$out LINGUA=$LINGV"
+M="$W/mut-lingua.sh"; sed 's/ export MAAT_LINGUA=\$(sq "\$MAAT_LINGUA");//' "$GT" > "$M"
+if cmp -s "$GT" "$M"; then ko "15b controprova: la mutazione non si applica"
+else lingua15 mut "$M"
+  if [ -z "$LINGV" ]; then ok   # expected red: test-fast.sh does not see MAAT_LINGUA
+  else ko "15b controprova: senza l'export test-fast.sh vede ancora MAAT_LINGUA (il test non discrimina)" "LINGUA=$LINGV"; fi
 fi
 : > "$GLOG"
 

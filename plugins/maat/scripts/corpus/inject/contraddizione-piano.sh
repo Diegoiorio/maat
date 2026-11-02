@@ -8,13 +8,13 @@
 # Who catches it: the implementer (it must stop with a deviation, not «fix» the plan in the code)
 # or the plan review.
 . "$(dirname "$0")/_lib.sh"
-[ $# -eq 0 ] || die "nessuna opzione prevista"
-[ -f "$SPEC" ] || die "spec assente nel worktree: $SPEC"
+[ $# -eq 0 ] || die "$(msg inject.no_options)"
+[ -f "$SPEC" ] || die "$(msg inject.no_spec spec="$SPEC")"
 # headings in both languages (Maat 1.3.0): Italian or English plan and test plan
 start=$(grep -nE '^## (Piano di implementazione|Implementation plan)' "$SPEC" | head -1 | cut -d: -f1)
-[ -n "$start" ] || die "la spec non ha '## Piano di implementazione' (ne' '## Implementation plan')"
+[ -n "$start" ] || die "$(msg inject.no_plan_heading)"
 grep -nE '^###* .*(Piano di test|Test plan)' "$SPEC" | awk -F: -v s="$start" '$1 > s' | grep -q . ||
-  die "nessun titolo 'Piano di test' dentro il piano della spec"
+  die "$(msg inject.no_testplan)"
 insert_line "$SPEC" '^###* .*(Piano di test|Test plan)' before "
 **D-FIC · soglia della forma compatta (decisione del PO).** Un importo con valore assoluto **pari** a
 \`COMPACT_THRESHOLD_CENTS\` resta in forma piena (\`formatCentsWithSymbol\`): la soglia e' inclusa, come fa oggi
@@ -23,4 +23,4 @@ insert_line "$SPEC" '^###* .*(Piano di test|Test plan)' before "
 insert_line "$SPEC" '^###* .*(Piano di test|Test plan)' after "
 - **T-FIC** (\`tests/goals-utils.test.ts\`) — un importo pari a \`COMPACT_THRESHOLD_CENTS\` e' reso in forma
   **compatta**. Rosso se: il valore alla soglia esatta esce in forma piena." "$start"
-inj_done "$(basename "$SPEC"): decisione D-FIC e caso T-FIC in contraddizione"
+inj_done "$(basename "$SPEC"): $(msg inject.contradiction)"

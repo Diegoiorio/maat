@@ -5,6 +5,7 @@
 # The mutation counterproofs run inside the suite: the reader is copied to a temporary folder, a sed mutates it,
 # and the case the mutation must break is rerun on the copy: it must turn red.
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 MC=${MC:-$HERE/maat-config.py}
@@ -59,7 +60,7 @@ check "default gate.full = test controlli lint build" '[ "$(leggi gate.full)" = 
 check "default gate.min = test controlli" '[ "$(leggi gate.min)" = "test controlli" ]'
 check "default cartelle.lavoro" '[ "$(leggi cartelle.lavoro)" = .claude/.ai-workflow ]'
 check "default piattaforma.copia_wsl = auto" '[ "$(leggi piattaforma.copia_wsl)" = auto ]'
-check "default lingua = en" '[ "$(leggi lingua)" = en ]'
+check "default lingua = en" '[ "$(unset MAAT_LINGUA; leggi lingua)" = en ]'
 check "default moduli.0.report = nessuno" '[ "$(leggi moduli.0.report)" = nessuno ]'
 MAAT_CONFIG=$MIN mc leggi guardia.produzione > "$T/out" 2>&1; rc=$?
 check "leggi: chiave assente -> exit 3" '[ $rc = 3 ] && grep -q "chiave assente" "$T/out"'
@@ -193,7 +194,7 @@ o=$(MAAT_CONFIG=$T/vuota.json mc sonda-produzione); rc=$?
 check "sonda-produzione con produzione vuota -> ripiego, exit 3" '[ $rc = 3 ] && [ "$o" = "git push --force origin x" ]'
 
 # --- 7. profiles: componi --------------------------------------------------------------------------------------------
-mc componi nuxt-vitest fastapi-pytest --radice fe=modules/app/apps/admin --radice be=modules/api > "$T/comp.json" 2>"$T/out"
+env -u MAAT_LINGUA "$FIC_PY" "$MC" componi nuxt-vitest fastapi-pytest --radice fe=modules/app/apps/admin --radice be=modules/api > "$T/comp.json" 2>"$T/out"
 check "componi nuxt-vitest + fastapi-pytest esce 0" '[ $? = 0 ]'
 mc valida "$T/comp.json" > "$T/out" 2>&1; check "  e il risultato è valido" '[ $? = 0 ]'
 "$FIC_PY" -c '
@@ -302,6 +303,52 @@ gen --file d/c.json > "$T/out" 2>&1; rc=$?
 check "generico: solo un JSON e niente python -> exit 3 (tutto saltato)" '[ $rc = 3 ]'
 o=$(FIC_GATES_VENV_PY=$T/py.exe gen --file d/c.json 2>/dev/null)
 check "generico: con un interprete, json.tool su un file per invocazione" '[ "$o" = "$(riga . "$T/py.exe -m json.tool '"'"'d/c.json'"'"'")" ]'
+
+# --- 1.4.0, English (MAAT_LINGUA=en): the reasons from the catalog; «SALTATA: », the «NOT RUN (declared): » prefix and
+# «python not found» are what gates.sh reads (gates.sh:220/229/262)
+IT_RX='dichiarato|non trovato|assente|risolvibile|atteso|trovato|fuori elenco|sconosciut|deve contenere|serve copia|uso:|valido|progetto'
+MAAT_LINGUA=en gen --file a.sh --file d/c.json > "$T/o1" 2> "$T/out"; rc=$?
+check "en: controlli saltati -> SALTATA, NOT RUN (declared), python not found, niente italiano" '[ $rc = 0 ] && grep -qxF "maat-config: SALTATA: {python} -m json.tool {file} — NOT RUN (declared): python not found: {python} cannot be resolved" "$T/out" && grep -qxF "maat-config: SALTATA: shellcheck {file} — NOT RUN (declared): shellcheck missing" "$T/out" && ! grep -qE "$IT_RX" "$T/out"'
+MAAT_LINGUA=en MAAT_CONFIG=$MIN mc leggi guardia.produzione > "$T/out" 2>&1; rc=$?
+check "en: leggi, chiave assente -> exit 3, key missing" '[ $rc = 3 ] && grep -qx "maat-config: key missing: guardia.produzione" "$T/out"'
+MAAT_LINGUA=en mc leggi > "$T/out" 2>&1; rc=$?
+check "en: uso sbagliato -> 64, usage in inglese" '[ $rc = 64 ] && grep -qx "maat-config: usage: leggi <dotted.key> \[--default x\] | leggi --tutto" "$T/out"'
+MAAT_LINGUA=en MAAT_CONFIG=$T/non-esiste.json mc leggi lingua > "$T/out" 2>&1; rc=$?
+check "en: progetto non configurato -> 4, in inglese" '[ $rc = 4 ] && grep -q "^maat-config: project not configured: run /maat:setup (.*non-esiste.json missing)$" "$T/out"'
+printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","regola_test":"vicino","comandi":{"test":5}}],"strana":1}' > "$T/ko-en.json"
+MAAT_LINGUA=en mc valida "$T/ko-en.json" > "$T/out" 2>&1; rc=$?
+check "en: errori di struttura in inglese, chiavi e valori come sono" '[ $rc = 1 ] && grep -qF ": moduli.0.regola_test: value \"vicino\" not in the list (allowed: " "$T/out" && grep -qF ": moduli.0.comandi.test: expected type string or object, found integer" "$T/out" && grep -qF ": strana: unknown key" "$T/out" && ! grep -qE "$IT_RX" "$T/out"'
+printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","comandi":{"test":"bash {maat}/scripts/test-fast.sh x","lint":"eslint"}}]}' > "$T/ko-en2.json"
+MAAT_LINGUA=en mc valida "$T/ko-en2.json" > "$T/out" 2>&1; rc=$?
+check "en: errori semantici in inglese (S2, S5), le graffe del segnaposto intatte" '[ $rc = 1 ] && grep -qF ": moduli.0.comandi.test: the test command must contain {test} (S2)" "$T/out" && grep -qF ": moduli.0.copia.test: comandi.test uses test-fast.sh: copia.test is needed" "$T/out" && ! grep -qE "$IT_RX" "$T/out"'
+MAAT_LINGUA=en mc valida "$MIN" > "$T/out" 2>&1; rc=$?
+check "en: valida -> «<file> valid»" '[ $rc = 0 ] && grep -qx "maat-config: .*maat.json valid" "$T/out"'
+# language from maat.json (no MAAT_LINGUA): maat_msg resolves it through carica() of this same reader. A message built
+# inside that resolution must not resolve it again (T of maat-config.py): an invalid maat.json that says "it" gives
+# English (invalid = en) and returns, without recursion
+mkdir -p "$T/li"
+"$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1],encoding="utf-8")); c["lingua"]=sys.argv[3]; json.dump(c,open(sys.argv[2],"w",encoding="utf-8"))' "$MIN" "$T/li/it.json" it
+"$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1],encoding="utf-8")); c["lingua"]=sys.argv[3]; json.dump(c,open(sys.argv[2],"w",encoding="utf-8"))' "$MIN" "$T/li/en.json" en
+"$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1],encoding="utf-8")); c["lingua"]="it"; c["strana"]=1; json.dump(c,open(sys.argv[2],"w",encoding="utf-8"))' "$MIN" "$T/li/ko.json"
+o1=$(env -u MAAT_LINGUA MAAT_CONFIG=$T/li/it.json "$FIC_PY" "$MC" leggi guardia.produzione 2>&1)
+o2=$(env -u MAAT_LINGUA MAAT_CONFIG=$T/li/en.json "$FIC_PY" "$MC" leggi guardia.produzione 2>&1)
+o3=$(env -u MAAT_LINGUA "$FIC_PY" "$MC" valida "$T/li/ko.json" 2>&1); rc=$?
+check "lingua da maat.json: it -> italiano, en -> inglese; maat.json non valido -> inglese, exit 1, senza ricorsione" \
+  '[ "$o1" = "maat-config: chiave assente: guardia.produzione" ] && [ "$o2" = "maat-config: key missing: guardia.produzione" ] && [ $rc = 1 ] && printf "%s\n" "$o3" | grep -q ": strana: unknown key$" && ! printf "%s\n" "$o3" | grep -qE "Recursion|Traceback"' "$o1 | $o2 | $o3"
+# the same from a caller that imported maat_msg first and loads this reader by path (blocks-independent.py, the
+# embedded Python of gates.sh): one maat_msg module, the guard holds
+o=$(cd "$T" && env -u MAAT_LINGUA MAAT_CONFIG=$T/li/ko.json "$FIC_PY" -c '
+import importlib.util, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+import maat_msg
+s = importlib.util.spec_from_file_location("mc", sys.argv[2]); mc = importlib.util.module_from_spec(s); s.loader.exec_module(mc)
+try:
+    mc.carica()
+except mc.Uscita as u:
+    print("uscita", u.codice, maat_msg.lingua())
+' "$HERE" "$MC" 2>&1)
+check "chiamante con maat_msg gia importato: maat.json non valido -> uscita 1, lingua en, nessuna ricorsione" '[ "$(printf "%s\n" "$o" | tail -1)" = "uscita 1 en" ] && ! printf "%s\n" "$o" | grep -q Recursion' "$o"
 # pk09 (pilot on a second project): the python3-from-PATH fallback does not yield the Store stub. Under …/WindowsApps/ it is probed with
 # arguments and a timeout: exits 9009 (the stub) -> discarded; answers -c "import sys" (Python Install Manager) -> kept.
 WA="$T/wa/Microsoft/WindowsApps"; mkdir -p "$WA"; WAU=$(cd "$WA" && pwd)   # /… form for the bash PATH

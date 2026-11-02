@@ -75,7 +75,8 @@ Tools analysed: Bash and PowerShell (in PowerShell `\` is a separator; Remove-It
 
 REASONS (R11): every answer has three parts, separated by « — »: <what was recognised, starting from the command> —
 <core|project rule, which one> — <what to do if it is intended>. Single MSG table, in it and en; the language comes
-from maat.json -> lingua (missing, not in the table, maat.json invalid or missing: en).
+from MAAT_LINGUA if set (it|en, any other value: en), otherwise from maat.json -> lingua (missing, not in the table,
+maat.json invalid or missing: en): the same precedence as maat_msg.lingua().
 
 Usage: stdin = PreToolUse JSON. Sub-sessions: exit 0 = allowed, 2 = denied (reason on stderr).
 `--universal` = session guard: in the main session (empty FIC_PHASE) instead of denying it ASKS FOR
@@ -337,10 +338,23 @@ CONF = {"stato": "assente", "lingua": "en", "prod": None, "rilascio": [], "invol
         "suite": dict(SUITE_NUCLEO)}
 
 
+def lingua():
+    """MAAT_LINGUA if set and not empty (it|en, any other value: en), otherwise the maat.json language (CONF)."""
+    v = os.environ.get("MAAT_LINGUA", "")
+    if v:
+        return v if v in ("it", "en") else "en"
+    return CONF["lingua"]
+
+
+# Who denies, before the reason on stderr (1.4.0): the session hook or the guard of a phase. Like MSG, a table of its own:
+# the hook does not load the message catalog (lib/messages.tsv) on every command.
+WHO = {"it": ("guardia di sessione", "guardia di fase"), "en": ("session guard", "phase guard")}
+
+
 def reason(key, **kw):
-    """The three-part reason, in the maat.json language (it if missing, not in the table or with an invalid maat.json)."""
+    """The three-part reason, in the language of lingua() (it for an entry without that language)."""
     voci = MSG[key]
-    t = voci.get(CONF["lingua"]) or voci["it"]
+    t = voci.get(lingua()) or voci["it"]
     vals = {k: str(v).replace("—", "-") for k, v in kw.items()}   # « — » only as the separator
     return SEP.join((t[0].format(**vals), t[1], t[2]))
 
@@ -363,7 +377,7 @@ def deny(key, grave=False, **kw):
             "hookEventName": "PreToolUse", "permissionDecision": "ask",
             "permissionDecisionReason": msg}}) + "\n")
         sys.exit(0)
-    who = "guardia di sessione" if MODE["universal"] else "guardia di fase"
+    who = WHO[lingua()][0 if MODE["universal"] else 1]
     sys.stderr.write(who + ": " + msg + "\n")
     sys.exit(2)
 

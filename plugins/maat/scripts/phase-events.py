@@ -18,11 +18,17 @@ re-arm must not repeat events already shown. Exits 0 at the end of the phase, 1 
 ended without a result (crash, interruption) or with a non-zero .exit even after a `result`
 (`✖` line): silence must not look like "still working".
 Launched by watch-phase.sh with the python.sh interpreter (FIC_PY), without WSL.
+The words of the lines come from the message catalog next to this file (maat_msg.py, 1.4.0); the "▶ " lines, the
+`Decision:` of the agents and the PHASE RESULT line are quoted as they are.
 """
 import json
 import os
 import sys
 import time
+
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from maat_msg import T  # noqa: E402
 
 MAX = 240
 
@@ -105,12 +111,12 @@ def main():
                 if last is not None:
                     # a `result` (even an intermediate one) followed by a non-zero exit is a failure: ✖
                     if code != "0":
-                        last = f"✖ sottosessione uscita con exit {code} — ultimo turno: {last.lstrip('■✖ ')}"
+                        last = "✖ " + T("phase-events.exit_after", code=code, last=last.lstrip("■✖ "))
                     emit(last)
                     with open(resf, "w", encoding="utf-8") as f:
                         f.write(last)
                     sys.exit(0 if code == "0" else 1)
-                emit(f"✖ sottosessione terminata senza risultato (exit {code}) — vedi {os.path.basename(log)} e .stderr")
+                emit("✖ " + T("phase-events.no_result", code=code, log=os.path.basename(log)))
                 sys.exit(1)
         time.sleep(1)
 
@@ -130,9 +136,9 @@ def handle(ev, agents):
             elif b.get("type") == "tool_use":
                 name, inp = b.get("name"), b.get("input") or {}
                 if name in ("Agent", "Task"):
-                    desc = f"{inp.get('subagent_type', 'agente')}: {inp.get('description', '')}"
+                    desc = f"{inp.get('subagent_type', T('phase-events.agent'))}: {inp.get('description', '')}"
                     agents[b.get("id")] = desc
-                    emit(short(f"  · lancia {desc}"))
+                    emit(short("  · " + T("phase-events.launches", desc=desc)))
                 elif name == "Skill" and top:
                     emit(short(f"  · skill /{inp.get('skill', '?')} {inp.get('args', '')}"))
     elif t == "user":
@@ -140,17 +146,17 @@ def handle(ev, agents):
             if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in agents:
                 txt = text_of(b.get("content"))
                 dec = next((l.strip() for l in txt.splitlines() if l.strip().startswith("Decision:")), None)
-                emit(short(f"    ← {agents.pop(b.get('tool_use_id'))} → {dec or 'finito'}"))
+                emit(short(f"    ← {agents.pop(b.get('tool_use_id'))} → {dec or T('phase-events.done')}"))
     elif t == "result":
         res = ev.get("result") or ""
         esito = next((l.strip() for l in reversed(res.splitlines()) if l.strip().startswith(("PHASE RESULT", "ESITO FASE"))), None)
         mins = round((ev.get("duration_ms") or 0) / 60000, 1)
         cost = ev.get("total_cost_usd")
-        extra = f" · {mins} min · {ev.get('num_turns', '?')} turni" + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")
+        extra = f" · {mins} min · {ev.get('num_turns', '?')} " + T("phase-events.turns") + (f" · ${cost:.2f}" if isinstance(cost, (int, float)) else "")
         mark = "✖" if ev.get("is_error") else "■"
         # progress line, not an end line: the end is decided by the .exit file (see main)
-        emit(short(f"  · turno concluso: {esito or 'nessuna riga ESITO FASE'}{extra}", 400))
-        return short(f"{mark} {esito or 'fase finita (nessuna riga ESITO FASE)'}{extra}", 400)
+        emit(short("  · " + T("phase-events.turn_done") + (esito or T("phase-events.no_line")) + extra, 400))
+        return short(f"{mark} {esito or T('phase-events.phase_done')}{extra}", 400)
     return None
 
 

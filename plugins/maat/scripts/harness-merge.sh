@@ -23,20 +23,21 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin)
+. "$HERE/lib/maat-msg.sh"; maat_msg_carica   # messages (1.4.0); the --lock-status tokens read below stay as they are
 HROOT=${HARNESS_MERGE_HARNESS:-$MAAT_ROOT}
 FIC=$HROOT/scripts
 unset MSYS_NO_PATHCONV
 
-[ $# -eq 1 ] && [ -d "$1" ] || { echo "uso: $0 <worktree>" >&2; exit 2; }
+[ $# -eq 1 ] && [ -d "$1" ] || { echo "$(msg harness-merge.usage script="$0")" >&2; exit 2; }
 WT=$(cd "$1" && pwd)
 gd=$(git -C "$WT" rev-parse --path-format=absolute --git-dir 2>/dev/null) &&
   gcd=$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
-  [ -n "$gd" ] && [ -n "$gcd" ] || { echo "harness-merge: $WT non e' un repository git" >&2; exit 2; }
-[ "$gd" != "$gcd" ] || { echo "harness-merge: $WT e' il tree principale, non un worktree collegato" >&2; exit 2; }
+  [ -n "$gd" ] && [ -n "$gcd" ] || { echo "harness-merge: $(msg harness-merge.not_git wt="$WT")" >&2; exit 2; }
+[ "$gd" != "$gcd" ] || { echo "harness-merge: $(msg harness-merge.is_main wt="$WT")" >&2; exit 2; }
 MAIN=$(cd "$gcd/.." && pwd)
 branch=$(git -C "$WT" symbolic-ref --short -q HEAD) || branch=""
-head=$(git -C "$WT" rev-parse HEAD) || { echo "harness-merge: HEAD del worktree illeggibile" >&2; exit 2; }
-echo "harness-merge: tree principale $MAIN · worktree $WT (${branch:-HEAD staccato} @ ${head:0:12})"
+head=$(git -C "$WT" rev-parse HEAD) || { echo "harness-merge: $(msg harness-merge.head_unreadable)" >&2; exit 2; }
+echo "harness-merge: $(msg harness-merge.trees main="$MAIN" wt="$WT" branch="${branch:-$(msg harness-merge.detached)}" head="${head:0:12}")"
 # the main tree's work folder (cartelle.lavoro of its maat.json): the resolver launched from there
 mp=$( (cd "$MAIN" && env -u FIC_REPO bash "$HERE/lib/maat-paths.sh") 2>/dev/null | tr -d '\r')
 mw=$(printf '%s\n' "$mp" | sed -n 's/^MAAT_WORK=//p') mr=$(printf '%s\n' "$mp" | sed -n 's/^PROJECT_ROOT=//p')
@@ -47,7 +48,7 @@ AIW=$MAIN/$lav
 refuse=0
 # lock of the code phases: the main tree's one (inside git-common-dir)
 lock=$(env -u FIC_PHASE FIC_LOCK="${FIC_LOCK:-$gcd/full-implementation-cycle.lock}" bash "$FIC/run-phase.sh" --lock-status 2>&1); lrc=$?
-echo "Lock delle fasi di codice: $lock"
+echo "$(msg harness-merge.lock lock="$lock")"
 case "$lock" in libero*) [ $lrc -eq 0 ] || refuse=1 ;; *) refuse=1 ;; esac
 
 # phases with .running and no .exit (running, or killed: either way a cycle is half done)
@@ -57,29 +58,29 @@ for f in "$AIW"/spec-*.run/log/*.running; do
 done
 if [ ${#running[@]} -gt 0 ]; then
   refuse=1
-  echo "Fasi in corso o interrotte (.running senza .exit):"
+  echo "$(msg harness-merge.running_head)"
   for f in "${running[@]}"; do
-    echo "  ${f#"$MAIN"/} (dal $(head -1 "$f" 2>/dev/null | tr -d '\r'))"
-    echo "    recupero, SOLO se nessuna sessione la sta eseguendo (processo morto, log fermo): echo 143 > \"${f%.running}.exit\""
+    echo "  $(msg harness-merge.running_since f="${f#"$MAIN"/}" since="$(head -1 "$f" 2>/dev/null | tr -d '\r')")"
+    echo "    $(msg harness-merge.running_fix exit="${f%.running}")"
   done
 else
-  echo "Fasi in corso o interrotte (.running senza .exit): nessuna"
+  echo "$(msg harness-merge.running_none)"
 fi
 
 if [ $refuse -eq 1 ]; then
-  echo "harness-merge: RIFIUTATO — un ciclo e' in corso o interrotto: rilancia quando il lock e' libero e nessuna fase e' a meta'"
+  echo "harness-merge: $(msg harness-merge.refused)"
 else
   # the command, printed and not run
   ref=${branch:-$head}
-  echo "harness-merge: via libera. Esegui tu, nel tree principale:"
+  echo "harness-merge: $(msg harness-merge.clear)"
   if git -C "$MAIN" merge-base --is-ancestor HEAD "$head" 2>/dev/null; then
     echo "  cd \"$MAIN\" && git merge --ff-only $ref"
   else
     commits=$(git -C "$MAIN" rev-list --reverse --no-merges "HEAD..$head" 2>/dev/null)
     if [ -z "$commits" ]; then
-      echo "  niente da portare: nessun commit di $ref manca al tree principale"
+      echo "  $(msg harness-merge.nothing ref="$ref")"
     else
-      echo "  (il tree principale non e' un antenato di $ref: niente fast-forward) — cherry-pick dei commit:"
+      echo "  $(msg harness-merge.not_ancestor ref="$ref")"
       echo "  cd \"$MAIN\" && git cherry-pick $(printf '%s\n' "$commits" | tr '\n' ' ')"
       # shellcheck disable=SC2086  # one argument per commit
       git -C "$MAIN" log --no-walk=unsorted --format='    %h %s' $commits 2>/dev/null
@@ -98,7 +99,7 @@ spec_state() { # <spec> → "<Review status>\t<Feature status>" of the review se
     END { printf "%s\t%s\n", rs, fs }'
 }
 if [ "${FIC_MERGE_NO_LIST:-0}" = 1 ]; then
-  echo "Cicli non chiusi: elenco saltato (FIC_MERGE_NO_LIST=1)"
+  echo "$(msg harness-merge.list_skipped)"
 else
   max=${FIC_MERGE_LIST_MAX:-20} t0=$SECONDS open=() cut=0
   for d in "$AIW"/spec-*.run; do
@@ -106,15 +107,15 @@ else
     [ $((SECONDS - t0)) -ge "$max" ] && { cut=1; break; }
     IFS=$'\t' read -r rs fs < <(spec_state "${d%.run}.md")
     case "$rs/$fs" in APPROVED*/IMPLEMENTED*) continue ;; esac
-    if [ -z "$rs$fs" ]; then open+=("$(basename "${d%.run}"): nessuna review")
-    else open+=("$(basename "${d%.run}"): Review status ${rs:-(assente)} · Feature status ${fs:-(assente)}"); fi
+    if [ -z "$rs$fs" ]; then open+=("$(msg harness-merge.no_review spec="$(basename "${d%.run}")")")
+    else open+=("$(msg harness-merge.open_status spec="$(basename "${d%.run}")" rs="${rs:-$(msg harness-merge.absent)}" fs="${fs:-$(msg harness-merge.absent)}")"); fi
   done
   if [ ${#open[@]} -gt 0 ]; then
-    echo "Cicli non chiusi (righe di stato della spec; ripartiranno col harness nuovo):"; printf '  %s\n' "${open[@]}"
+    echo "$(msg harness-merge.open_head)"; printf '  %s\n' "${open[@]}"
   else
-    echo "Cicli non chiusi: nessuno"
+    echo "$(msg harness-merge.open_none)"
   fi
-  [ $cut -eq 1 ] && echo "  (elenco troncato dopo ${max}s: FIC_MERGE_LIST_MAX)"
+  [ $cut -eq 1 ] && echo "  $(msg harness-merge.list_cut max="${max}")"
 fi
 
 [ $refuse -eq 1 ] && exit 4

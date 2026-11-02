@@ -1,0 +1,164 @@
+# blocco-d.doctor.tsv — the messages of maat-doctor.sh (block D, lane 1a), read by tools/lingua-converti.py.
+# key <TAB> at <TAB> pre <TAB> post <TAB> names <TAB> en (format: the docstring of lingua-converti.py). Section
+# maat-doctor. The bash part is replaced by `apply`; the Python program after #__PYTHON__ (!pytail rows) was edited by
+# hand (T of maat_msg). Frozen in every language (D3): the tokens OK|ATTENZIONE|MANCA and the meta lines #chiave<TAB>
+# valore between the Python part and bash; the bash `riga` maps the level only when printing (level_* below). Frozen
+# too: the --piattaforma values (windows-wsl, windows-senza-wsl, altro, read by /maat:setup) and the maat.json keys.
+
+# ---------------------------------------------------------------- levels and summary (D3: printed, never internal)
+maat-doctor.level_warning	scripts/maat-doctor.sh:491!pytail	-	-	-	WARNING
+maat-doctor.level_missing	scripts/maat-doctor.sh:450!pytail	-	-	-	MISSING
+maat-doctor.summary	scripts/maat-doctor.sh:157	maat-doctor: 	-	nok natt nman	{nok} OK, {natt} WARNING, {nman} MISSING
+maat-doctor.summary	scripts/maat-doctor.sh:210	maat-doctor: 	-	nok natt nman	{nok} OK, {natt} WARNING, {nman} MISSING
+
+# ---------------------------------------------------------------- bash: usage, versions
+maat-doctor.bad_option	scripts/maat-doctor.sh:60	maat-doctor: 	-	a	unknown option: {a} (--prova-test | --piattaforma | --help)
+maat-doctor.no_python_platform	scripts/maat-doctor.sh:90#2	maat-doctor: 	-	-	Python not found: cannot determine the platform
+maat-doctor.prova_writes	scripts/maat-doctor.sh:95#2	--prova-test: 	-	-	the test command can write cache and coverage (this run is not read-only)
+maat-doctor.bash_old	scripts/maat-doctor.sh:118	-	-	v	bash {v} below 4 — install bash 4 or later (a recent Git Bash on Windows)
+maat-doctor.no_python	scripts/maat-doctor.sh:123	-	-	-	Python not found — install Python 3.10 or later, or set FIC_PYTHON
+maat-doctor.python_old	scripts/maat-doctor.sh:125	-	-	pyv py	Python {pyv} below 3.10 ({py}) — install Python 3.10 or later, or set FIC_PYTHON
+maat-doctor.no_git	scripts/maat-doctor.sh:129#2	-	-	-	git not found — install git 2.35 or later
+maat-doctor.git_old	scripts/maat-doctor.sh:131	-	-	gv	git {gv} below 2.35 — update git
+maat-doctor.no_claude	scripts/maat-doctor.sh:142	-	-	-	Claude Code not found: version not verified — set CLAUDE_BIN or put claude on the PATH
+maat-doctor.claude_no_version	scripts/maat-doctor.sh:147#2	-	-	cl	Claude Code ({cl}) does not report its version: version not verified
+maat-doctor.claude_old	scripts/maat-doctor.sh:149	-	-	cv min	Claude Code {cv} below the tested {min} — update Claude Code
+
+# ---------------------------------------------------------------- bash: project, guard, working folder
+maat-doctor.no_repo	scripts/maat-doctor.sh:156	-	-	dir	git repository not found from {dir} — run the doctor from the project folder (or set FIC_REPO)
+maat-doctor.no_python_config	scripts/maat-doctor.sh:168	-	-	-	configuration, modules and guard not checked: Python 3.10 or later is needed — install Python or set FIC_PYTHON
+maat-doctor.guard_phase_not_denied	scripts/maat-doctor.sh:180#2	-	-	rc	not denied in a phase (exit {rc}, expected 2)
+maat-doctor.guard_session_not_asked	scripts/maat-doctor.sh:182#4	-	-	-	not asked in the session (expected ask)
+maat-doctor.guard_not_tested	scripts/maat-doctor.sh:186	-	-	-	guard not tested: invalid configuration — fix maat.json, then run the doctor again
+maat-doctor.guard_ok	scripts/maat-doctor.sh:189#2	-	-	c	guard: «{c}» denied in a phase and asked in the session
+maat-doctor.guard_ko	scripts/maat-doctor.sh:190	-	-	c why	guard: «{c}» {why} — the guard does not protect: check guard.py and the guardia section of maat.json
+maat-doctor.no_probe	scripts/maat-doctor.sh:193#2	-	-	-	no production probe: only the core tested
+maat-doctor.probe_failed	scripts/maat-doctor.sh:194#3	-	-	src	production probe not computable (maat-config.py sonda-produzione exited {src}) — check guardia.sonde
+maat-doctor.probe_ok	scripts/maat-doctor.sh:195#2	-	-	sonda	guard: production probe «{sonda}» denied in a phase and asked in the session
+maat-doctor.probe_ko	scripts/maat-doctor.sh:196	-	-	sonda why	guard: production probe «{sonda}» {why} — check guardia.produzione and guardia.sonde
+maat-doctor.work_missing	scripts/maat-doctor.sh:204#2	-	-	lav lav	working folder {lav} missing — create it (mkdir -p {lav}) or fix cartelle.lavoro
+maat-doctor.work_readonly	scripts/maat-doctor.sh:205#2	-	-	lav	working folder {lav} not writable — grant write permission
+maat-doctor.work_ignored	scripts/maat-doctor.sh:207	-	-	lav	working folder {lav} writable, ignored by git
+maat-doctor.work_tracked	scripts/maat-doctor.sh:208	-	-	lav	working folder {lav} writable, NOT ignored by git: specs and run dirs show up in git status (add it to .gitignore if you do not want to version them)
+
+# ---------------------------------------------------------------- Python: WSL state, configuration
+maat-doctor.wsl_not_on_path	scripts/maat-doctor.sh:264!pytail	-	-	-	wsl.exe not on the PATH
+maat-doctor.wsl_timeout	scripts/maat-doctor.sh:269!pytail	-	-	n	`wsl -- true` took longer than {n} s
+maat-doctor.wsl_cannot_run	scripts/maat-doctor.sh:271!pytail	-	-	e	`wsl -- true` cannot run: {e}
+maat-doctor.wsl_exit	scripts/maat-doctor.sh:273!pytail	-	-	rc	`wsl -- true` exited {rc}
+maat-doctor.config_missing	scripts/maat-doctor.sh:450#2!pytail	-	-	p	maat.json missing ({p})
+maat-doctor.run_setup	scripts/maat-doctor.sh:450#3!pytail	-	-	-	run /maat:setup
+maat-doctor.config_invalid	scripts/maat-doctor.sh:455#2!pytail	-	-	d	invalid maat.json: {d}
+maat-doctor.config_invalid_fix	scripts/maat-doctor.sh:456!pytail	-	-	-	fix the file (python maat-config.py valida) or run /maat:setup again
+maat-doctor.config_valid	scripts/maat-doctor.sh:461#2!pytail	-	-	p	valid maat.json ({p})
+maat-doctor.version_ok	scripts/maat-doctor.sh:466#2!pytail	-	-	vp h	plugin version {vp} compatible with harness {h}
+maat-doctor.version_ko	scripts/maat-doctor.sh:468#2!pytail	-	-	vp h	plugin version {vp} not compatible with harness {h}
+maat-doctor.version_unknown	scripts/maat-doctor.sh:468#3!pytail	-	-	-	unknown
+maat-doctor.version_unknown	scripts/maat-doctor.sh:471#3!pytail	-	-	-	unknown
+maat-doctor.version_fix	scripts/maat-doctor.sh:469!pytail	-	-	-	update the plugin or fix harness in maat.json
+maat-doctor.version_no_harness	scripts/maat-doctor.sh:471#2!pytail	-	-	vp	plugin version {vp} (harness not declared)
+
+# ---------------------------------------------------------------- Python: WSL checks
+maat-doctor.wsl_required	scripts/maat-doctor.sh:486#2!pytail	-	-	why	WSL missing ({why}) but piattaforma.copia_wsl requires it
+maat-doctor.wsl_required_fix	scripts/maat-doctor.sh:487!pytail	-	-	-	install WSL, or set piattaforma.copia_wsl: auto
+maat-doctor.wsl_missing_ok	scripts/maat-doctor.sh:489#2!pytail	-	-	why	WSL missing: fast test copy not available ({why})
+maat-doctor.wsl_missing	scripts/maat-doctor.sh:491#2!pytail	-	-	why	WSL missing ({why})
+maat-doctor.wsl_missing_below	scripts/maat-doctor.sh:491#3!pytail	-	-	-	the wsl modules are listed below
+maat-doctor.wsl_not_required	scripts/maat-doctor.sh:493#2!pytail	-	-	-	WSL not required (piattaforma.copia_wsl: no, no wsl module)
+maat-doctor.not_windows	scripts/maat-doctor.sh:495#2!pytail	-	-	-	not a Windows platform: WSL not needed
+maat-doctor.wsl_reachable	scripts/maat-doctor.sh:503#2!pytail	-	-	-	WSL reachable
+maat-doctor.wsl_no_bash	scripts/maat-doctor.sh:505#2!pytail	-	-	-	bash not found in WSL
+maat-doctor.wsl_no_bash_fix	scripts/maat-doctor.sh:505#3!pytail	-	-	-	install bash in the default WSL distribution
+maat-doctor.wsl_no_node	scripts/maat-doctor.sh:509#3!pytail	-	-	node	Node not found in WSL ({node})
+maat-doctor.wsl_no_node_fix	scripts/maat-doctor.sh:510!pytail	-	-	-	install Node in WSL, or set piattaforma.node_wsl
+
+# ---------------------------------------------------------------- Python: module, {python}, commands
+maat-doctor.mod_wsl_not_windows	scripts/maat-doctor.sh:531#2!pytail	-	-	nome	module {nome} ambiente: wsl outside Windows: its gates will be BLOCKED
+maat-doctor.mod_wsl_not_windows_fix	scripts/maat-doctor.sh:532!pytail	-	-	-	set ambiente: nativo
+maat-doctor.mod_wsl_missing	scripts/maat-doctor.sh:534#2!pytail	-	-	nome	module {nome} ambiente: wsl but WSL missing: its gates will be BLOCKED
+maat-doctor.mod_wsl_missing_fix	scripts/maat-doctor.sh:535!pytail	-	-	-	set `ambiente: nativo` or install WSL
+maat-doctor.mod_root_missing	scripts/maat-doctor.sh:537#2!pytail	-	-	nome rad	root of module {nome} missing: {rad}
+maat-doctor.mod_root_fix	scripts/maat-doctor.sh:537#4!pytail	-	-	-	fix moduli[].radice
+maat-doctor.py_wsl_ok	scripts/maat-doctor.sh:567#2!pytail	-	-	nome p	python of module {nome} in WSL: {p}
+maat-doctor.py_wsl_missing	scripts/maat-doctor.sh:571#2!pytail	-	-	nome cand	python missing for module {nome} in WSL (looked for: {cand})
+maat-doctor.py_wsl_fix	scripts/maat-doctor.sh:572!pytail	-	-	-	create the module's venv inside WSL or fix moduli[].python
+maat-doctor.py_ok	scripts/maat-doctor.sh:586#2!pytail	-	-	nome p	python of module {nome}: {p}
+maat-doctor.py_missing	scripts/maat-doctor.sh:589#2!pytail	-	-	nome p	python missing for module {nome} ({p})
+maat-doctor.py_no_candidate	scripts/maat-doctor.sh:589#3!pytail	-	-	-	no candidate
+maat-doctor.py_fix	scripts/maat-doctor.sh:590!pytail	-	-	-	create the module's venv or fix moduli[].python / piattaforma.python
+maat-doctor.shell_command	scripts/maat-doctor.sh:635#3!pytail	-	-	-	shell command
+maat-doctor.shell_command	scripts/maat-doctor.sh:852#3!pytail	-	-	-	shell command
+maat-doctor.check_skipped	scripts/maat-doctor.sh:637#2!pytail	-	-	et miss	{et}: check skipped, {miss} missing
+maat-doctor.check_skipped_fix	scripts/maat-doctor.sh:638!pytail	-	-	miss	install {miss} if you want the check
+maat-doctor.not_found	scripts/maat-doctor.sh:640!pytail	-	-	et miss	{et}: {miss} not found
+maat-doctor.not_found	scripts/maat-doctor.sh:850#2!pytail	-	-	et miss	{et}: {miss} not found
+maat-doctor.not_found_fix	scripts/maat-doctor.sh:641!pytail	-	-	-	install it or fix the command in maat.json
+maat-doctor.not_found_fix_project	scripts/maat-doctor.sh:850#4!pytail	-	-	-	install it or fix maat.json
+maat-doctor.command_of	scripts/maat-doctor.sh:650!pytail	-	-	tipo nome	command {tipo} of module {nome}
+maat-doctor.folder_missing	scripts/maat-doctor.sh:653#2!pytail	-	-	et cart quale	{et}: folder {cart} ({quale}) missing
+maat-doctor.folder_fix	scripts/maat-doctor.sh:653#4!pytail	-	-	-	fix radice or radice_pacchetti
+maat-doctor.not_run_present	scripts/maat-doctor.sh:656#3!pytail	-	-	et sp	{et}: NOT RUN (declared), {sp} missing
+maat-doctor.check_of	scripts/maat-doctor.sh:662!pytail	-	-	j nome glob	check {j} of module {nome} ({glob})
+maat-doctor.cp_not_run	scripts/maat-doctor.sh:668#2!pytail	-	-	nome	counterproofs of module {nome}: NOT RUN (declared)
+maat-doctor.cp_of	scripts/maat-doctor.sh:671!pytail	-	-	nome	counterproof of module {nome}
+maat-doctor.cp_of	scripts/maat-doctor.sh:673!pytail	-	-	nome	counterproof of module {nome}
+
+# ---------------------------------------------------------------- Python: counterproof tools, WSL copy, module files
+maat-doctor.cp_blocked	scripts/maat-doctor.sh:685#2!pytail	-	-	nome miss	counterproofs of module {nome} not available (BLOCKED): missing {miss}
+maat-doctor.cp_blocked_fix	scripts/maat-doctor.sh:686#2!pytail	-	-	miss where	install {miss} {where}
+maat-doctor.here	scripts/maat-doctor.sh:686#6!pytail	-	-	-	here
+maat-doctor.rsync_and_tar	scripts/maat-doctor.sh:682!pytail	-	-	-	rsync and tar
+maat-doctor.no_rsync	scripts/maat-doctor.sh:688#2!pytail	-	-	-	rsync missing: fallback copy, slower
+maat-doctor.no_flock	scripts/maat-doctor.sh:689#2!pytail	-	-	-	flock missing: fallback lock, slower
+maat-doctor.no_rsync_flock	scripts/maat-doctor.sh:690#3!pytail	-	-	-	rsync/flock missing: fallback copy and lock, slower
+maat-doctor.cp_tools	scripts/maat-doctor.sh:691#2!pytail	-	-	nome what	counterproofs of module {nome}: {what}
+maat-doctor.cp_tools_ok	scripts/maat-doctor.sh:693#2!pytail	-	-	nome where	counterproofs of module {nome}: rsync and flock {where}
+maat-doctor.present	scripts/maat-doctor.sh:693#5!pytail	-	-	-	present
+maat-doctor.copy_ok	scripts/maat-doctor.sh:707#2!pytail	-	-	nome	WSL copy of module {nome} present
+maat-doctor.copy_seed	scripts/maat-doctor.sh:709#2!pytail	-	-	nome	WSL copy of module {nome} missing in this worktree: it will be seeded on first use from the copy of the main tree (node_modules hardlinked), if the dependencies match
+maat-doctor.copy_seed_fix	scripts/maat-doctor.sh:711!pytail	-	-	setup	nothing to do; if the dependencies differ: {setup}
+maat-doctor.copy_missing	scripts/maat-doctor.sh:713#2!pytail	-	-	nome	WSL copy of module {nome} missing
+maat-doctor.copy_missing_fix	scripts/maat-doctor.sh:713#3!pytail	-	-	setup	create it once: {setup}
+maat-doctor.prep_ok	scripts/maat-doctor.sh:721#2!pytail	-	-	nome guida	prepared file of module {nome} present ({guida})
+maat-doctor.prep_missing	scripts/maat-doctor.sh:722#2!pytail	-	-	nome guida	prepared file missing in module {nome} ({guida})
+maat-doctor.prep_fix	scripts/maat-doctor.sh:723!pytail	-	-	prep	run `{prep}` in the root of the module
+maat-doctor.prep_default	scripts/maat-doctor.sh:723#3!pytail	-	-	-	the preparation command
+maat-doctor.also_ok	scripts/maat-doctor.sh:728#2!pytail	-	-	nome d	copia_anche of module {nome}: {d}
+maat-doctor.also_missing	scripts/maat-doctor.sh:729#2!pytail	-	-	nome d	copia_anche of module {nome}: {d} does not exist (the counterproofs of the module would fail)
+maat-doctor.also_fix	scripts/maat-doctor.sh:730!pytail	-	-	-	fix moduli[].copia_anche
+maat-doctor.link_ok	scripts/maat-doctor.sh:739#2!pytail	-	-	nome dov	collega_nel_worktree of module {nome}: {dov} present
+maat-doctor.link_missing	scripts/maat-doctor.sh:740#2!pytail	-	-	nome dov	dependencies not installed: the worktrees of module {nome} will not have {dov}
+maat-doctor.link_fix	scripts/maat-doctor.sh:741!pytail	-	-	-	install the dependencies in the main tree
+maat-doctor.deps_ok	scripts/maat-doctor.sh:754#2!pytail	-	-	nome g	file_dipendenze of module {nome}: {g}
+maat-doctor.deps_untracked	scripts/maat-doctor.sh:755#2!pytail	-	-	nome g	file_dipendenze of module {nome}: glob without tracked files: {g}
+maat-doctor.deps_fix	scripts/maat-doctor.sh:756!pytail	-	-	-	fix the glob in maat.json
+
+# ---------------------------------------------------------------- Python: --prova-test, project commands, guard hookup, usage
+maat-doctor.trial_no_test	scripts/maat-doctor.sh:785#2!pytail	-	-	nome rule	test trial of module {nome}: no test file found by the rule {rule}
+maat-doctor.trial_no_test_fix	scripts/maat-doctor.sh:786#3!pytail	-	-	-	add a test or fix regola_test
+maat-doctor.trial_unresolved	scripts/maat-doctor.sh:797#2!pytail	-	-	nome why	test trial of module {nome}: command not resolved ({why})
+maat-doctor.trial_fix	scripts/maat-doctor.sh:798!pytail	-	-	-	fix comandi.test
+maat-doctor.trial_timeout	scripts/maat-doctor.sh:819#2!pytail	-	-	nome t	test trial of module {nome}: {t} over 900 s
+maat-doctor.trial_timeout_fix	scripts/maat-doctor.sh:819#3!pytail	-	-	-	run the command by hand and see where it stops
+maat-doctor.trial_ok	scripts/maat-doctor.sh:823#2!pytail	-	-	nome t	test trial of module {nome}: {t}, exit 0
+maat-doctor.trial_ko	scripts/maat-doctor.sh:825#2!pytail	-	-	nome t rc last	test trial of module {nome}: {t}, exit {rc} ({last})
+maat-doctor.trial_ko_fix	scripts/maat-doctor.sh:826!pytail	-	-	-	fix comandi.test or the environment of the module
+maat-doctor.session_command	scripts/maat-doctor.sh:834#2!pytail	-	-	et cmd	{et}: session command {cmd} (it runs in Claude Code, not verifiable here)
+maat-doctor.suite_missing	scripts/maat-doctor.sh:872#2!pytail	-	-	nome	guardia.suite: script {nome} not found in the repo
+maat-doctor.suite_fix	scripts/maat-doctor.sh:872#3!pytail	-	-	-	fix guardia.suite
+maat-doctor.regex_invalid	scripts/maat-doctor.sh:881#2!pytail	-	-	p e	guardia.produzione: invalid regex {p} ({e})
+maat-doctor.regex_fix	scripts/maat-doctor.sh:882!pytail	-	-	-	fix the regex
+maat-doctor.probe_covered	scripts/maat-doctor.sh:886#2!pytail	-	-	s	probe {s} covered by guardia.produzione
+maat-doctor.probe_uncovered	scripts/maat-doctor.sh:887#2!pytail	-	-	s	probe not covered by the guard: {s}
+maat-doctor.probe_uncovered_fix	scripts/maat-doctor.sh:887#3!pytail	-	-	-	add to guardia.produzione a regex that covers it
+maat-doctor.rule_untested	scripts/maat-doctor.sh:891#2!pytail	-	-	p	production rule not tested: {p}
+maat-doctor.rule_untested_fix	scripts/maat-doctor.sh:892!pytail	-	-	-	add to guardia.sonde a host that matches it
+maat-doctor.hook_double	scripts/maat-doctor.sh:929#2!pytail	-	-	dove	duplicate guard hook: plugin maat enabled ({dove}) and project PreToolUse hook in .claude/settings.json
+maat-doctor.hook_double_fix	scripts/maat-doctor.sh:930!pytail	-	-	-	remove the project hook: the guard of the plugin is enough
+maat-doctor.hook_plugin	scripts/maat-doctor.sh:932#2!pytail	-	-	mk dove	guard hooked up: plugin maat{mk} enabled ({dove})
+maat-doctor.hook_project	scripts/maat-doctor.sh:934#2!pytail	-	-	-	guard hooked up: project PreToolUse hook in .claude/settings.json
+maat-doctor.hook_none	scripts/maat-doctor.sh:936#2!pytail	-	-	-	guard not hooked up: neither the maat plugin enabled nor a project hook
+maat-doctor.hook_none_fix	scripts/maat-doctor.sh:936#3!pytail	-	-	-	enable the plugin (/plugin)
+maat-doctor.marketplace_dir	scripts/maat-doctor.sh:943#2!pytail	-	-	mk	plugin installed from a folder marketplace ({mk}): the code runs from the source folder, every change arrives at once
+maat-doctor.marketplace_dir_fix	scripts/maat-doctor.sh:944!pytail	-	-	-	install from git with a ref
+maat-doctor.bad_mode	scripts/maat-doctor.sh:950!pytail	maat-doctor (python): 	\n	-	unknown mode

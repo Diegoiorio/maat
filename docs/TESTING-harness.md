@@ -39,6 +39,43 @@ The names are the same as before; only the default changes.
 Under an overridden harness root the plugin structure applies: a mutated copy of the plugin (test counterproofs) is
 passed whole, not just one script.
 
+**Message language (`MAAT_LINGUA`, 1.4.0).** The messages the scripts print for a person come from the catalog
+`scripts/lib/messages.tsv` (`msg` in bash, `lib/maat-msg.sh`; `T` in Python, `maat_msg.py`). The language is
+`MAAT_LINGUA` (`it|en`; any other value: `en`; empty: unset), otherwise `lingua` of `.claude/maat.json`, otherwise
+`en`; `guard.py` follows the same precedence. The section below says how the two languages are tested.
+
+## The two languages (1.4.0)
+
+- **Italian, unchanged.** Every suite starts with `export MAAT_LINGUA=it`: its assertions are on the Italian text,
+  the same as in 1.3.0, so a green suite proves that `"lingua": "it"` prints what 1.3.0 printed. The cases that test
+  the reading of `lingua` (guard, session-start, maat-config) drop the variable (`env -u MAAT_LINGUA` or a local
+  `unset`).
+- **English cases.** Next to the Italian ones, the suites of the scripts that print messages have cases with
+  `MAAT_LINGUA=en` on their main output: the English text is there and no Italian is left, except the frozen lines. `cycle-state.test.sh` runs every `expect`
+  in English too (`CS_EN=0` skips that part, it makes the suite slower). In `plan-check.test.sh`,
+  `MAAT_VINCOLO2=1` checks that the stdout of `basis` and `contract` is byte for byte the same with `MAAT_LINGUA=it`,
+  with `MAAT_LINGUA=en` and with `plan-check.sh` of `v1.3.0` (off by default).
+- **The catalog and the anti-leak test.** `messages.test.sh` tests `scripts/lib/messages.tsv`: bash and Python give
+  the same language and the same bytes, the catalog format (unique keys, the same placeholders in both columns, no
+  Italian in the `en` column, no key missing or unused), the fallback `‹key›`, and the static **anti-leak** test: no
+  Italian literal in a plugin script outside the catalog and `scripts/lib/protocol-strings.list`. Its counterproofs
+  run on a mutated copy of the plugin (an Italian `echo` added, a list entry deleted…) and must be red.
+- **The inventory.** `python tools/lingua-inventario.py` (read-only) scans every `.sh`/`.py` of the plugin and prints
+  the residual: the lines that still hold Italian once the frozen parts of `protocol-strings.list` are taken out
+  (`--rows` lists them; an entry of the list that covers nothing is reported as unused).
+  `python tools/lingua-inventario.py --consumers` looks at the other side: the places (scripts, tests, skills,
+  agents) that read Italian text another script prints. `messages.test.sh` uses the same scanner; outside the repo
+  (plugin installed in the cache) those sections are skipped with the reason.
+- **The conversion.** The messages were moved by `tools/lingua-converti.py` from the tables of
+  `tools/lingua-conversioni/`. `check <table>` compares every Italian entry with its literal in `v1.3.0`;
+  `copertura <table>...` checks that every Italian-looking literal of the cited lines is covered by an entry, or
+  declared in `non-messaggi.list` or `protocol-strings.list` (a wrong `#n` index passes `check`, not `copertura`).
+  Run both, on all the tables, after any change to a table; a one-word literal outside the scanner vocabulary is
+  seen by neither, so check those rows by hand.
+- **Frozen lines.** `protocol-strings.list` says, line by line, which Italian text stays in every language and why
+  (the lines that scripts pass to each other, the keywords `VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`,
+  `Scheletro:`, `S2:`). A new Italian literal goes either into the catalog or into the list, with its reason.
+
 ## How to run the suites from the plugin
 
 Each suite creates its own synthetic repos in a temporary folder and touches neither the plugin repo nor a real
@@ -115,7 +152,7 @@ time, with `FIC_WT_WSL=0` like the Linux run. The job fails if a suite exits wit
 `riepilogo.txt` are kept as the `esiti` artifact. Locally the same run is
 `bash tools/suite.sh <results folder>` from a Linux clone.
 
-What CI does not cover: Windows (Git Bash and WSL) and macOS, which come with multi-platform CI (1.4.3). Until then
+What CI does not cover: Windows (Git Bash and WSL) and macOS, which come with multi-platform CI (1.5.3). Until then
 the Windows part of `giro-completo.sh` runs before each release. What skips with a declared reason, as in the Linux
 clone: part 2 of `vitest-classify.test.sh` (specific to the guide project) and `comandi-equivalenza.test.sh`, which
 needs a commit of the private history.
@@ -168,7 +205,9 @@ radice=<MAAT_ROOT, in the form C:/…>
 - **What goes in:** every file under `MAAT_ROOT` (relative path, `LC_ALL=C` order, sha256 of the content without CR)
   except the single `HARNESS_EXCLUDE` list of `run-phase.sh` — `__pycache__`, `assets`, `*.swp`, `*.orig`,
   `.DS_Store`, `*~`, matched against every path component — plus `<project>/.claude/maat.json` (absent: a fixed
-  line, so creating or deleting it changes the fingerprint). No git and no `.gitignore`: a stray file left in the
+  line, so creating or deleting it changes the fingerprint), and since 1.4.0 a line `lingua <it|en>` with the
+  **resolved** language of the messages (`MAAT_LINGUA`, otherwise `lingua` of `maat.json`, otherwise `en`): changing
+  the language in the middle of a cycle stops it like any other change of the harness. No git and no `.gitignore`: a stray file left in the
   plugin folder (for example a `.bak`) stops the cycles. The **project's** skills (for example `dev-verify`) are not
   part of it: changing one does not stop a cycle.
 - **Who decides:** a single function, `run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]`, used by
@@ -211,6 +250,16 @@ objects would end up in the project's `.git`; `GIT_OPTIONAL_LOCKS=0` keeps git f
   it must be identical.
 - Then the file is copied to `scripts/driver.equiv` and `driver.py certificato` must say VALIDO (valid).
   `driver.equiv` is under `MAAT_ROOT`: recertifying changes the harness fingerprint.
+
+**In two languages (1.4.0).** `equiv` runs the whole proof twice, first with `MAAT_LINGUA=it` and then with
+`MAAT_LINGUA=en` (a line `equiv: lingua <l>` opens each pass), and writes the certificate only if both say
+`diverse=0 · diversi=0`; the `corpus` line of `driver.equiv` then ends with `lingue it,en`. The run dirs are the
+same for both passes, so each `harness.fp` is read once in its own language and once in the other: a cycle that is
+not closed gets, in each pass, the same fingerprint verdict on both sides (that is what is compared), and a closed
+cycle does not read it. The `harness.fp` files are left as they are, never regenerated for the proof; the language
+inside the fingerprint is proven by the suites (`run-phase.test.sh`, `cycle-state.test.sh`). The old-against-new
+comparison with fingerprints regenerated per language is a separate check of each release, on copies of the run
+dirs, never on the project.
 
 ### Variant: certifying on a copy of the project
 

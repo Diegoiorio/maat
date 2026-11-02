@@ -1,0 +1,332 @@
+# blocco-b.tsv — the messages of block B (cycle-state.sh, driver.py, run-phase.sh), read by tools/lingua-converti.py.
+# key <TAB> at <TAB> pre <TAB> post <TAB> names <TAB> en (format: the docstring of lingua-converti.py). The first row
+# of a key is its source in v1.3.0, the following ones its twins (cycle-state.sh <-> driver.py next, VALIDA_PY of
+# run-phase.sh <-> driver.py valida). Sections: cycle-state (the table and its twins in driver.py), driver,
+# run-phase (with the twins of the validator in driver.py).
+
+# ---------------------------------------------------------------- cycle-state.sh and driver.py next
+cycle-state.usage	scripts/cycle-state.sh:108#2	-	-	script	usage: {script} <spec-<name>.md>
+cycle-state.driver_failed	scripts/cycle-state.sh:131	AVVISO: 	-	-	driver.py next failed: cycle-state.sh standalone
+cycle-state.json_dev	scripts/driver.py:315	STOP|	-	n devs	declared deviations ({n}): {devs}
+cycle-state.json_dev	scripts/cycle-state.sh:262!py	STOP|	-	n devs	declared deviations ({n}): {devs}
+cycle-state.json_blocked	scripts/driver.py:317	STOP|	-	-	blocked on: 
+cycle-state.json_blocked	scripts/cycle-state.sh:264!py	STOP|	-	-	blocked on: 
+cycle-state.json_esito	scripts/driver.py:319	STOP|	-	esito motivo	outcome {esito}: {motivo}
+cycle-state.json_esito	scripts/cycle-state.sh:266!py	STOP|	-	esito motivo	outcome {esito}: {motivo}
+cycle-state.json_unreadable	scripts/cycle-state.sh:271	-	-	-	result.json unreadable
+cycle-state.json_unreadable	scripts/driver.py:498#2	-	-	-	result.json unreadable
+cycle-state.json_stop	scripts/cycle-state.sh:285	STOP — 	-	label why run label label label	{label}: {why} (rule in code on {run}/log/{label}.result.json). Decide; to resume after the decision (e.g. migration applied) rename that file to {label}.result.json.visto: the ESITO line of {label}.esito decides (STOP -> the phase is relaunched, in completion). A deviation is accepted by reopening the plan (spec changed), not by renaming
+cycle-state.json_stop	scripts/driver.py:683	STOP — 	-	label why run label label label	{label}: {why} (rule in code on {run}/log/{label}.result.json). Decide; to resume after the decision (e.g. migration applied) rename that file to {label}.result.json.visto: the ESITO line of {label}.esito decides (STOP -> the phase is relaunched, in completion). A deviation is accepted by reopening the plan (spec changed), not by renaming
+cycle-state.fin_unsigned_none	scripts/cycle-state.sh:298#3	-	-	-	IMPLEMENTED not signed by finalize.sh (no Finalize: line)
+cycle-state.fin_unsigned_none	scripts/driver.py:694	-	-	-	IMPLEMENTED not signed by finalize.sh (no Finalize: line)
+cycle-state.fin_unsigned	scripts/cycle-state.sh:299	-	-	f	IMPLEMENTED not signed by finalize.sh (Finalize: {f})
+cycle-state.fin_unsigned	scripts/driver.py:696	-	-	f	IMPLEMENTED not signed by finalize.sh (Finalize: {f})
+cycle-state.fin_no_fp	scripts/cycle-state.sh:301#2	-	-	-	Finalize: line without the fingerprint of the signed snapshot
+cycle-state.fin_no_fp	scripts/driver.py:699	-	-	-	Finalize: line without the fingerprint of the signed snapshot
+cycle-state.fin_other_snap	scripts/cycle-state.sh:302#3	-	-	fs	Finalize: signed on another snapshot (snapshot {fs}), not on the current Reviewed snapshot
+cycle-state.fin_other_snap	scripts/driver.py:701	-	-	fs	Finalize: signed on another snapshot (snapshot {fs}), not on the current Reviewed snapshot
+cycle-state.fin_no_time	scripts/cycle-state.sh:305#2	-	-	-	Finalize: line without a readable time
+cycle-state.fin_no_time	scripts/driver.py:706	-	-	-	Finalize: line without a readable time
+cycle-state.fin_review_time	scripts/cycle-state.sh:309#2	-	-	rl	time of the last review ({rl}) not readable
+cycle-state.fin_review_time	scripts/driver.py:713	-	-	rl	time of the last review ({rl}) not readable
+cycle-state.fin_older	scripts/cycle-state.sh:310#3	-	-	rl	Finalize: older than the last review launched ({rl})
+cycle-state.fin_older	scripts/driver.py:714#2	-	-	rl	Finalize: older than the last review launched ({rl})
+cycle-state.budget_unknown	scripts/cycle-state.sh:317#3	STOP — 	-	rounds	fix budget not computable: line 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' missing or unreadable ('{rounds}')
+cycle-state.budget_unknown	scripts/driver.py:720	STOP — 	-	rounds	fix budget not computable: line 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' missing or unreadable ('{rounds}')
+cycle-state.budget_spent	scripts/cycle-state.sh:318#3	STOP — 	-	n k	fix budget exhausted (Review rounds {n}/3 · post-approval NEEDS_CHANGES {k}/1): a fix that no review will see is not written; a person decides
+cycle-state.budget_spent	scripts/driver.py:724	STOP — 	-	n k	fix budget exhausted (Review rounds {n}/3 · post-approval NEEDS_CHANGES {k}/1): a fix that no review will see is not written; a person decides
+cycle-state.attr_no_post	scripts/cycle-state.sh:323#2	-	-	label	{label} without .post-tree
+cycle-state.attr_pre_open	scripts/cycle-state.sh:327#3	-	-	l	{l} with a .pre-tree still open
+cycle-state.attr_gap	scripts/cycle-state.sh:334	STOP — 	-	gap rs run	attribution not measured ({gap}): the review would not know which files belong to the feature. With the .pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash {rs} tree) >> {run}/touched.txt, then that tree into <label>.post-tree (that is what run-phase does). Without .pre-tree: list the files of the feature by hand in touched.txt, then create the .post-tree — your decision
+cycle-state.attr_gap	scripts/driver.py:746	STOP — 	-	gap rs run	attribution not measured ({gap}): the review would not know which files belong to the feature. With the .pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash {rs} tree) >> {run}/touched.txt, then that tree into <label>.post-tree (that is what run-phase does). Without .pre-tree: list the files of the feature by hand in touched.txt, then create the .post-tree — your decision
+cycle-state.testred_stop	scripts/cycle-state.sh:345#4	STOP — 	-	label l run label label	{label}: acceptance tests not recorded ({l}). Decide (plan to correct and approve again, or tests to review): correcting the acceptance tests is a human decision. To relaunch the phase: rename {run}/log/{label}.esito to {label}.esito.visto
+cycle-state.testred_stop	scripts/driver.py:760	STOP — 	-	label l run label label	{label}: acceptance tests not recorded ({l}). Decide (plan to correct and approve again, or tests to review): correcting the acceptance tests is a human decision. To relaunch the phase: rename {run}/log/{label}.esito to {label}.esito.visto
+cycle-state.testred	scripts/cycle-state.sh:347	TEST-RED — 	-	-	format-2 plan approved: acceptance tests and stubs to write and prove red before the implementation
+cycle-state.testred	scripts/driver.py:764	TEST-RED — 	-	-	format-2 plan approved: acceptance tests and stubs to write and prove red before the implementation
+cycle-state.code_unreadable	scripts/cycle-state.sh:363#4	  	-	-	snapshot or manifest unreadable
+cycle-state.code_unreadable	scripts/driver.py:519#2	  	-	-	snapshot or manifest unreadable
+cycle-state.ring_prev	scripts/cycle-state.sh:383	Anelli precedenti: 	-	files	{files} — same chain, previous ring: neither other flows nor mixed ones, no completion
+cycle-state.ring_prev	scripts/driver.py:540	Anelli precedenti: 	-	files	{files} — same chain, previous ring: neither other flows nor mixed ones, no completion
+cycle-state.ring_base_missing	scripts/cycle-state.sh:384#3	Base anello: (	)	-	missing: the previous ring has no .post-tree
+cycle-state.ring_base_missing	scripts/driver.py:543	Base anello: (	)	-	missing: the previous ring has no .post-tree
+cycle-state.harness_changed	scripts/cycle-state.sh:422	-	-	since a b rim next	harness changed since {since} (recorded fingerprint {a}, current {b}; the language of the messages counts too): restart the phase or confirm. Remedy: if the change is wanted, {rim} and resume (next phase: {next}); otherwise put the harness back as it was
+cycle-state.harness_changed	scripts/driver.py:586	-	-	since a b rim next	harness changed since {since} (recorded fingerprint {a}, current {b}; the language of the messages counts too): restart the phase or confirm. Remedy: if the change is wanted, {rim} and resume (next phase: {next}); otherwise put the harness back as it was
+cycle-state.harness_old	scripts/cycle-state.sh:423	-	-	a since b rim next	fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint {a} since {since}, current {b}). Remedy: if the move to the plugin is wanted, {rim} and resume (next phase: {next}); otherwise resume the cycle with the internal harness
+cycle-state.harness_old	scripts/driver.py:590	-	-	a since b rim next	fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint {a} since {since}, current {b}). Remedy: if the move to the plugin is wanted, {rim} and resume (next phase: {next}); otherwise resume the cycle with the internal harness
+cycle-state.harness_unreadable	scripts/cycle-state.sh:424	-	-	since a rim next	harness.fp unreadable (empty or without a fingerprint, recorded since {since}; current {a}). Remedy: if the current harness is the wanted one, {rim} and resume (next phase: {next})
+cycle-state.harness_unreadable	scripts/driver.py:594	-	-	since a rim next	harness.fp unreadable (empty or without a fingerprint, recorded since {since}; current {a}). Remedy: if the current harness is the wanted one, {rim} and resume (next phase: {next})
+cycle-state.harness_nc	scripts/cycle-state.sh:425	-	-	root repo since	harness fingerprint not computable (plugin files in {root} or .claude/maat.json of {repo} not readable, or repository not found; recorded since {since}): check the plugin and the repository, then resume
+cycle-state.harness_nc	scripts/driver.py:596	-	-	root repo since	harness fingerprint not computable (plugin files in {root} or .claude/maat.json of {repo} not readable, or repository not found; recorded since {since}): check the plugin and the repository, then resume
+cycle-state.ring_plan_wait	scripts/cycle-state.sh:444	Next: WAIT — catena: 	-	k prev pn pst=${pst:-$(msg cycle-state.no_plan)}	the plan of ring {k} starts when the plan of ring {prev} ({pn}) is APPROVED (now: {pst})
+cycle-state.ring_plan_wait	scripts/driver.py:622	WAIT — catena: 	-	k prev pn pst	the plan of ring {k} starts when the plan of ring {prev} ({pn}) is APPROVED (now: {pst})
+cycle-state.no_plan	scripts/driver.py:623	-	-	-	no plan
+cycle-state.no_plan	scripts/cycle-state.sh:444!d	-	-	-	no plan
+cycle-state.no_plan	scripts/cycle-state.sh:478	PLAN — 	-	-	no plan
+cycle-state.no_plan	scripts/driver.py:787	PLAN — 	-	-	no plan
+cycle-state.ring_impl_wait	scripts/cycle-state.sh:446#2	Next: WAIT — catena: 	-	k prev pn	the implement of ring {k} waits for ring {prev} ({pn}) IMPLEMENTED; the plan can run
+cycle-state.ring_impl_wait	scripts/driver.py:625	WAIT — catena: 	-	k prev pn	the implement of ring {k} waits for ring {prev} ({pn}) IMPLEMENTED; the plan can run
+cycle-state.ring_no_base	scripts/cycle-state.sh:448#2	Next: STOP — catena: 	-	prev pn k	ring {prev} ({pn}) has no .post-tree: the base of ring {k} is not measured. Your decision
+cycle-state.ring_no_base	scripts/driver.py:630	STOP — catena: 	-	prev pn k	ring {prev} ({pn}) has no .post-tree: the base of ring {k} is not measured. Your decision
+cycle-state.ring_tree	scripts/cycle-state.sh:450	Next: STOP — catena: 	-	now=${ring_now:-$(msg cycle-state.not_computable)} prev base k pn rs	the working tree ({now}) is not the .post-tree of ring {prev} ({base}): changes made after its closing, which ring {k} would claim as its own. Your decision: take them out of the tree and resume; to keep them in the chain add them to the touched.txt of {pn} and record the current tree as its .post-tree (bash {rs} tree)
+cycle-state.ring_tree	scripts/driver.py:634	STOP — catena: 	-	now prev base k pn rs	the working tree ({now}) is not the .post-tree of ring {prev} ({base}): changes made after its closing, which ring {k} would claim as its own. Your decision: take them out of the tree and resume; to keep them in the chain add them to the touched.txt of {pn} and record the current tree as its .post-tree (bash {rs} tree)
+cycle-state.not_computable	scripts/driver.py:638	-	-	-	not computable
+cycle-state.not_computable	scripts/cycle-state.sh:450!d	-	-	-	not computable
+cycle-state.not_computable	scripts/run-phase.sh:1447#2!d	-	-	-	not computable
+cycle-state.child_missing	scripts/cycle-state.sh:458#2	STOP — catena: 	-	c i n	the child {c} (ring {i}/{n}) does not exist: the Figlie: line and the files must match
+cycle-state.child_missing	scripts/driver.py:644	STOP — catena: 	-	c i n	the child {c} (ring {i}/{n}) does not exist: the Figlie: line and the files must match
+cycle-state.ring_open	scripts/cycle-state.sh:459#2	WAIT — catena: 	-	i n c	ring {i}/{n} ({c}) not closed: the cycle runs on that ring; the mother closes after the last one
+cycle-state.ring_open	scripts/driver.py:647	WAIT — catena: 	-	i n c	ring {i}/{n} ({c}) not closed: the cycle runs on that ring; the mother closes after the last one
+cycle-state.chain_closing	scripts/cycle-state.sh:463#2	CHIUSURA — 	-	n	{n} rings closed: full gates on the final tree against the base of the mother (base.txt of the first ring), e2e via /dev-verify if the children have [e2e-locator:
+cycle-state.chain_closing	scripts/driver.py:651	CHIUSURA — 	-	n	{n} rings closed: full gates on the final tree against the base of the mother (base.txt of the first ring), e2e via /dev-verify if the children have [e2e-locator:
+cycle-state.chain_done	scripts/cycle-state.sh:470#2	DONE — 	-	n	chain closed: {n} rings IMPLEMENTED and closing IMPLEMENTED on the current code
+cycle-state.chain_done	scripts/driver.py:667	DONE — 	-	n	chain closed: {n} rings IMPLEMENTED and closing IMPLEMENTED on the current code
+cycle-state.chain_redo	scripts/cycle-state.sh:471	CHIUSURA — 	-	st=${st:-$(msg cycle-state.unreadable)}	chain code changed after the closing ({st}): it is done again
+cycle-state.chain_redo	scripts/driver.py:668	CHIUSURA — 	-	st	chain code changed after the closing ({st}): it is done again
+cycle-state.unreadable	scripts/driver.py:668#2	-	-	-	unreadable
+cycle-state.unreadable	scripts/cycle-state.sh:471!d	-	-	-	unreadable
+cycle-state.chain_failed	scripts/cycle-state.sh:472	STOP — 	-	why run run	closing of the chain failed ({why}): see {run}/log/*-chiusura.*; once the reason is fixed, to relaunch it rename {run}/chiusura.txt to chiusura.txt.visto
+cycle-state.chain_failed	scripts/driver.py:669	STOP — 	-	why run run	closing of the chain failed ({why}): see {run}/log/*-chiusura.*; once the reason is fixed, to relaunch it rename {run}/chiusura.txt to chiusura.txt.visto
+cycle-state.review_both	scripts/cycle-state.sh:475	STOP — 	-	-	the spec has both '## Review implementazione' and '## Implementation review': the same section in two languages. Keep the heading that was there, move the status lines into that section and remove the other one, then resume
+cycle-state.review_both	scripts/driver.py:779	STOP — 	-	-	the spec has both '## Review implementazione' and '## Implementation review': the same section in two languages. Keep the heading that was there, move the status lines into that section and remove the other one, then resume
+cycle-state.review_no_plan	scripts/cycle-state.sh:477	STOP — 	-	-	review section without a plan: nothing to plan on top of an implementation
+cycle-state.review_no_plan	scripts/driver.py:785	STOP — 	-	-	review section without a plan: nothing to plan on top of an implementation
+cycle-state.plan_reopened	scripts/cycle-state.sh:480	STOP — 	-	plan	plan reopened ({plan}) after the review: does the existing review still hold? your decision
+cycle-state.plan_reopened	scripts/driver.py:790	STOP — 	-	plan	plan reopened ({plan}) after the review: does the existing review still hold? your decision
+cycle-state.plan_draft	scripts/cycle-state.sh:481#2	PLAN — 	-	-	plan in DRAFT
+cycle-state.plan_draft	scripts/driver.py:793	PLAN — 	-	-	plan in DRAFT
+cycle-state.plan_nhd	scripts/cycle-state.sh:482	STOP — 	-	-	open decision on the plan (Plan status: NEEDS HUMAN DECISION)
+cycle-state.plan_nhd	scripts/driver.py:794	STOP — 	-	-	open decision on the plan (Plan status: NEEDS HUMAN DECISION)
+cycle-state.plan_unknown	scripts/cycle-state.sh:484#2	STOP — 	-	plan	Plan status not recognised: '{plan}'
+cycle-state.plan_unknown	scripts/driver.py:796	STOP — 	-	plan	Plan status not recognised: '{plan}'
+cycle-state.tests_stale	scripts/cycle-state.sh:486#2	STOP — 	-	pc spec run	acceptance tests changed after the test-red phase (Approved basis: tests): a change to the acceptance tests is a deviation, a person decides. If wanted: bash {pc} basis {spec} --write-tests records the current fingerprint; otherwise put the tests back as they were ({run}/test-red/tests.txt)
+cycle-state.tests_stale	scripts/driver.py:798	STOP — 	-	pc spec run	acceptance tests changed after the test-red phase (Approved basis: tests): a change to the acceptance tests is a deviation, a person decides. If wanted: bash {pc} basis {spec} --write-tests records the current fingerprint; otherwise put the tests back as they were ({run}/test-red/tests.txt)
+cycle-state.basis_stale	scripts/cycle-state.sh:487	STOP — 	-	basis	spec or plan changed after the approval ({basis}): reopen the plan with /plan-review-cycle
+cycle-state.basis_stale	scripts/driver.py:803	STOP — 	-	basis	spec or plan changed after the approval ({basis}): reopen the plan with /plan-review-cycle
+cycle-state.impl_done	scripts/cycle-state.sh:492	-	-	label	implementation finished ({label})
+cycle-state.impl_done	scripts/driver.py:809	-	-	label	implementation finished ({label})
+cycle-state.impl	scripts/cycle-state.sh:493	IMPLEMENT — 	-	-	plan approved, no review
+cycle-state.impl	scripts/driver.py:810	IMPLEMENT — 	-	-	plan approved, no review
+cycle-state.review_legacy	scripts/cycle-state.sh:495#2	REVIEW — 	-	-	legacy review section without status lines: the review does a full round
+cycle-state.review_legacy	scripts/driver.py:812	REVIEW — 	-	-	legacy review section without status lines: the review does a full round
+cycle-state.contract_stale	scripts/cycle-state.sh:497#2	REVIEW — 	-	-	spec or plan changed after the review (Reviewed contract different): full-scope round
+cycle-state.contract_stale	scripts/driver.py:816	REVIEW — 	-	-	spec or plan changed after the review (Reviewed contract different): full-scope round
+cycle-state.excluded	scripts/cycle-state.sh:499#2	STOP — 	-	tx run	the review excluded a file touched by the feature: {tx}. Relaunch /implementation-review-cycle <name>: it reads touched.txt and reviews that file (never the promotion); or, if the file does not belong to the feature, remove it from {run}/touched.txt
+cycle-state.excluded	scripts/driver.py:819	STOP — 	-	tx run	the review excluded a file touched by the feature: {tx}. Relaunch /implementation-review-cycle <name>: it reads touched.txt and reviews that file (never the promotion); or, if the file does not belong to the feature, remove it from {run}/touched.txt
+cycle-state.fix_done	scripts/cycle-state.sh:502	-	-	label	fix finished ({label})
+cycle-state.fix_done	scripts/driver.py:825	-	-	label	fix finished ({label})
+cycle-state.nv_attempt	scripts/cycle-state.sh:506#2	REVIEW — NEEDS_VERIFICATION: 	-	-	one promotion attempt
+cycle-state.nv_attempt	scripts/driver.py:829	REVIEW — NEEDS_VERIFICATION: 	-	-	one promotion attempt
+cycle-state.fin_gap	scripts/cycle-state.sh:510#2	REVIEW — 	-	fg fin	{fg}: in the new regime the final state is signed by {fin} (fail-closed; see log/<label>.finalize)
+cycle-state.fin_gap	scripts/driver.py:834	REVIEW — 	-	fg fin	{fg}: in the new regime the final state is signed by {fin} (fail-closed; see log/<label>.finalize)
+cycle-state.done_fresh	scripts/cycle-state.sh:513	DONE — 	-	-	code equal to the approved snapshot
+cycle-state.done_fresh	scripts/driver.py:837	DONE — 	-	-	code equal to the approved snapshot
+cycle-state.done_legacy	scripts/cycle-state.sh:514	DONE — 	-	-	section without a snapshot (legacy): freshness of the code not verifiable
+cycle-state.done_legacy	scripts/driver.py:839	DONE — 	-	-	section without a snapshot (legacy): freshness of the code not verifiable
+cycle-state.code_changed	scripts/cycle-state.sh:515	REVIEW — 	-	code	code changed after the approval ({code})
+cycle-state.code_changed	scripts/driver.py:840	REVIEW — 	-	code	code changed after the approval ({code})
+cycle-state.unknown	scripts/cycle-state.sh:518	STOP — 	-	rs fs	combination not recognised: Review status '{rs}' · Feature status '{fs}'
+cycle-state.unknown	scripts/driver.py:841	STOP — 	-	rs fs	combination not recognised: Review status '{rs}' · Feature status '{fs}'
+
+# ---------------------------------------------------------------- driver.py only
+driver.result_unreadable	scripts/driver.py:976	-	-	e	unreadable: {e}
+driver.result_phase	scripts/driver.py:979	-	-	fase phase	phase {fase} different from {phase}
+driver.lots_no_f2	scripts/driver.py:1066	-	-	-	batches and lanes: plan not in format 2 (or gen failed): the worker decides them, series
+driver.lot_over	scripts/driver.py:1073	-	-	-	, above the cap
+driver.ev_lots	scripts/driver.py:1077	-	-	-	batches: 
+driver.lots_line	scripts/driver.py:1078	LOTTI (driver): 	-	desc cap	{desc}. One plan-implementer for each batch, in this order: the batch is the unit of work of the agent (estimate of its context below the cap of {cap}k).
+driver.ev_lanes	scripts/driver.py:1091	-	-	-	lanes: 
+driver.l2_promoted	scripts/driver.py:1134	L2: 	-	id why	counterproof {id} no longer absorbed, it is executed: {why}
+driver.l2_unverified	scripts/driver.py:1135	-	-	rc	conditions not verified (plan-check.sh l2, exit {rc})
+driver.reads_plan_writing	scripts/driver.py:1173#2	-	-	-	with the writing of the plan
+driver.reads_plan_reviewer	scripts/driver.py:1174	-	-	-	plan reviewer
+driver.reads_agent	scripts/driver.py:1175#2	-	-	-	agent
+driver.reads_reviewer	scripts/driver.py:1178#2	-	-	-	reviewer
+driver.missing	scripts/driver.py:1205	-	-	-	MISSING
+driver.above_cap	scripts/driver.py:1214#2	 	-	cap	ABOVE {cap}
+driver.conditional	scripts/driver.py:1215	 · 	 	-	conditional
+driver.cert_expired	scripts/driver.py:1317	-	-	why	certificate expired: next from cycle-state.sh ({why})
+driver.cert_invalid	scripts/driver.py:1318	-	-	-	driver.equiv not valid for these files
+driver.running	scripts/driver.py:1323#2	-	-	label	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running
+driver.antiloop	scripts/driver.py:1332#2	-	-	label state next	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}
+driver.chain_to	scripts/driver.py:1347	-	-	word dest	chain: {word} — moving to {dest}
+driver.chain_from	scripts/driver.py:1349	-	-	next	chain: arriving from {next}
+driver.next_unknown	scripts/driver.py:1360#2	-	-	next	Next not recognised: '{next}'
+driver.budget	scripts/driver.py:1362#2	-	-	n next	driver budget exhausted: {n} phases launched in this invocation (--max-fasi); next: {next}
+driver.dry	scripts/driver.py:1366#2	-	-	label next	would launch {label} ({next})
+driver.started	scripts/driver.py:1382	▶ 	-	label	{label} started
+driver.rp_not_launched	scripts/driver.py:1387#2	-	-	e	run-phase.sh not launched: {e}
+driver.finished	scripts/driver.py:1391	■ 	-	label rc esito	{label} finished: exit {rc} · {esito}
+driver.no_esito	scripts/driver.py:1391#2	-	-	-	(no ESITO line)
+driver.busy	scripts/driver.py:1394#2	-	-	tail	run-phase exit 4 (code lock, or plan lock of the same spec): {tail}
+driver.chain_prefix	scripts/driver.py:1398#4	-	-	-	chain: 
+driver.rp2	scripts/driver.py:1400	-	-	-	usage
+driver.rp3	scripts/driver.py:1400#2	-	-	-	claude binary not found
+driver.rp5	scripts/driver.py:1400#3	-	-	-	guard not active: never relaunch without it
+driver.rp6	scripts/driver.py:1401	-	-	-	harness changed since the first launch of the cycle
+driver.rp_other	scripts/driver.py:1401#2	-	-	rc	sub-session exited {rc}
+driver.result_invalid	scripts/driver.py:1409#2	-	-	label errs	result.json of {label} not valid: {errs}
+driver.nv_done	scripts/driver.py:1432#2	-	-	what	cycle finished: signature NEEDS_VERIFICATION — to verify: {what}; the promotion to IMPLEMENTED belongs to a later invocation, after the verification
+driver.nv_no_detail	scripts/driver.py:1434	-	-	-	detail not found in the spec (Finalize:/Verification: lines)
+driver.equiv_not_found	scripts/driver.py:1489	equiv: 	-	t	not found: {t}
+driver.equiv_nothing	scripts/driver.py:1539	equiv: 	-	-	no run directory: nothing to certify
+driver.equiv_written	scripts/driver.py:1549	equiv: 	-	path	certificate written: {path}
+driver.cert_stale	scripts/driver.py:1561	certificato: SCADUTO — 	-	keys	different hashes: {keys} (relaunch driver.py equiv --certifica)
+driver.usage	scripts/driver.py:1568	-	-	-	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | equiv [--certifica] <folder|spec.md>… | certificato | righe [<cap>]
+driver.usage_next	scripts/driver.py:1582	-	-	-	usage: driver.py next <spec-<name>.md>
+
+# ---------------------------------------------------------------- run-phase.sh (and the validator twins in driver.py)
+run-phase.usage_fp	scripts/run-phase.sh:335	-	-	script	usage: {script} --harness-fp [<repo>]
+run-phase.hfp_nc	scripts/run-phase.sh:338#2	-	-	-	harness fingerprint not computable
+run-phase.usage_fpc	scripts/run-phase.sh:342	-	-	script	usage: {script} --harness-fp-confronta <harness.fp> [<repo>]
+run-phase.v_keyword	scripts/run-phase.sh:385!py	-	-	p kw	{p}: keyword not supported by the minimal validator: {kw}
+run-phase.v_keyword	scripts/driver.py:861	-	-	p kw	{p}: keyword not supported by the minimal validator: {kw}
+run-phase.v_type	scripts/run-phase.sh:389!py	-	-	p types	{p}: expected type {types}
+run-phase.v_type	scripts/driver.py:865	-	-	p types	{p}: expected type {types}
+run-phase.v_enum	scripts/run-phase.sh:392!py	-	-	p x enum	{p}: value {x} outside {enum}
+run-phase.v_enum	scripts/driver.py:868	-	-	p x enum	{p}: value {x} outside {enum}
+run-phase.v_required	scripts/run-phase.sh:395!py	-	-	p r	{p}: missing {r}
+run-phase.v_required	scripts/driver.py:871	-	-	p r	{p}: missing {r}
+run-phase.v_extra	scripts/run-phase.sh:400!py	-	-	p k	{p}: unexpected field {k}
+run-phase.v_extra	scripts/driver.py:876	-	-	p k	{p}: unexpected field {k}
+run-phase.v_short	scripts/run-phase.sh:405!py	-	-	p n	{p}: string shorter than {n}
+run-phase.v_short	scripts/driver.py:881	-	-	p n	{p}: string shorter than {n}
+run-phase.v_min	scripts/run-phase.sh:407!py	-	-	p min	{p}: below the minimum {min}
+run-phase.v_min	scripts/driver.py:883	-	-	p min	{p}: below the minimum {min}
+run-phase.v_nojson	scripts/run-phase.sh:416!py	-	-	-	no JSON block (structured_output or json fence)
+run-phase.v_nojson	scripts/driver.py:921	-	-	-	no JSON block (structured_output or json fence)
+run-phase.v_badjson	scripts/run-phase.sh:420!py	-	-	e	unreadable JSON block: {e}
+run-phase.v_badjson	scripts/driver.py:925	-	-	e	unreadable JSON block: {e}
+run-phase.v_schema	scripts/run-phase.sh:428!py	-	-	e	unreadable schema: {e}
+run-phase.v_schema	scripts/driver.py:933	-	-	e	unreadable schema: {e}
+run-phase.v_phase	scripts/run-phase.sh:436!py	-	-	fase phase	phase {fase} different from that of the label ({phase})
+run-phase.v_phase	scripts/driver.py:937	-	-	fase phase	phase {fase} different from that of the label ({phase})
+run-phase.v_invalid	scripts/run-phase.sh:441!py	PHASE RESULT %s: STOP — 	-	msg	invalid output: {msg}
+run-phase.v_invalid	scripts/driver.py:942	PHASE RESULT %s: STOP — 	-	msg	invalid output: {msg}
+run-phase.v_dev	scripts/run-phase.sh:454!py	-	-	n devs	declared deviations ({n}): {devs}
+run-phase.v_dev	scripts/driver.py:954	-	-	n devs	declared deviations ({n}): {devs}
+run-phase.v_blocked	scripts/run-phase.sh:456!py	-	-	-	blocked on: 
+run-phase.v_blocked	scripts/driver.py:956	-	-	-	blocked on: 
+run-phase.v_esito	scripts/run-phase.sh:458!py	-	-	-	outcome STOP: 
+run-phase.v_esito	scripts/driver.py:958	-	-	-	outcome STOP: 
+run-phase.v_json_stop	scripts/run-phase.sh:463!py	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
+run-phase.v_json_stop	scripts/driver.py:963	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
+run-phase.drv_valida_failed	scripts/run-phase.sh:485	AVVISO: 	-	-	driver.py valida failed: internal validator of run-phase.sh
+run-phase.usage_valida	scripts/run-phase.sh:490	-	-	script	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>
+run-phase.no_python	scripts/run-phase.sh:491#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
+run-phase.no_python	scripts/run-phase.sh:616#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
+run-phase.usage_nominati	scripts/run-phase.sh:615	-	-	script	usage: {script} --nominati <root> <paths-file> <log.jsonl>…
+run-phase.lock_unknown	scripts/run-phase.sh:631#3	sconosciuto: 	-	-	git cannot find the repository of the lock
+run-phase.lock_no_repo	scripts/run-phase.sh:632	-	-	-	git cannot find the repository: lock not computable, phase not launched
+run-phase.usage_lock	scripts/run-phase.sh:650	-	-	script	usage: {script} --lock-status
+run-phase.lock_inside	scripts/run-phase.sh:651#2	dentro il ciclo (fase $FIC_PHASE): 	-	-	the lock belongs to this phase
+run-phase.lock_orphan_free	scripts/run-phase.sh:653#2	libero (	)	owner	orphan lock, processes no longer alive: {owner}
+run-phase.usage	scripts/run-phase.sh:657	-	-	script	usage: {script} <run-dir> <label> <prompt-file> | --lock-status
+run-phase.no_prompt	scripts/run-phase.sh:659#2	-	-	prompt	prompt missing: {prompt}
+run-phase.no_claude	scripts/run-phase.sh:669#2	-	-	-	claude binary not found (set CLAUDE_BIN)
+run-phase.attr_not_computed	scripts/run-phase.sh:699#3	AVVISO: 	-	f	attribution not computed for {f} (no .post-tree: cycle-state.sh will stop the cycle)
+run-phase.attr_diff_failed	scripts/run-phase.sh:701	AVVISO: 	-	f	git diff failed for {f} (no .post-tree: cycle-state.sh will stop the cycle)
+run-phase.names_unverifiable	scripts/run-phase.sh:724	AVVISO: 	-	-	attribution by name not verifiable (phase log unreadable, without events or without result): no annotation of the other flows
+run-phase.other_flow_kept	scripts/run-phase.sh:730	AVVISO: 	-	p	{p} changed during the phase and never named by the sub-session: it stays in touched.txt (the review sees it), probably from another flow
+run-phase.busy_retry	scripts/run-phase.sh:751!cont	-	-	lock	Relaunch when it has finished. If you are sure that no phase is running: rm -rf "{lock}"
+run-phase.same_label	scripts/run-phase.sh:756	-	-	label	same label (or owner not written yet): log/{label}.* not touched
+run-phase.lock_taken	scripts/run-phase.sh:770	-	-	what	{what} taken over (processes no longer alive)
+run-phase.lock_plan_busy	scripts/run-phase.sh:784#2	-	-	-	plan lock busy: another plan phase on the SAME spec is running
+run-phase.lock_plan_orphan	scripts/run-phase.sh:784#3	-	-	-	orphan plan lock
+run-phase.lock_busy	scripts/run-phase.sh:787#2	-	-	-	lock busy: another code phase is running
+run-phase.lock_orphan	scripts/run-phase.sh:787#3	-	-	-	orphan lock
+run-phase.not_a_repo	scripts/run-phase.sh:802#2	-	-	-	not a git repository
+run-phase.format2_only	scripts/run-phase.sh:809	-	-	phase spec	phase {phase}: only for a format-2 plan (Plan format: 2) in the spec next to the run dir ({spec}): not launched
+run-phase.hfp_changed	scripts/run-phase.sh:822	STOP: 	-	since a b root rim	harness changed since {since}: restart the phase or confirm (recorded fingerprint {a}, current {b}; plugin files in {root}, .claude/maat.json and the language of the messages, MAAT_LINGUA or lingua of maat.json). Remedy: if the change is wanted, record the current fingerprint — {rim} — and relaunch; otherwise put the harness back as it was
+run-phase.hfp_old	scripts/run-phase.sh:823	STOP: 	-	a since b rim	fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint {a} since {since}, current {b}). Remedy: if the move to the plugin is wanted, record the current fingerprint — {rim} — and relaunch; otherwise resume the cycle with the internal harness
+run-phase.hfp_unreadable	scripts/run-phase.sh:824	STOP: 	-	since a rim	harness.fp unreadable (empty or without a fingerprint, recorded since {since}; current {a}). Remedy: if the current harness is the wanted one, record the current fingerprint — {rim} — and relaunch
+run-phase.hfp_nc_stop	scripts/run-phase.sh:825	STOP: 	-	root repo since	harness fingerprint not computable (plugin files in {root} or .claude/maat.json of {repo} not readable, or repository not found; recorded since {since}), phase not launched
+run-phase.hfp_not_recorded	scripts/run-phase.sh:832	AVVISO: 	-	-	harness fingerprint not computed: this cycle will not be checked
+run-phase.guard_no_python	scripts/run-phase.sh:844#2	-	-	-	guard not active: no usable Python interpreter (set FIC_PYTHON)
+run-phase.guard_probe	scripts/run-phase.sh:872	-	-	probe hook	guard not active: the self-test did not deny the probe «{probe}» ({hook})
+run-phase.guard_deny_empty	scripts/run-phase.sh:877	-	-	hook	guard not active: empty DENY list ({hook} --deny-list)
+run-phase.stop_hook_missing	scripts/run-phase.sh:885	AVVISO: 	-	stop	Stop hook missing ({stop}): the sub-session starts without it
+run-phase.gates_no_touched	scripts/run-phase.sh:906#2	gates: 	-	-	not run (no touched.txt): the gates stay with the phase
+run-phase.gates_missing	scripts/run-phase.sh:907#2	gates: 	-	gates	not run (gates.sh missing: {gates})
+run-phase.cp_missing	scripts/run-phase.sh:988#2	-	-	cp	counterproof.sh missing: {cp}
+run-phase.not_launched	scripts/run-phase.sh:1021#4	$cn — 	-	-	phase not launched
+run-phase.mother_missing	scripts/run-phase.sh:1028#2	-	-	m	mother spec missing: {m}
+run-phase.mother_no_children	scripts/run-phase.sh:1031#2	-	-	-	the mother has no Figlie: line
+run-phase.ring_no_touched	scripts/run-phase.sh:1035#2	${chz_fail:+$chz_fail; }	-	c	{c} without touched.txt
+run-phase.rings_no_files	scripts/run-phase.sh:1040#2	${chz_fail:+$chz_fail; }	-	-	no file in the touched.txt of the rings
+run-phase.first_no_base	scripts/run-phase.sh:1042#4	${chz_fail:+$chz_fail; }	-	first	base of the first ring missing ({first}.run/base.txt)
+run-phase.red_no_attr	scripts/run-phase.sh:1054#3	-	-	-	attribution not measured (.pre-tree/.post-tree): scope of the phase not verifiable
+run-phase.red_outside	scripts/run-phase.sh:1066	-	-	out	writes outside the scope of test-red (tests of the plan and new files): {out}
+run-phase.red_names	scripts/run-phase.sh:1067	$why (	)	-	attribution by name not verifiable: phase log unreadable, without events or without result
+run-phase.red_feature	scripts/run-phase.sh:1076	${why:+$why; }	-	files	file of the feature (already in touched.txt before test-red) changed during the phase by another flow (never named by the sub-session): {files} — it stays in touched.txt, it does not go into do-not-touch: you decide (your work to keep or to put back as it was)
+run-phase.red_other_flow	scripts/run-phase.sh:1086	AVVISO: 	-	p	{p} changed during the phase by another flow (never named by the sub-session): not attributed, into do-not-touch
+run-phase.red_no_gates	scripts/run-phase.sh:1094#2	-	-	gates	verification of the red tests not run (gates.sh missing: {gates})
+run-phase.red_level	scripts/run-phase.sh:1097	exit=$rc livello=std (	)	-	test-red: the acceptance tests must be red
+run-phase.red_no_evidence	scripts/run-phase.sh:1099#3	-	-	rc label	verification of the red tests not run (gates.sh exit {rc} without evidence: log/{label}.gates)
+run-phase.red_not_proven	scripts/run-phase.sh:1105	-	-	why=${why:-$(msg run-phase.not_proven)} label	acceptance tests {why} (log/{label}.rossi)
+run-phase.not_proven	scripts/run-phase.sh:1105!d	-	-	-	not proven
+run-phase.red_blocked	scripts/run-phase.sh:1106	-	-	det label	verification of the red tests BLOCKED: {det} (log/{label}.rossi)
+run-phase.red_closing	scripts/run-phase.sh:1114	-	-	label	closing of test-red not recorded (stubs, test fingerprint or gen: log/{label}.rossi)
+run-phase.tg_python_only	scripts/run-phase.sh:1180!py	-	-	-	Python only (ast)
+run-phase.tg_no_rossi	scripts/run-phase.sh:1182!py	-	-	-	test-red/rossi.json missing or unreadable
+run-phase.tg_no_names	scripts/run-phase.sh:1185!py	-	-	-	no acceptance test name for the file in rossi.json
+run-phase.tg_no_base	scripts/run-phase.sh:1188!py	-	-	-	content of test-red not found (no .post-tree of test-red with its sha256)
+run-phase.tg_unparsable	scripts/run-phase.sh:1192!py	-	-	-	test-red file not parseable
+run-phase.tg_current	scripts/run-phase.sh:1197!py	cambiato\t%s\t	-	-	(current file missing or not parseable)
+run-phase.tg_not_found	scripts/run-phase.sh:1208!py	-	-	-	functions not found in the test-red file: 
+run-phase.tg_ok	scripts/run-phase.sh:1237	AVVISO: 	-	p b x	acceptance test: {p} changed, change prescribed by the plan (scrive: of {b}); acceptance test functions unchanged since test-red ({x}) — the rest of the file (helpers, fixtures) changed: let the review check it; test fingerprint recorded again
+run-phase.tg_unverified	scripts/run-phase.sh:1238	AVVISO: 	-	p b x	acceptance test: {p} changed, change prescribed by the plan (scrive: of {b}); acceptance test functions NOT verified ({x}): let the review check that the acceptance tests are those of test-red; test fingerprint recorded again
+run-phase.tg_not_recorded	scripts/run-phase.sh:1243!printf	PHASE RESULT %s: STOP — 	\noriginale=%s\n	files label	prescribed change of acceptance tests ({files}), but test fingerprint not recorded again (plan-check.sh tests/basis --write-tests: see log/{label}.stderr)
+run-phase.tg_deviation	scripts/run-phase.sh:1247!printf	PHASE RESULT %s: STOP — 	\noriginale=%s\n	files	deviation: acceptance tests changed after test-red ({files}); correcting them is a human decision
+run-phase.tg_deviation	scripts/run-phase.sh:1251!printf	PHASE RESULT %s: STOP — 	\noriginale=%s\n	files	deviation: acceptance tests changed after test-red ({files}); correcting them is a human decision
+run-phase.bi_no_tree	scripts/run-phase.sh:1259#2	blocks-independent: esito=serie motivo=	-	-	initial tree not computed (no after-the-fact check)
+run-phase.bi_missing	scripts/run-phase.sh:1264#4	blocks-independent: esito=serie motivo=	-	-	spec, plan-check.sh or blocks-independent.py missing
+run-phase.bi_failed	scripts/run-phase.sh:1268	blocks-independent: esito=serie motivo=	-	rc	blocks-independent.py failed (exit {rc})
+run-phase.bi_failed	scripts/driver.py:1087	blocks-independent: esito=serie motivo=	\n	rc	blocks-independent.py failed (exit {rc})
+run-phase.bi_no_gen	scripts/run-phase.sh:1270	blocks-independent: esito=serie motivo=	-	-	plan-check.sh gen failed (format 1 or malformed plan)
+run-phase.lane_post	scripts/run-phase.sh:1322#3!py	-	-	-	after-the-fact check of the lanes: 
+run-phase.lane_post_not_run	scripts/run-phase.sh:1322#5!py	-	-	-	not run
+run-phase.lane_exit	scripts/run-phase.sh:1328!py	-	-	k rc	lane {k}: exit {rc}
+run-phase.lane_no_result	scripts/run-phase.sh:1330!py	-	-	k	lane {k}: no result event
+run-phase.lane_no_json	scripts/run-phase.sh:1332!py	-	-	k	lane {k}: structured outcome missing or not valid
+run-phase.lane_dev_pre	scripts/run-phase.sh:1342!py	-	-	pre k d	{pre}lane {k}: {d}
+run-phase.lane_item	scripts/run-phase.sh:1343!py	-	-	k d	lane {k}: {d}
+run-phase.lane_item	scripts/run-phase.sh:1344#7!py	-	-	k d	lane {k}: {d}
+run-phase.lane_item	scripts/run-phase.sh:1352#2!py	-	-	k d	lane {k}: {d}
+run-phase.lane_item	scripts/run-phase.sh:1364!py	PHASE RESULT implement: STOP — 	-	k d	lane {k}: {d}
+run-phase.lane_no_esito	scripts/run-phase.sh:1364#4!py	-	-	-	no ESITO line
+run-phase.lane_ok	scripts/run-phase.sh:1366!py	PHASE RESULT implement: OK — 	-	-	parallel lanes: 
+run-phase.lane_prompt	scripts/run-phase.sh:1375#3	CORSIA $k/2 (driver, run-phase.sh): 	-	b s o k k	ONLY the blocks {b} of the plan are yours, in their dopo: order; your files are those of their scrive: ({s}). The other lane implements NOW, in parallel, the blocks {o}: its files are do-not-touch, and the guard denies Edit/Write outside yours (FIC_WRITE_SCOPE). base.txt is written only by lane 1; the preflight lists go into do-not-touch.{k}.txt and mixed.{k}.txt. The suites of the level are run by the driver on the whole tree once the lanes are done: keep only the targeted inner loop. In the JSON, in file, ONLY the files you wrote.
+run-phase.post_no_diff	scripts/run-phase.sh:1399	posteriori: esito=STOP — 	-	-	tree diff not computable
+run-phase.tree_not_computed	scripts/run-phase.sh:1414#4	AVVISO: 	-	label	initial tree not computed for {label} (no .post-tree: cycle-state.sh will stop the cycle)
+run-phase.s3_outside	scripts/run-phase.sh:1440	AVVISO: S3: 	-	r	{r} outside the scope of test-red, not copied
+run-phase.s3_copied	scripts/run-phase.sh:1444	S3: 	-	n fp	{n} parked files copied from the staging (plan fingerprint {fp})
+run-phase.s3_discarded	scripts/run-phase.sh:1447	S3: 	-	fp=${sfp:-$(msg run-phase.missing)} plan=${plan_fp:-$(msg cycle-state.not_computable)}	staging discarded (fingerprint {fp}, current plan {plan})
+run-phase.missing	scripts/run-phase.sh:1447!d	-	-	-	missing
+run-phase.defensive_prompt	scripts/run-phase.sh:1463#3	DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — 	-	-	deviations from the plan declared «defensive: » (or «difensiva: ») by implement/fix, which did not stop the cycle (label, text). Pass them to implementation-review-cycle to judge: if one of these deviations is not purely defensive (it changes an observable behaviour, an API contract, an expected visible string, the permissions or the data written in the cases the plan foresees), it is a major finding.
+run-phase.ring_prompt	scripts/run-phase.sh:1473#3	DIFF DELL'ANELLO (driver, run-phase.sh): $rd — 	-	rb rt	ring base {rb} (the .post-tree of the previous ring, never HEAD) → tree {rt}, only the files of the touched.txt of this ring. It is the surface of the review: pass it to implementation-review-cycle; index (path, offset, limit):
+run-phase.ring_no_diff	scripts/run-phase.sh:1476	STOP — catena: 	-	rb dir	ring diff not computed (base {rb}, touched.txt {dir}/touched.txt): the review does not start
+run-phase.ring_no_base	scripts/run-phase.sh:1486	STOP — catena: 	-	rk	no Base anello from cycle-state.sh (the previous ring has no .post-tree?): the review of ring {rk} does not start
+run-phase.no_schema	scripts/run-phase.sh:1508	AVVISO: 	-	schema	outcome schema missing or unreadable ({schema}): the phase will close with STOP «invalid output»
+run-phase.seq_approved	scripts/run-phase.sh:1528#2	-	-	-	review recorded APPROVED: promotion or gate-only (the reviewer may not start) or post-approval round
+run-phase.seq_no_key	scripts/run-phase.sh:1533#2	-	-	-	tree key not computable
+run-phase.cp_driver	scripts/run-phase.sh:1543	-	-	-	the counterproofs of counterproof/mutations.json (generated by plan-check.sh gen, consistent with the plan) are run by the DRIVER now (do not rewrite mutations.json, do not launch counterproof.sh: the results will be counterproof/<id>.json)
+run-phase.cp_worker	scripts/run-phase.sh:1544	-	-	-	the counterproofs stay yours, as always (Worker review, step 2: write or regenerate counterproof/mutations.json and launch counterproof.sh)
+run-phase.verify_prompt	scripts/run-phase.sh:1545#3	VERIFY IN PARALLELO (driver, run-phase.sh): 	-	cpn	gates.sh runs NOW, outside this session, on the files of touched.txt; {cpn}. Do not wait for and do not run the suites of the level, do not quote their results: for every requirement write in the copertura field of the JSON the IDs of the tests that cover it. The verdict is provisional (Verification: VERIFIED (provisional: …)): finalize.sh ANDs it with the results and composes the Evidence table.
+run-phase.discarded	scripts/run-phase.sh:1553	scartato: 	-	k0 k1	key changed during the phase ({k0} -> {k1}): review and VERIFY relaunched in sequence
+run-phase.seq_key_changed	scripts/run-phase.sh:1566	-	-	-	key changed during the parallel phase
+run-phase.gates_prompt	scripts/run-phase.sh:1576#3	EVIDENZE DEI GATE (driver, run-phase.sh): $ev — $(grep '^gates: esito=' "$dir/log/$label.gates" | tail -1 | sed 's/ chiave=.*//'). 	-	-	Pass them to implementation-review-cycle as context (Step 2.5, evidence of the driver).
+run-phase.s3_result	scripts/run-phase.sh:1580#2	{"type":"result","result":"PHASE RESULT test-red: OK — 	","structured_output":{"fase":"test-red","esito":"OK","motivo":"test in sosta (S3) copiati dallo staging","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}	-	parked tests (S3) copied from the staging
+run-phase.def_note	scripts/run-phase.sh:1628!py	-	-	label text	- note (defensive deviation, {label}): {text}
+run-phase.def_count	scripts/run-phase.sh:1643	AVVISO: 	-	n	{n} defensive deviations declared (they do not stop the cycle, the review judges them): log/deviazioni-difensive.txt
+run-phase.def_no_changelog	scripts/run-phase.sh:1649	AVVISO: 	-	-	defensive deviations: the plan has no changelog, no note in the spec
+run-phase.def_not_written	scripts/run-phase.sh:1652	AVVISO: 	-	rc b0=${b0:-$(msg run-phase.not_computed)} b1=${b1:-$(msg run-phase.not_computed)}	defensive deviations: note in the changelog not written (exit {rc}, fingerprint {b0} -> {b1}): spec put back as it was
+run-phase.not_computed	scripts/run-phase.sh:1652!d	-	-	-	not computed
+run-phase.not_computed	scripts/run-phase.sh:1652#2!d	-	-	-	not computed
+run-phase.fin_missing	scripts/run-phase.sh:1668	finalize non eseguito (	)	fin	missing: {fin}
+run-phase.fin_failed	scripts/run-phase.sh:1674	finalize fallito (	)	rc label	exit {rc}, see log/{label}.finalize
+run-phase.cp_mirror	scripts/run-phase.sh:1679	counterproof.sh exit 5: 	${fin_fail:+; $fin_fail}	label	mirror not restored (see log/{label}.counterproof)
+run-phase.chz_gates	scripts/run-phase.sh:1708	-	-	g label	gates {g} (see log/{label}.gates)
+run-phase.chz_e2e_none	scripts/run-phase.sh:1710	-	-	-	not required
+run-phase.chz_e2e_failed	scripts/run-phase.sh:1715	-	-	e2e rc label	e2e failed ({e2e}): exit {rc}, see log/{label}.jsonl
+run-phase.chz_no_tree	scripts/run-phase.sh:1718#5	-	-	-	final tree not computed
+run-phase.chz_ok	scripts/run-phase.sh:1721	PHASE RESULT chiusura: OK — 	-	e2e	chain closed: full gates PASS, e2e {e2e}

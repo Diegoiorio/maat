@@ -5,6 +5,7 @@
 #   bash script/fic/cycle-report.test.sh
 #   CR=/path/variant.py bash script/fic/cycle-report.test.sh   # the suite on a variant
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 SCRIPTS_DIR=$HERE   # replay.sh reassigns HERE and ROOT when it is sourced (FIC_REPLAY_LIB=1)
@@ -14,6 +15,8 @@ pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
 WP=$(cygpath -m "$W" 2>/dev/null || printf '%s' "$W")   # path readable by Windows Python too
+# the mutants written in $W import the message catalog next to themselves (1.4.0: maat_msg.py and lib/messages.tsv)
+mkdir -p "$W/lib" && cp "$HERE/maat_msg.py" "$W/" && cp "$HERE/lib/messages.tsv" "$W/lib/"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
 
@@ -540,6 +543,116 @@ for b in ("01-implement", "02-implement"):
     e, why = m.esito_of(b + ".jsonl", [])
     print(b, e, m.stop_class(why))' "$(cygpath -m "$CR" 2>/dev/null || printf '%s' "$CR")" 2>&1 | tr -d '\r')
 [ "$eo" = "$(printf '01-implement STOP deviazione\n02-implement STOP deviazione')" ] && ok || ko "riga d'esito inglese e italiana: stesso STOP e stessa causa" "$eo"
+
+# --- 1.4.0: English summary, STOP_CLASSES in both languages ---
+# the readable output in English (MAAT_LINGUA=en): same numbers, the class names and the JSON/CSV values of D7 as they are
+out=$(MAAT_LINGUA=en "$FIC_PY" "$CR" --projects "$WP/projects" "$WP/runs/spec-syn.run" "$WP/runs/spec-nb.run" 2>&1)
+printf '%s\n' "$out" | grep -q "^== spec-syn .* phases 4  A 15\.6 min .* B 30\.0 min" &&
+  printf '%s\n' "$out" | grep -q "STOP 02-implement \[deviazione\]" && printf '%s\n' "$out" | grep -q "^== spec-nb .* B not measurable" &&
+  printf '%s\n' "$out" | grep -q "^== TOTAL 2 cycles" && printf '%s\n' "$out" | grep -q "^   aggregates (min): (a) reruns " &&
+  ! printf '%s\n' "$out" | grep -v "^   STOP " | grep -qE "fasi|misurabile|aggregati|riesecuzioni|lavoro fuori|modello per filo|attesa passiva|cicli|letti|pause dopo" &&
+  ok || ko "en: tabella in inglese, stessi numeri, nessun italiano fuori dal testo degli STOP" "$out"
+jo=$(MAAT_LINGUA=en "$FIC_PY" "$CR" --json --projects "$WP/projects" "$WP/runs/spec-nb.run" 2>&1)
+ji=$("$FIC_PY" "$CR" --json --projects "$WP/projects" "$WP/runs/spec-nb.run" 2>&1)
+[ "$jo" = "$ji" ] && ok || ko "en: il JSON e' lo stesso dell'italiano (D7)" "$(diff <(echo "$ji") <(echo "$jo") | head -5)"
+out=$(MAAT_LINGUA=en "$FIC_PY" "$CR" --metrics x.csv "$WP/runs/spec-syn.run" 2>&1); rc=$?
+[ $rc -eq 2 ] && printf '%s\n' "$out" | grep -q -- "--metrics only goes with --append" && ok || ko "en: errore d'uso in inglese (rc=$rc)" "$out"
+
+# The classes of the Italian texts are those of v1.3.0 (Revisione 2 §3): every Italian text of the catalog and every STOP
+# reason written by a suite (.esito and result fixtures), plus the .esito of a real corpus if MAAT_CORPUS_ESITI names
+# its folder. The English cases: one per class, from the English text of the catalog (the run-phase.* entries of block B
+# and the others that end after `STOP — `), or a text an agent writes there where no script writes one (quota, question).
+cat > "$W/classi.py" <<'EOF'
+import glob, importlib.util, os, re, subprocess, sys
+sys.dont_write_bytecode = True
+def load(p, n):
+    s = importlib.util.spec_from_file_location(n, p); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+    return m
+cmd, new = sys.argv[1], load(sys.argv[2], "cr_new")
+if cmd == "it":   # <new> <v1.3.0 module> <catalog> <test files…>
+    old, texts = load(sys.argv[3], "cr_old"), set()
+    for l in open(sys.argv[4], encoding="utf-8").read().split("\n"):
+        p = l.split("\t")
+        if len(p) == 3 and not l.startswith("#"):
+            texts.add(p[2])
+    rx = re.compile(r"(?:PHASE RESULT|ESITO FASE) [\w%-]+: STOP\s*(?:[—–-]+\s*)?([^\n'\"\\]*)")
+    files = sys.argv[5:] + glob.glob(os.path.join(os.environ.get("MAAT_CORPUS_ESITI") or "-", "**", "*.esito"), recursive=True)
+    for f in files:
+        texts.update(m.group(1) for m in rx.finditer(open(f, encoding="utf-8", errors="replace").read()))
+    diff = [(t[:90], old.stop_class(t), new.stop_class(t)) for t in sorted(texts) if old.stop_class(t) != new.stop_class(t)]
+    for d in diff[:5]:
+        print("DIVERSA: %r v1.3.0=%s 1.4.0=%s" % d)
+    print("testi=%d diverse=%d" % (len(texts), len(diff)))
+elif cmd == "en":   # <new> <maat_msg.py>
+    os.environ["MAAT_LINGUA"] = "en"
+    T = load(sys.argv[3], "maat_msg").T
+    cases = [
+        ("deviazione", T("run-phase.tg_deviation", files="tests/a.test.ts")),
+        ("gate", T("run-phase.red_blocked", det="exit 1", label="02-test-red")),
+        ("gate", T("plan-check.red_other", texts="`x`")),
+        ("concorrenza", T("run-phase.lock_busy")),
+        ("concorrenza", "another session is changing the same files at the same time"),
+        ("timeout", T("counterproof.timeout")),
+        ("timeout", "the sub-session timed out after 30 minutes"),
+        ("quota", "usage limit reached: the 5h window resets at 14:00"),
+        ("decisione", T("cycle-state.plan_nhd")),
+        ("decisione", "a question for the user: keep the old column or drop it?"),
+    ]
+    for want, text in cases:
+        got = new.stop_class(text)
+        print("%s %s %s %r" % ("OK" if got == want else "KO", want, got, text[:80]))
+EOF
+nat() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
+CR130="$W/cr-130.py"
+if git -C "$SCRIPTS_DIR" show v1.3.0:plugins/maat/scripts/cycle-report.py > "$CR130" 2>/dev/null && [ -s "$CR130" ]; then
+  SUITES=(); for f in "$SCRIPTS_DIR"/*.test.sh; do SUITES+=("$(nat "$f")"); done
+  cls_it() { "$FIC_PY" "$W/classi.py" it "$(nat "$1")" "$(nat "$CR130")" "$(nat "$SCRIPTS_DIR/lib/messages.tsv")" \
+               "${SUITES[@]}" 2>&1 | tr -d '\r'; }
+  o=$(cls_it "$CR")
+  printf '%s\n' "$o" | grep -qE '^testi=[0-9]{3,} diverse=0$' && ok || ko "it: le classi dei testi italiani sono quelle di v1.3.0" "$o"
+  # counterproof: an English twin that matches the `red` of test-red (no lookbehind) changes Italian texts → red
+  "$FIC_PY" -c 'import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+q = chr(34) + "),"   # the twin without its lookbehind: \bred also matches the red of test-red
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(r"|(?<![\w-])reds?\b" + q, r"|\breds?\b" + q, 1))' \
+    "$(nat "$CR")" "$(nat "$W/mut-red.py")"
+  if cmp -s "$CR" "$W/mut-red.py"; then ko "controprova test-red: la mutazione non si applica"
+  else o=$(cls_it "$W/mut-red.py"); printf '%s\n' "$o" | grep -qE 'diverse=[1-9]' && ok || ko "controprova: un gemello en su «red» di test-red resta verde" "$o"; fi
+else
+  echo "SALTATO [classi it contro v1.3.0: git show v1.3.0 non disponibile (plugin fuori dal repository)]"
+fi
+cls_en() { "$FIC_PY" "$W/classi.py" en "$(nat "$1")" "$(nat "$SCRIPTS_DIR/maat_msg.py")" 2>&1 | tr -d '\r'; }
+o=$(cls_en "$CR")
+[ "$(printf '%s\n' "$o" | grep -c '^OK ')" = 10 ] && ok || ko "en: un caso per classe, dai testi inglesi del catalogo" "$o"
+# counterproof: the STOP_CLASSES of v1.3.0 (Italian only) → the English cases are red
+"$FIC_PY" - "$(nat "$CR")" "$(nat "$CR130")" "$(nat "$W/mut-it.py")" <<'EOF'
+import re, sys
+new, old = (open(p, encoding="utf-8").read() for p in sys.argv[1:3])
+rx = re.compile(r"^STOP_CLASSES = \[.*?^\]", re.S | re.M)
+open(sys.argv[3], "w", encoding="utf-8").write(rx.sub(lambda m: rx.search(old).group(0), new, count=1))
+EOF
+if [ ! -s "$W/mut-it.py" ] || cmp -s "$CR" "$W/mut-it.py"; then ko "controprova STOP_CLASSES solo italiane: la mutazione non si applica"
+else o=$(cls_en "$W/mut-it.py"); printf '%s\n' "$o" | grep -q '^KO ' && ok || ko "controprova: con le regex solo italiane i casi inglesi restano verdi" "$o"; fi
+
+# replay.sh in English: the same dry-run, refusals and usage, with the reasons from the catalog
+out=$(MAAT_LINGUA=en rp rp review --source "$SRCD" --dry-run 2>&1); rc=$?
+[ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q '^replay: cycle spec-rp · phase 03-review' &&
+  printf '%s\n' "$out" | grep -q 'DRY-RUN: nothing is run' && printf '%s\n' "$out" | grep -q '^+ (check: name fic-replay-\*' &&
+  ! printf '%s\n' "$out" | grep -E '^replay: |^\+ \(' | grep -qE "ciclo|fase |uscita|nulla|verifica|codice da" &&
+  ok || ko "en: replay --dry-run in inglese (rc=$rc)" "$out"
+out=$(MAAT_LINGUA=en rp --remove "$W/fic-replay-esiste" --dry-run 2>&1); rc=$?
+[ $rc -eq 3 ] && printf '%s\n' "$out" | grep -q "^replay: REFUSED — .* is not a worktree created by replay.sh: not removing it" &&
+  ! printf '%s\n' "$out" | grep -qE "RIFIUTO|non e'|manca" && ok || ko "en: rifiuto di --remove in inglese (rc=$rc)" "$out"
+out=$(MAAT_LINGUA=en rp 2>&1); rc=$?
+[ $rc -eq 2 ] && printf '%s\n' "$out" | grep -q "^replay: usage: replay.sh <cycle> <phase>" && ok || ko "en: uso di replay.sh in inglese (rc=$rc)" "$out"
+# the injects (no suite of their own): usage and the refusal of a path that is not a corpus worktree, in both languages
+IJ="$SCRIPTS_DIR/corpus/inject/lint-vue.sh"; mkdir -p "$W/non-repo"
+out=$(cd "$PJ" && MAAT_LINGUA=en bash "$IJ" 2>&1); rc=$?
+[ $rc -eq 2 ] && printf '%s\n' "$out" | grep -q "^inject lint-vue: usage: .*lint-vue.sh <corpus worktree> \[options\]$" && ok || ko "en: uso di un inject (rc=$rc)" "$out"
+out=$(cd "$PJ" && MAAT_LINGUA=en GIT_CEILING_DIRECTORIES="$W" bash "$IJ" "$W/non-repo" 2>&1); rc=$?
+[ $rc -eq 3 ] && printf '%s\n' "$out" | grep -q "^inject lint-vue: REFUSED — not a git repository: " && ok || ko "en: rifiuto di un inject fuori da git (rc=$rc)" "$out"
+out=$(cd "$PJ" && GIT_CEILING_DIRECTORIES="$W" bash "$IJ" "$W/non-repo" 2>&1); rc=$?
+[ $rc -eq 3 ] && printf '%s\n' "$out" | grep -q "^inject lint-vue: RIFIUTO — non e' un repository git: " && ok || ko "it: rifiuto di un inject fuori da git (rc=$rc)" "$out"
 
 echo "cycle-report.test.sh: $pass ok, $fail falliti"
 [ $fail -eq 0 ]

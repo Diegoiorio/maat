@@ -255,17 +255,22 @@ def summary(run):
 
 
 def main(argv):
+    # messages (1.4.0): the catalog next to this file, only for the table and the usage (the --summary lines and the JSON
+    # keys are those of before); imported here, so that summary() stays importable from a bare copy of this file
+    sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from maat_msg import T
     if "--summary" in argv:
         args = [a for a in argv if a != "--summary"]
         if len(args) != 1 or not os.path.isdir(args[0]):
-            print("uso: phase-usage.py --summary <spec-<name>.run>", file=sys.stderr)
+            print(T("phase-usage.usage_summary"), file=sys.stderr)
             return 2
         print("\n".join(summary(args[0])))
         return 0
     as_json = "--json" in argv
     args = [a for a in argv if a != "--json"]
     if not args:
-        print("uso: phase-usage.py <spec-<name>.run | file .jsonl> [...] [--json]", file=sys.stderr)
+        print(T("phase-usage.usage"), file=sys.stderr)
         return 2
     report = [analyse(f) for a in args for f in files_of(a)]
     if as_json:
@@ -273,20 +278,22 @@ def main(argv):
         return 0
     for r in report:
         q = r["quota_5h"]
-        print("== %s  $%.2f  %.1f min  turni %d  output %s  quota5h %s  tool all'avvio %s (mcp %s)%s" % (
-            os.path.basename(r["log"]), r["cost_usd"], r["duration_min"], r["turns"], k(r["output_tokens"]),
-            "%.0f%%->%.0f%%" % (q[0] * 100, q[1] * 100) if q else "-", r["init_tools"], r["init_mcp_tools"],
-            "  ERRORE" if r["is_error"] else ""))
+        print(T("phase-usage.head", log=os.path.basename(r["log"]), cost="%.2f" % r["cost_usd"],
+                m="%.1f" % r["duration_min"], n=r["turns"], out=k(r["output_tokens"]),
+                q="%.0f%%->%.0f%%" % (q[0] * 100, q[1] * 100) if q else "-", t=r["init_tools"], mcp=r["init_mcp_tools"],
+                err="  " + T("phase-usage.error") if r["is_error"] else ""))
         print("   %-24s %4s %6s %7s %7s %7s %8s %7s %5s %5s  %s" % (
-            "filo", "ist.", "chiam.", "ctx0", "ctxMed", "ctxMax", "cacheR", "cacheW", "tool", "multi",
-            "riletture"))
+            T("phase-usage.col_thread"), T("phase-usage.col_inst"), T("phase-usage.col_calls"), "ctx0", "ctxMed",
+            "ctxMax", "cacheR", "cacheW", "tool", "multi", T("phase-usage.col_rereads")))
+        row = "   %-24s %4d %6d %7s %7s %7s %8s %7s %5d %5d  %d (%s " + T("phase-usage.chars").replace("%", "%%") + ")"
         for name, t in sorted(r["threads"].items(), key=lambda x: -x[1]["cache_read"]):
-            print("   %-24s %4d %6d %7s %7s %7s %8s %7s %5d %5d  %d (%s car.)" % (
+            print(row % (
                 name[:24], t["instances"], t["calls"], k(t["ctx_first"]), k(t["ctx_mean"]), k(t["ctx_max"]),
                 k(t["cache_read"]), k(t["cache_write"]), t["tools"], t["multi_tool_msgs"],
                 t["redundant_reads"], k(t["redundant_chars"])))
         for s in r["slow_tools"][:8]:
-            print("   lento: %-14s %-6s >= %4ds  %s" % (s["thread"][:14], s["tool"], s["seconds_at_least"], s["what"]))
+            print(("   " + T("phase-usage.slow").replace("%", "%%") + ": %-14s %-6s >= %4ds  %s") % (
+                s["thread"][:14], s["tool"], s["seconds_at_least"], s["what"]))
     return 0
 
 

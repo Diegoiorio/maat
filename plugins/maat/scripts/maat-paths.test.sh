@@ -14,6 +14,7 @@
 # The «internal» harness of section 7 is run-phase.sh of the faithful pk02 copy (commit $INTERNO_REF of this
 # repo): the lock from the script location (git -C "$HERE").
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 INTERNO_REF=8143e8b
@@ -70,6 +71,22 @@ check "maat_paths.py: fuori da git exit 4 con lo stesso errore" '[ $prf -eq 4 ] 
 om=$(cd "$R" && MAAT_ROOT="$F" bash "$P/scripts/lib/maat-paths.sh" 2>&1); rm_=$?
 pm=$(cd "$R" && MAAT_ROOT="$F" py 2>&1); prm=$?
 check "MAAT_ROOT senza .claude-plugin/plugin.json → exit 4, bash e Python" '[ $rm_ -eq 4 ] && [ $prm -eq 4 ] && printf "%s" "$om" | grep -q "plugin.json" && printf "%s" "$pm" | grep -q "plugin.json"' "$om / $pm"
+# 1.4.0 (Revisione 1 §9): the errors from the catalog next to the resolver in the current language; a copy without the
+# catalog prints the Italian of 1.3.0 in every language
+oe=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL MAAT_LINGUA=en bash "$P/scripts/lib/maat-paths.sh" 2>&1); re_=$?
+pe=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL MAAT_LINGUA=en py 2>&1); pre=$?
+EN_NOGIT="is not in a git repository: PROJECT_ROOT not resolved (run it from the folder of the project, or set FIC_REPO)"
+check "en: fuori da git, bash e Python in inglese (exit 4), nessun italiano" '[ $re_ -eq 4 ] && [ $pre -eq 4 ] && printf "%s" "$oe" | grep -qF "$EN_NOGIT" && printf "%s" "$pe" | grep -qF "$EN_NOGIT" && ! printf "%s\n%s" "$oe" "$pe" | grep -qE "cartella|non e.|lancia"' "$oe / $pe"
+oe=$(cd "$R" && MAAT_ROOT="$F" MAAT_LINGUA=en bash "$P/scripts/lib/maat-paths.sh" 2>&1); re_=$?
+pe=$(cd "$R" && MAAT_ROOT="$F" MAAT_LINGUA=en py 2>&1); pre=$?
+check "en: MAAT_ROOT non valida, il catalogo accanto al resolver, bash e Python in inglese" '[ $re_ -eq 4 ] && [ $pre -eq 4 ] && printf "%s" "$oe" | grep -q "is not the root of a maat plugin (.claude-plugin/plugin.json missing)" && printf "%s" "$pe" | grep -q "is not the root of a maat plugin" && ! printf "%s\n%s" "$oe" "$pe" | grep -q "non e"' "$oe / $pe"
+PN="$T/senza catalogo/maat"; copia "$P" "$PN"; rm -f "$PN/scripts/lib/messages.tsv"
+oe=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL MAAT_LINGUA=en bash "$PN/scripts/lib/maat-paths.sh" 2>&1); re_=$?
+pe=$(cd "$F" && GIT_CEILING_DIRECTORIES=$CEIL MAAT_LINGUA=en "$FIC_PY" "$PN/scripts/maat_paths.py" 2>&1 | tr -d '\r'); pre=${PIPESTATUS[0]}
+check "senza catalogo: l'italiano di 1.3.0 anche con MAAT_LINGUA=en, bash e Python" '[ $re_ -eq 4 ] && [ $pre -eq 4 ] && printf "%s" "$oe" | grep -q "non e'"'"' in un repository git: PROJECT_ROOT non risolta (lancia dalla cartella del progetto, o imposta FIC_REPO)" && printf "%s" "$pe" | grep -q "non e'"'"' in un repository git: PROJECT_ROOT non risolta (lancia dalla cartella del progetto, o imposta FIC_REPO)"' "$oe / $pe"
+oe=$(cd "$R" && MAAT_ROOT="$F" MAAT_LINGUA=en bash "$PN/scripts/lib/maat-paths.sh" 2>&1); re_=$?
+check "  e con MAAT_ROOT non valida" '[ $re_ -eq 4 ] && printf "%s" "$oe" | grep -q "non e'"'"' la radice di un plugin maat (manca .claude-plugin/plugin.json)"' "$oe"
+rm -rf "$T/senza catalogo"
 ov=$(cd "$R" && MAAT_ROOT="$P" FIC_REPO="$(canon "$R")" bash "$P/scripts/lib/maat-paths.sh" 2>&1)
 check "MAAT_ROOT e FIC_REPO dall'ambiente vincono" '[ "$(val "$ov" MAAT_ROOT)" = "$P" ] && [ "$(val "$ov" PROJECT_ROOT)" = "$(canon "$R")" ]' "$ov"
 RC="$T/progetto con spazi/configurato"; newrepo "$RC" >/dev/null 2>&1

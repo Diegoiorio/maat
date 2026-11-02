@@ -1,0 +1,156 @@
+# blocco-d.mirror.tsv — the messages of block D, lane 2b: fic-mirror.sh, test-fast.sh and vitest-classify.py, read
+# by tools/lingua-converti.py (format: its docstring). The first row of a key is its source in v1.3.0, the following
+# ones its twins. Rows of Python sites (.py files, !f) and of the !d mode feed the catalog and the check; their code
+# was edited by hand, and so were the sites inside $(…) that the converter does not see (fic-mirror.sh:352).
+# Frozen and not here: the prefixes «vitest-fast: », «vitest-fast: esito=<STATO> (» … «) luogo=<luogo>» (gates.sh reads
+# the outcome word), «equivalenza=», «sync=», the whole luogo= field with its declaration «luogo=mnt-c (ripiego…)»,
+# the value «interrotto» of .fic-deps and the classes of vitest-classify (written to the WSL wrapper).
+
+# ---------------------------------------------------------------- fic-mirror.sh (sourced: its own lib/maat-msg.sh)
+fic-mirror.sync_bad_option	scripts/fic-mirror.sh:140	fic_sync: 	-	opt	option not handled by the fallback without rsync: {opt}
+fic-mirror.sync_usage	scripts/fic-mirror.sh:144	fic_sync: 	-	-	needs <source>/ <copy>/
+fic-mirror.outside_copy	scripts/fic-mirror.sh:260	-	-	mirror=${FIC_MIRROR:-$(msg fic-mirror.copy_uninit)} path	copy outside {mirror}: {path} (the caller passes $FIC_MIRROR/<directory>)
+fic-mirror.copy_uninit	scripts/fic-mirror.sh:260!d	-	-	-	<copy not initialised>
+fic-mirror.no_node_modules	scripts/fic-mirror.sh:288#2	-	-	src	the source has no node_modules ({src})
+fic-mirror.copy_unwritable	scripts/fic-mirror.sh:289#3	-	-	dst	copy not writable: {dst}
+fic-mirror.rsync_failed	scripts/fic-mirror.sh:291#2	-	-	rc	rsync from the source failed (exit {rc})
+fic-mirror.fp_unwritable	scripts/fic-mirror.sh:292#3	-	-	dst	fingerprint not writable: {dst}/.fic-deps
+fic-mirror.fp_unwritable	scripts/fic-mirror.sh:300#3	-	-	dst	fingerprint not writable: {dst}/.fic-deps
+fic-mirror.fp_unwritable	scripts/fic-mirror.sh:310#3	-	-	dst	fingerprint not writable: {dst}/.fic-deps
+fic-mirror.seed_unreadable	scripts/fic-mirror.sh:301	-	-	mm	seed source not readable: {mm}
+fic-mirror.seed_failed	scripts/fic-mirror.sh:306	-	-	-	seeding failed (rsync --link-dest)
+fic-mirror.orphans	scripts/fic-mirror.sh:309	-	-	-	orphan node_modules of the copy cannot be deleted
+fic-mirror.missing	scripts/fic-mirror.sh:317#3	-	-	nome mm	{nome} missing ({mm})
+fic-mirror.lock_unopenable	scripts/fic-mirror.sh:320#2	-	-	nome	lock of the {nome} cannot be opened
+fic-mirror.busy	scripts/fic-mirror.sh:321#2	-	-	nome wait	{nome} busy beyond {wait}s
+fic-mirror.still_stale	scripts/fic-mirror.sh:324#3	-	-	nome	{nome} still stale after the realignment
+fic-mirror.stale_failed	scripts/fic-mirror.sh:325	-	-	nome out	{nome} stale, realignment failed: {out}
+fic-mirror.stale_realigned	scripts/fic-mirror.sh:326#2	fic-mirror: 	-	nome mm out	{nome} ({mm}) stale: {out}
+fic-mirror.realigned	scripts/fic-mirror.sh:334#4	-	-	-	copy realigned from the source
+fic-mirror.no_nm_main	scripts/fic-mirror.sh:335#3	-	-	src	the source has no node_modules to realign the copy from ({src}): run --setup again where they are
+fic-mirror.no_nm_no_main	scripts/fic-mirror.sh:337#3	-	-	mm	the source has no node_modules and the copy of the main tree is missing ({mm})
+fic-mirror.no_nm_deps_differ	scripts/fic-mirror.sh:339	-	-	-	the source has no node_modules and its dependencies differ from those of the main tree
+fic-mirror.name_main	scripts/fic-mirror.sh:340#3	-	-	-	copy of the main tree
+fic-mirror.name_main	scripts/fic-mirror.sh:375#3	-	-	-	copy of the main tree
+fic-mirror.reseeded	scripts/fic-mirror.sh:341#4	-	-	-	copy seeded again from ~/fic-mirror (node_modules as hardlinks)
+fic-mirror.lane_reseeded	scripts/fic-mirror.sh:354	-	-	base	lane copy seeded again from {base} (node_modules as hardlinks)
+fic-mirror.deps_changed	scripts/fic-mirror.sh:358	-	-	old=${old:-$(msg fic-mirror.fp_absent)} new out	dependencies changed (fingerprint {old} -> {new}): {out}
+fic-mirror.fp_absent	scripts/fic-mirror.sh:358!d	-	-	-	absent
+fic-mirror.not_worktree	scripts/fic-mirror.sh:364#4	-	-	-	not the copy of a worktree
+fic-mirror.no_root_copy	scripts/fic-mirror.sh:369#3	-	-	mm	the copy of the root is missing ({mm}): a run without FIC_LANE or --setup
+fic-mirror.name_root	scripts/fic-mirror.sh:370#3	-	-	-	copy of the root
+fic-mirror.no_main_copy	scripts/fic-mirror.sh:372#3	-	-	mm	the copy of the main tree is missing ({mm})
+fic-mirror.deps_differ	scripts/fic-mirror.sh:374	-	-	-	the worktree dependencies differ from those of the main tree
+fic-mirror.copy_mkdir	scripts/fic-mirror.sh:377#2	-	-	dst	copy cannot be created: {dst}
+fic-mirror.wt_busy	scripts/fic-mirror.sh:379#2	-	-	-	worktree copy busy
+fic-mirror.no_root	scripts/fic-mirror.sh:387#2	fic-mirror: 	-	root	root not determinable (git): {root}
+fic-mirror.refuse_wt	scripts/fic-mirror.sh:388#3	fic-mirror: 	-	mirror	refused, not the copy of a worktree: {mirror}
+fic-mirror.no_copy	scripts/fic-mirror.sh:389#2	fic-mirror: 	-	root	no copy for {root}
+fic-mirror.deleted	scripts/fic-mirror.sh:391	fic-mirror: 	-	mirror	copy deleted: {mirror}
+fic-mirror.in_use	scripts/fic-mirror.sh:399#3	fic-mirror: 	-	dir	copy in use, left: {dir}
+fic-mirror.no_lane	scripts/fic-mirror.sh:411#3	fic-mirror: 	-	root lane	lane or root not determinable: {root} {lane}
+fic-mirror.refuse_lane	scripts/fic-mirror.sh:413	fic-mirror: 	-	mirror	refused, not the copy of a lane: {mirror}
+fic-mirror.no_lane_copy	scripts/fic-mirror.sh:414#2	fic-mirror: 	-	lane root	no copy of lane {lane} for {root}
+fic-mirror.lane_deleted	scripts/fic-mirror.sh:416	fic-mirror: 	-	mirror	lane copy deleted: {mirror}
+
+# ---------------------------------------------------------------- test-fast.sh: usage, project, module, copy
+test-fast.usage	scripts/test-fast.sh:167#2	-	-	-	usage: test-fast.sh <test files…> | --lint [--cache] [--base <ref>] <files…> | --setup
+test-fast.usage_lint	scripts/test-fast.sh:182	-	-	-	usage: test-fast.sh --lint [--cache] [--base <ref>] <files…>
+test-fast.base_needs_ref	scripts/test-fast.sh:173#2	vitest-fast: 	-	-	--base needs a git reference
+test-fast.base_is_path	scripts/test-fast.sh:177#2	vitest-fast: 	-	base	--base wants a git reference, not a path: {base}
+test-fast.tools_missing	scripts/test-fast.sh:185	vitest-fast: 	-	-	rsync, flock and sha256sum are needed (it runs in WSL)
+test-fast.no_project	scripts/test-fast.sh:198	vitest-fast: 	-	cwd	project not found above {cwd} (no .git nor .claude/maat.json; or FIC_REPO)
+test-fast.root_unreachable	scripts/test-fast.sh:200	vitest-fast: 	-	root	project root not accessible: {root}
+test-fast.no_python	scripts/test-fast.sh:204#2	vitest-fast: 	-	-	no Python to read maat.json (python.sh)
+test-fast.no_module	scripts/test-fast.sh:206	vitest-fast: 	-	rc	module of the copy not determinable from maat.json (maat-config.py copia-modulo, exit {rc})
+test-fast.pkg_is_root	scripts/test-fast.sh:208#2	vitest-fast: 	-	module	radice_pacchetti of module {module} is the repository root: the copy needs a directory
+test-fast.pkg_missing	scripts/test-fast.sh:211	vitest-fast: 	-	pkg root	{pkg} not found in {root}
+test-fast.no_fic_mirror	scripts/test-fast.sh:218#2	vitest-fast: 	-	-	fic-mirror.sh not found next to test-fast.sh
+test-fast.bad_lane	scripts/test-fast.sh:225#2	vitest-fast: 	-	lane	FIC_LANE must be a digit from 1 to 9: {lane}
+test-fast.cmd_unresolved	scripts/test-fast.sh:266	vitest-fast: esito=BLOCKED (	) luogo=-	type module rc	copia.{type} of module {module} not resolved by maat.json: maat-config.py comando-copia, exit {rc}
+test-fast.eslint_config	scripts/test-fast.sh:291#3	BLOCKED (	)	rc	eslint: configuration or environment, exit {rc}
+test-fast.eslint_config	scripts/test-fast.sh:869	vitest-fast: esito=BLOCKED (	) luogo=copia	rc	eslint: configuration or environment, exit {rc}
+test-fast.setup_alone	scripts/test-fast.sh:300	vitest-fast: 	-	-	--setup must be used alone
+test-fast.setup_no_root	scripts/test-fast.sh:303#2	vitest-fast: 	-	-	repository root not determinable (git): no copy prepared
+test-fast.setup_no_seed	scripts/test-fast.sh:310	vitest-fast: 	-	src why	{src} has no node_modules and seeding is not possible: {why}
+test-fast.setup_seed	scripts/test-fast.sh:311	vitest-fast: 	-	dst	setup of the copy in {dst} (node_modules as hardlinks from ~/fic-mirror)…
+test-fast.setup_done	scripts/test-fast.sh:313	vitest-fast: 	-	fp	setup done, dependency fingerprint {fp}
+test-fast.setup_done	scripts/test-fast.sh:318	vitest-fast: 	-	fp	setup done, dependency fingerprint {fp}
+test-fast.setup_full	scripts/test-fast.sh:316	vitest-fast: 	-	dst	setup of the copy in {dst} (node_modules included)…
+test-fast.setup_failed	scripts/test-fast.sh:317	vitest-fast: 	-	why	setup failed: {why}
+test-fast.only_paths	scripts/test-fast.sh:328	vitest-fast: 	-	p	only paths, no options for the runner: {p}
+test-fast.abs_path	scripts/test-fast.sh:329	vitest-fast: 	-	p	absolute path not allowed: {p}
+test-fast.dotdot	scripts/test-fast.sh:330	vitest-fast: 	-	p	segment '..' not allowed in the path: {p}
+
+# ---------------------------------------------------------------- test-fast.sh: lint outside the root, fallback
+test-fast.unclassified_no_base	scripts/test-fast.sh:360	vitest-fast: 	-	rad	outside {rad}, not classified (no --base):
+test-fast.unclassified_no_base	scripts/test-fast.sh:470	vitest-fast: 	-	rad	outside {rad}, not classified (no --base):
+test-fast.base_unresolvable	scripts/test-fast.sh:365	vitest-fast: 	-	base	base '{base}' not resolvable: classification impossible
+test-fast.no_eslint_config	scripts/test-fast.sh:386	vitest-fast: 	-	grp	{grp} without an eslint configuration (not lintable):
+test-fast.eslint_failed	scripts/test-fast.sh:392	vitest-fast: 	-	grp rc	{grp} eslint not runnable (exit {rc}): classification impossible
+test-fast.restore_failed	scripts/test-fast.sh:414	vitest-fast: 	-	grp	restoring the copy failed ({grp}): the next run will resync it
+test-fast.eslint_base_failed	scripts/test-fast.sh:419	vitest-fast: 	-	grp rc	{grp} eslint on the base not runnable (exit {rc}): classification impossible
+test-fast.preexisting	scripts/test-fast.sh:430	vitest-fast: 	-	grp	{grp} PREEXISTING (already in the base, outside the gate):
+test-fast.introduced	scripts/test-fast.sh:435	vitest-fast: 	-	grp	{grp} INTRODUCED (absent from the base):
+test-fast.clean_vs_base	scripts/test-fast.sh:441#2	vitest-fast: 	-	grp paths	{grp} clean against the base: {paths}
+test-fast.fallback_first	scripts/test-fast.sh:457	vitest-fast: luogo=mnt-c (	)	why	fallback: {why}; declared by FIC_ALLOW_MNT_C=1
+test-fast.fallback_declared	scripts/test-fast.sh:458	luogo=mnt-c (	)	-	declared fallback: FIC_ALLOW_MNT_C=1
+test-fast.unclassified_fallback	scripts/test-fast.sh:473	vitest-fast: 	-	rad	outside {rad}, NOT classified (fallback on /mnt/c):
+test-fast.unresolved_fallback	scripts/test-fast.sh:476	vitest-fast: esito=UNRESOLVED (	) $dich	rad	lint outside the root {rad} not classifiable in the fallback
+test-fast.outside_root	scripts/test-fast.sh:482	vitest-fast: esito=SKIPPED (	) $dich	rad	outside the module root: {rad}
+test-fast.outside_root	scripts/test-fast.sh:682	vitest-fast: esito=SKIPPED (	) luogo=-	rad	outside the module root: {rad}
+test-fast.unavailable	scripts/test-fast.sh:494	vitest-fast: esito=BLOCKED (	) luogo=-	why	copy not usable: {why}; fallback on /mnt/c only with FIC_ALLOW_MNT_C=1
+test-fast.generated_cleaned	scripts/test-fast.sh:541	vitest-fast: 	-	-	generated files of the copy cleaned (preparati and caches: dependency fingerprint or guide file of the preparati changed)
+
+# ---------------------------------------------------------------- test-fast.sh: paths, preparati, copy state
+test-fast.not_relative	scripts/test-fast.sh:665	vitest-fast: 	-	p	path not relative to the repository: {p}
+test-fast.outside_not_linted	scripts/test-fast.sh:671	vitest-fast: 	-	rad	outside the module root ({rad}), not linted:
+test-fast.deleted_not_linted	scripts/test-fast.sh:675	vitest-fast: 	-	-	deleted in the working tree, not linted:
+test-fast.only_deleted	scripts/test-fast.sh:680	vitest-fast: esito=SKIPPED (	) luogo=-	-	deleted files only
+test-fast.prep_unreadable	scripts/test-fast.sh:691	vitest-fast: esito=BLOCKED (	) luogo=-	module	preparati of module {module} not readable from maat.json
+test-fast.prep_missing	scripts/test-fast.sh:693	vitest-fast: esito=BLOCKED (	) luogo=-	rad guide prep=${PREP:-$(msg test-fast.prep_default)} rad	preparato missing: {rad}/{guide}; run '{prep}' in {rad}
+test-fast.prep_default	scripts/test-fast.sh:693!d	-	-	-	the preparation of the module
+test-fast.no_manifest_root	scripts/test-fast.sh:718#2	-	-	-	manifest not computable (git: repository root not determinable, no copy associated)
+test-fast.lane_seeded	scripts/test-fast.sh:724#2	vitest-fast: 	-	lane base	copy of lane {lane} seeded from {base} (node_modules as hardlinks)
+test-fast.wt_seeded	scripts/test-fast.sh:725	vitest-fast: 	-	-	worktree copy seeded from ~/fic-mirror (node_modules as hardlinks)
+test-fast.lane_seed_failed	scripts/test-fast.sh:727	; 	-	base why	seeding from {base} not possible: {why}
+test-fast.wt_seed_failed	scripts/test-fast.sh:729	; 	-	why	seeding from ~/fic-mirror not possible: {why}
+test-fast.copy_missing	scripts/test-fast.sh:732#3	-	-	why	copy missing: run --setup{why}
+test-fast.copy_busy	scripts/test-fast.sh:736#2	-	-	wait	copy busy with another run beyond {wait}s (FIC_LOCK_WAIT)
+test-fast.deps_failed	scripts/test-fast.sh:741	-	-	out	stale dependencies, automatic realignment failed: {out}
+test-fast.deps_still	scripts/test-fast.sh:743	-	-	-	dependencies still stale after the automatic realignment
+test-fast.clean_failed	scripts/test-fast.sh:745	-	-	-	cleanup of the generated files of the copy failed
+test-fast.no_manifest	scripts/test-fast.sh:758#2	-	-	-	manifest not computable (git)
+test-fast.sync_failed	scripts/test-fast.sh:764	-	-	-	sync failed
+test-fast.sync_failed	scripts/test-fast.sh:777	-	-	-	sync failed
+test-fast.stat_incomplete	scripts/test-fast.sh:774	vitest-fast: 	-	-	stat cache incomplete, full resync
+test-fast.sync_incr_failed	scripts/test-fast.sh:786	-	-	-	incremental sync failed
+test-fast.prep_copy_failed	scripts/test-fast.sh:789	-	-	-	preparati of the module cannot be copied
+test-fast.diff_src_copy	scripts/test-fast.sh:794	vitest-fast: 	-	-	differences between source and copy:
+test-fast.misaligned	scripts/test-fast.sh:795	vitest-fast: 	-	-	copy not aligned: resync
+test-fast.diff_after	scripts/test-fast.sh:800	vitest-fast: 	-	-	differences after the resync:
+test-fast.misaligned_after	scripts/test-fast.sh:801	-	-	-	copy not aligned after the resync
+test-fast.sync_incr	scripts/test-fast.sh:806#3	vitest-fast: sync=incrementale (	)	n	{n} files aligned
+test-fast.run_wrote	scripts/test-fast.sh:828	vitest-fast: 	-	-	the run wrote into the copy:
+test-fast.snapshot	scripts/test-fast.sh:829	vitest-fast: esito=BLOCKED (	) luogo=copia	-	snapshots to generate on /mnt/c: run again on /mnt/c and have the generated files reviewed
+test-fast.equiv_sync_failed	scripts/test-fast.sh:848	vitest-fast: esito=BLOCKED (	) luogo=copia	-	equivalence: full sync failed
+test-fast.equiv_ok	scripts/test-fast.sh:856	vitest-fast: equivalenza=OK (	)	sync rc	sync {sync} and full sync: same manifest, same exit {rc}
+test-fast.equiv_diff	scripts/test-fast.sh:858	vitest-fast: equivalenza=DIFF (	)	sync rc rc2	sync {sync}: exit {rc} · full sync: exit {rc2}
+test-fast.equiv_violated	scripts/test-fast.sh:860	vitest-fast: esito=BLOCKED (	) luogo=copia	sync	equivalence violated between sync {sync} and full sync
+test-fast.unresolved	scripts/test-fast.sh:873	vitest-fast: esito=UNRESOLVED (	) luogo=copia	rad	lint outside the root {rad} not classifiable
+test-fast.skipped_partial	scripts/test-fast.sh:875	vitest-fast: esito=SKIPPED (	) luogo=copia	rad n total	outside the module root: {rad}; {n} classified out of {total}
+
+# ---------------------------------------------------------------- vitest-classify.py (Python: edited by hand, T())
+vitest-classify.imports_vue	scripts/vitest-classify.py:183	-	-	-	imports a .vue component: 
+vitest-classify.unreadable	scripts/vitest-classify.py:187	-	-	-	unreadable: 
+vitest-classify.nuxt_define	scripts/vitest-classify.py:191!f	-	-	define rel	Nuxt define {define} in {rel}
+vitest-classify.nuxt_api	scripts/vitest-classify.py:194!f	-	-	api rel	Nuxt API {api} in {rel}
+vitest-classify.dom_global	scripts/vitest-classify.py:198!f	-	-	name rel	DOM global {name} in {rel}
+vitest-classify.auto_component	scripts/vitest-classify.py:213!f	-	-	name rel	auto-imported component {name} in {rel}
+vitest-classify.import_of	scripts/vitest-classify.py:217!f	-	-	spec rel	import of {spec} in {rel}
+vitest-classify.import_vue	scripts/vitest-classify.py:219!f	-	-	spec rel	import of a .vue ({spec}) in {rel}
+vitest-classify.unresolvable	scripts/vitest-classify.py:224!f	-	-	spec rel	unresolvable import {spec} in {rel}
+vitest-classify.file_missing	scripts/vitest-classify.py:235#2	-	-	-	file missing
+vitest-classify.usage	scripts/vitest-classify.py:257	-	-	-	usage: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]
+vitest-classify.usage	scripts/vitest-classify.py:262	-	-	-	usage: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]
+vitest-classify.nuxt_missing	scripts/vitest-classify.py:268!f	vitest-classify: 	-	dir f	missing {dir}/{f} (npx nuxi prepare, or a vitest run in the copy)

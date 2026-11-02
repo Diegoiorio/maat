@@ -7,6 +7,7 @@
 # absent declared SALTATA and not PASS.
 #   bash plugins/maat/scripts/bash-node.test.sh          (Git Bash or WSL)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 GT=${GT:-$HERE/gates.sh}
@@ -17,6 +18,8 @@ trap 'rm -rf "$W"' EXIT
 unset MAAT_CONFIG MAAT_MODULO FIC_GATES_HARNESS FIC_GATES_WSL PROJECT_ROOT FIC_REPO
 # the mutants written in $W source the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
 mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
+# … and the message catalog with its two readers (1.4.0: lib/messages.tsv, lib/maat-msg.sh, maat_msg.py)
+cp "$HERE/lib/messages.tsv" "$HERE/lib/maat-msg.sh" "$W/lib/" && cp "$HERE/maat_msg.py" "$W/"
 export HOME="$W/home"; mkdir -p "$HOME"
 . "$HERE/python.sh" || { echo "interprete Python non trovato" >&2; exit 2; }
 ok() { pass=$((pass + 1)); }

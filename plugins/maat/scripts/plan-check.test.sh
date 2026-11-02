@@ -3,6 +3,7 @@
 # that cannot turn red looks like coverage and is not.
 #   bash plugins/maat/scripts/plan-check.test.sh
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -238,8 +239,9 @@ export MAAT_CONFIG_PY="$HERE/maat-config.py" PROJECT_ROOT="$R"
 # the be interpreter (python of the example: .venv312/bin/python, then .venv/bin/python): the second one exists
 mkdir -p "$R/modules/api/.venv/bin"; : > "$R/modules/api/.venv/bin/python"
 PLUGIN_DIR=$(cd "$HERE/.." && pwd)
-mutpc() { # <name> <sed expression> → mutant of plan-check.sh next to lib/maat-paths.sh (the plugin from MAAT_ROOT)
-  mkdir -p "$T/pcm-$1/lib"; cp "$HERE/lib/maat-paths.sh" "$T/pcm-$1/lib/"
+mutpc() { # <name> <sed expression> → mutant of plan-check.sh next to lib/maat-paths.sh and the catalog (the plugin from MAAT_ROOT)
+  mkdir -p "$T/pcm-$1/lib"; cp "$HERE/lib/maat-paths.sh" "$HERE/lib/maat-msg.sh" "$HERE/lib/messages.tsv" "$T/pcm-$1/lib/"
+  cp "$HERE/maat_msg.py" "$T/pcm-$1/"   # 1.4.0: the message catalog and its two readers, next to the mutant
   sed "$2" "$PC" > "$T/pcm-$1/plan-check.sh"; ! cmp -s "$PC" "$T/pcm-$1/plan-check.sh"
 }
 spec2() {
@@ -529,6 +531,8 @@ refute "cmd lint" "gen: lint solo a full" -- cat "$P2"
 # mutations.json valid for counterproof.sh: validated by its own prep function (pt05)
 CPS="$HERE/counterproof.sh"
 awk "/^PY='\$/{f=1;next} f&&/^'\$/{exit} f" "$CPS" > "$T/cp.py"
+# 1.4.0: that Python imports the message catalog from MAAT_MSG_PY, as counterproof.sh exports it (native form)
+MAAT_MSG_PY=$(cygpath -m "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
 mkdir -p "$T/cptmp" "$T/cpout"
 # prep summary (pk04b-2, block A): groups, runnable entries, absorbed, NOT RUN; the modules in <tmp>/mods
 expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
@@ -653,6 +657,10 @@ expect 0 "^Percorso: pieno — .*discordanza con la dichiarazione" "route: disco
 printf '%s\n' "# T" "## Piano di implementazione" "Plan status: DRAFT" "Test level: min" "Superfici a rischio: nessuna" \
   "1. In \`modules/app/apps/admin/components/Bar.vue\` cambia il testo." > "$T/light.md"
 expect 0 "^Percorso: leggero" "route: piano piccolo, nessuna superficie, dichiarazione nessuna = leggero" -- bash "$PC" route "$T/light.md"
+# 1.4.0 English twin: the keyword stays (D2), the explanation follows the language
+expect 0 "^Percorso: leggero — plan within 150 lines, no migration, no surface detected, declaration consistent$" "en (MAAT_LINGUA=en) route: Percorso: leggero e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" route "$T/light.md"
+expect 0 "^Percorso: pieno — .*mismatch with the declaration" "en (MAAT_LINGUA=en) route: Percorso: pieno e il motivo in inglese" -- env MAAT_LINGUA=en bash "$PC" route "$T/f2-decl.md"
+refute "nessuna migrazione|discordanza con|Righe del piano" "en (MAAT_LINGUA=en) route: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash "$PC" route "$T/f2-decl.md"
 sed 's/^1\. In `modules\/app\/apps\/admin\/components\/Bar.vue`/1. In `modules\/app\/packages\/ui\/Bar.vue`/' "$T/light.md" > "$T/light-pkg.md"
 expect 0 "^Superfici rilevate: logica-condivisa$" "route: modules/app/packages/ = logica-condivisa" -- bash "$PC" route "$T/light-pkg.md"
 sed 's/^1\. In `modules\/app\/apps\/admin\/components\/Bar.vue`/1. In `modules\/app\/apps\/admin\/utils\/adminRouteRoles.ts`/' "$T/light.md" > "$T/light-role.md"
@@ -726,6 +734,9 @@ expect 0 "^Superfici rilevate: nessuna$" "route: progetto senza maat.json = ness
 rv() { printf '%s\n' "Impronta piano: $1" "Decision: $2" "Coverage statement: tutto" "Blocking findings:"; [ "$3" = 0 ] || printf '%s\n' "1. Severity: major" "   Claim: x"; printf '%s\n' "Optional findings:" "1. Severity: minor"; }
 rv "$fpcur" APPROVED 0 > "$T/d-ok"; rv "$fpcur" APPROVED 0 > "$T/g-ok"; rv "$fpcur" NEEDS_CHANGES 1 > "$T/d-one"
 expect 0 "^S2: APPROVA" "s2: delta e gate puliti sulla stessa impronta = APPROVA" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-ok" --gate "$T/g-ok"
+expect 0 "^S2: APPROVA — delta and fresh eyes clean on fingerprint [0-9a-f]{12}$" "en (MAAT_LINGUA=en) s2: APPROVA e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" s2 "$T/f2.md" --delta "$T/d-ok" --gate "$T/g-ok"
+expect 0 "^S2: RILANCIA — 1 findings rejected: clean means no finding" "en (MAAT_LINGUA=en) s2: RILANCIA e il motivo in inglese" -- env MAAT_LINGUA=en bash "$PC" s2 "$T/f2.md" --delta "$T/d-one" --gate "$T/g-ok" --respinti 1
+refute "puliti sull|pulito vuol dire" "en (MAAT_LINGUA=en) s2: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash "$PC" s2 "$T/f2.md" --delta "$T/d-one" --gate "$T/g-ok" --respinti 1
 expect 0 "^S2: RILANCIA — 1 finding respinti" "s2: un delta con un respinto NON approva (regola dei respinti)" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-one" --gate "$T/g-ok" --respinti 1
 expect 0 "^S2: CORREGGI — 1 blocker/major" "s2: finding non respinto = CORREGGI" -- bash "$PC" s2 "$T/f2.md" --delta "$T/d-one" --gate "$T/g-ok"
 rv 000000000000 APPROVED 0 > "$T/g-old"
@@ -741,6 +752,9 @@ expect 2 "respinti" "s2: piu' respinti che finding = errore d'uso" -- bash "$PC"
 
 # ── skeleton (harness-pt12): skeleton below or above the cap, and the full plan within 400 lines ──────────────
 expect 0 "^Scheletro: SOTTO IL TETTO" "skeleton: 3 passi, 4 file = sotto il tetto (uscita 0)" -- bash "$PC" skeleton "$T/f2.md"
+expect 0 "^Scheletro: SOTTO IL TETTO — the full plan starts from this skeleton$" "en (MAAT_LINGUA=en) skeleton: SOTTO IL TETTO e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" skeleton "$T/f2.md"
+expect 0 "^Steps: 3 \(cap 15\)$" "en (MAAT_LINGUA=en) skeleton: i conteggi in inglese" -- env MAAT_LINGUA=en bash "$PC" skeleton "$T/f2.md"
+refute "il piano completo parte|tetto 15" "en (MAAT_LINGUA=en) skeleton: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash "$PC" skeleton "$T/f2.md"
 expect 0 "^Passi: 3 \(tetto 15\)$" "skeleton: conta i passi" -- bash "$PC" skeleton "$T/f2.md"
 expect 0 "^File: 4 \(tetto 40\)$" "skeleton: conta i file (File toccati + passi)" -- bash "$PC" skeleton "$T/f2.md"
 expect 0 "^Superfici: permessi, contratto-api$" "skeleton: le superfici dichiarate" -- bash "$PC" skeleton "$T/f2.md"
@@ -998,6 +1012,8 @@ bash "$PC" stubs "$T/f2t.md" --run-dir "$T/f2t-b.run" >/dev/null
 expect 0 "^mutazioni: 1$" "L2: simbolo esportato non testato, gen" -- bash "$PC" gen "$T/f2t.md" --run-dir "$T/f2t-b.run"
 refute "assorbita" "L2: file nuovo con un simbolo esportato non testato = controprova non assorbita" -- cat "$T/f2t-b.run/counterproof/mutations.json"
 expect 0 "^L2 T1: NO — simbolo esportato non testato .*aiuto" "l2: il motivo" -- bash "$PC" l2 "$T/f2t.md" --run-dir "$T/f2t-b.run"
+expect 0 "^L2 T1: NO — exported symbol tested by no acceptance test: .*aiuto" "en (MAAT_LINGUA=en) l2: il prefisso L2 <id>: NO — resta, il motivo in inglese" -- env MAAT_LINGUA=en bash "$PC" l2 "$T/f2t.md" --run-dir "$T/f2t-b.run"
+refute "simbolo esportato" "en (MAAT_LINGUA=en) l2: nessun motivo italiano" -- env MAAT_LINGUA=en bash "$PC" l2 "$T/f2t.md" --run-dir "$T/f2t-b.run"
 expect 0 "^L2 T1: NO — gli stub non coprono tutti e soli i simboli nuovi" "l2: un export aggiunto dopo test-red = non piu' assorbita" -- bash "$PC" l2 "$T/f2t.md"
 # harness-pt15: gen decides L2 with the finalize criterion (stub = symbols exported NOW). Counterproof: with
 # l2_eval(..., False) in gen (as it was) here T1 goes back to absorbed, and finalize then rejects it (l2 NO above).
@@ -1327,6 +1343,20 @@ if mutpc noen-sec 's/ "test plan": "Piano di test",//'; then
   expect 1 "manca la sezione ### Piano di test" "controprova: senza 'test plan' in SEC il piano formato 2 inglese perde la sezione" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-noen-sec/plan-check.sh" lint2 "$E/f2.md"
 else echo "FAIL [controprova SEC: la mutazione non si applica]"; fail=$((fail+1)); fi
 
+# ── 1.4.0: English twins of the lint and delta families (the other families sit next to their Italian case: route,
+# s2, skeleton, l2). The keyword stays Italian (D2: the skills read it), the explanation follows the language.
+printf '%s\n' "# T" "## Piano di implementazione" "Plan status: DRAFT" "Superfici a rischio: boh" > "$T/en-lint.md"
+expect 1 "^VIOLAZIONE: unknown surface 'boh' in 'Risk surfaces' — only bare tokens of the vocabulary: " "en (MAAT_LINGUA=en) lint: VIOLAZIONE e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" lint "$T/en-lint.md"
+expect 1 "^AVVISO: 'Test level:' missing from the plan \(legacy spec\?\) — on reopening, Step 1 adds it$" "en (MAAT_LINGUA=en) lint: AVVISO e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" lint "$T/en-lint.md"
+refute "superficie sconosciuta|assente nel piano|in riapertura" "en (MAAT_LINGUA=en) lint: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash "$PC" lint "$T/en-lint.md"
+expect 1 "^VIOLAZIONE: superficie sconosciuta 'boh'" "it lint: la stessa spec in italiano (gemello)" -- bash "$PC" lint "$T/en-lint.md"
+expect 1 "^ERRORE DURO: baseline missing or empty \(.*\) — redo the round at full scope, never APPROVED$" "en (MAAT_LINGUA=en) delta: ERRORE DURO e la spiegazione in inglese" -- env MAAT_LINGUA=en bash "$PC" delta "$T/nessuna-baseline" "$T/en-lint.md"
+cp "$T/en-lint.md" "$T/en-lint.copy"
+expect 1 "^ERRORE DURO: empty diff — no revision recorded" "en (MAAT_LINGUA=en) delta: diff vuoto, ERRORE DURO in inglese" -- env MAAT_LINGUA=en bash "$PC" delta "$T/en-lint.copy" "$T/en-lint.md"
+refute "rifai il giro|nessuna revisione" "en (MAAT_LINGUA=en) delta: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash "$PC" delta "$T/en-lint.copy" "$T/en-lint.md"
+expect 1 "^ERRORE DURO: diff vuoto — nessuna revisione registrata" "it delta: lo stesso caso in italiano (gemello)" -- bash "$PC" delta "$T/en-lint.copy" "$T/en-lint.md"
+rm -f "$T/en-lint.copy"
+
 # ── oracle (safety constraint 2 of the 1.3.0 plan): on every Italian fixture of this file, plan-check.sh of
 # 1.2.1 (a2c5b99) and the current one give the SAME output, byte for byte: basis (plan fingerprint), contract and
 # lint everywhere, lint2 and route on the format 2 fixtures. Opt-in (MAAT_ORACOLO_121=1: it doubles the run time and
@@ -1353,6 +1383,32 @@ elif git -c safe.directory='*' -C "$HERE" cat-file -e a2c5b99:plugins/maat/scrip
   [ -z "$ord" ] && [ "$nor" -gt 100 ] && pass=$((pass+1)) || { echo "FAIL [oracolo 1.2.1: output diverso sulle fixture italiane ($nor file):$ord]"; fail=$((fail+1)); }
 else
   echo "SKIP [oracolo 1.2.1 sulle fixture italiane — nessun a2c5b99:plugins/maat/scripts/plan-check.sh in $HERE]"
+fi
+# ── constraint 2 of the 1.4.0 plan: the stdout of basis and contract (basis enters State, the contract keys are
+# read by the skills) is byte for byte the same with MAAT_LINGUA=it, with MAAT_LINGUA=en and with plan-check.sh of
+# v1.3.0, on every fixture of this file (Italian and English), exit code included. Stdout only, as cycle-state.sh and
+# driver.py read it (2>/dev/null). Opt-in like the oracle above (MAAT_VINCOLO2=1, or MAAT_ORACOLO_121=1 runs both):
+# three runs per fixture. A copy without git or without the tag v1.3.0: motivated SKIP.
+V2="$T/pc-130/plan-check.sh"; mkdir -p "$T/pc-130/lib"
+if [ "${MAAT_VINCOLO2:-0}" != 1 ] && [ "${MAAT_ORACOLO_121:-0}" != 1 ]; then
+  echo "SKIP [vincolo 2 della 1.4.0: basis e contract uguali in it, en e v1.3.0 — attivalo con MAAT_VINCOLO2=1]"
+elif git -c safe.directory='*' -C "$HERE" cat-file -e v1.3.0:plugins/maat/scripts/plan-check.sh 2>/dev/null; then
+  git -c safe.directory='*' -C "$HERE" show v1.3.0:plugins/maat/scripts/plan-check.sh > "$V2"
+  git -c safe.directory='*' -C "$HERE" show v1.3.0:plugins/maat/scripts/lib/maat-paths.sh > "$T/pc-130/lib/maat-paths.sh"
+  v2d=""; nv2=0
+  while IFS= read -r f; do
+    nv2=$((nv2 + 1))
+    for sc in basis contract; do
+      a=$(env MAAT_ROOT="$PLUGIN_DIR" bash "$V2" "$sc" "$f" 2>/dev/null; echo "rc=$?")
+      bi=$(MAAT_LINGUA=it bash "$PC" "$sc" "$f" 2>/dev/null; echo "rc=$?")
+      be=$(MAAT_LINGUA=en bash "$PC" "$sc" "$f" 2>/dev/null; echo "rc=$?")
+      [ "$a" = "$bi" ] || v2d="$v2d $(basename "$f"):$sc:it"
+      [ "$a" = "$be" ] || v2d="$v2d $(basename "$f"):$sc:en"
+    done
+  done < <(find "$T" "$C" "$E" -maxdepth 1 -type f -name '*.md' | LC_ALL=C sort)   # set -f: no glob here
+  [ -z "$v2d" ] && [ "$nv2" -gt 100 ] && pass=$((pass+1)) || { echo "FAIL [vincolo 2: basis/contract diversi da v1.3.0 ($nv2 file):$v2d]"; fail=$((fail+1)); }
+else
+  echo "SKIP [vincolo 2 della 1.4.0 — nessun v1.3.0:plugins/maat/scripts/plan-check.sh in $HERE]"
 fi
 unset PLAN_CHECK_ROOT FIC_PY
 

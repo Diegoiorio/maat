@@ -47,13 +47,17 @@
 
 set -uo pipefail
 set -f
+# Messages (1.4.0): the catalog next to this script, loaded by the first message (msg does it), not here: `tree` runs
+# before and after every phase and gate, and a message is printed only for an error or a verdict. The prefixes of the
+# lines read by the review skill («Status: …», «Gate-only eligible: no — ») stay in the code.
+case ${BASH_SOURCE[0]} in */*) . "${BASH_SOURCE[0]%/*}/lib/maat-msg.sh" ;; *) . lib/maat-msg.sh ;; esac
 
 die() { echo "review-surface: $*" >&2; exit 2; }
 g() { git -c core.quotePath=false "$@"; }
 
-g rev-parse --git-dir >/dev/null 2>&1 || die "non e' un repository git"
+g rev-parse --git-dir >/dev/null 2>&1 || die "$(msg review-surface.not_git)"
 TOP=$(g rev-parse --show-toplevel)
-cd "$TOP" || die "impossibile entrare in $TOP"
+cd "$TOP" || die "$(msg review-surface.cd_failed top="$TOP")"
 
 # Test files: the perimeter of "test-signals" and of the gate-only path. `script/` excluded on
 # purpose: script/e2e/ is stack infrastructure, not a test.
@@ -89,10 +93,10 @@ is_test() { printf '%s\n' "$1" | grep -Ev "$NOT_TEST_RE" | grep -Eq "$TEST_RE"; 
 snapshot_tree() {
   local tmp idx tree
   idx=$(g rev-parse --git-path index)
-  tmp=$(mktemp) || die "mktemp fallito"
+  tmp=$(mktemp) || die "$(msg review-surface.mktemp_failed)"
   if [ -f "$idx" ]; then cp -p "$idx" "$tmp"; else rm -f "$tmp"; fi
-  GIT_INDEX_FILE="$tmp" g add -A >/dev/null 2>&1 || { rm -f "$tmp"; die "git add -A (indice temporaneo) fallito"; }
-  tree=$(GIT_INDEX_FILE="$tmp" g write-tree) || { rm -f "$tmp"; die "git write-tree fallito"; }
+  GIT_INDEX_FILE="$tmp" g add -A >/dev/null 2>&1 || { rm -f "$tmp"; die "$(msg review-surface.add_failed)"; }
+  tree=$(GIT_INDEX_FILE="$tmp" g write-tree) || { rm -f "$tmp"; die "$(msg review-surface.write_tree_failed)"; }
   rm -f "$tmp"
   echo "$tree"
 }
@@ -100,12 +104,12 @@ snapshot_tree() {
 resolve_base() {
   local ref=${1:-}
   if [ -z "$ref" ]; then g rev-parse HEAD; return; fi
-  g rev-parse --verify -q "$ref^{commit}" >/dev/null || die "base '$ref' non risolvibile"
+  g rev-parse --verify -q "$ref^{commit}" >/dev/null || die "$(msg review-surface.base_unresolvable ref="$ref")"
   g merge-base "$ref" HEAD 2>/dev/null || g rev-parse "$ref^{commit}"
 }
 
 read_paths() { # prints the paths in the file, without blank lines, sorted and unique
-  [ -f "$1" ] || die "paths-file '$1' inesistente"
+  [ -f "$1" ] || die "$(msg review-surface.paths_missing f="$1")"
   # a line may carry a note after « — » (Excluded: «<path> — stessa catena, anello precedente (…)»): the path is what counts
   tr -d '\r' < "$1" | sed 's/ — .*//' | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u
 }
@@ -167,7 +171,7 @@ while [ $# -gt 0 ]; do
     --fingerprint) FP=${2:-}; shift 2 ;;
     --exclude-file) XF=${2:-}; shift 2 ;;
     --out) OUT=${2:-}; shift 2 ;;
-    *) die "argomento sconosciuto: $1" ;;
+    *) die "$(msg review-surface.unknown_arg arg="$1")" ;;
   esac
 done
 
@@ -185,13 +189,13 @@ case "$cmd" in
     if [ -z "$st" ]; then echo "  (clean)"; else printf '%s\n' "$st" | sed 's/^/  /'; fi
     ;;
   fingerprint)
-    [ -n "$TREE" ] && [ -n "$PF" ] || die "uso: fingerprint --tree <tree> --paths-file <f>"
-    g cat-file -e "$TREE^{tree}" 2>/dev/null || die "tree $TREE non presente"
+    [ -n "$TREE" ] && [ -n "$PF" ] || die "$(msg review-surface.usage_fp)"
+    g cat-file -e "$TREE^{tree}" 2>/dev/null || die "$(msg review-surface.tree_absent tree="$TREE")"
     echo "Fingerprint: $(fingerprint_of "$TREE" "$PF")"
     ;;
   check)
-    [ -n "$BASE" ] && [ -n "$TREE" ] && [ -n "$PF" ] || die "uso: check --base <sha> --tree <tree> --paths-file <f> [--fingerprint <fp>] [--exclude-file <f>]"
-    g rev-parse --verify -q "$BASE^{commit}" >/dev/null || die "base $BASE non presente"
+    [ -n "$BASE" ] && [ -n "$TREE" ] && [ -n "$PF" ] || die "$(msg review-surface.usage_check)"
+    g rev-parse --verify -q "$BASE^{commit}" >/dev/null || die "$(msg review-surface.base_absent base="$BASE")"
     new=$(snapshot_tree) || exit 2
     echo "Current tree: $new"
     # New paths relative to the RECORDED base that were not in the approved manifest.
@@ -219,7 +223,7 @@ case "$cmd" in
       # Gate-only path: ALL paths of the delta are tests (not test infrastructure), and the
       # tests of the delta show no weakening signals.
       all=$( { printf '%s\n' "$delta" | cut -f2-; printf '%s\n' "$added"; } | grep -v '^$')
-      dfile=$(mktemp) || die "mktemp fallito"
+      dfile=$(mktemp) || die "$(msg review-surface.mktemp_failed)"
       printf '%s\n' "$all" > "$dfile"
       sig=$(signals "$TREE" "$new" "$dfile")
       rm -f "$dfile"
@@ -230,38 +234,38 @@ case "$cmd" in
       eligible=yes why=""
       while IFS= read -r p; do
         [ -z "$p" ] && continue
-        if ! is_test "$p" || ! printf '%s\n' "$p" | grep -Eq "$TEST_FILE_RE"; then eligible=no; why="non e' un file di test: $p"; break; fi
-        if printf '%s\n' "$p" | grep -Eq "$TEST_INFRA_RE"; then eligible=no; why="infrastruttura di test: $p"; break; fi
+        if ! is_test "$p" || ! printf '%s\n' "$p" | grep -Eq "$TEST_FILE_RE"; then eligible=no; why="$(msg review-surface.not_test p="$p")"; break; fi
+        if printf '%s\n' "$p" | grep -Eq "$TEST_INFRA_RE"; then eligible=no; why="$(msg review-surface.test_infra p="$p")"; break; fi
         g cat-file -e "$TREE:$p" 2>/dev/null || continue   # new file: no pre-existing test
         d=$(g diff --no-color --no-ext-diff -U0 --ignore-blank-lines --ignore-space-at-eol "$TREE" "$new" -- ":(literal)$p" | grep -Ev '^(\+\+\+|---) ')
-        if printf '%s\n' "$d" | grep -Eq '^-.*[^[:space:]]'; then eligible=no; why="righe tolte o modificate in un test esistente: $p"; break; fi
-        if printf '%s\n' "$d" | grep -E '^\+' | grep -Eq "$SHARED_SETUP_RE"; then eligible=no; why="setup condiviso aggiunto a un test esistente: $p"; break; fi
-        if printf '%s\n' "$d" | grep -Eq "$CONTROL_RE"; then eligible=no; why="flusso di controllo aggiunto a un test esistente: $p"; break; fi
+        if printf '%s\n' "$d" | grep -Eq '^-.*[^[:space:]]'; then eligible=no; why="$(msg review-surface.lines_removed p="$p")"; break; fi
+        if printf '%s\n' "$d" | grep -E '^\+' | grep -Eq "$SHARED_SETUP_RE"; then eligible=no; why="$(msg review-surface.shared_setup p="$p")"; break; fi
+        if printf '%s\n' "$d" | grep -Eq "$CONTROL_RE"; then eligible=no; why="$(msg review-surface.control_flow p="$p")"; break; fi
       done <<< "$all"
-      if [ "$sig" != "Test signals: none" ]; then eligible=no; why="segnali di indebolimento"; fi
+      if [ "$sig" != "Test signals: none" ]; then eligible=no; why="$(msg review-surface.weakening)"; fi
       if [ "$eligible" = yes ]; then echo "Gate-only eligible: yes"; else echo "Gate-only eligible: no — $why"; fi
     else
-      [ -n "$FP" ] || { echo "Status: UNKNOWN (tree $TREE potato da gc, nessuna impronta registrata)"; exit 3; }
+      [ -n "$FP" ] || { echo "Status: UNKNOWN ($(msg review-surface.unknown_pruned tree="$TREE"))"; exit 3; }
       cur=$(fingerprint_of "$new" "$PF")
       if [ "$cur" = "$FP" ] && [ -z "$added" ]; then echo "Status: FRESH (via fingerprint)"; exit 0; fi
-      echo "Status: STALE (via fingerprint; delta non ricostruibile → giro a scope pieno)"
+      echo "Status: STALE (via fingerprint; $(msg review-surface.stale_fp))"
       [ -n "$added" ] && printf '%s\n' "$added" | sed 's/^/  NEW-SURFACE\t/'
-      echo "Gate-only eligible: no — delta non ricostruibile"
+      echo "Gate-only eligible: no — $(msg review-surface.no_delta)"
     fi
     ;;
   test-signals)
-    [ -n "$FROM" ] && [ -n "$TO" ] || die "uso: test-signals --from <tree-ish> --to <tree-ish> [--paths-file <f>]"
+    [ -n "$FROM" ] && [ -n "$TO" ] || die "$(msg review-surface.usage_signals)"
     signals "$FROM" "$TO" "$PF"
     ;;
   tree)
     snapshot_tree
     ;;
   diff)
-    [ -n "$FROM" ] && [ -n "$TO" ] && [ -n "$PF" ] && [ -n "$OUT" ] || die "uso: diff --from <tree-ish> --to <tree-ish> --paths-file <f> --out <file>"
+    [ -n "$FROM" ] && [ -n "$TO" ] && [ -n "$PF" ] && [ -n "$OUT" ] || die "$(msg review-surface.usage_diff)"
     pathspecs "$PF"
-    [ ${#SPECS[@]} -gt 0 ] || die "paths-file vuoto: nessun path da mostrare"
-    g diff --no-color --no-ext-diff -M "$FROM" "$TO" -- "${SPECS[@]}" > "$OUT" || die "git diff fallito"
-    [ -s "$OUT" ] || { echo "(nessuna differenza)"; exit 0; }
+    [ ${#SPECS[@]} -gt 0 ] || die "$(msg review-surface.no_paths)"
+    g diff --no-color --no-ext-diff -M "$FROM" "$TO" -- "${SPECS[@]}" > "$OUT" || die "$(msg review-surface.diff_failed)"
+    [ -s "$OUT" ] || { echo "($(msg review-surface.no_diff))"; exit 0; }
     # "diff --git a/P b/P": P = half of what follows "a/", minus " b/"; renames state it explicitly.
     awk '
       function emit(e) { if (s) printf "%s\toffset=%d limit=%d\n", name, s, e - s + 1 }
@@ -270,5 +274,5 @@ case "$cmd" in
       s && /^rename to / { name = old " → " substr($0, 11); next }
       END { emit(NR) }' "$OUT"
     ;;
-  *) die "sottocomando: snapshot | fingerprint | check | test-signals | tree | diff" ;;
+  *) die "$(msg review-surface.subcommand)" ;;
 esac

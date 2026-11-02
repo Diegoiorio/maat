@@ -1,0 +1,23 @@
+# non-messaggi.list — the literals with Italian (or a phrase) on a v1.3.0 line cited by the tables that are not a
+# message and are not covered by scripts/lib/protocol-strings.list, read by `lingua-converti.py copertura`.
+# at <TAB> reason. at = <file>:<line>#<n>[!<mode>] as in a table row (the n-th literal of that mode on the line).
+# A line that covers nothing (a row or the list covers it, no Italian, no such literal) makes copertura fail.
+
+# --- variable names that the Italian detector takes for words
+scripts/counterproof.sh:163#1	nome di variabile ([ -n "$manca" ]), non un testo
+scripts/ciclo-worktree.sh:381#1!insq	nome di variabile (rm -rf "$nuova" nel trap), non un testo
+scripts/ciclo-worktree.sh:382#2	nome di variabile (cp -R … "$nuova"), non un testo
+scripts/ciclo-worktree.sh:382#3	nome di variabile (rm -rf "$nuova"), non un testo
+scripts/ciclo-worktree.sh:383#3	nome di variabile (mv … "$vecchia"), non un testo
+scripts/ciclo-worktree.sh:383#4	nome di variabile (rm -rf "$nuova"), non un testo
+scripts/ciclo-worktree.sh:386#1	nome di variabile ([ -d "$vecchia" ]), non un testo
+scripts/ciclo-worktree.sh:387#1	nome di variabile (mv "$vecchia" …), non un testo
+
+# --- readers and English protocol values
+scripts/run-phase.sh:1364#2!py	regex che legge la riga di esito di una corsia, già bilingue (PHASE RESULT|ESITO FASE)
+scripts/counterproof.sh:358#4!py	valore «NOT RUN» del campo controprova di <id>.json, letto da finalize.sh: protocollo inglese
+scripts/finalize.sh:293#1!py	riga N| di finalize: «NOT RUN» è il token di esito, la coda (motivo) passa da finalize.no_reason
+scripts/finalize.sh:309#1!py	token di esito «NOT RUN» (m.startswith), protocollo inglese
+scripts/review-surface.sh:241#2	confronto con la riga «Test signals: none» stampata da review-surface.sh:155 di v1.3.0 (protocollo inglese)
+scripts/maat-doctor.sh:686#4!pytail	«in WSL»: valore di {where} uguale in en e in it (WSL è un nome), resta nel codice
+scripts/maat-doctor.sh:693#3!pytail	«in WSL»: valore di {where} uguale in en e in it (WSL è un nome), resta nel codice

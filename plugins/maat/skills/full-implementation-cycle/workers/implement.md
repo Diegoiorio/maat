@@ -22,7 +22,7 @@ Each agent gets: the spec path, the mode, `Blocco k/N — sono tuoi solo i passi
 tuo`, the level in force and `### Test plan` (`### Piano di test`), the do-not-touch and mixed lists, the note that **the level's
 suites are the driver's** (the agent keeps its targeted inner loop), the previous block's report **as
 orientation only** (the working tree wins), and, if `<run-dir>/context-pack.md` exists, its header lines (up to
-the first `##`) and the `### <path>` sections of its files, marked `orientamento: il codice vince sul pacchetto`.
+the first `##`) and the `### <path>` sections of its files, marked `Orientation, not authority: the code wins over the pack` (Italian: `Orientamento, non autorità: il codice vince sul pacchetto`).
 
 **Generated files** (harness-pt15). Every agent also gets the lines of `. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh"
 && "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/maat-config.py" generati` (the `generati` of `.claude/maat.json`:

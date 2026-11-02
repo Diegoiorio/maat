@@ -16,7 +16,7 @@ live and nobody can answer a question.
   tests; a suite only where the review's Step 2.5 says so. pytest and a frontend runner: both in background in
   the same message; never two runs at once on the WSL copy.
 - SHORT REPORTS: the decision, the gate results with the last lines of the real output, `file:line`. The text
-  gets shorter, never the work.
+  gets shorter, never the work. Free text (reports, the reason after `STOP — `) in the language of the `▶ ` lines; keywords and labels stay.
 - Your LAST message ends with exactly one line:
   `PHASE RESULT <phase>: OK — <one-line summary>` or `PHASE RESULT <phase>: STOP — <reason>`.
 - The production machine exists. `guard.py` denies (a denial is final: report it, never look for another

@@ -24,6 +24,7 @@
 # The R11 reminder in the main-session skills (pk05) is already checked by guard.test.sh, a plugin suite.
 #   bash plugins/maat/scripts/genericita.test.sh          (Git Bash or WSL)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 pass=0 fail=0
@@ -45,6 +46,7 @@ NUCLEO_DIR='\.nuxt.*\.output|\.output.*\.nuxt'   # a list of the core's known di
 # file <TAB> regex of the covered line <TAB> reason
 ECC=(
   "scripts/blocks-independent.py	.	adattatore framework nuxt-autoimport (passo 6: attivo solo se dichiarato in maat.json) e l'elenco dei percorsi generati che mettono la fase in serie"
+  "scripts/lib/messages.tsv	^blocks-independent\\.	i messaggi di blocks-independent.py (adattatore nuxt-autoimport), spostati nel catalogo dalla 1.4.0"
   "schemas/maat-config.schema.json	nuxt-autoimport	descrizione dell'adattatore nuxt-autoimport del campo framework"
   "scripts/fic-mirror.sh	$NUCLEO_DIR	elenco unico delle esclusioni della copia (passo 4 del piano: node_modules, .nuxt, .output, …), impronta e semina"
   "scripts/test-fast.sh	$NUCLEO_DIR	cartelle escluse dal manifest e dalla rilevazione delle scritture: lo stesso elenco del nucleo"
@@ -54,9 +56,12 @@ ECC=(
   "scripts/maat-config.py	$NUCLEO_DIR	cartelle che il lettore salta (SALTA_DIR, ESCLUSE_ACCANTO): lo stesso elenco del nucleo"
 )
 
+# The catalog sections of the files excluded by name (1.4.0: their messages moved to lib/messages.tsv) are excluded with
+# them: replay.* and inject.* are scripts/corpus/, vitest-classify.* is scripts/vitest-classify.py
+CAT_ESCLUSE='^scripts/lib/messages\.tsv:[0-9]+:(replay|inject|vitest-classify)\.'
 cerca() { # $1 plugin root -> "file:line:text", files relative to the root
   (cd "$1" && grep -rniE "$NOMI" "${PERCORSI[@]}" --exclude='*.test.sh' --exclude-dir=fixtures \
-     --exclude-dir=__pycache__ --exclude-dir=corpus --exclude=vitest-classify.py 2>/dev/null)
+     --exclude-dir=__pycache__ --exclude-dir=corpus --exclude=vitest-classify.py 2>/dev/null | grep -vE "$CAT_ESCLUSE")
 }
 cerca_runner() { (cd "$1" && grep -HniE "$RUNNER" scripts/counterproof.sh scripts/plan-check.sh scripts/gates.sh 2>/dev/null); }
 # $1 root -> stdout: the lines NOT covered; in "$W/usate" the index of each exception that covered a line

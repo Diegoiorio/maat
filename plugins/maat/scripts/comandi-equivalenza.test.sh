@@ -20,6 +20,7 @@
 # To be run in WSL (the copy needs rsync and flock):
 #   wsl -- bash -lc 'bash /mnt/c/<maat>/plugins/maat/scripts/comandi-equivalenza.test.sh'
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 RIF=d3e9397   # maat-pk05: the last harness with hard-wired commands

@@ -21,6 +21,8 @@
 WTLIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 . "$WTLIB_DIR/lib/maat-paths.sh" || return 1   # fic-mirror.sh lives in MAAT_SCRIPTS, next to this file
 WTLIB_TEST=$MAAT_SCRIPTS
+# messages (1.4.0): the catalog next to this file, unless the caller already loaded it (msg loads it on first use)
+declare -F msg >/dev/null || . "$WTLIB_DIR/lib/maat-msg.sh"
 
 winpath() { maat_cygm "$1" 2>/dev/null || printf '%s' "$1"; }
 # Canonical form of an EXISTING path (C:/…): under MSYS the same place has several names (/tmp and
@@ -45,7 +47,11 @@ try:
 except mc.Uscita as u:
     if u.codice == 4:   # project not configured: nothing to link or compare
         sys.exit(0)
-    sys.stderr.write("maat.json: %s\n" % (u.messaggio or "configurazione non valida (uscita %d)" % u.codice))
+    if not u.messaggio:   # the message catalog (1.4.0) next to this file: argv[3] is its maat_msg.py
+        s = importlib.util.spec_from_file_location("maat_msg", sys.argv[3])
+        mm = importlib.util.module_from_spec(s)
+        s.loader.exec_module(mm)
+    sys.stderr.write("maat.json: %s\n" % (u.messaggio or mm.T("worktree-lib.config_invalid", rc=u.codice)))
     sys.exit(1)
 r = mc.risolto(cfg)
 def j(base, x):
@@ -73,9 +79,10 @@ EOF
 _WT_CONF="" _WT_CONF_OK=""
 wt_conf_carica() { # reads the main tree's maat.json once (subshells inherit the cache): 1 if invalid
   local cfg out
-  [ -n "${FIC_PY:-}" ] || . "$MAAT_SCRIPTS/python.sh" || { echo "${WT_TAG:-replay}: interprete Python non trovato (maat.json)" >&2; return 1; }
+  [ -n "${FIC_PY:-}" ] || . "$MAAT_SCRIPTS/python.sh" || { echo "${WT_TAG:-replay}: $(msg worktree-lib.no_python)" >&2; return 1; }
   cfg=${MAAT_CONFIG:-${MAIN:-${PROJECT_ROOT:-.}}/.claude/maat.json}
-  out=$("$FIC_PY" -c "$WT_CONF_PY" "$(winpath "$MAAT_SCRIPTS/maat-config.py")" "$(winpath "$cfg")" 2>&1) ||
+  out=$("$FIC_PY" -c "$WT_CONF_PY" "$(winpath "$MAAT_SCRIPTS/maat-config.py")" "$(winpath "$cfg")" \
+         "$(winpath "$MAAT_SCRIPTS/maat_msg.py")" 2>&1) ||
     { echo "${WT_TAG:-replay}: $(printf '%s' "$out" | tr -d '\r' | tail -1) ($cfg)" >&2; return 1; }
   _WT_CONF=$(printf '%s' "$out" | tr -d '\r') _WT_CONF_OK=1
 }
@@ -107,8 +114,8 @@ dep_links() { # $1 root → the relative paths of the installed dependencies (co
   return 0
 }
 link_dep() { # $1 source (existing folder), $2 link to create (must not exist)
-  [ -d "$1" ] || { echo "${WT_TAG:-replay}: sorgente del collegamento assente: $1" >&2; return 1; }
-  { [ -e "$2" ] || [ -L "$2" ]; } && { echo "${WT_TAG:-replay}: $2 esiste gia': non lo sostituisco" >&2; return 1; }
+  [ -d "$1" ] || { echo "${WT_TAG:-replay}: $(msg worktree-lib.link_src_missing src="$1")" >&2; return 1; }
+  { [ -e "$2" ] || [ -L "$2" ]; } && { echo "${WT_TAG:-replay}: $(msg worktree-lib.link_exists dst="$2")" >&2; return 1; }
   mkdir -p "$(dirname "$2")" || return 1
   if [ $WIN -eq 1 ]; then   # junction: no privileges needed; MSYS must not convert /c and /J
     MSYS2_ARG_CONV_EXCL='*' cmd.exe /c mklink /J "$(cygpath -w "$2")" "$(cygpath -w "$1")" >/dev/null || return 1
@@ -125,7 +132,7 @@ unlink_deps() { # $1 worktree root: removes ONLY the links (never recursive: the
     # rmdir without /s on a junction removes the junction, not the target's contents
     [ $WIN -eq 1 ] && MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rmdir "$(cygpath -w "$r/$p")" >/dev/null 2>&1
     [ -L "$r/$p" ] && rm -f "$r/$p"   # symlink: unlink(), does not follow
-    [ -L "$r/$p" ] && { echo "${WT_TAG:-replay}: collegamento non rimosso: $r/$p" >&2; left=1; }
+    [ -L "$r/$p" ] && { echo "${WT_TAG:-replay}: $(msg worktree-lib.link_left r="$r" p="$p")" >&2; left=1; }
   done < <(dep_links "$r")
   return $left
 }
@@ -135,19 +142,19 @@ fic_relgit() { # $1 worktree: .git with a RELATIVE gitdir, readable by WSL's git
   rel=$("$FIC_PY" -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]).replace(os.sep, "/"))' \
         "$gd" "$(canon "$wt")" 2>/dev/null | tr -d '\r')
   if [ -z "$rel" ]; then
-    echo "${WT_TAG:-replay}: AVVISO — gitdir relativo non calcolabile (unita' diverse?): resta quello assoluto, che vitest-fast.sh traduce" >&2
+    echo "${WT_TAG:-replay}: $(msg worktree-lib.relgit_none)" >&2
     return 0
   fi
   printf 'gitdir: %s\n' "$rel" > "$wt/.git" &&
     [ "$(canon "$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null)")" = "$(canon "$gd")" ] && return 0
   printf 'gitdir: %s\n' "$gd" > "$wt/.git"   # restore: the worktree must stay removable
-  echo "${WT_TAG:-replay}: gitdir relativo non valido ($rel): ripristinato quello assoluto" >&2
+  echo "${WT_TAG:-replay}: $(msg worktree-lib.relgit_bad rel="$rel")" >&2
   return 1
 }
 # Fingerprint of the copy's dependencies: the SAME as test-fast.sh and counterproof.sh (fic_deps_fp of fic-mirror.sh,
 # content without CR) on the radice_pacchetti of the maat.json module with copia; no module with copia: empty. It is
 # the condition for seeding the dependencies into the worktree's WSL copy.
-[ -n "$WTLIB_TEST" ] && [ -f "$WTLIB_TEST/fic-mirror.sh" ] || { echo "worktree-lib: fic-mirror.sh non trovato: $WTLIB_TEST/fic-mirror.sh" >&2; return 1; }
+[ -n "$WTLIB_TEST" ] && [ -f "$WTLIB_TEST/fic-mirror.sh" ] || { echo "worktree-lib: $(msg worktree-lib.no_mirror f="$WTLIB_TEST")" >&2; return 1; }
 . "$WTLIB_TEST/fic-mirror.sh" || return 1
 deps_fp() { # $1 root → fingerprint as in test-fast.sh (which computes it on the radice_pacchetti of the module with copia)
   local rp
@@ -158,9 +165,9 @@ FPWARN=""
 deps_fp_check() { # $1 main tree, $2 worktree: different fingerprints → warning (log and report), never an error
   local a b
   a=$(deps_fp "$1") b=$(deps_fp "$2")
-  [ "$a" = "$b" ] && { echo "${WT_TAG:-replay}: impronta delle dipendenze della copia uguale al tree principale (${a:0:12})"; return 0; }
-  FPWARN="impronta delle dipendenze della copia diversa dal tree principale (${b:0:12} ≠ ${a:0:12}): la copia WSL del worktree non si semina, test-fast e counterproof usciranno BLOCKED (copia assente)"
-  echo "${WT_TAG:-replay}: AVVISO — $FPWARN" >&2
+  [ "$a" = "$b" ] && { echo "${WT_TAG:-replay}: $(msg worktree-lib.fp_same a="${a:0:12}")"; return 0; }
+  FPWARN="$(msg worktree-lib.fp_diff b="${b:0:12}" a="${a:0:12}")"
+  echo "${WT_TAG:-replay}: $(msg worktree-lib.fp_warn w="$FPWARN")" >&2
   return 0
 }
 wslp() { # path C:/… → /mnt/c/… (for WSL's git); others stay as they are
@@ -173,11 +180,14 @@ forget_mirror() { # $1 worktree: deletes the WSL copies of its lanes (~/fic-mirr
   # measured 2026-09-30), so the lanes were never deleted and the exit was always 0.
   local lib=$WTLIB_TEST/fic-mirror.sh wt=$1 l w out rc
   if [ $WIN -eq 1 ]; then l=$(wslp "$(winpath "$lib")") w=$(wslp "$(canon "$wt")"); else l=$lib w=$wt; fi
+  # MAAT_LINGUA resolved, as in ciclo-worktree.sh: wsl.exe does not pass the environment, and the reasons of
+  # fic-mirror.sh (catalog loaded by itself in WSL) follow it
   out=$({ printf 'L=%q R=%q\n' "$l" "$w"
+          printf 'export MAAT_LINGUA=%q\n' "$(maat_lingua)"
           printf '%s\n' '. "$L" || exit 1' \
             'r=0; for k in 1 2; do fic_lane_forget "$R" "$k" || r=1; done; fic_mirror_forget "$R" || r=1; exit $r'
         } | if [ $WIN -eq 1 ]; then MSYS_NO_PATHCONV=1 wsl.exe -- bash -s; else bash -s; fi 2>&1); rc=$?
   [ -z "$out" ] || printf '%s\n' "$out"
-  [ $rc -eq 0 ] || echo "${WT_TAG:-replay}: AVVISO — copia WSL del worktree non cancellata del tutto (in uso?); poi, da WSL: . $l && fic_lane_forget $w 1; fic_lane_forget $w 2; fic_mirror_forget $w" >&2
+  [ $rc -eq 0 ] || echo "${WT_TAG:-replay}: $(msg worktree-lib.forget_left l="$l" w="$w" w="$w" w="$w")" >&2
   return 0
 }

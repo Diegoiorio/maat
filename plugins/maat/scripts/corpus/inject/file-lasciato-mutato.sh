@@ -15,18 +15,18 @@ while [ $# -gt 0 ]; do
     --file) F=${2:-}; shift 2 ;;
     --from) FROM=${2:-}; shift 2 ;;
     --to) TO=${2:-}; shift 2 ;;
-    *) die "opzione sconosciuta: $1" ;;
+    *) die "$(msg inject.unknown_opt opt="$1")" ;;
   esac
 done
-[ -f "$WT/$F" ] || die "file assente nel worktree: $F"
+[ -f "$WT/$F" ] || die "$(msg inject.no_file f="$F")"
 base=$(tr -d '\r\n ' 2>/dev/null < "$RUN/base.txt")
 [ -n "$base" ] || base=$(git -C "$WT" rev-parse HEAD)
 CP="$RUN/counterproof/$F"
-[ -e "$CP" ] && die "copia di controprova gia' presente: $CP"
-mkdir -p "$(dirname "$CP")" && cp "$WT/$F" "$CP" || die "copia non riuscita: $CP"
+[ -e "$CP" ] && die "$(msg inject.cp_exists cp="$CP")"
+mkdir -p "$(dirname "$CP")" && cp "$WT/$F" "$CP" || die "$(msg inject.copy_failed cp="$CP")"
 copy_sha=$(sha256sum < "$CP" | cut -c1-64)
 replace_once "$F" "$FROM" "$TO"
 mut_sha=$(sha256sum < "$WT/$F" | cut -c1-64)
 printf 'path: %s\nbase: %s\ncopy_sha256: %s\nreverted_sha256: %s\nmutation: %s -> %s\n' \
   "$F" "$base" "$copy_sha" "$mut_sha" "$FROM" "$TO" > "$CP.meta"
-inj_done "$F mutato; copia e sidecar in counterproof/"
+inj_done "$F $(msg inject.mutated)"

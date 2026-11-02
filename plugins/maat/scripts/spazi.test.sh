@@ -28,6 +28,7 @@
 #   M9 fic-mirror.sh pid written without noclobber in fic_lock_dir -> case 3 (lock taken over by another, review round 2).
 #   bash plugins/maat/scripts/spazi.test.sh          (Git Bash or Linux)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 . "$HERE/python.sh" || true

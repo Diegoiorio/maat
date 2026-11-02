@@ -21,7 +21,7 @@
       "pattern": "^>=[0-9]+\\.[0-9]+$"
     },
     "lingua": {
-      "description": "Language of Maat's messages to the user: guard reasons and the explanation under each permission request (R11). Default en.",
+      "description": "Language of Maat's messages to the user: guard reasons, the explanation under each permission request (R11) and, from 1.4.0, the messages the scripts print (catalog scripts/lib/messages.tsv). The environment variable MAAT_LINGUA (it|en) wins over it. Default en.",
       "enum": ["it", "en"],
       "default": "en"
     },

@@ -31,6 +31,10 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin) and PROJECT_ROOT (working directory)
+# Messages (1.4.0): the catalog next to this script; the Python part imports maat_msg.py from MAAT_MSG_PY (below). The
+# pack is written in the language of the messages; its «#», «##», «###» and «>» markers stay. A pack written in the
+# other language is not «unchanged» (its fingerprint line differs): it is regenerated.
+. "$HERE/lib/maat-msg.sh"; maat_msg_carica
 HROOT=${CONTEXT_PACK_HARNESS:-$MAAT_ROOT}
 ROOT=${CONTEXT_PACK_ROOT:-$PROJECT_ROOT}
 usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2; }
@@ -41,29 +45,30 @@ while [ $# -gt 0 ]; do
     --run-dir) [ $# -ge 2 ] || usage; run_dir=$2; shift 2 ;;
     --force) force=1; shift ;;
     -h|--help) usage ;;
-    -*) echo "context-pack: opzione sconosciuta: $1" >&2; exit 2 ;;
+    -*) echo "context-pack: $(msg context-pack.bad_option opt="$1")" >&2; exit 2 ;;
     *) [ -z "$spec" ] || usage; spec=$1; shift ;;
   esac
 done
 [ -n "$spec" ] || usage
 [ -n "$ROOT" ] || { maat_progetto; exit 4; }
 if [ ! -f "$spec" ]; then
-  if [ -f "$ROOT/$spec" ]; then spec=$ROOT/$spec; else echo "context-pack: spec non trovato: $spec" >&2; exit 2; fi
+  if [ -f "$ROOT/$spec" ]; then spec=$ROOT/$spec; else echo "context-pack: $(msg context-pack.no_spec spec="$spec")" >&2; exit 2; fi
 fi
 if [ -z "$run_dir" ]; then
   case $spec in *.md) run_dir=${spec%.md}.run ;; *) run_dir=$spec.run ;; esac
 fi
-. "$HROOT/scripts/python.sh" || { echo "context-pack: interprete Python non trovato" >&2; exit 2; }
+. "$HROOT/scripts/python.sh" || { echo "context-pack: $(msg context-pack.no_python)" >&2; exit 2; }
 win() { maat_cygm "$1" 2>/dev/null || printf '%s' "$1"; }
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
 export MAAT_CONFIG_PY=${MAAT_CONFIG_PY:-$HROOT/scripts/maat-config.py}   # the Python code reads `contesto` through the single reader
+MAAT_MSG_PY=$(win "$HERE/maat_msg.py"); export MAAT_MSG_PY
 args=("$(win "$ROOT")" "$(win "$spec")" "$(win "$run_dir")" "$force")
 py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # the code comes from a pipe: no temporary file
 
-plan=$(py plan "${args[@]}" | tr -d '\r') || { echo "context-pack: estrazione fallita" >&2; exit 1; }
+plan=$(py plan "${args[@]}" | tr -d '\r') || { echo "context-pack: $(msg context-pack.extract_failed)" >&2; exit 1; }
 fp=$(printf '%s\n' "$plan" | sed -n 's/^FP //p')
 if printf '%s\n' "$plan" | grep -qx 'STATE unchanged'; then
-  echo "context-pack: invariato ($fp) — $run_dir/context-pack.md"; exit 0
+  echo "context-pack: $(msg context-pack.unchanged fp="$fp" dir="$run_dir")"; exit 0
 fi
 tables=$(printf '%s\n' "$plan" | sed -n 's/^TABLE //p' | tr '\n' ' ')
 dbcmd=$(printf '%s\n' "$plan" | sed -n 's/^DBCMD //p' | head -1)   # contesto.schema_db_comando
@@ -86,7 +91,12 @@ CP_DB=$db_state CP_DB_OUT=$db_out CP_TABLES=$tables py write "${args[@]}"
 exit $?
 
 #__PYTHON__
-import datetime, hashlib, os, posixpath, re, subprocess, sys
+import datetime, hashlib, importlib.util, os, posixpath, re, subprocess, sys
+
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the catalog (lib/messages.tsv), the same as the bash side
 
 MODE, ROOT, SPEC, RUN_DIR, FORCE = sys.argv[1:6]
 ROOT = ROOT.rstrip("/\\")
@@ -105,14 +115,14 @@ def contesto():
         mc = importlib.util.module_from_spec(sp)
         sp.loader.exec_module(mc)
     except Exception as e:
-        sys.stderr.write("context-pack: lettore della configurazione non caricabile (%s): %s\n" % (p, e))
+        sys.stderr.write("context-pack: %s\n" % T("context-pack.cfg_loader", p=p, e=e))
         sys.exit(1)
     try:
         cfg, _p = mc.carica(os.environ.get("MAAT_CONFIG") or os.path.join(ROOT, ".claude", "maat.json"))
     except mc.Uscita as u:
         if u.codice == 4:
             return {}
-        sys.stderr.write("context-pack: maat.json: %s\n" % (u.messaggio or "configurazione non valida (uscita %d)" % u.codice))
+        sys.stderr.write("context-pack: maat.json: %s\n" % (u.messaggio or T("context-pack.cfg_invalid", code=u.codice)))
         sys.exit(1)
     return cfg.get("contesto") or {}
 
@@ -172,7 +182,7 @@ def named_tables():
 
 
 if MODE == "plan":
-    same = ("Impronta spec: " + FP) in read(PACK, 4000)
+    same = (T("context-pack.fp_label") + FP) in read(PACK, 4000)
     print("FP", FP)
     print("STATE", "unchanged" if same and FORCE != "1" else "changed")
     if SCHEMA_CMD:
@@ -376,23 +386,24 @@ def py_sigs(f, s):
     for m in re.finditer(r"^@router\.(get|post|put|patch|delete)\(\s*['\"]([^'\"]*)['\"](.*?)^(?:async\s+)?def\s+(\w+)",
                          s, re.M | re.S):
         rm = re.search(r"response_model\s*=\s*([\w\[\], ]+?)\s*[,)\n]", m.group(3))
-        out.append("%s %s%s → %s%s (r. %d)" % (m.group(1).upper(), pre, m.group(2), m.group(4),
-                   " · response_model " + rm.group(1) if rm else "", lineno(s, m.start())))
+        out.append("%s %s%s → %s%s (%s)" % (m.group(1).upper(), pre, m.group(2), m.group(4),
+                   " · response_model " + rm.group(1) if rm else "", T("context-pack.line_ref", n=lineno(s, m.start()))))
     if not out:
         for m in re.finditer(r"^(?:async\s+)?def\s+[A-Za-z]\w*\s*\([^\n]*|^class\s+\w+[^\n]*", s, re.M):
-            out.append("%s (r. %d)" % (short(m.group(0)).rstrip(":"), lineno(s, m.start())))
+            out.append("%s (%s)" % (short(m.group(0)).rstrip(":"), T("context-pack.line_ref", n=lineno(s, m.start()))))
     if PYD is None:
         PYD = pydantic_index()
     models = []
     for n in re.findall(r"\b([A-Z]\w+)\b", s):
         if n in PYD and n not in models and PYD[n][0] != f:
             models.append(n)
-    extra = ["modello %s (%s:%d): %s" % (n, PYD[n][0], PYD[n][1], ", ".join(PYD[n][3][:8]) or "—") for n in models[:8]]
+    extra = [T("context-pack.model", n=n, file=PYD[n][0], line=PYD[n][1], fields=", ".join(PYD[n][3][:8]) or "—")
+             for n in models[:8]]
     return out, extra
 
 
 def ts_sigs(s):
-    return ["%s (r. %d)" % (short(m.group(0)), lineno(s, m.start())) for m in re.finditer(
+    return ["%s (%s)" % (short(m.group(0)), T("context-pack.line_ref", n=lineno(s, m.start()))) for m in re.finditer(
         r"^export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|const|let|class|interface|type|enum)\s+[\w$]+[^\n]*"
         r"|^export\s+default\b[^\n]*", s, re.M)]
 
@@ -419,7 +430,7 @@ def citing_tests(f):
 
 def fmt_tests(ts):
     if not ts:
-        return "nessuno"
+        return T("context-pack.none")
     return ", ".join(ts[:MAX_TESTS]) + (" … +%d" % (len(ts) - MAX_TESTS) if len(ts) > MAX_TESTS else "")
 
 
@@ -472,72 +483,72 @@ def find_defs(sym, first):
 paths = named_paths()
 L = []
 sel, n_missing, n_listed = [], 0, 0
-L.append("## File nominati dallo spec")
+L.append("## " + T("context-pack.files_header"))
 for q in paths:
     kind, c = resolve(q)
     if kind in ("esiste", "trovato") and all(x in sel for x in c):
         continue   # same file mentioned in another way
     n_listed += 1
     if kind == "esiste":
-        L.append("- esiste: " + q)
+        L.append("- " + T("context-pack.exists") + q)
     elif kind == "trovato":
-        L.append("- esiste: %s (citato come `%s`)" % (", ".join(c), q))
+        L.append("- " + T("context-pack.exists_as", files=", ".join(c), q=q))
     elif kind == "ambiguo":
-        L.append("- ambiguo: `%s` → %d file (%s)" % (q, len(c), fmt_tests(c)))
+        L.append("- " + T("context-pack.ambiguous", q=q, n=len(c), files=fmt_tests(c)))
     else:
-        L.append("- NON ESISTE: " + q)
+        L.append("- " + T("context-pack.does_not_exist") + q)
         n_missing += 1
     if kind in ("esiste", "trovato"):
         sel += [x for x in c if x not in sel]
 if not paths:
-    L.append("- nessuno")
+    L.append("- " + T("context-pack.none"))
 sel_code = [f for f in sel if f.endswith(CODE)]
 
 db_state, db_out = os.environ.get("CP_DB", "none"), os.environ.get("CP_DB_OUT", "")
 if not SCHEMA_FILE and not SCHEMA_CMD:   # section omitted: the project declares no schema
-    db_summary = "schema DB non dichiarato"
-    L += ["", "Colonne DB: schema DB non dichiarato (contesto.schema_db_file e schema_db_comando in maat.json)."]
+    db_summary = T("context-pack.no_schema")
+    L += ["", T("context-pack.no_schema_line")]
 elif db_state == "none" or not TABLES:
-    L += ["", "## Colonne DB (information_schema, sola lettura)"]
-    db_summary = "nessuna tabella"
+    L += ["", "## " + T("context-pack.db_header")]
+    db_summary = T("context-pack.no_table")
     if not SCHEMA_FILE or not TAB.get("blocco"):
-        L.append("- nessuna tabella riconoscibile: %s non dichiarato in maat.json" % (
-            "contesto.schema_db_file" if not SCHEMA_FILE else "contesto.tabelle"))
+        L.append("- " + T("context-pack.no_table_known",
+                          what="contesto.schema_db_file" if not SCHEMA_FILE else "contesto.tabelle"))
     else:
-        L.append("- nessuna tabella nominata (una `tabella` fra backtick che coincide con un blocco di %s)" % SCHEMA_FILE)
+        L.append("- " + T("context-pack.no_table_named", file=SCHEMA_FILE))
 else:
-    L += ["", "## Colonne DB (information_schema, sola lettura)"]
+    L += ["", "## " + T("context-pack.db_header")]
     rc = int(db_state.split("=", 1)[1]) if db_state.startswith("rc=") else None
     if rc == 0:
         rows = dict((k, v.strip()) for k, v in re.findall(r"@@(\w+)\|([^\n]*)", db_out))
-        db_summary = "presente"
+        db_summary = T("context-pack.present")
         L.append("(`?` = nullable)")
         for t in TABLES:
-            L.append("- `%s`: %s" % (t, rows.get(t, "non trovata in information_schema")))
+            L.append("- `%s`: %s" % (t, rows.get(t, T("context-pack.not_in_schema"))))
     else:
         if rc is None:   # tables named but no command to query them
-            why = "comando dello schema non dichiarato (contesto.schema_db_comando)"
+            why = T("context-pack.cmd_undeclared")
         elif rc == 124:
             why = "timeout"
         else:   # the command itself explains the reason: the first non-empty line of its output
             first = next((x.strip() for x in db_out.replace("\r", "").split("\n") if x.strip()), "")
-            why = "comando dello schema uscito %d%s" % (rc, (": " + first[:200]) if first else "")
-        db_summary = "assente (%s)" % why
-        L.append("- **assente** — %s. Tabelle nominate: %s" % (why, ", ".join(TABLES)))
+            why = T("context-pack.cmd_exit", rc=rc, out=(": " + first[:200]) if first else "")
+        db_summary = T("context-pack.db_missing", why=why)
+        L.append("- " + T("context-pack.db_missing_line", why=why, tables=", ".join(TABLES)))
 
 syms = named_symbols()
-L += ["", "## Simboli nominati (definizione: prima nei file nominati, poi nel repository)"]
+L += ["", "## " + T("context-pack.symbols_header")]
 for s in syms:
     d = find_defs(s, sel_code)
-    L.append("- `%s` → %s" % (s, ", ".join(d) if d else "non trovato"))
+    L.append("- `%s` → %s" % (s, ", ".join(d) if d else T("context-pack.not_found")))
 if not syms:
-    L.append("- nessuno")
+    L.append("- " + T("context-pack.none"))
 
 dt_vue = []
-L += ["", "## Per file: firme e test che lo citano"]
+L += ["", "## " + T("context-pack.by_file_header")]
 for f in sel[:MAX_FILES]:
     s, ext = content(f), os.path.splitext(f)[1]
-    L.append("### %s (%d righe)" % (f, s.count("\n") + (1 if s and not s.endswith("\n") else 0)))
+    L.append("### %s (%s)" % (f, T("context-pack.lines", n=s.count("\n") + (1 if s and not s.endswith("\n") else 0))))
     sig, extra = [], []
     if ext == ".vue":
         p, e = vue_props(s), vue_emits(s)
@@ -552,16 +563,16 @@ for f in sel[:MAX_FILES]:
     for x in sig[:MAX_SIG]:
         L.append("- " + x)
     if len(sig) > MAX_SIG:
-        L.append("- … +%d firme" % (len(sig) - MAX_SIG))
+        L.append("- … " + T("context-pack.more_sigs", n=len(sig) - MAX_SIG))
     L += ["- " + x for x in extra]
     if TEST_RE.search(f):
-        L.append("- (è un test)")
+        L.append("- " + T("context-pack.is_test"))
     else:
         L.append("- test: " + fmt_tests(citing_tests(f)))
 if len(sel) > MAX_FILES:
-    L.append("- … altri %d file non espansi (tetto %d)" % (len(sel) - MAX_FILES, MAX_FILES))
+    L.append("- " + T("context-pack.more_files", n=len(sel) - MAX_FILES, cap=MAX_FILES))
 
-L += ["", "## Test che citano i data-test"]
+L += ["", "## " + T("context-pack.dt_header")]
 dt_spec = []
 for x in re.findall(r"data-test(?:id)?\s*=\s*\\?[\"'`]?([\w-]+)", TEXT):
     if x not in dt_spec:
@@ -574,18 +585,17 @@ def dt_tests(x):
 for x in dt_spec[:25]:
     L.append("- `%s` (spec) → %s" % (x, fmt_tests(dt_tests(x))))
 if len(dt_spec) > 25:
-    L.append("- … altri %d data-test dello spec" % (len(dt_spec) - 25))
+    L.append("- " + T("context-pack.more_dt", n=len(dt_spec) - 25))
 extra_dt = [x for x in dt_vue if x not in dt_spec]
 if extra_dt:   # those of the named .vue files: only the count and the unmentioned ones (mentioned ones are the norm)
     orphans = [x for x in extra_dt if not dt_tests(x)]
-    L.append("- nei .vue nominati altri %d data-test, %d citati da test; non citati: %s" % (
-        len(extra_dt), len(extra_dt) - len(orphans),
+    L.append("- " + T("context-pack.dt_vue", n=len(extra_dt), cited=len(extra_dt) - len(orphans), orphans=
         ", ".join("`%s`" % x for x in orphans[:15]) + (" … +%d" % (len(orphans) - 15) if len(orphans) > 15 else "")
-        if orphans else "nessuno"))
+        if orphans else T("context-pack.none")))
 if not dt_spec and not extra_dt:
-    L.append("- nessun data-test nello spec né nei .vue nominati")
+    L.append("- " + T("context-pack.no_dt"))
 
-L += ["", "## Test che citano le stringhe dello spec («…» e \"…\")"]
+L += ["", "## " + T("context-pack.strings_header")]
 strs = []
 for a, b in re.findall(r"«([^»\n]{5,60})»|\"([^\"\n]{5,60})\"", TEXT):
     x = (a or b).strip()
@@ -598,26 +608,27 @@ generic = [x for x, t in cited if len(t) > 12]
 cited = [(x, t) for x, t in cited if t and len(t) <= 12]
 for x, t in cited[:20]:
     L.append("- «%s» → %s" % (x, fmt_tests(t)))
-L.append("- stringhe cercate: %d · citate da test: %d%s · generiche (in più di 12 test, non elencate): %d" % (
-    len(strs), len(cited), " (mostrate 20)" if len(cited) > 20 else "", len(generic)))
+L.append("- " + T("context-pack.strings_count", n=len(strs), cited=len(cited),
+                   shown=T("context-pack.strings_shown") if len(cited) > 20 else "", generic=len(generic)))
 
 rev = (git("rev-parse", "--short", "HEAD") or "n/d").strip()
 now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-head = ["# Pacchetto di contesto — %s" % SPEC_REL, "",
-        "> Orientamento, non autorità: il codice vince sul pacchetto. Generato da `scripts/context-pack.sh` del plugin maat",
-        "> (sola lettura); si rigenera quando cambia l'impronta dello spec.", "",
-        "Data: %s · Commit: %s · Impronta spec: %s" % (now, rev, FP), ""]
+FPL = T("context-pack.fp_label")   # the fingerprint line, read again by MODE plan (same language = same marker)
+head = ["# " + T("context-pack.title", spec=SPEC_REL), "",
+        "> " + T("context-pack.orientation"),
+        "> " + T("context-pack.regenerated"), "",
+        T("context-pack.date_commit", now=now, rev=rev) + FPL + FP, ""]
 head = "\n".join(head) + "\n"
 body = "\n".join(L) + "\n"
 room = CAP - len(head) - 100   # the cap applies to the whole file, header and estimate included
 if len(body) > room:
-    body = body[:body.rfind("\n", 0, room) + 1] + "\n… TRONCATO al tetto di ~5k token: il resto va letto dal codice.\n"
+    body = body[:body.rfind("\n", 0, room) + 1] + "\n" + T("context-pack.truncated") + "\n"
 doc = head + body
 tok = (len(doc) + 3) // 4
-doc = doc.replace("Impronta spec: %s\n" % FP, "Impronta spec: %s · Stima: ~%d token\n" % (FP, tok), 1)
+doc = doc.replace(FPL + FP + "\n", FPL + FP + " · " + T("context-pack.estimate", tok=tok) + "\n", 1)
 os.makedirs(RUN_DIR, exist_ok=True)
 with open(PACK + ".tmp", "w", encoding="utf-8", newline="\n") as fh:
     fh.write(doc)
 os.replace(PACK + ".tmp", PACK)
-print("context-pack: %s — file nominati %d (%d inesistenti), ~%d token, DB: %s" % (
-    PACK.replace("\\", "/"), n_listed, n_missing, tok, db_summary))
+print("context-pack: %s — %s" % (PACK.replace("\\", "/"), T("context-pack.summary", n=n_listed, missing=n_missing,
+                                                                  tok=tok, db=db_summary)))

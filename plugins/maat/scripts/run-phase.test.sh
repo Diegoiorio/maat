@@ -7,6 +7,7 @@
 # The real lock (inside .git) is not touched: FIC_LOCK points to a temporary directory; FIC_REPO points
 # to a temporary git repo, so the fake claude changes files there and not in the project.
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 RP=${RP:-$HERE/run-phase.sh}
 T=$(mktemp -d)
@@ -367,6 +368,18 @@ check "primo lancio: harness.fp e' l'uscita di --harness-fp, tre righe" '[ $rc -
 check "  impronta=<64 esadecimali>, versione= della copia, radice= la copia" 'sed -n 1p "$T/h.run/harness.fp" | grep -Eqx "impronta=[0-9a-f]{64}" && [ "$(sed -n 2p "$T/h.run/harness.fp")" = "versione=9.9.9-copia" ] && [ "$(sed -n 3p "$T/h.run/harness.fp")" = "radice=$HP_M" ]'
 hrun "$T/h.run" 02-implement; rc=$?
 check "harness invariato fra due fasi → la fase gira" '[ $rc -eq 0 ] && [ -f "$T/h02-implement.args" ]'
+# 1.4.0: the RESOLVED language of the messages is part of the fingerprint. A change of MAAT_LINGUA in the middle of a
+# cycle stops it like a changed maat.json (the message cites the language in English; the Italian one is that of
+# 1.3.0, asserted below); back to the language of the cycle, the phase runs.
+MAAT_LINGUA=en hrun "$T/h.run" 02b-probe; rc=$?
+check "1.4.0: un cambio di lingua (MAAT_LINGUA it → en) a meta' ciclo ferma il ciclo: exit 6, la sotto-sessione non parte" '[ $rc -eq 6 ] && [ ! -f "$T/h02b-probe.args" ] && grep -q "^STOP: harness changed since [0-9T:-]*Z: .*and the language of the messages" "$T/h02b-probe.err"'
+hrun "$T/h.run" 02c-probe; rc=$?
+check "  di nuovo con la lingua del ciclo (it): la fase gira" '[ $rc -eq 0 ] && [ -f "$T/h02c-probe.args" ]'
+LR="$T/lrepo"; mkdir -p "$LR/.claude" && (cd "$LR" && git init -q .)
+printf '{"versione_schema": 1, "moduli": [{"nome": "tutto", "radice": ".", "regola_test": "nessuna"}], "lingua": "it"}\n' > "$LR/.claude/maat.json"
+lfp() { (cd "$LR" && env -u MAAT_CONFIG FIC_REPO="$LR" "$@" bash "$RP" --harness-fp "$LR" | sed -n 's/^impronta=//p'); }
+f_none=$(lfp env -u MAAT_LINGUA); f_it=$(lfp env MAAT_LINGUA=it); f_en=$(lfp env MAAT_LINGUA=en)
+check "1.4.0: impronta senza MAAT_LINGUA = impronta con MAAT_LINGUA uguale alla lingua di maat.json (la lingua risolta)" '[ -n "$f_none" ] && [ "$f_none" = "$f_it" ] && [ "$f_en" != "$f_it" ]'
 mkdir -p "$HP/scripts/__pycache__"; echo pyc > "$HP/scripts/__pycache__/m.pyc"
 hrun "$T/h.run" 03-review; rc=$?
 check "  un file in scripts/__pycache__/ del plugin non cambia l'impronta" '[ $rc -eq 0 ]'
@@ -572,7 +585,7 @@ check "run_cp senza FIC_CP_CMD, modulo nativo: counterproof.sh diretto con PROJE
 cprun "$RP" 7b-review "$T/cfg-wsl.json"
 case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in
   *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*)
-    check "  modulo wsl su Windows: dentro WSL, PROJECT_ROOT e MAAT_CONFIG tradotti" 'grep -q "^-- bash -lc PROJECT_ROOT=./mnt/.* MAAT_CONFIG=./mnt/.*cfg-wsl\.json. bash ./mnt/.*cp-diretto. ./mnt/.*counterproof/mutations\.json.$" "$T/wsl.log" && [ ! -f "$T/7b-review.cpd" ] && grep -qx "exit=127" "$L3/7b-review.counterproof"' ;;
+    check "  modulo wsl su Windows: dentro WSL, PROJECT_ROOT e MAAT_CONFIG tradotti, MAAT_LINGUA passata" 'grep -q "^-- bash -lc PROJECT_ROOT=./mnt/.* MAAT_CONFIG=./mnt/.*cfg-wsl\.json. MAAT_LINGUA=.it. bash ./mnt/.*cp-diretto. ./mnt/.*counterproof/mutations\.json.$" "$T/wsl.log" && [ ! -f "$T/7b-review.cpd" ] && grep -qx "exit=127" "$L3/7b-review.counterproof"' ;;
   *) check "  modulo wsl fuori da Windows: diretto, mai wsl" '[ ! -f "$T/wsl.log" ] && [ -f "$T/7b-review.cpd" ]' ;;
 esac
 sed 's/^  elif cp_in_wsl; then$/  elif true; then   # MUTANTE: wsl fisso/' "$RP" > "$MRP"
@@ -641,6 +654,12 @@ printf '%s\n' "# B" "## Piano di implementazione" "Plan status: APPROVED" "Test 
 crun() { FAKE_OUT="$T/c$2" bash "$RP" "$CD/$1.run" "$2" "$T/prompt.md" 2>"$T/c$2.err" </dev/null; }
 crun spec-m-2-b 70-implement; rc=$?
 check "anello 2 con l'anello 1 aperto: implement non lanciato (exit 7, WAIT)" '[ $rc -eq 7 ] && [ ! -f "$T/c70-implement.args" ] && grep -q "WAIT — catena" "$CD/spec-m-2-b.run/log/70-implement.stderr"'
+# 1.4.0, block B (f): the same in English: the prefix «WAIT — catena» written by cycle-state.sh in English is still
+# recognised by run-phase.sh (the harness.fp of the ring is recorded in English for this case, then put back)
+cp "$CD/spec-m-2-b.run/harness.fp" "$T/hfp-it"; MAAT_LINGUA=en bash "$RP" --harness-fp "$FIC_REPO" > "$CD/spec-m-2-b.run/harness.fp"
+MAAT_LINGUA=en crun spec-m-2-b 70b-implement; rc=$?
+check "  1.4.0 (f): in inglese, WAIT — catena riconosciuto: exit 7, niente sotto-sessione, messaggio inglese" '[ $rc -eq 7 ] && [ ! -f "$T/c70b-implement.args" ] && grep -q "^WAIT — catena: the implement of ring 2 waits for ring 1 (spec-m-1-a) IMPLEMENTED; the plan can run — phase not launched$" "$CD/spec-m-2-b.run/log/70b-implement.stderr"'
+cp "$T/hfp-it" "$CD/spec-m-2-b.run/harness.fp"
 mkdir -p "$CD/spec-m-1-a.run/log"; printf 'a.py\n' > "$CD/spec-m-1-a.run/touched.txt"
 printf 'anello1\n' >> "$FIC_REPO/a.py"                  # ring 1's hunk on a.py, which ring 2 will also touch
 (cd "$FIC_REPO" && bash "$HERE/review-surface.sh" tree) > "$CD/spec-m-1-a.run/log/02-implement.post-tree"
@@ -649,6 +668,10 @@ printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature sta
 printf 'umano\n' > "$FIC_REPO/z.py"
 crun spec-m-2-b 71-implement; rc=$?
 check "anello 2 col tree diverso dal .post-tree dell'anello 1: exit 7 (STOP), niente sotto-sessione" '[ $rc -eq 7 ] && [ ! -f "$T/c71-implement.args" ] && grep -q "STOP — catena: il working tree" "$CD/spec-m-2-b.run/log/71-implement.stderr"'
+cp "$CD/spec-m-2-b.run/harness.fp" "$T/hfp-it"; MAAT_LINGUA=en bash "$RP" --harness-fp "$FIC_REPO" > "$CD/spec-m-2-b.run/harness.fp"
+MAAT_LINGUA=en crun spec-m-2-b 71b-implement; rc=$?
+check "  1.4.0 (f): STOP — catena in inglese ancora riconosciuto da run-phase.sh: exit 7, niente sotto-sessione" '[ $rc -eq 7 ] && [ ! -f "$T/c71b-implement.args" ] && grep -q "^STOP — catena: the working tree .* — phase not launched$" "$CD/spec-m-2-b.run/log/71b-implement.stderr"'
+cp "$T/hfp-it" "$CD/spec-m-2-b.run/harness.fp"
 rm -f "$FIC_REPO/z.py"
 FAKE_TOUCH="$FIC_REPO/a.py" crun spec-m-2-b 72-implement; rc=$?
 check "  controprova: tree uguale al .post-tree dell'anello 1 → l'implement parte" '[ $rc -eq 0 ] && [ -f "$T/c72-implement.args" ]'

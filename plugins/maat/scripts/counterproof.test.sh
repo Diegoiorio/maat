@@ -10,6 +10,7 @@
 # variant lives in a copy of the plugin (scripts/ with lib/, fic-mirror.sh, maat-config.py, python.sh; schemas/;
 # .claude-plugin/), because it sources the files next to itself.
 set -u
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 CP=${CP:-$HERE/counterproof.sh}
@@ -274,6 +275,8 @@ cpr "$(mj bad2.json '[{"id":"X","file":"modules/app/apps/admin/src.ts"}]')"
 check "voce incompleta -> 64" '[ "$(rc)" = 64 ]'
 cpr "$(mj bad3.json "[$(entry X $V/src.ts 'x = 1' 'x = 2'),$(entry X $V/other.ts 'y = 1' 'y = 2')]")"
 check "id duplicato -> 64" '[ "$(rc)" = 64 ] && grep -q "id duplicato" "$T/out"'
+MAAT_LINGUA=en cpr "$OUT/bad3.json"
+check "en: id duplicato -> 64, the reason in English from the embedded Python" '[ "$(rc)" = 64 ] && grep -qx "counterproof: id X: duplicate id" "$T/out"'
 
 # 10b. L2 (harness-pt11): "absorbed" entry -> not run, <id>.json with outcome `assorbita`; absorbed only -> exit 0,
 #      no runner. Counterproof (by hand, CP=<variant> without SALTO-ASSORBITE): the absorbed entry would be run.
@@ -377,6 +380,10 @@ check "  runner comando: rosso = uscita != 0 -> rosso_generico, PASS (prova debo
 check "  ognuno nella sua <copia>/<radice_pacchetti>, ripristinato" 'grep -qx "UNO=1" "$HOME/fic-mirror/y/svc/core.txt" && grep -qx "UNO=1" "$HOME/fic-mirror/z/lib/core.txt"'
 check "  solo i moduli delle mutazioni: web e doc non sincronizzati" '[ ! -e "$HOME/fic-mirror/x/web/app" ] && [ ! -e "$HOME/fic-mirror/w" ]'
 check "  modulo senza controprova -> non_eseguita, NOT RUN (dichiarato), mai verde ne rosso" '[ "$(field D1 esito)" = non_eseguita ] && [ "$(field D1 controprova)" = "NOT RUN" ] && field D1 motivo | grep -q "^NOT RUN (dichiarato): il modulo doc non dichiara controprova"'
+# 1.4.0: the same run in English (MAAT_LINGUA=en): the last line, the values of <id>.json and the «NOT RUN» prefix read by
+# finalize.sh stay; the reasons and the progress lines follow the language, no Italian of the catalog is left
+MAAT_LINGUA=en MAAT_CONFIG=$T/tre.json cpr "$(mj tre-en.json "[$(te S1 y/svc),$(te L1 z/lib),$(te D1 w/doc)]")"
+check "en: N moduli -> stessa ultima riga e stessi esiti, motivi e righe d'avanzamento in inglese" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*non_eseguite=1" && [ "$(field D1 esito)" = non_eseguita ] && [ "$(field S1 esito)" = rosso_generico ] && field D1 motivo | grep -q "^NOT RUN (declared): module doc declares no counterproof$" && field S1 motivo | grep -q "^the counterproof command exits 1: red without a report" && grep -q "^counterproof: 2 mutations, 2 to run (exact duplicates once only), luogo=mirror$" "$T/out" && grep -q "^counterproof: 1 NOT RUN (declared): modules without a counterproof, <id>.json with esito=non_eseguita$" "$T/out" && ! grep -qE "mutazioni|da eseguire|dichiarato|non dichiara|il comando della controprova|senza report" "$T/out" "$OUT/D1.json" "$OUT/S1.json"'
 MAAT_CONFIG=$T/tre.json cpr "$(mj tre-v.json "[$(te V1 z/lib 'UNO=2')]")"
 check "  runner comando: uscita 0 -> verde, FAIL" '[ "$(rc)" = 1 ] && [ "$(field V1 esito)" = verde ] && [ "$(field V1 controprova)" = FAIL ]'
 MAAT_CONFIG=$T/tre.json cpr "$(mj tre-d.json "[$(te D2 w/doc)]")"
@@ -468,6 +475,8 @@ for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync 
   cpb "$(path_senza "$T/bin-${v#*|}" ${v#*|})" "$OUT/one.json"
   check "senza ${v%%|*} -> exit 3, «controprove non disponibili: manca ${v%%|*}», niente eseguito" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (controprove non disponibili: manca ${v%%|*})" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
 done
+MAAT_LINGUA=en cpb "$(path_senza "$T/bin-sha256sum-en" rsync flock sha256sum)" "$OUT/one.json"
+check "en: senza sha256sum -> exit 3, prefisso «esito=BLOCKED (» congelato, motivo in inglese" '[ "$(rc)" = 3 ] && grep -qx "counterproof: esito=BLOCKED (counterproofs not available: missing sha256sum) luogo=-" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
 # known limit: radice_pacchetti = repository root -> 64 with the reason, with and without rsync
 echo "{\"versione_schema\": 1, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", $CMDC}]}" > "$T/radice.json"
 RADL=$(mj rad.json "[$(entry R1 y/svc/core.txt 'UNO=1' 'UNO=1 ROSSO' y/svc/t.sh y/svc/t.sh 'rosso')]")

@@ -79,6 +79,12 @@
 # for other scripts (Recorded:, Catena:, Impronta piano:, blocco …, L2 …, rossi:, S2:, Percorso:, Scheletro:)
 # do not change. For an Italian spec every output is byte for byte the one of 1.2.1. A section present in
 # BOTH languages (same H2 zone, same H3, Figlie: and Children:) is a VIOLAZIONE of lint.
+# Messages (Maat 1.4.0): the text for a person comes from the catalog lib/messages.tsv (msg in bash, _msg.T in
+# PY2), English by default, Italian with "lingua": "it" or MAAT_LINGUA=it. The keywords VIOLAZIONE, AVVISO,
+# ERRORE DURO, Percorso: leggero|pieno, Scheletro: SOPRA|SOTTO IL TETTO and S2: <word> stay Italian (the skills
+# read them); only the explanation after them follows the language. NEVER through the catalog: the whole stdout of
+# basis and contract (basis enters State), the keys of gen/procedura.txt, the tokens of accept, tests, rossi.json
+# (esito) and the prefixes "L2 <id>: OK|NO — " and "rossi: esito=" (frozen in lib/protocol-strings.list).
 #
 # Tests: plan-check.test.sh (every check has its red counterproof).
 
@@ -113,7 +119,7 @@ Decisioni|Decisions
 Stringhe e data-test|Strings and data-test
 Changelog revisione piano|Plan review changelog"
 
-die_usage() { echo "uso: $0 delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]" >&2; exit 2; }
+die_usage() { echo "$(msg plan-check.usage script="$0")" >&2; exit 2; }
 
 # annotate FILE → lines "NR<TAB>zona<TAB>infence<TAB>testo"
 # zona: above | plan | changelog | review. infence=1 also on the fence lines themselves.
@@ -211,11 +217,11 @@ fmt2_of() { awk -F'\t' '$2 == "plan" && $3 == 0 && $4 ~ /^Plan format:[ \t]*2[ \
 cmd_delta() {
   [ $# -eq 2 ] || die_usage
   local base="$1" cur="$2"
-  if [ ! -s "$base" ]; then echo "ERRORE DURO: baseline assente o vuota ($base) — rifai il giro a scope pieno, mai APPROVED"; return 1; fi
-  [ -f "$cur" ] || { echo "file corrente assente: $cur" >&2; return 2; }
+  if [ ! -s "$base" ]; then echo "ERRORE DURO: $(msg plan-check.delta_no_base base="$base")"; return 1; fi
+  [ -f "$cur" ] || { echo "$(msg plan-check.delta_no_cur cur="$cur")" >&2; return 2; }
 
   local d; d=$(diff --strip-trailing-cr "$base" "$cur")
-  if [ -z "$d" ]; then echo "ERRORE DURO: diff vuoto — nessuna revisione registrata, oppure baseline presa dopo l'Edit. Rifai il giro a scope pieno, mai APPROVED"; return 1; fi
+  if [ -z "$d" ]; then echo "ERRORE DURO: $(msg plan-check.delta_empty)"; return 1; fi
 
   local ann; ann=$(annotate "$cur")
   local total_new total_old
@@ -223,7 +229,8 @@ cmd_delta() {
   total_old=$(tr -d '\r' < "$base" | wc -l)
 
   # Hunk → range on the current file (1-based). A pure deletion becomes the line after which it fell.
-  printf '%s\n' "$d" | awk -v tn="$total_new" -v to="$total_old" '
+  # the text of the message reaches awk through the environment (ENVIRON: no escape processing, unlike -v)
+  printf '%s\n' "$d" | PC_WHOLE="$(msg plan-check.delta_whole)" awk -v tn="$total_new" -v to="$total_old" '
     /^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$/ {
       match($0, /[acd]/); op = substr($0, RSTART, 1)
       split(substr($0, 1, RSTART - 1), o, ","); split(substr($0, RSTART + 1), n, ",")
@@ -236,7 +243,7 @@ cmd_delta() {
     }
     END {
       if ((tn > 20 && chnew > 0.9 * tn) || (to > 20 && chold > 0.9 * to)) {
-        print "ERRORE DURO: il diff copre oltre il 90% del file (riformattazione o fine riga) — trattalo come baseline mancante: giro a scope pieno"
+        print "ERRORE DURO: " ENVIRON["PC_WHOLE"]
         exit 1
       }
       # merges nearby ranges (distance <= 3) so as not to spend reviewer calls
@@ -268,7 +275,7 @@ cmd_delta() {
     while IFS= read -r ln; do printf '%d\t%d\t%s\n' "$hits" "$ln" "$tok" >> "$TMPD/cand"; done < "$TMPD/hits"
   done < "$TMPD/tokens"
   # rarest first; a single line per line number; cap XREF_MAX_LINES
-  sort -t$'\t' -k1,1n -k2,2n "$TMPD/cand" | awk -F'\t' -v max="$XREF_MAX_LINES" '!seen[$2]++ { print "xref: riga " $2 " (" $3 ")"; if (++n >= max) exit }'
+  sort -t$'\t' -k1,1n -k2,2n "$TMPD/cand" | PC_LINE="$(msg plan-check.xref_line)" awk -F'\t' -v max="$XREF_MAX_LINES" '!seen[$2]++ { print "xref: " ENVIRON["PC_LINE"] " " $2 " (" $3 ")"; if (++n >= max) exit }'
   return 0
 }
 
@@ -288,7 +295,7 @@ cmd_lint() {
   warn() { echo "AVVISO: $*"; }
 
   if ! printf '%s\n' "$ann" | awk -F'\t' '$2 != "above" { f = 1 } END { exit !f }'; then
-    viol "nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1
+    viol "$(msg plan-check.no_plan)"; return 1
   fi
 
   # Status lines: a single anchored occurrence in the plan (changelog included), outside fences.
@@ -297,25 +304,25 @@ cmd_lint() {
     # l2: the English form of the literal (the same literal when it is already English)
     l2=$lit; [ "$lit" = "Superfici a rischio:" ] && l2="Risk surfaces:"
     n=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '($2 == "plan" || $2 == "changelog") && $3 == 0 && (index($4, l) == 1 || index($4, l2) == 1)' | wc -l)
-    if [ "$n" -gt 1 ]; then viol "'$lit' compare $n volte a inizio riga nel piano: dev'essere UNA (i grep a valle prendono la prima)"
-    elif [ "$n" -eq 0 ]; then warn "'$lit' assente nel piano (spec legacy?) — in riapertura lo Step 1 la aggiunge"
+    if [ "$n" -gt 1 ]; then viol "$(msg plan-check.lit_dup lit="$lit" n="$n")"
+    elif [ "$n" -eq 0 ]; then warn "$(msg plan-check.lit_missing lit="$lit")"
     fi
     ln=$(printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '$2 == "plan" && $3 == 0 && (index($4, l) == 1 || index($4, l2) == 1) { print $1; exit }')
-    if [ -n "$prev" ] && [ -n "$ln" ] && [ "$ln" -ne $((prev + 1)) ]; then warn "'$lit' non sta nella riga subito sotto la precedente riga di stato"; fi
+    if [ -n "$prev" ] && [ -n "$ln" ] && [ "$ln" -ne $((prev + 1)) ]; then warn "$(msg plan-check.lit_not_next lit="$lit")"; fi
     [ -n "$ln" ] && prev="$ln"
     # In the changelog the literal must not be quoted even mid-line: that is where the duplicate comes from.
     if printf '%s\n' "$ann" | awk -F'\t' -v l="$lit" -v l2="$l2" '$2 == "changelog" && (index($4, l) > 1 || index($4, l2) > 1) { f = 1 } END { exit !f }'; then
-      warn "il changelog cita il letterale '$lit' in mezzo a una riga — scrivilo in prosa, e' a un a-capo dal diventare un duplicato"
+      warn "$(msg plan-check.lit_changelog lit="$lit")"
     fi
   done
 
   # Approved basis: written at approval (written by the skill, never by hand); only one.
   n=$(printf '%s
 ' "$ann" | awk -F'	' '($2 == "plan" || $2 == "changelog") && $3 == 0 && index($4, "Approved basis:") == 1' | wc -l)
-  if [ "$n" -gt 1 ]; then viol "'Approved basis:' compare $n volte a inizio riga nel piano: dev'essere UNA"
+  if [ "$n" -gt 1 ]; then viol "$(msg plan-check.basis_dup n="$n")"
   elif [ "$n" -eq 0 ] && printf '%s
 ' "$ann" | awk -F'	' '$2 == "plan" && $3 == 0 && $4 ~ /^Plan status:[ 	]*APPROVED/ { f = 1 } END { exit !f }'; then
-    warn "piano APPROVED senza riga 'Approved basis:' (piano legacy: non si ritocca a mano, la riga arriva alla prossima approvazione)"
+    warn "$(msg plan-check.basis_legacy)"
   fi
 
   # Declared surfaces: vocabulary tokens only (backticks are tolerated, notes are not).
@@ -329,10 +336,10 @@ cmd_lint() {
       case " $SURFACES " in
         *" $sc "*) declared="$declared $sc" ;;
         *) if [ "$sc" = "nessuna" ]; then nnone=1
-           else viol "superficie sconosciuta '$s' in 'Superfici a rischio' — solo token nudi del vocabolario: $SURFACES (oppure: nessuna)"; fi ;;
+           else viol "$(msg plan-check.surf_unknown s="$s" surfaces="$SURFACES")"; fi ;;
       esac
     done
-    [ "$nnone" -eq 1 ] && [ "$ntok" -gt 1 ] && viol "'Superfici a rischio' dice 'nessuna' insieme ad altre superfici"
+    [ "$nnone" -eq 1 ] && [ "$ntok" -gt 1 ] && viol "$(msg plan-check.surf_none_mixed)"
   fi
 
   # Floor: list item in "### Piano di test", on a CRITICAL and DECLARED surface, one per surface.
@@ -340,10 +347,10 @@ cmd_lint() {
   local pav; pav=$(printf '%s\n' "$tz" | pav_toks | cut -f2)
   if [ -n "$pav" ]; then
     while IFS= read -r s; do
-      case " $CRITICAL " in *" $s "*) ;; *) viol "[pavimento: $s] — il pavimento vale solo per le superfici critiche: $CRITICAL" ;; esac
-      case " $declared " in *" $s "*) ;; *) viol "[pavimento: $s] su una superficie non dichiarata in 'Superfici a rischio'" ;; esac
+      case " $CRITICAL " in *" $s "*) ;; *) viol "$(msg plan-check.floor_not_critical s="$s" critical="$CRITICAL")" ;; esac
+      case " $declared " in *" $s "*) ;; *) viol "$(msg plan-check.floor_undeclared s="$s")" ;; esac
     done <<< "$pav"
-    printf '%s\n' "$pav" | sort | uniq -d | while IFS= read -r s; do echo "VIOLAZIONE: piu' di una riga [pavimento: $s] — il pavimento e' UNA verifica per superficie"; done
+    printf '%s\n' "$pav" | sort | uniq -d | while IFS= read -r s; do echo "VIOLAZIONE: $(msg plan-check.floor_dup s="$s")"; done
     printf '%s\n' "$pav" | sort | uniq -d | grep -q . && rc=1
   fi
   # Declared critical surface with neither a floor nor a ⚠️ line that NAMES it: AVVISO (L3 judges it).
@@ -355,22 +362,22 @@ cmd_lint() {
     printf '%s\n' "$pav" | grep -qx "$s" && continue
     wl=$(printf '%s\n' "$ann" | warn_line "$s")
     if [ -z "$wl" ]; then
-      warn "superficie critica '$s' dichiarata senza riga [pavimento: $s] ne' riga '⚠️ Superficie $s … non coperta'"
+      warn "$(msg plan-check.critical_uncovered s="$s" s="$s" s="$s")"
       continue
     fi
     wn=${wl%%$'\t'*}; wt=${wl#*$'\t'}
     if printf '%s\n' "$wt" | grep -Eq '(statica sufficiente|static sufficient):' && [ -z "$(waiver_of "$wt")" ]; then
-      warn "riga $wn: deroga 'statica sufficiente:' senza motivo sulla stessa riga"
+      warn "$(msg plan-check.waiver_no_reason wn="$wn")"
     fi
     nxt=$(printf '%s\n' "$ann" | awk -F'\t' -v n=$((wn + 1)) '$1 == n { print $4; exit }')
     if printf '%s\n' "$nxt" | grep -Eq '^[[:space:]]*(—|-)?[[:space:]]*(statica|sufficiente|static[[:space:]]+sufficient)'; then
-      warn "riga $wn: la deroga continua a capo — 'statica sufficiente: <motivo>' va sulla stessa riga di '⚠️ Superficie $s'"
+      warn "$(msg plan-check.waiver_wrapped wn="$wn" s="$s")"
     fi
   done
 
   # targeted e2e by locator: at most 2 (beyond that, a ⚠️ line and the regression-watch).
   local ne2e; ne2e=$(printf '%s\n' "$tz" | cut -f2- | grep -cE "$E2E_RE" || true)
-  [ "${ne2e:-0}" -le 2 ] || warn "$ne2e righe [e2e-locator: — al massimo 2; oltre, una riga ⚠️ e il regression-watch"
+  [ "${ne2e:-0}" -le 2 ] || warn "$(msg plan-check.e2e_cap n="$ne2e")"
 
   # Length of "### Piano di test" relative to the level (AVVISO: L3 judges it, here it is measured).
   # Not counted: blank lines, floor lines, [e2e-locator: lines and ⚠️ lines: outside the cap.
@@ -382,8 +389,8 @@ cmd_lint() {
       | { if [ "$f2" = 1 ]; then grep -vE '^[[:space:]]*\|[[:space:]]*(ID[[:space:]]*\||:?-)' | grep -vE '⚠️ (Rischio aperto|Open risk)'; else cat; fi; } \
       | grep -c '[^[:space:]]' || true)
     case "$lvl" in
-      min) [ "$tlen" -le 1 ] || warn "'### Piano di test' ha $tlen righe al livello min (tetto 1; righe [pavimento:, [e2e-locator: e ⚠️ escluse)" ;;
-      std) [ "$tlen" -le 15 ] || warn "'### Piano di test' ha $tlen righe al livello std (tetto 15; righe [pavimento:, [e2e-locator: e ⚠️ escluse)" ;;
+      min) [ "$tlen" -le 1 ] || warn "$(msg plan-check.testplan_min n="$tlen")" ;;
+      std) [ "$tlen" -le 15 ] || warn "$(msg plan-check.testplan_std n="$tlen")" ;;
     esac
   fi
 
@@ -391,7 +398,7 @@ cmd_lint() {
   # existing Italian one. The readers would take only one of the two: VIOLAZIONE. H2 zones of the file and H3
   # sections of the plan, outside fences; "Figlie:" and "Children:" above the plan.
   local dup
-  dup=$(printf '%s\n' "$ann" | H2P="$H2_PAIRS" H3P="$H3_PAIRS" awk -F'\t' '
+  dup=$(printf '%s\n' "$ann" | H2P="$H2_PAIRS" H3P="$H3_PAIRS" PC_IN="$(msg plan-check.dup_in_plan)" PC_ABOVE="$(msg plan-check.dup_above_plan)" awk -F'\t' '
     BEGIN { n2 = split(ENVIRON["H2P"], h2, "\n"); n3 = split(ENVIRON["H3P"], h3, "\n") }
     $3 != 0 { next }
     { for (i = 1; i <= n2; i++) { split(h2[i], p, "|"); if (index($4, "## " p[1]) == 1) a2[i]++; if (index($4, "## " p[2]) == 1) b2[i]++ } }
@@ -401,27 +408,27 @@ cmd_lint() {
     $2 == "above" && index($4, "Children:") == 1 { ch++ }
     END {
       for (i = 1; i <= n2; i++) if (a2[i] && b2[i]) { split(h2[i], p, "|"); print "## " p[1] "\t## " p[2] "\t" }
-      for (i = 1; i <= n3; i++) if (a3[i] && b3[i]) { split(h3[i], p, "|"); print "### " p[1] "\t### " p[2] "\t nel piano" }
-      if (fi && ch) print "Figlie:\tChildren:\t sopra il piano"
+      for (i = 1; i <= n3; i++) if (a3[i] && b3[i]) { split(h3[i], p, "|"); print "### " p[1] "\t### " p[2] "\t " ENVIRON["PC_IN"] }
+      if (fi && ch) print "Figlie:\tChildren:\t " ENVIRON["PC_ABOVE"]
     }')
   local it en where
   while IFS=$'\t' read -r it en where; do
-    [ -n "$it" ] && viol "'$it' e '$en' insieme$where: la stessa sezione in due lingue (tieni il titolo che c'era; si legge la prima)"
+    [ -n "$it" ] && viol "$(msg plan-check.dup_lang it="$it" en="$en" where="$where")"
   done <<< "$dup"
 
   # With baseline: the spec above the plan and the implementation review must not be touched.
   if [ -n "$base" ]; then
-    [ -f "$base" ] || { echo "baseline assente: $base" >&2; return 2; }
+    [ -f "$base" ] || { echo "$(msg plan-check.lint_no_base base="$base")" >&2; return 2; }
     local bann; bann=$(annotate "$base")
     local b_above c_above b_rev c_rev
     # Trailing spaces and blank lines at the END of the part above the plan do not count: the blank line before
     # "## Piano di implementazione" is added by whoever writes the plan, not by whoever wrote the spec.
     b_above=$(printf '%s\n' "$bann" | awk -F'\t' '$2 == "above" { print $4 }' | above_norm | sha256sum)
     c_above=$(printf '%s\n' "$ann"  | awk -F'\t' '$2 == "above" { print $4 }' | above_norm | sha256sum)
-    [ "$b_above" = "$c_above" ] || viol "le sezioni della SPEC sopra '## Piano di implementazione' sono cambiate rispetto alla baseline — questo ciclo non le puo' toccare"
+    [ "$b_above" = "$c_above" ] || viol "$(msg plan-check.above_changed)"
     b_rev=$(printf '%s\n' "$bann" | awk -F'\t' '$2 == "review" { print $4 }' | sha256sum)
     c_rev=$(printf '%s\n' "$ann"  | awk -F'\t' '$2 == "review" { print $4 }' | sha256sum)
-    [ "$b_rev" = "$c_rev" ] || viol "la sezione '## Review implementazione' e' cambiata — appartiene a /implementation-review-cycle"
+    [ "$b_rev" = "$c_rev" ] || viol "$(msg plan-check.review_changed)"
   fi
 
   [ $rc -eq 0 ] && echo "lint: OK"
@@ -546,24 +553,24 @@ closed_why() {
   snap=$(printf '%s\n' "$sec" | sed -n 's/^Reviewed snapshot:[[:space:]]*//p' | head -1)
   case "$rs" in APPROVED*) ;; *) echo "Review status ${rs:-(assente)}"; return ;; esac
   case "$fs" in IMPLEMENTED*) ;; *) echo "Feature status ${fs:-(assente)}"; return ;; esac
-  case "$fz" in IMPLEMENTED*) ;; "") echo "nessuna riga Finalize: IMPLEMENTED"; return ;; *) echo "Finalize: $fz"; return ;; esac
+  case "$fz" in IMPLEMENTED*) ;; "") echo "$(msg plan-check.closed_no_finalize)"; return ;; *) echo "Finalize: $fz"; return ;; esac
   fs12=$(printf '%s\n' "$fz" | sed -n 's/.*snapshot \([0-9a-f]\{12\}\).*/\1/p' | head -1)
   now=$(printf '%s' "$snap" | tr -s ' \t' '  ' | sed 's/^ //; s/ $//' | tr -d '\n' | sha256sum | cut -c1-12)
-  [ -n "$fs12" ] && [ "$fs12" = "$now" ] || { echo "Finalize su un altro snapshot (${fs12:-nessuna impronta}), non sul Reviewed snapshot attuale"; return; }
+  [ -n "$fs12" ] && [ "$fs12" = "$now" ] || { echo "$(msg plan-check.closed_other_snap fs="${fs12:-$(msg plan-check.closed_no_fp)}")"; return; }
   ts=$(printf '%s\n' "$fz" | grep -o '[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z' | tail -1)
   ts=$( [ -n "$ts" ] && date -u -d "$ts" +%s 2>/dev/null )
-  [ -n "$ts" ] || { echo "Finalize senza un'ora leggibile"; return; }
+  [ -n "$ts" ] || { echo "$(msg plan-check.closed_no_time)"; return; }
   rl=$(ls "$run/log" 2>/dev/null | sed -n 's/^\([0-9][0-9]*-[^.]*review[^.]*\)\.jsonl$/\1/p' | sort -t- -k1,1n | tail -1)
   [ -n "$rl" ] || return 0
   rt=$(date -r "$run/log/$rl.jsonl" +%s 2>/dev/null)
-  [ -n "$rt" ] && [ "$ts" -ge "$rt" ] || echo "Finalize piu' vecchia dell'ultima review lanciata ($rl)"
+  [ -n "$rt" ] && [ "$ts" -ge "$rt" ] || echo "$(msg plan-check.closed_older rl="$rl")"
 }
 closed_of() { [ -z "$(closed_why "$1")" ]; }
 cmd_closed() {
   [ $# -eq 1 ] && [ -f "$1" ] || die_usage
   local w; w=$(closed_why "$1")
-  if [ -z "$w" ]; then echo "Anello: CHIUSO"; return 0; fi
-  echo "Anello: APERTO — $w"; return 1
+  if [ -z "$w" ]; then echo "$(msg plan-check.closed_yes)"; return 0; fi
+  echo "$(msg plan-check.closed_no w="$w")"; return 1
 }
 # last_post_tree <run-dir>: the tree of the last .post-tree (highest number label), or nothing.
 last_post_tree() {
@@ -680,7 +687,13 @@ cmd_basis() {
 # Parser of the format 2 tables, in Python (stdin = annotate lines). No single quote in here,
 # and ASCII only (non-ASCII characters as \u escapes). need_py writes it to a file in $TMPD (too long for `-c`).
 PY2='
-import json, os, re, sys
+import importlib.util, json, os, re, sys
+
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+# the message catalog (1.4.0): maat_msg.py from MAAT_MSG_PY (need_py), the same keys as msg in the bash above
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_msg = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_msg)
 
 sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
@@ -845,7 +858,7 @@ def conf():
         mc = importlib.util.module_from_spec(sp)
         sp.loader.exec_module(mc)
     except Exception as e:
-        sys.stderr.write("plan-check: lettore della configurazione non caricabile (%s): %s\n" % (p, e))
+        sys.stderr.write("plan-check: " + _msg.T("plan-check.conf_reader", p=p, e=e) + "\n")
         sys.exit(2)
     f = os.environ.get("MAAT_CONFIG") or os.path.join(_CONF.get("root", "."), ".claude", "maat.json")
     try:
@@ -853,7 +866,7 @@ def conf():
         r = mc.risolto(cfg)
     except mc.Uscita as u:
         if u.codice != 4:
-            sys.stderr.write("plan-check: maat.json: %s\n" % (u.messaggio or "configurazione non valida (uscita %d)" % u.codice))
+            sys.stderr.write("plan-check: maat.json: %s\n" % (u.messaggio or _msg.T("plan-check.conf_invalid", code=u.codice)))
             sys.exit(2)
         cfg, r = {"moduli": []}, {"moduli": []}
     _CONF["cfg"] = cfg
@@ -862,7 +875,7 @@ def conf():
         _CONF["sup"] = [(canon(x["superficie"]), re.compile(x["regex"])) for x in piano.get("superfici_critiche", [])]
         _CONF["mig"] = [re.compile(x) for x in piano.get("migrazioni", [])]
     except re.error as e:
-        sys.stderr.write("plan-check: maat.json: regex non valida in piano: %s\n" % e)
+        sys.stderr.write("plan-check: maat.json: " + _msg.T("plan-check.conf_regex", e=e) + "\n")
         sys.exit(2)
     _CONF.update(mc=mc, r=r)
     return r
@@ -911,7 +924,7 @@ def parse_mut(cell):
             if sg.strip():
                 cur.append(("t", sg.strip()))
     parts.append(cur)
-    bad = "mutazione illeggibile, forma attesa: " + MUT_FORM + " (sostituisci puo essere (vuoto))"
+    bad = _msg.T("plan-check.mut_bad") + ": " + MUT_FORM + " " + _msg.T("plan-check.mut_bad_empty")
     if len(parts) != 4:
         return None, bad
     f, sym, cs, rs = parts
@@ -929,9 +942,9 @@ def parse_mut(cell):
     m = {"file": f[0][1].strip(), "simbolo": sym[0][1].strip(), "cerca": cs[0][1],
          "sostituisci": sost, "asserzione": rs[1][1]}
     if not m["simbolo"] or not m["asserzione"].strip():
-        return None, "mutazione: simbolo e testo di rosso se non possono essere vuoti"
+        return None, _msg.T("plan-check.mut_empty_fields")
     if m["cerca"] == m["sostituisci"]:
-        return None, "mutazione vuota: cerca uguale a sostituisci"
+        return None, _msg.T("plan-check.mut_noop")
     return m, None
 
 
@@ -970,7 +983,7 @@ def build(rows, root):
     M["is2"] = any(re.match(r"^Plan format:[ \t]*2[ \t]*$", t) for n, t in plan)
     fmt = [n for n, t in plan if t.startswith("Plan format:")]
     if len(fmt) > 1:
-        E.append("riga %d: Plan format: compare %d volte a inizio riga nel piano, deve essere UNA" % (fmt[1], len(fmt)))
+        E.append(_msg.T("plan-check.fmt_dup", n=fmt[1], k=len(fmt)))
     lvl = [t for n, t in plan if t.startswith("Test level:")]
     M["level"] = (lvl[0][len("Test level:"):].split() or ["legacy"])[0] if lvl else "legacy"
     dl = [t for n, t in plan if t.startswith("Superfici a rischio:") or t.startswith("Risk surfaces:")]
@@ -980,10 +993,10 @@ def build(rows, root):
     sec, dup = sections(plan)
     M["sec"] = sec
     for n, name in dup:
-        E.append("riga %d: sezione ### %s ripetuta: deve essere una" % (n, name))
+        E.append(_msg.T("plan-check.sec_dup", n=n, name=name))
     for name in ("File toccati", "Passi", "Tracciabilit\u00e0 requisiti", "Piano di test"):
         if name not in sec:
-            E.append("manca la sezione ### %s (formato 2)" % name)
+            E.append(_msg.T("plan-check.sec_missing", name=name))
 
     files, newf = [], []
     for n, t in sec.get("File toccati", []):
@@ -1003,18 +1016,18 @@ def build(rows, root):
     tests, order = {}, []
     tbls = [tb for tb in tables(sec.get("Piano di test", [])) if tb["hdr"] in TEST_HDRS]
     if "Piano di test" in sec and not tbls:
-        G.append("### Piano di test senza la tabella | ID | requisito | file | asserzione | mutazione |")
+        G.append(_msg.T("plan-check.tp_no_table"))
     for tb in tbls:
         for n, c in tb["rows"]:
             if len(c) != 5:
-                G.append("riga %d: la riga del piano di test ha %d colonne, ne servono 5" % (n, len(c)))
+                G.append(_msg.T("plan-check.tp_cols", n=n, k=len(c)))
                 continue
             tid = bare(c[0])
             if not SAFE_ID.match(tid):
-                G.append("riga %d: ID di test non valido (%s): lettere, cifre, . _ -" % (n, tid))
+                G.append(_msg.T("plan-check.tp_bad_id", n=n, id=tid))
                 continue
             if tid in tests:
-                G.append("riga %d: ID di test %s ripetuto" % (n, tid))
+                G.append(_msg.T("plan-check.tp_dup_id", n=n, id=tid))
                 continue
             cs = codes(c[2])
             ref = cs[0].strip() if cs else ""
@@ -1022,21 +1035,21 @@ def build(rows, root):
             T = {"id": tid, "n": n, "reqs": items(c[1]), "path": path.strip(), "name": name.strip(), "mut": None,
                  "asserzione": c[3].strip(), "texts": [x for x in codes(c[3]) if x.strip()]}
             if not ref:
-                G.append("riga %d: test %s: il file va fra backtick (`percorso` o `percorso::nome`)" % (n, tid))
+                G.append(_msg.T("plan-check.tp_no_backtick", n=n, id=tid))
             elif not in_repo(root, T["path"]):
-                G.append("riga %d: test %s: percorso non relativo al repository: %s" % (n, tid, T["path"]))
+                G.append(_msg.T("plan-check.tp_path", n=n, id=tid, path=T["path"]))
             if not c[3].strip():
-                G.append("riga %d: test %s: asserzione vuota (e il rosso se del caso)" % (n, tid))
+                G.append(_msg.T("plan-check.tp_no_assert", n=n, id=tid))
             m, why = parse_mut(c[4])
             if why:
-                G.append("riga %d: test %s: %s" % (n, tid, why))
+                G.append(_msg.T("plan-check.tp_why", n=n, id=tid, why=why))
             elif m:
                 if not in_repo(root, m["file"]):
-                    G.append("riga %d: test %s: file della mutazione non relativo al repository: %s" % (n, tid, m["file"]))
+                    G.append(_msg.T("plan-check.tp_mut_path", n=n, id=tid, path=m["file"]))
                 elif not T["name"]:
-                    G.append("riga %d: test %s: ha una mutazione ma non nomina il test (`percorso::nome`)" % (n, tid))
+                    G.append(_msg.T("plan-check.tp_mut_noname", n=n, id=tid))
                 elif not runner(m["file"], T["path"]):
-                    G.append("riga %d: test %s: file e test in moduli diversi di maat.json (o fuori da ogni modulo, o test fuori dalla radice del modulo): counterproof.sh la rifiuterebbe" % (n, tid))
+                    G.append(_msg.T("plan-check.tp_mut_module", n=n, id=tid))
                 else:
                     T["mut"] = m
             tests[tid] = T
@@ -1050,7 +1063,7 @@ def build(rows, root):
         if m:
             cur = {"id": m.group(1), "n": n, "scrive": None, "dopo": None}
             if cur["id"] in bids:
-                E.append("riga %d: blocco %s ripetuto" % (n, cur["id"]))
+                E.append(_msg.T("plan-check.blk_dup", n=n, id=cur["id"]))
             bids.add(cur["id"])
             blocks.append(cur)
             hdr = None
@@ -1063,12 +1076,12 @@ def build(rows, root):
             if is_sep(c) or hdr not in STEP_HDRS:
                 continue
             if len(c) != 4:
-                E.append("riga %d: la riga del passo ha %d colonne, ne servono 4 (id | file | modifica | test)" % (n, len(c)))
+                E.append(_msg.T("plan-check.step_cols", n=n, k=len(c)))
                 continue
             S = {"id": bare(c[0]), "n": n, "files": [x.strip() for x in codes(c[1]) if x.strip()],
                  "tests": items(c[3]), "block": cur["id"] if cur else None}
             if cur is None:
-                E.append("riga %d: passo %s fuori da un blocco (#### Blocco <id>)" % (n, S["id"]))
+                E.append(_msg.T("plan-check.step_no_block", n=n, id=S["id"]))
             steps.append(S)
             continue
         hdr = None
@@ -1076,20 +1089,20 @@ def build(rows, root):
         if m and cur is not None and cur[KEYS[m.group(1)]] is None:
             cur[KEYS[m.group(1)]] = m.group(2).strip()
     if "Passi" in sec and not steps:
-        E.append("### Passi senza la tabella | id | file | modifica | test |")
+        E.append(_msg.T("plan-check.steps_no_table"))
     if "Passi" in sec and not blocks:
-        E.append("### Passi: i passi non sono raggruppati in blocchi (#### Blocco <id> con scrive: e dopo:)")
+        E.append(_msg.T("plan-check.steps_no_blocks"))
     for b in blocks:
         s = b["scrive"] or ""
         b["files"] = [x.strip() for x in codes(s) if x.strip()] or items(s)
         b["deps"] = [x for x in re.split(r"[,;\u00b7\s]+", (b["dopo"] or "").replace("`", "")) if x and x.lower() not in NONE]
         if not b["files"]:
-            E.append("riga %d: blocco %s senza scrive: (i file che scrive)" % (b["n"], b["id"]))
+            E.append(_msg.T("plan-check.blk_no_writes", n=b["n"], id=b["id"]))
         if b["dopo"] is None:
-            W.append("riga %d: blocco %s senza dopo: (scrivi dopo: nessuno se non dipende da altri blocchi)" % (b["n"], b["id"]))
+            W.append(_msg.T("plan-check.blk_no_after", n=b["n"], id=b["id"]))
         for d in b["deps"]:
             if d not in bids:
-                W.append("riga %d: blocco %s dopo %s, che non esiste" % (b["n"], b["id"], d))
+                W.append(_msg.T("plan-check.blk_bad_dep", n=b["n"], id=b["id"], dep=d))
     M["blocks"], M["steps"] = blocks, steps
 
     reqs = []
@@ -1099,7 +1112,7 @@ def build(rows, root):
             if r:
                 reqs.append((n, r, c[2].strip() if len(c) > 2 else ""))
     if "Tracciabilit\u00e0 requisiti" in sec and not reqs:
-        E.append("### Tracciabilit\u00e0 requisiti senza righe (| Req | Passi del piano | Verifica |)")
+        E.append(_msg.T("plan-check.trace_no_rows"))
     M["reqs"] = reqs
     return M
 
@@ -1211,39 +1224,39 @@ def lint2(M, root):
     known = set(r for n, r, v in M["reqs"])
     for n, r, ver in M["reqs"]:
         if r not in covered and not ver.lower().startswith(("non verificabile", "not verifiable")):  # CONTROLLO-REQUISITO-SENZA-TEST
-            E.append("riga %d: requisito %s senza test: nessuna riga del piano di test lo nomina (oppure Verifica: non verificabile a test, <motivo>)" % (n, r))
+            E.append(_msg.T("plan-check.req_no_test", n=n, r=r))
     for tid in M["order"]:
         for r in tests[tid]["reqs"]:
             if known and r not in known:
-                W.append("riga %d: test %s cita il requisito %s, che non e nella tracciabilita" % (tests[tid]["n"], tid, r))
+                W.append(_msg.T("plan-check.test_bad_req", n=tests[tid]["n"], id=tid, r=r))
     in_steps = set(x for S in steps for x in S["tests"])
     for tid in M["order"]:
         if tid not in in_steps:
-            E.append("riga %d: test %s non compare in nessun passo (colonna test)" % (tests[tid]["n"], tid))
+            E.append(_msg.T("plan-check.test_no_step", n=tests[tid]["n"], id=tid))
         # harness-pt11: the test-red phase verifies the red on a text of the assertion (ID + position)
         if not tests[tid]["texts"] and not tests[tid]["mut"]:  # CONTROLLO-ASSERZIONE-LINT2
-            E.append("riga %d: test %s: asserzione senza testo fra backtick e senza mutazione: la fase test-red non puo dimostrare il rosso (scrivi il testo atteso del messaggio d errore fra backtick)" % (tests[tid]["n"], tid))
+            E.append(_msg.T("plan-check.test_no_text", n=tests[tid]["n"], id=tid))
         # harness-pt15 (D): an EXISTING non-regression test cannot be shown red on the stubbed base; in the
         # table it stops the cycle at test-red. It goes in a note under the table.
         if INVARIANZA.match(tests[tid]["asserzione"]):  # CONTROLLO-NON-REGRESSIONE-LINT2
-            E.append("riga %d: test %s: asserzione \"resta verde\": un test esistente di non-regressione non e una riga del Piano di test (test-red pretende ogni riga rossa sulla base con stub). Toglilo dalla tabella e mettilo nella nota sotto di essa (\"Test ESISTENTI di non-regressione\": file, cosa resta vero, requisito, comando se fuori dal gate); la tracciabilita lo cita come \"non verificabile a test (invarianza, non dimostrabile rossa): <test esistente>\"" % (tests[tid]["n"], tid))
+            E.append(_msg.T("plan-check.test_invariance", n=tests[tid]["n"], id=tid))
     files = set(M["files"])
     for S in steps:
         for x in S["tests"]:
             if x not in tests:
-                W.append("riga %d: passo %s cita il test %s, che non e nella tabella del piano di test" % (S["n"], S["id"], x))
+                W.append(_msg.T("plan-check.step_bad_test", n=S["n"], id=S["id"], t=x))
         for f in S["files"]:
             if f not in files:
-                E.append("riga %d: passo %s: %s non e nella lista ### File toccati" % (S["n"], S["id"], f))
+                E.append(_msg.T("plan-check.step_not_touched", n=S["n"], id=S["id"], f=f))
             if not in_repo(root, f):
-                E.append("riga %d: passo %s: percorso non relativo al repository: %s" % (S["n"], S["id"], f))
+                E.append(_msg.T("plan-check.step_path", n=S["n"], id=S["id"], f=f))
     for n, t in M["plan"]:
         if RISK.search(t) and not any(re.search(r"(?<![A-Za-z0-9._-])" + re.escape(tid) + r"(?![A-Za-z0-9._-])", t) for tid in tests):
-            E.append("riga %d: rischio aperto senza un test assegnato (un ID della tabella del piano di test)" % n)
+            E.append(_msg.T("plan-check.risk_no_test", n=n))
     rows = []
     for tb in tables(M["sec"].get("Stringhe e data-test", [])):
         if tb["hdr"] not in STR_HDRS:
-            E.append("riga %d: ### Stringhe e data-test vuole la tabella | azione | tipo | valore | (piu | verificato | facoltativa)" % tb["n"])
+            E.append(_msg.T("plan-check.str_table", n=tb["n"]))
             continue
         for n, c in tb["rows"]:
             ver = None   # waiver: verificato column = `file` - reason (long or short dash)
@@ -1255,7 +1268,7 @@ def lint2(M, root):
                     vf = (vc[0] if vc else vs[0]).strip()
                     why = vs[1].strip() if len(vs) > 1 else ""
                     if not rel_ok(vf) or not why:
-                        E.append("riga %d: verificato vuole `file` - motivo (file relativo al repository e un motivo)" % n)
+                        E.append(_msg.T("plan-check.str_verified", n=n))
                     else:
                         ver = (vf, why)
             az, tp = (c[0].strip().lower(), c[1].strip().lower()) if len(c) == 3 else ("", "")
@@ -1263,7 +1276,7 @@ def lint2(M, root):
             cs = codes(c[2]) if len(c) == 3 else []
             val = cs[0] if cs else (c[2].strip().strip("\u00ab\u00bb\"") if len(c) == 3 else "")
             if az not in ("aggiunge", "toglie") or tp not in ("stringa", "data-test") or not val:
-                E.append("riga %d: attesi azione aggiunge|toglie, tipo stringa|data-test e un valore" % n)
+                E.append(_msg.T("plan-check.str_row", n=n))
                 continue
             rows.append((n, az, tp, val, ver))
     if rows:
@@ -1275,21 +1288,21 @@ def lint2(M, root):
             for rel, ln, neg in hits.get(val, []):
                 byfile.setdefault(rel, []).append((ln, neg))
             if ver and ver[0] not in byfile:
-                W.append("riga %d: deroga verificato inutilizzata: %s non cita %s %s in un letterale (o non esiste)" % (n, ver[0], tp, val))
+                W.append(_msg.T("plan-check.str_unused_waiver", n=n, f=ver[0], tp=tp, val=val))
             for rel, occ in byfile.items():
                 pos = [ln for ln, neg in occ if not neg]
                 if az == "aggiunge":
-                    W.append("riga %d: %s %s aggiunto dal piano ma gia presente in %s:%d" % (n, tp, val, rel, occ[0][0]))
+                    W.append(_msg.T("plan-check.str_already", n=n, tp=tp, val=val, rel=rel, ln=occ[0][0]))
                 elif rel in touched:
                     continue
                 elif "/e2e/" in "/" + rel and os.path.basename(rel) in e2e:
                     continue
                 elif not pos:
-                    W.append("riga %d: %s %s tolto dal piano: %s:%d lo cita solo in un asserzione di assenza, che resta verde" % (n, tp, val, rel, occ[0][0]))
+                    W.append(_msg.T("plan-check.str_absence", n=n, tp=tp, val=val, rel=rel, ln=occ[0][0]))
                 elif ver and ver[0] == rel:
-                    W.append("riga %d: %s %s tolto dal piano, asserito da %s:%d: deroga verificato (%s)" % (n, tp, val, rel, pos[0], ver[1]))
+                    W.append(_msg.T("plan-check.str_waived", n=n, tp=tp, val=val, rel=rel, ln=pos[0], why=ver[1]))
                 else:
-                    E.append("riga %d: %s %s tolto dal piano ma ancora asserito da %s:%d, che il piano non tocca (aggiungilo ai passi; un e2e vuole la sua riga [e2e-locator:]; oppure la colonna verificato)" % (n, tp, val, rel, pos[0]))
+                    E.append(_msg.T("plan-check.str_asserted", n=n, tp=tp, val=val, rel=rel, ln=pos[0]))
     for w in W:
         print("AVVISO: " + w)
     for e in E:
@@ -1364,9 +1377,9 @@ def riga_cmd(m, tipo, root, run, file=(), test=()):
     if wsl and "{python}" in mc.testo(m.get("comandi", {}).get(tipo)):
         py, verificato = py_wsl(m, root)
         if py is None:
-            return "NON DISPONIBILE — python WSL assente per il modulo %s" % m["nome"]
+            return "NON DISPONIBILE \u2014 " + _msg.T("plan-check.gen_no_wsl_py", m=m["nome"])
         if not verificato:
-            nota = "  # non verificato: %s cercato nel PATH di WSL solo da gates.sh" % py
+            nota = "  # " + _msg.T("plan-check.gen_unverified", py=py)
         env["FIC_GATES_VENV_PY"] = py
     prima = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
@@ -1374,7 +1387,7 @@ def riga_cmd(m, tipo, root, run, file=(), test=()):
         cart, riga = mc.comando(_CONF["cfg"], m["nome"], tipo, file=list(file), test=list(test),
                                 report=to_mnt(rep) if wsl else rep, root=root)[0]
     except mc.Uscita as u:
-        return "NON DISPONIBILE — " + (u.messaggio or "comando %s del modulo %s (uscita %d)" % (tipo, m["nome"], u.codice))
+        return "NON DISPONIBILE — " + (u.messaggio or _msg.T("plan-check.gen_no_cmd", tipo=tipo, m=m["nome"], code=u.codice))
     finally:
         for k, v in prima.items():
             if v is None:
@@ -1457,12 +1470,12 @@ def gen(M, root, run, fp):
                 break
         if l2.get(tid) == "":
             e["assorbita"] = True
-            e["motivo"] = "L2: file nuovo, rosso alla base con stub sull asserzione di rosso se (test-red), verde dopo"
+            e["motivo"] = "L2: " + _msg.T("plan-check.gen_l2_reason")
             absorbed.append(tid)
         muts.append(e)
         fpath = os.path.join(root, m["file"])
         if not os.path.isfile(fpath):
-            print("AVVISO: mutazione %s: %s assente nel working tree (atteso se lo crea il piano)" % (tid, m["file"]))
+            print("AVVISO: " + _msg.T("plan-check.gen_mut_missing", id=tid, f=m["file"]))
         else:
             with open(fpath, "rb") as fh:
                 data = fh.read()
@@ -1471,7 +1484,7 @@ def gen(M, root, run, fp):
             if k == 0 and b"\r\n" in data and b"\n" in c:
                 k = data.count(c.replace(b"\n", b"\r\n"))
             if k != 1:
-                print("AVVISO: mutazione %s: cerca compare %d volte in %s (dopo l implementazione ne serve esattamente 1)" % (tid, k, m["file"]))
+                print("AVVISO: " + _msg.T("plan-check.gen_mut_count", id=tid, k=k, f=m["file"]))
     lines = ["Plan format: 2", "Impronta piano: " + fp, "Test level: " + M["level"],
              "vitest: " + (" ".join(vit) or "(nessuno)"), "pytest: " + (" ".join(pyt) or "(nessuno)"),
              "altri: " + (" ".join(other) or "(nessuno)")]
@@ -1505,8 +1518,8 @@ def gen(M, root, run, fp):
     for l in lines:
         print(l)
     for tid in absorbed:
-        print("gen: mutazione %s assorbita (L2)" % tid)
-    print("gen: scritto %s%s" % (os.path.join(run, "gen", "procedura.txt").replace(os.sep, "/"), " e counterproof/mutations.json" if muts else ""))
+        print("gen: " + _msg.T("plan-check.gen_absorbed", id=tid))
+    print("gen: " + _msg.T("plan-check.gen_written", path=os.path.join(run, "gen", "procedura.txt").replace(os.sep, "/"), extra=(" " + _msg.T("plan-check.gen_and_mut")) if muts else ""))
     return 0
 
 
@@ -1544,7 +1557,7 @@ def route(M, diff):
         for n, t in M["plan"]:
             for c in codes(t):
                 add(c, "piano")
-    text = [("piano riga %d" % n, t) for n, t in M["plan_all"]]
+    text = [(_msg.T("plan-check.route_plan_line", n=n), t) for n, t in M["plan_all"]]
     if diff:
         with open(diff, encoding="utf-8", errors="replace") as fh:
             for i, l in enumerate(fh.read().split("\n")):
@@ -1553,7 +1566,7 @@ def route(M, diff):
                     add(m.group(1), "diff")
                     add(m.group(2), "diff")
                 elif l[:1] in "+-" and not l.startswith("+++") and not l.startswith("---"):
-                    text.append(("diff riga %d" % (i + 1), l[1:]))
+                    text.append((_msg.T("plan-check.route_diff_line", n=i + 1), l[1:]))
     ev = {}
     mig = []
     for p, where in paths:
@@ -1564,44 +1577,44 @@ def route(M, diff):
     for where, t in text:
         m = DESTR.search(t)
         if m:
-            ev.setdefault("distruttiva", []).append("parola chiave %s (%s)" % (m.group(0).strip(), where))
+            ev.setdefault("distruttiva", []).append(_msg.T("plan-check.route_keyword", k=m.group(0).strip(), where=where))
     decl = M["declared"]
     dset = set(x for x in (decl or []) if x in VOCAB)
     if "distruttiva" in dset and "distruttiva" not in ev:
-        ev["distruttiva"] = ["dichiarata"]
+        ev["distruttiva"] = [_msg.T("plan-check.route_declared")]
     det = [s for s in VOCAB if s in ev]
     nl = len(M["plan_all"])
-    print("Righe del piano: %d (tetto 150)" % nl)
-    print("Migrazione: " + (", ".join(mig) if mig else "no"))
+    print(_msg.T("plan-check.route_lines", n=nl))
+    print(_msg.T("plan-check.route_migration") + ": " + (", ".join(mig) if mig else "no"))
     for s in det:
-        print("Superficie %s: %s" % (s, ", ".join(ev[s][:3]) + (" (+%d)" % (len(ev[s]) - 3) if len(ev[s]) > 3 else "")))
-    print("Superfici rilevate: " + (", ".join(det) or "nessuna"))
-    print("Superfici dichiarate: " + ("(assente)" if decl is None else (", ".join(decl) or "(vuota)")))
+        print(_msg.T("plan-check.route_surface", s=s, ev=", ".join(ev[s][:3]) + (" (+%d)" % (len(ev[s]) - 3) if len(ev[s]) > 3 else "")))
+    print(_msg.T("plan-check.route_detected") + ": " + (", ".join(det) or "nessuna"))
+    print(_msg.T("plan-check.route_declared_label") + ": " + ("(assente)" if decl is None else (", ".join(decl) or "(vuota)")))
     why = []
     if nl > 150:
-        why.append("piano di %d righe (oltre 150)" % nl)
+        why.append(_msg.T("plan-check.route_why_lines", n=nl))
     if mig:
-        why.append("migrazione")
+        why.append(_msg.T("plan-check.route_why_mig"))
     if det:
-        why.append("superfici rilevate: " + ", ".join(det))
+        why.append(_msg.T("plan-check.route_why_det") + ": " + ", ".join(det))
     if decl is None:
-        why.append("riga Superfici a rischio assente")
+        why.append(_msg.T("plan-check.route_why_nodecl"))
     elif decl != ["nessuna"]:
-        why.append("dichiarazione diversa da nessuna: " + (", ".join(decl) or "(vuota)"))
+        why.append(_msg.T("plan-check.route_why_decl") + ": " + (", ".join(decl) or "(vuota)"))
     a = [s for s in det if s not in dset]
     b = [s for s in VOCAB if s in dset and s not in det]
     if a or b:
         d = []
         if a:
-            d.append("rilevata e non dichiarata: " + ", ".join(a))
+            d.append(_msg.T("plan-check.route_det_undecl") + ": " + ", ".join(a))
         if b:
-            d.append("dichiarata e non rilevata: " + ", ".join(b))
-        print("Discordanza: " + " \u00b7 ".join(d))
-        why.append("discordanza con la dichiarazione")
+            d.append(_msg.T("plan-check.route_decl_undet") + ": " + ", ".join(b))
+        print(_msg.T("plan-check.route_mismatch") + ": " + " \u00b7 ".join(d))
+        why.append(_msg.T("plan-check.route_why_mismatch"))
     if why:
         print("Percorso: pieno \u2014 " + " \u00b7 ".join(why))
     else:
-        print("Percorso: leggero \u2014 piano entro 150 righe, nessuna migrazione, nessuna superficie rilevata, dichiarazione concorde")
+        print("Percorso: leggero \u2014 " + _msg.T("plan-check.route_light"))
     return 0
 
 
@@ -1617,30 +1630,30 @@ def skeleton(M):
                 files.append(f)
     ns, nf, nl = len(M["steps"]), len(files), len(M["plan_all"])
     if not ns:
-        print("AVVISO: nessuna riga di passo sotto ### Passi (| id | file | modifica | test |): lo scheletro conta passi e file da li")
+        print("AVVISO: " + _msg.T("plan-check.skel_no_steps"))
     decl = M["declared"]
-    print("Passi: %d (tetto %d)" % (ns, SKEL_STEPS))
-    print("File: %d (tetto %d)" % (nf, SKEL_FILES))
-    print("Superfici: " + ("(assente)" if decl is None else (", ".join(decl) or "(vuota)")))
-    print("Righe del piano: %d (tetto %d)" % (nl, PLAN_LINES))
+    print(_msg.T("plan-check.skel_steps", n=ns, cap=SKEL_STEPS))
+    print(_msg.T("plan-check.skel_files", n=nf, cap=SKEL_FILES))
+    print(_msg.T("plan-check.skel_surfaces") + ": " + ("(assente)" if decl is None else (", ".join(decl) or "(vuota)")))
+    print(_msg.T("plan-check.skel_lines", n=nl, cap=PLAN_LINES))
     over = []
     if ns > SKEL_STEPS:  # TETTO-PASSI
-        over.append("passi %d > %d" % (ns, SKEL_STEPS))
+        over.append(_msg.T("plan-check.skel_over_steps", n=ns, cap=SKEL_STEPS))
     if nf > SKEL_FILES:
-        over.append("file %d > %d" % (nf, SKEL_FILES))
+        over.append(_msg.T("plan-check.skel_over_files", n=nf, cap=SKEL_FILES))
     if nl > PLAN_LINES:
-        over.append("righe del piano %d > %d" % (nl, PLAN_LINES))
+        over.append(_msg.T("plan-check.skel_over_lines", n=nl, cap=PLAN_LINES))
     if M["taglio"]:
         print("Taglio: " + M["taglio"])
     if over and M["taglio"].lower().startswith(("rifiutato", "rejected")):  # DECISIONE-TAGLIO
         print("Scheletro: SOPRA IL TETTO — " + " · ".join(over)
-              + ": taglio rifiutato dall utente (riga Taglio:), si prosegue col piano unico, nessuno stop")
+              + ": " + _msg.T("plan-check.skel_cut_refused"))
         return 0
     if over:
         print("Scheletro: SOPRA IL TETTO — " + " · ".join(over)
-              + ": proposta di taglio (spec-author, modalita split), nessuna deroga")
+              + ": " + _msg.T("plan-check.skel_cut_proposal"))
         return 1
-    print("Scheletro: SOTTO IL TETTO — il piano completo parte da questo scheletro")
+    print("Scheletro: SOTTO IL TETTO \u2014 " + _msg.T("plan-check.skel_under"))
     return 0
 
 
@@ -1769,7 +1782,7 @@ def cmd_stubs(M, root, run):
     for f in stub_files(M):
         ex = exports(root, f)
         d[f] = {"simboli": ex}
-        print("stub %s: %s" % (f, "assente" if ex is None else (", ".join(ex) or "(nessun simbolo)")))
+        print("stub %s: %s" % (f, _msg.T("plan-check.stub_absent") if ex is None else (", ".join(ex) or ("(" + _msg.T("plan-check.stub_none") + ")"))))
     jsave(os.path.join(run, "test-red", "stubs.json"), d)
     return 0
 
@@ -1778,25 +1791,25 @@ def l2_why(T, m, stubs, rossi, root, acc, final):
     """perche la controprova di T NON e assorbita (vuoto = assorbita). final: codice implementato."""
     st = stubs.get(m["file"])
     if not isinstance(st, dict) or not isinstance(st.get("simboli"), list):
-        return "stub non registrati alla chiusura di test-red"
+        return _msg.T("plan-check.l2_no_stubs")
     r = rossi.get(T["id"]) if isinstance(rossi, dict) else None
     if not isinstance(r, dict) or r.get("esito") != "dimostrato":
-        return "rosso alla base con stub non dimostrato"
+        return _msg.T("plan-check.l2_not_proven")
     if not r.get("posizione"):
-        return "rosso alla base senza posizione"
+        return _msg.T("plan-check.l2_no_pos")
     if nrm(m["asserzione"]) not in nrm(r.get("messaggio")):
-        return "il rosso alla base non colpisce l asserzione di rosso se (%s)" % m["asserzione"]
+        return _msg.T("plan-check.l2_other_assert", a=m["asserzione"])
     sy = st["simboli"]
     if final:
         cur = exports(root, m["file"])
         if cur is None:
-            return "file assente"
+            return _msg.T("plan-check.l2_file_missing")
         if sorted(cur) != sorted(sy):
-            return "gli stub non coprono tutti e soli i simboli nuovi: esportati ora %s, stub %s" % (", ".join(cur) or "-", ", ".join(sy) or "-")
+            return _msg.T("plan-check.l2_symbols", cur=", ".join(cur) or "-", sy=", ".join(sy) or "-")
         sy = cur
     miss = [s for s in sy if not mentioned(root, acc, s)]  # SIMBOLI-TESTATI
     if miss:
-        return "simbolo esportato non testato da nessun test di accettazione: " + ", ".join(miss)
+        return _msg.T("plan-check.l2_untested") + ": " + ", ".join(miss)
     return ""
 
 
@@ -1819,7 +1832,7 @@ def cmd_l2(M, root, run, tests_state):
     """per finalize.sh: una riga per mutazione su un file nuovo, L2 <id>: OK | NO - <motivo>"""
     for tid, why in l2_eval(M, root, run, True).items():
         if tests_state != "FRESH":
-            why = "impronta dei test di accettazione cambiata o non registrata (Tests status: %s)" % tests_state
+            why = _msg.T("plan-check.l2_tests_changed", state=tests_state)
         print("L2 %s: %s" % (tid, "OK" if not why else "NO \u2014 " + why))
     return 0
 
@@ -1912,24 +1925,24 @@ def verdict(T, failed, suite, ran, passed, imp, trel):
         msg = nrm(raw)
         pos = posizione(T, raw, trel)
         if imp.search(msg):  # CLASSIFICAZIONE-IMPORT
-            return "rosso_import", "rosso per un errore d import, non per l asserzione: non dimostrato", msg, pos
+            return "rosso_import", _msg.T("plan-check.red_import"), msg, pos
         if not texts:  # CONTROLLO-ASSERZIONE: without an assertion text no red is proven
-            return "rosso_senza_asserzione", "nessun testo dell asserzione (backtick nella colonna asserzione o rosso se della mutazione): non dimostrato", msg, pos
+            return "rosso_senza_asserzione", _msg.T("plan-check.red_no_text"), msg, pos
         if texts and not any(nrm(x) in msg for x in texts):
-            return "rosso_diverso", "rosso, ma non sull asserzione dichiarata (%s): non dimostrato" % " | ".join(texts), msg, pos
+            return "rosso_diverso", _msg.T("plan-check.red_other", texts=" | ".join(texts)), msg, pos
         if not pos:  # CONTROLLO-POSIZIONE: ID + position in the test file
-            return "rosso_senza_asserzione", "rosso senza posizione nel file di test: non dimostrato", msg, pos
-        return "dimostrato", "rosso sull asserzione dichiarata", msg, pos
+            return "rosso_senza_asserzione", _msg.T("plan-check.red_no_pos"), msg, pos
+        return "dimostrato", _msg.T("plan-check.red_proven"), msg, pos
     if suite:
         msg = nrm("\n".join(suite))
         if imp.search(msg):
-            return "rosso_import", "il file di test non si carica (errore d import): non dimostrato", msg, None
-        return "rosso_raccolta", "il file di test fallisce in raccolta: non dimostrato", msg, None
+            return "rosso_import", _msg.T("plan-check.red_suite_import"), msg, None
+        return "rosso_raccolta", _msg.T("plan-check.red_collection"), msg, None
     if not ran:
-        return "rosso_raccolta", "file di test non raccolto dal runner: non dimostrato", "", None
+        return "rosso_raccolta", _msg.T("plan-check.red_not_collected"), "", None
     if passed:
-        return "verde", "verde sulla base con stub: il test non prova nulla", "", None
-    return "rosso_raccolta", "test nominato non eseguito (assente o saltato): non dimostrato", "", None
+        return "verde", _msg.T("plan-check.red_green"), "", None
+    return "rosso_raccolta", _msg.T("plan-check.red_not_run"), "", None
 
 
 def cmd_rossi(M, root, run, ev):
@@ -1965,19 +1978,19 @@ def cmd_rossi(M, root, run, ev):
             rep[g] = False   # report none: the outcomes of the single tests cannot be read
     out, blocked = {}, []
     if not M["order"]:
-        print("AVVISO: la tabella del piano di test non ha righe: nessun test di accettazione da dimostrare rosso")
+        print("AVVISO: " + _msg.T("plan-check.red_no_rows"))
     for tid in M["order"]:
         T = tests[tid]
         mt, kt = modulo(T["path"])
         g = "tests-" + mt["nome"] if mt is not None and kt == "radice" else None
         if g is None:
-            out[tid] = ("non_eseguito", "test fuori dalla radice di ogni modulo di maat.json: il driver non lo esegue", "", None)
+            out[tid] = ("non_eseguito", _msg.T("plan-check.red_outside"), "", None)
             continue
         d = gates[g]
         if not isinstance(d, dict) or g not in rep or rep[g] is False:
-            why = "evidenza assente" if not isinstance(d, dict) else (
-                "esito %s (%s)" % (d.get("esito"), d.get("motivo") or "") if g not in rep else
-                "report illeggibile" if fmt[g] != "nessuno" else "report nessuno: esiti dei test non leggibili")
+            why = _msg.T("plan-check.red_no_ev") if not isinstance(d, dict) else (
+                _msg.T("plan-check.red_gate_esito", esito=d.get("esito"), motivo=d.get("motivo") or "") if g not in rep else
+                _msg.T("plan-check.red_report_bad") if fmt[g] != "nessuno" else _msg.T("plan-check.red_report_none"))
             if "%s: %s" % (g, why) not in blocked:
                 blocked.append("%s: %s" % (g, why))
             continue
@@ -2030,14 +2043,14 @@ def cmd_rossi(M, root, run, ev):
         for c in (rep.get(g) or []):
             if c["bad"] and c["own"] is None:
                 f = sotto_rad(g, c["cn"].replace(".", "/") + ".py") if c["cn"] else c["nm"]
-                confl.append("%s::%s \u2014 %s <-> %s" % (c["cn"] or "(raccolta)", c["nm"], nrm("\n".join(c["bad"]))[:200], related(f)))
+                confl.append("%s::%s \u2014 %s <-> %s" % (c["cn"] or ("(" + _msg.T("plan-check.red_collection_case") + ")"), c["nm"], nrm("\n".join(c["bad"]))[:200], related(f)))
     for g in [x for x in gates if fmt[x] == "vitest"]:
         fe = rep.get(g)
         if fe:  # the vitest summary and the blocks read must add up: otherwise the parser has lost some reds
             nsum = [int(x.split("=")[1]) for x in fe[1] if x.startswith("#failed=")]
             nblk = len([b for b in fe[0] if b["segs"] is not None])
             if nsum and nsum[-1] != nblk:
-                confl.append("riepilogo di vitest: %d test falliti, %d blocchi FAIL letti dall output: evidenza non interpretabile" % (nsum[-1], nblk))
+                confl.append(_msg.T("plan-check.red_vitest_sum", n=nsum[-1], k=nblk))
         for b in (fe[0] if fe else []):
             if b["own"] is None:
                 confl.append("%s%s \u2014 %s <-> %s" % (b["file"], " > " + " > ".join(b["segs"]) if b["segs"] else " (file)",
@@ -2055,23 +2068,23 @@ def cmd_rossi(M, root, run, ev):
             for rel, ln, neg in hs:
                 if neg:  # CONFLITTO-STATICO
                     near = [t for t in M["order"] if val in tests[t]["asserzione"]] or M["order"]
-                    confl.append("%s:%d asserisce l assenza di %s, che il piano aggiunge <-> %s" % (
-                        rel, ln, val, "; ".join("%s: %s" % (t, tests[t]["asserzione"][:100]) for t in near)))
+                    confl.append(_msg.T("plan-check.red_absence", rel=rel, ln=ln, val=val,
+                                        near="; ".join("%s: %s" % (t, tests[t]["asserzione"][:100]) for t in near)))
     for tid in M["order"]:
-        es, why, msg, pos = out.get(tid, ("bloccato", "gate non utilizzabile", "", None))
+        es, why, msg, pos = out.get(tid, ("bloccato", _msg.T("plan-check.red_gate_unusable"), "", None))
         print("rosso %s: %s%s \u2014 %s%s" % (tid, es, (" " + pos) if pos else "", why, (" \u2014 " + msg[:200]) if msg else ""))
     for c in confl:
         print("conflitto: " + c)
     bad = [t for t in M["order"] if t in out and out[t][0] != "dimostrato"]
     if blocked:
-        esito, riass = "BLOCKED", "evidenza dei gate non utilizzabile: " + "; ".join(blocked)
+        esito, riass = "BLOCKED", _msg.T("plan-check.red_sum_blocked") + ": " + "; ".join(blocked)
     elif bad or confl:
-        parts = ["non dimostrato: " + ", ".join("%s %s" % (t, out[t][0]) for t in bad)] if bad else []
+        parts = [_msg.T("plan-check.red_sum_bad") + ": " + ", ".join("%s %s" % (t, out[t][0]) for t in bad)] if bad else []
         if confl:
-            parts.append("conflitto con la suite esistente: " + confl[0])
+            parts.append(_msg.T("plan-check.red_sum_conflict") + ": " + confl[0])
         esito, riass = "STOP", "; ".join(parts)
     else:
-        esito, riass = "OK", "%d/%d test di accettazione rossi sulla loro asserzione" % (len(out), len(M["order"]))
+        esito, riass = "OK", _msg.T("plan-check.red_sum_ok", n=len(out), k=len(M["order"]))
     jsave(os.path.join(run, "test-red", "rossi.json"), {
         "esito": esito, "riassunto": riass, "evidence": ev, "conflitti": confl,
         "test": {t: {"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
@@ -2105,10 +2118,10 @@ if cmd == "wbasis":
 _CONF["root"] = sys.argv[2]   # the repository root: maat.json by default, read at the first question (conf)
 M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
-    print("%s: non si applica (piano in formato 1, senza la riga Plan format: 2)" % cmd)
+    print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(0)
 if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2"):
-    print("%s: non si applica (piano in formato 1, senza la riga Plan format: 2)" % cmd)
+    print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(2)
 if cmd == "accept":
     sys.exit(cmd_accept(M))
@@ -2134,10 +2147,13 @@ sys.exit(2)
 need_py() {
   # The program goes into a file in $TMPD, never into `-c`: beyond ~32k characters Windows rejects the command line.
   printf '%s' "$PY2" > "$TMPD/plan_check_f2.py" || return 2
+  # PY2 imports the message catalog: maat_msg.py next to THIS script (a copy of the plugin uses its own), in the
+  # form native Python reads
+  MAAT_MSG_PY=$(maat_cygm "$PC_HERE/maat_msg.py" 2>/dev/null || printf '%s' "$PC_HERE/maat_msg.py"); export MAAT_MSG_PY
   export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0
-  echo "plan-check: interprete Python non trovato (python.sh del full cycle)" >&2; return 2
+  echo "plan-check: $(msg plan-check.no_python)" >&2; return 2
 }
 repo_root() {
   if [ -n "${PLAN_CHECK_ROOT:-}" ]; then printf '%s\n' "$PLAN_CHECK_ROOT"; return; fi
@@ -2148,7 +2164,7 @@ has_plan_section() { printf '%s\n' "$1" | awk -F'\t' '$2 != "above" { f = 1 } EN
 cmd_lint2() {
   [ $# -eq 1 ] && [ -f "$1" ] || die_usage
   local ann; ann=$(annotate "$1")
-  has_plan_section "$ann" || { echo "VIOLAZIONE: nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" lint2 "$(repo_root "$1")"
 }
@@ -2165,7 +2181,7 @@ cmd_gen() {
   [ -n "$spec" ] && [ -f "$spec" ] || die_usage
   [ -n "$run" ] || run="${spec%.md}.run"
   local ann fp; ann=$(annotate "$spec")
-  has_plan_section "$ann" || { echo "VIOLAZIONE: nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   fp=$(basis_of "$ann" | sed -n 's/.*plan \([0-9a-f]*\).*/\1/p')
   printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" gen "$(repo_root "$spec")" "$run" "$fp"
@@ -2196,7 +2212,7 @@ cmd_f2x() {
   [ "$sub" != rossi ] || [ -n "$ev" ] || die_usage
   [ -n "$run" ] || run="${spec%.md}.run"
   local ann root ts; ann=$(annotate "$spec")
-  has_plan_section "$ann" || { echo "VIOLAZIONE: nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   root=$(repo_root "$spec")
   case $sub in
@@ -2220,7 +2236,7 @@ cmd_route() {
   done
   [ -n "$spec" ] && [ -f "$spec" ] || die_usage
   local ann; ann=$(annotate "$spec")
-  has_plan_section "$ann" || { echo "nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "$(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   if [ -n "$diff" ]; then printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" route "$(repo_root "$spec")" "$diff"
   else printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" route "$(repo_root "$spec")"; fi
@@ -2253,24 +2269,24 @@ cmd_s2() {
   [ -n "$spec" ] && [ -f "$spec" ] && [ -f "$fd" ] && [ -f "$fg" ] || die_usage
   case "$nr" in ''|*[!0-9]*) die_usage ;; esac
   local ann cur; ann=$(annotate "$spec")
-  has_plan_section "$ann" || { echo "nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "$(msg plan-check.no_plan)"; return 1; }
   cur=$(basis_of "$ann" | sed -n 's/.*plan \([0-9a-f]*\).*/\1/p')
   local dfp dd dnb dp gfp gd gnb gp
   read -r dfp dd dnb dp <<< "$(review_info "$fd")"
   read -r gfp gd gnb gp <<< "$(review_info "$fg")"
   local tot=$((dnb + gnb))
-  [ "$nr" -le "$tot" ] || { echo "respinti ($nr) piu' dei blocker/major delle due risposte ($tot)" >&2; return 2; }
-  case "$dd $gd" in *STOP_HUMAN*) echo "S2: STOP — un revisore chiede una decisione umana (delta $dd · gate $gd)"; return 0 ;; esac
+  [ "$nr" -le "$tot" ] || { echo "$(msg plan-check.s2_rejected_over nr="$nr" tot="$tot")" >&2; return 2; }
+  case "$dd $gd" in *STOP_HUMAN*) echo "S2: STOP — $(msg plan-check.s2_stop dd="$dd" gd="$gd")"; return 0 ;; esac
   if [ "$dfp" != "$cur" ] || [ "$gfp" != "$cur" ]; then
-    echo "S2: IMPRONTA DIVERSA — delta $dfp · gate $gfp · piano attuale $cur: rilancia entrambi sull'impronta attuale"; return 0
+    echo "S2: IMPRONTA DIVERSA — $(msg plan-check.s2_fp dfp="$dfp" gfp="$gfp" cur="$cur")"; return 0
   fi
-  if [ "$dp" = 1 ] || [ "$gp" = 1 ]; then echo "S2: RILANCIA — risposta parziale (Blocked on): non e' un'approvazione"; return 0; fi
-  if [ $((tot - nr)) -gt 0 ]; then echo "S2: CORREGGI — $((tot - nr)) blocker/major da applicare (delta $dnb · gate $gnb · respinti $nr)"; return 0; fi
-  [ "$nr" -gt 0 ] && { echo "S2: RILANCIA — $nr finding respinti: pulito vuol dire nessun finding, nemmeno respinto; si rilanciano delta e gate insieme, con la lista dei respinti"; return 0; }  # REGOLA-RESPINTI
+  if [ "$dp" = 1 ] || [ "$gp" = 1 ]; then echo "S2: RILANCIA — $(msg plan-check.s2_partial)"; return 0; fi
+  if [ $((tot - nr)) -gt 0 ]; then echo "S2: CORREGGI — $(msg plan-check.s2_fix n="$((tot - nr))" dnb="$dnb" gnb="$gnb" nr="$nr")"; return 0; fi
+  [ "$nr" -gt 0 ] && { echo "S2: RILANCIA — $(msg plan-check.s2_rejected nr="$nr")"; return 0; }  # REGOLA-RESPINTI
   if { [ "$dnb" -eq 0 ] && [ "$dd" != APPROVED ]; } || { [ "$gnb" -eq 0 ] && [ "$gd" != APPROVED ]; }; then
-    echo "S2: RILANCIA — Decision senza blocker/major ma non APPROVED (delta $dd · gate $gd)"; return 0
+    echo "S2: RILANCIA — $(msg plan-check.s2_not_approved dd="$dd" gd="$gd")"; return 0
   fi
-  echo "S2: APPROVA — delta e occhi freschi puliti sull'impronta $cur"
+  echo "S2: APPROVA — $(msg plan-check.s2_ok cur="$cur")"
   return 0
 }
 
@@ -2278,7 +2294,7 @@ cmd_s2() {
 cmd_skeleton() {
   [ $# -eq 1 ] && [ -f "$1" ] || die_usage
   local ann; ann=$(annotate "$1")
-  has_plan_section "$ann" || { echo "VIOLAZIONE: nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)"; return 1; }
+  has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" skeleton "$(repo_root "$1")"
 }
@@ -2294,15 +2310,15 @@ cmd_split() {
   sviol() { echo "VIOLAZIONE: $*"; rc=1; }
   # both forms of the children line (1.3.0): the first one is read, but the mother is ambiguous
   if [ -n "$(head_val "$madre" "Figlie:")" ] && [ -n "$(head_val "$madre" "Children:")" ]; then
-    sviol "la madre ha sia 'Figlie:' sia 'Children:': ne basta una (si legge la prima)"
+    sviol "$(msg plan-check.split_both)"
   fi
-  [ ${#kids[@]} -ge 2 ] || { sviol "una catena vuole almeno due figlie (argomenti, oppure la riga Figlie: della madre)"; return 1; }
-  for f in "${kids[@]}"; do [ -f "$f" ] || { sviol "figlia assente: $f"; return 1; }; done
+  [ ${#kids[@]} -ge 2 ] || { sviol "$(msg plan-check.split_few)"; return 1; }
+  for f in "${kids[@]}"; do [ -f "$f" ] || { sviol "$(msg plan-check.split_kid_missing f="$f")"; return 1; }; done
   n=$(for f in "${kids[@]}"; do basename "$f" .md; done | LC_ALL=C sort | uniq -d | tr '\n' ' ' | sed 's/ $//')
-  [ -z "$n" ] || { sviol "figlia ripetuta nella catena: $n"; return 1; }
+  [ -z "$n" ] || { sviol "$(msg plan-check.split_kid_dup n="$n")"; return 1; }
   req_ids "$madre" > "$TMPD/split.madre"
   if [ ! -s "$TMPD/split.madre" ]; then
-    sviol "la madre non definisce ID (RF<n>, CA<n>) in Requisiti funzionali o Criteri di accettazione: la partizione non si verifica"; return 1
+    sviol "$(msg plan-check.split_no_ids)"; return 1
   fi
   : > "$TMPD/split.figlie"
   for f in "${kids[@]}"; do
@@ -2312,24 +2328,28 @@ cmd_split() {
   while IFS= read -r id; do
     who=$(awk -F'\t' -v i="$id" '$1 == i { print $2 }' "$TMPD/split.figlie" | LC_ALL=C sort -u)
     n=$(printf '%s' "$who" | grep -c . || true)
-    if [ "$n" -eq 0 ]; then sviol "$id della madre non sta in nessuna figlia (perso)"
-    elif [ "$n" -gt 1 ]; then sviol "$id sta in $n figlie: $(printf '%s' "$who" | tr '\n' ' ' | sed 's/ $//') (duplicato)"; fi
+    if [ "$n" -eq 0 ]; then sviol "$(msg plan-check.split_lost id="$id")"
+    elif [ "$n" -gt 1 ]; then sviol "$(msg plan-check.split_twice id="$id" n="$n" who="$(printf '%s' "$who" | tr '\n' ' ' | sed 's/ $//')")"; fi
   done < "$TMPD/split.madre"
   # the children add no requirements: each of their IDs belongs to the parent
   while IFS=$'\t' read -r id who; do
-    grep -qxF -- "$id" "$TMPD/split.madre" || sviol "$who: $id non e' un ID della madre (le figlie non cambiano i requisiti)"
+    grep -qxF -- "$id" "$TMPD/split.madre" || sviol "$(msg plan-check.split_foreign who="$who" id="$id")"
   done < "$TMPD/split.figlie"
   for f in "${kids[@]}"; do
     for lit in "Dipende da:" "Interfaccia per:"; do
-      [ -n "$(head_val "$f" "$lit" "$([ "$lit" = "Dipende da:" ] && echo "Depends on:" || echo "Interface for:")")" ] || sviol "$(basename "$f" .md): manca la riga '$lit' (sopra il piano, a inizio riga)"
+      [ -n "$(head_val "$f" "$lit" "$([ "$lit" = "Dipende da:" ] && echo "Depends on:" || echo "Interface for:")")" ] || sviol "$(msg plan-check.split_no_line spec="$(basename "$f" .md)" lit="$lit")"
     done
   done
-  [ $rc -eq 0 ] && echo "split: OK — $(grep -c . "$TMPD/split.madre") ID della madre in ${#kids[@]} figlie, ciascuno in una sola"
+  [ $rc -eq 0 ] && echo "split: OK — $(msg plan-check.split_ok n="$(grep -c . "$TMPD/split.madre")" k="${#kids[@]}")"
   return $rc
 }
 
 PC_HERE=$(cd "$(dirname "$0")" && pwd)
 . "$PC_HERE/lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin)
+# Messages (1.4.0): the catalog next to this script; the language is resolved once and exported (PY2 and the
+# children read the same one). The stdout of basis and contract does not go through it: it enters State.
+. "$PC_HERE/lib/maat-msg.sh"; maat_msg_carica
+maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
 # relative MAAT_CONFIG (to the working directory, even with spaces) made absolute HERE, in bash, like run-phase.sh: the
 # gen cmd/cp lines run after a cd or inside WSL, and os.path.abspath of Windows Python on a /c/… would give C:\c\….
 # C:/… form where cygpath exists (maat_cygm), otherwise that of `pwd`.

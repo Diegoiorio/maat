@@ -14,7 +14,7 @@ Usage:
   maat-config.py copia-modulo
       the module of the WSL copy (test-fast.sh): MAAT_MODULO if set, otherwise the only module with `copia`.
       Prints five lines: name, radice, radice_pacchetti, lint_base (true|false), preparazione. Several modules with copia and no
-      MAAT_MODULO: exit 64 «più moduli con copia: imposta MAAT_MODULO»; no module with copia: exit 2.
+      MAAT_MODULO: exit 64 «several modules with copia: set MAAT_MODULO»; no module with copia: exit 2.
   maat-config.py comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir>
                  [--pacchetto p] [--file f]… [--test t]… [--cache c]
       the command that test-fast.sh runs INSIDE the copy (field `copia`, never `comandi`). Two lines: absolute
@@ -33,8 +33,8 @@ Usage:
       the regenerable generated files of implement/fix: one line per entry, «percorso | cartella | comando | test |
       ambiente» (ambiente = that of the module containing the cartella, nativo outside every module); no entries
       = no lines. --verifica checks the entries against the project (PROJECT_ROOT): the generated file, the cartella,
-      the test and the command's script exist, the test names the generated file; «ERRORE: generati.<i>: …» and exit 1, otherwise
-      «generati: <n> voci verificate».
+      the test and the command's script exist, the test names the generated file; «ERROR: generati.<i>: …» and exit 1, otherwise
+      «generati: <n> entries verified» (ERRORE, voci verificate in Italian).
   maat-config.py sonda-produzione
   maat-config.py componi <profilo>… --radice <modulo>=<percorso> [--radice …] [--nativo]
       --nativo (pk06, /maat:setup without WSL or outside Windows): every module has ambiente nativo and no copia;
@@ -55,6 +55,10 @@ plugin that contains this file.
 Exit codes: 0 ok · 1 invalid configuration · 2 no module / command not declared · 3 key missing (leggi),
 command skipped and NOT RUN (declared) (comando), core fallback (sonda-produzione) · 4 project not
 configured · 64 wrong usage.
+
+Messages (1.4.0): from the catalog lib/messages.tsv (T below), English by default, Italian with "lingua": "it".
+Read by gates.sh in both languages: «python not found» (and its Italian form) and the «NOT RUN (dichiarato): » /
+«NOT RUN (declared): » prefix; frozen: «SALTATA: » of the skipped checks and the «assente» type of `chiave`.
 """
 import copy
 import json
@@ -83,6 +87,35 @@ class Uscita(Exception):
 
 def err(msg):
     sys.stderr.write("maat-config: %s\n" % msg)
+
+
+# Messages (1.4.0): the catalog lib/messages.tsv through maat_msg.py next to this file, imported only when a message
+# is built (leggi --tutto, the hot path of maat-conf.sh, prints none). maat_msg resolves `lingua` with carica() of
+# this file: a message built INSIDE that resolution (maat.json missing or invalid) must not resolve it again, so
+# the nested call gets the bare key (maat_msg swallows it and falls back to en). The flag lives on the maat_msg
+# module, the only object shared with the copy of this file that maat_msg loads.
+_MSG = []
+
+
+def T(chiave, **valori):
+    if not _MSG:
+        dwb = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        try:
+            import maat_msg
+        finally:
+            sys.dont_write_bytecode = dwb
+        _MSG.append(maat_msg)
+    m = _MSG[0]
+    if getattr(m, "_maat_config_in_lingua", False):
+        return chiave
+    m._maat_config_in_lingua = True
+    try:
+        m.lingua()
+    finally:
+        m._maat_config_in_lingua = False
+    return m.T(chiave, **valori)
 
 
 # --------------------------------------------------------------------------- structural validation
@@ -114,24 +147,24 @@ def valida_struttura(v, sch, chiave, errori):
     if t is not None:
         tipi = t if isinstance(t, list) else [t]
         if not any(TIPI[x](v) for x in tipi):
-            errori.append((chiave, "tipo %s atteso, trovato %s" % (" o ".join(tipi), nome_tipo(v))))
+            errori.append((chiave, T("maat-config.type_expected", types=(" %s " % T("maat-config.or")).join(tipi), got=nome_tipo(v))))
             return
     if "enum" in sch and not any(v == e and type(v) is type(e) for e in sch["enum"]):
-        errori.append((chiave, "valore %s fuori elenco (ammessi: %s)"
-                       % (json.dumps(v, ensure_ascii=False), ", ".join(str(e) for e in sch["enum"]))))
+        errori.append((chiave, T("maat-config.not_in_enum", v=json.dumps(v, ensure_ascii=False),
+                         allowed=", ".join(str(e) for e in sch["enum"]))))
     if "pattern" in sch and isinstance(v, str) and not re.fullmatch(sch["pattern"], v):
-        errori.append((chiave, "valore %s non rispetta la forma %s" % (json.dumps(v, ensure_ascii=False), sch["pattern"])))
+        errori.append((chiave, T("maat-config.bad_pattern", v=json.dumps(v, ensure_ascii=False), pattern=sch["pattern"])))
     if isinstance(v, dict):
         for k in sch.get("required", []):
             if k not in v:
-                errori.append((unisci(chiave, k), "chiave obbligatoria mancante"))
+                errori.append((unisci(chiave, k), T("maat-config.required_missing")))
         props = sch.get("properties", {})
         ap = sch.get("additionalProperties", True)
         for k, x in v.items():
             if k in props:
                 valida_struttura(x, props[k], unisci(chiave, k), errori)
             elif ap is False:
-                errori.append((unisci(chiave, k), "chiave sconosciuta"))
+                errori.append((unisci(chiave, k), T("maat-config.unknown_key")))
     if isinstance(v, list) and "items" in sch:
         for i, x in enumerate(v):
             valida_struttura(x, sch["items"], unisci(chiave, i), errori)
@@ -157,41 +190,41 @@ def alternative(c):
 def s1(cfg):
     for i, m in moduli(cfg):
         if m.get("regola_test") == "specchio" and "specchio" not in m:
-            yield "moduli.%d.specchio" % i, "obbligatoria con regola_test: specchio (S1)"
+            yield "moduli.%d.specchio" % i, T("maat-config.s1")
 
 
 def s2(cfg):
     for i, m in moduli(cfg):
         c = m.get("comandi", {})
         if "test" in c and "{test}" not in testo(c["test"]):
-            yield "moduli.%d.comandi.test" % i, "il comando di test deve contenere {test} (S2)"
+            yield "moduli.%d.comandi.test" % i, T("maat-config.s2_test")
         if "lint" in c and "{file}" not in testo(c["lint"]):
-            yield "moduli.%d.comandi.lint" % i, "il comando di lint deve contenere {file} (S2)"
+            yield "moduli.%d.comandi.lint" % i, T("maat-config.s2_lint")
         for j, v in enumerate(m.get("controlli", [])):
             if "{file}" not in v.get("comando", ""):
-                yield "moduli.%d.controlli.%d.comando" % (i, j), "il comando di un controllo deve contenere {file} (S2)"
+                yield "moduli.%d.controlli.%d.comando" % (i, j), T("maat-config.s2_check")
 
 
 def s3(cfg):
     v = cfg.get("versione_schema")
     if v > VERSIONE_CORRENTE:
-        yield "versione_schema", "versione futura: aggiorna il plugin (%d, il lettore arriva a %d) (S3)" % (v, VERSIONE_CORRENTE)
+        yield "versione_schema", T("maat-config.s3_future", v=v, cur=VERSIONE_CORRENTE)
     elif v != VERSIONE_CORRENTE and v != VERSIONE_PRECEDENTE:
-        yield "versione_schema", "versione %d non più supportata: il lettore accetta %s (S3)" % (
-            v, " e ".join(str(x) for x in (VERSIONE_CORRENTE, VERSIONE_PRECEDENTE) if x is not None))
+        yield "versione_schema", T("maat-config.s3_old", v=v, accepted=(" %s " % T("maat-config.and")).join(
+            str(x) for x in (VERSIONE_CORRENTE, VERSIONE_PRECEDENTE) if x is not None))
 
 
 def s4(cfg):
     for i, m in moduli(cfg):
         if m.get("lint_base") is True and "{base?" not in testo(m.get("comandi", {}).get("lint")):
-            yield "moduli.%d.comandi.lint" % i, "lint_base: true chiede un comando lint con {base?…} (S4)"
+            yield "moduli.%d.comandi.lint" % i, T("maat-config.s4")
 
 
 def s5(cfg):
     for i, m in moduli(cfg):
         for k in ("test", "lint"):
             if "test-fast.sh" in testo(m.get("comandi", {}).get(k)) and k not in m.get("copia", {}):
-                yield "moduli.%d.copia.%s" % (i, k), "comandi.%s usa test-fast.sh: serve copia.%s, il comando dentro la copia (S5)" % (k, k)
+                yield "moduli.%d.copia.%s" % (i, k), T("maat-config.s5", k=k)
 
 
 def s6(cfg):
@@ -201,27 +234,27 @@ def s6(cfg):
             for j, a in enumerate(alt):
                 if "test-fast.sh" in testo(a):
                     chiave = "moduli.%d.copia.%s" % (i, k) + (".%d" % j if isinstance(c, list) else "")
-                    yield chiave, "un comando di copia non può chiamare test-fast.sh (autorichiamo) (S6)"
+                    yield chiave, T("maat-config.s6")
 
 
 def s7(cfg):
     for i, m in moduli(cfg):
         cp = m.get("copia", {})
         if "test" in cp and "{test}" not in testo(cp["test"]):
-            yield "moduli.%d.copia.test" % i, "copia.test deve contenere {test} (S7)"
+            yield "moduli.%d.copia.test" % i, T("maat-config.s7_test")
         for k in ("lint", "lint_messaggi"):
             if k not in cp:
                 continue
             for j, a in enumerate(alternative(cp[k])):
                 if "{file}" not in testo(a):
                     chiave = "moduli.%d.copia.%s" % (i, k) + (".%d" % j if isinstance(cp[k], list) else "")
-                    yield chiave, "copia.%s deve contenere {file} (S7)" % k
+                    yield chiave, T("maat-config.s7_file", k=k)
 
 
 def s8(cfg):
     for i, m in moduli(cfg):
         if m.get("regola_test") == "nessuna" and "test" in m.get("comandi", {}):
-            yield "moduli.%d.comandi.test" % i, "regola nessuna ma comando di test dichiarato (S8)"
+            yield "moduli.%d.comandi.test" % i, T("maat-config.s8")
 
 
 NON_GENERATI = re.compile(r"golden|__snapshots__|lint-baseline", re.I)
@@ -231,27 +264,28 @@ def s9(cfg):
     for i, g in enumerate(cfg.get("generati", [])):
         for k in ("percorso", "test"):
             if NON_GENERATI.search(g.get(k, "")):
-                yield "generati.%d.%s" % (i, k), "golden, snapshot e base del lint non sono generati da rigenerare (S9)"
+                yield "generati.%d.%s" % (i, k), T("maat-config.s9")
 
 
 def s10(cfg):
     for i, m in moduli(cfg):
         if m.get("preparati") and not m.get("preparazione"):
-            yield "moduli.%d.preparati" % i, "preparati chiede preparazione, il comando che li scrive (S10)"
+            yield "moduli.%d.preparati" % i, T("maat-config.s10")
 
 
-# Semantic checks: declared here and in the schema `description`.
+# Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
+# maat-config.s* keys of the catalog).
 SEMANTICA = [
-    ("S1", "regola_test specchio => specchio presente", s1),
-    ("S2", "comandi.test con {test}; comandi.lint e controlli[].comando con {file}", s2),
-    ("S3", "versione_schema accettata dal lettore", s3),
-    ("S4", "lint_base true => comandi.lint con {base?…}", s4),
-    ("S5", "comandi con test-fast.sh => copia con la voce corrispondente", s5),
-    ("S6", "nessun comando di copia chiama test-fast.sh", s6),
-    ("S7", "copia.test con {test}; copia.lint e copia.lint_messaggi con {file}", s7),
-    ("S8", "regola_test nessuna => nessun comandi.test", s8),
-    ("S9", "generati[]: nessun golden, snapshot o base del lint", s9),
-    ("S10", "moduli[].preparati => preparazione presente", s10),
+    ("S1", "regola_test specchio => specchio present", s1),
+    ("S2", "comandi.test with {test}; comandi.lint and controlli[].comando with {file}", s2),
+    ("S3", "versione_schema accepted by the reader", s3),
+    ("S4", "lint_base true => comandi.lint with {base?…}", s4),
+    ("S5", "commands with test-fast.sh => copia with the matching entry", s5),
+    ("S6", "no command of copia calls test-fast.sh", s6),
+    ("S7", "copia.test with {test}; copia.lint and copia.lint_messaggi with {file}", s7),
+    ("S8", "regola_test=nessuna => no comandi.test", s8),
+    ("S9", "generati[]: no golden, snapshot or lint baseline", s9),
+    ("S10", "moduli[].preparati => preparazione present", s10),
 ]
 
 
@@ -298,18 +332,18 @@ def controlla(cfg, nome):
             err("%s: %s: %s" % (nome, k or "(radice)", motivo))
         raise Uscita(1)
     if VERSIONE_PRECEDENTE is not None and cfg.get("versione_schema") == VERSIONE_PRECEDENTE:
-        err("%s: versione_schema %d è la precedente: migra alla %d (R9)" % (nome, VERSIONE_PRECEDENTE, VERSIONE_CORRENTE))
+        err(T("maat-config.r9", name=nome, prev=VERSIONE_PRECEDENTE, cur=VERSIONE_CORRENTE))
 
 
 def carica(arg=None):
     p = percorso_config(arg)
     if not os.path.isfile(p):
-        raise Uscita(4, "progetto non configurato: lancia /maat:setup (manca %s)" % p)
+        raise Uscita(4, T("maat-config.not_configured", p=p))
     try:
         with open(p, encoding="utf-8") as f:
             cfg = json.load(f)
     except (OSError, ValueError) as e:
-        err("%s: (file): JSON non leggibile: %s" % (p, e))
+        err(T("maat-config.json_unreadable", p=p, e=e))
         raise Uscita(1)
     controlla(cfg, p)
     return cfg, p
@@ -431,7 +465,7 @@ def espandi(testo_cmd, valori):
             return mo.group(0) if v is None else sq(v)
         if nome == "python":
             if v is None:
-                raise NonRisolto("python non trovato: {python} non risolvibile")
+                raise NonRisolto(T("maat-config.python_unresolved"))
             return sq_se_serve(v)
         if nome == "maat":
             return sq(v)   # always quoted, like the script in gates.sh (`bash $(sq "$VF")`)
@@ -521,7 +555,7 @@ def rebase(percorsi, base):
         elif p.startswith(base + "/"):
             out.append(p[len(base) + 1:])
         else:
-            raise Uscita(64, "%s è fuori dalla cartella del comando (%s)" % (f, base))
+            raise Uscita(64, T("maat-config.outside_dir", f=f, base=base))
     return out
 
 
@@ -534,9 +568,9 @@ def presente(se_presente, radice_abs):
 # --------------------------------------------------------------------------- commands
 def cmd_valida(args):
     if len(args) > 1:
-        raise Uscita(64, "uso: valida [file]")
+        raise Uscita(64, T("maat-config.usage_valida"))
     _cfg, p = carica(args[0] if args else None)
-    print("maat-config: %s valido" % p)
+    print("maat-config: " + T("maat-config.valid", p=p))
 
 
 def cmd_leggi(args):
@@ -557,7 +591,7 @@ def cmd_leggi(args):
     if len(args) == 3 and args[1] == "--default":
         default = args[2]
     elif len(args) != 1:
-        raise Uscita(64, "uso: leggi <chiave.puntata> [--default x] | leggi --tutto")
+        raise Uscita(64, T("maat-config.usage_leggi"))
     cfg, _p = carica()
     v = risolto(cfg)
     for seg in args[0].split("."):
@@ -569,7 +603,7 @@ def cmd_leggi(args):
             if default is not None:
                 print(default)
                 return
-            raise Uscita(3, "chiave assente: %s" % args[0])
+            raise Uscita(3, T("maat-config.key_missing", k=args[0]))
     print(formatta(v))
 
 
@@ -595,7 +629,7 @@ def modulo_di(r, percorso):
 
 def cmd_modulo_di(args):
     if len(args) != 1:
-        raise Uscita(64, "uso: modulo-di <file relativo al repo>")
+        raise Uscita(64, T("maat-config.usage_modulo_di"))
     cfg, _p = carica()
     d = modulo_di(risolto(cfg), args[0])
     if d is None:
@@ -606,7 +640,7 @@ def cmd_modulo_di(args):
 def modulo_di_nome(r, nome):
     m = next((x for x in r["moduli"] if x["nome"] == nome), None)
     if m is None:
-        raise Uscita(2, "modulo sconosciuto: %s" % nome)
+        raise Uscita(2, T("maat-config.unknown_module", m=nome))
     return m
 
 
@@ -617,10 +651,10 @@ def cmd_gate_richiesti(args):
     modules that declare them, without a suffix if there is only one. Order: tests, controlli, lint, build, each by label.
     legacy = std. The same function serves gates.sh (which to run) and finalize.sh (which to require)."""
     if not args:
-        raise Uscita(64, "uso: gate-richiesti <min|std|full|legacy> [--file f]…")
+        raise Uscita(64, T("maat-config.usage_gate"))
     livello = "std" if args[0] == "legacy" else args[0]
     if livello not in ("min", "std", "full"):
-        raise Uscita(64, "livello sconosciuto: %s (min|std|full|legacy)" % args[0])
+        raise Uscita(64, T("maat-config.unknown_level", l=args[0]))
     o = opzioni(args[1:], ("file",), ())
     cfg, _p = carica()
     r = risolto(cfg)
@@ -701,7 +735,7 @@ def cmd_test_di(args):
     """The tests selected by the module's regola_test for the touched files: one per line, relative to the repo,
     sorted and without duplicates. Rule `nessuna`: none. Files outside the root are ignored."""
     if not args:
-        raise Uscita(64, "uso: test-di <modulo> [--file f]…")
+        raise Uscita(64, T("maat-config.usage_test_di"))
     o = opzioni(args[1:], ("file",), ())
     cfg, p = carica()
     m = modulo_di_nome(risolto(cfg), args[0])
@@ -732,14 +766,14 @@ def cmd_python(args):
     """The module's interpreter ({python} precedence), if one of its commands, controlli or chiave entries uses
     {python}: exit 2 if none uses it, 3 if it does not resolve."""
     if len(args) != 1:
-        raise Uscita(64, "uso: python <modulo>")
+        raise Uscita(64, T("maat-config.usage_python"))
     cfg, p = carica()
     m = modulo_di_nome(risolto(cfg), args[0])
     if not any("{python}" in t for t in testi_del_modulo(m)):
         raise Uscita(2)
     py = risolvi_python(cfg, m, radice_progetto(p))
     if py is None:
-        raise Uscita(3, "python non trovato per %s" % args[0])
+        raise Uscita(3, T("maat-config.python_not_found_for", m=args[0]))
     print(py)
 
 
@@ -748,7 +782,7 @@ def cmd_chiave(args):
     file, relative to cartella) or comando (valore = the expanded command, {python} and {maat} included); assente if
     the command does not resolve. cartella is relative to the repo («.» = the repo)."""
     if len(args) != 1:
-        raise Uscita(64, "uso: chiave <modulo>")
+        raise Uscita(64, T("maat-config.usage_chiave"))
     cfg, p = carica()
     m = modulo_di_nome(risolto(cfg), args[0])
     root = radice_progetto(p)
@@ -782,7 +816,7 @@ def opzioni(args, ripetibili, singole):
                 val[a[2:]] = args[i + 1]
             i += 2
         else:
-            raise Uscita(64, "opzione sconosciuta o senza valore: %s" % a)
+            raise Uscita(64, T("maat-config.unknown_option", a=a))
     return val
 
 
@@ -793,12 +827,12 @@ def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=N
     `comando` command (Uscita 2 not declared, 3 skipped and declared NOT RUN, 64 path outside the directory), which
     this implements: plan-check.sh and counterproof.sh also use it by importing this file."""
     if tipo not in ("test", "lint", "build", "controlli", "controprova"):
-        raise Uscita(64, "tipo sconosciuto: %s" % tipo)
+        raise Uscita(64, T("maat-config.unknown_type", t=tipo))
     r = risolto(cfg)
     root = (root or radice_progetto()).replace("\\", "/").rstrip("/")
     m = next((x for x in r["moduli"] if x["nome"] == modulo), None)
     if m is None:
-        raise Uscita(2, "modulo sconosciuto: %s" % modulo)
+        raise Uscita(2, T("maat-config.unknown_module", m=modulo))
     radice_abs = posixpath.join(root, norm(m["radice"])) if norm(m["radice"]) else root
     valori = {"maat": (os.environ.get("MAAT_ROOT") or PLUGIN).replace("\\", "/"),
               "base": base, "cache": cache, "report": report, "nome": nome}
@@ -822,7 +856,7 @@ def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=N
             if not files:
                 continue
             if v.get("se_presente") and not presente(v["se_presente"], radice_abs):
-                err("SALTATA: %s — NOT RUN (dichiarato): %s assente" % (v["comando"], v["se_presente"]))
+                err("SALTATA: " + T("maat-config.skipped_missing", cmd=v["comando"], x=v["se_presente"]))
                 saltate += 1
                 continue
             try:
@@ -831,27 +865,27 @@ def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=N
                 out.extend([espansa(norm(m["radice"]), v["comando"], "file", [f]) for f in files])
                 eseguite += 1
             except NonRisolto as e:
-                err("SALTATA: %s — NOT RUN (dichiarato): %s" % (v["comando"], e))
+                err("SALTATA: " + T("maat-config.skipped_unresolved", cmd=v["comando"], why=e))
                 saltate += 1
         if eseguite:
             return out
         if saltate:
             raise Uscita(3)
-        raise Uscita(2, "nessun controllo per questi file nel modulo %s" % modulo)
+        raise Uscita(2, T("maat-config.no_checks", m=modulo))
 
     if tipo == "controprova":
         c = m.get("controprova", {}).get("comando")
         if not c:
-            raise Uscita(2, "controprova.comando non dichiarato per %s" % modulo)
+            raise Uscita(2, T("maat-config.no_counterproof", m=modulo))
         c = {"comando": c}
     else:
         c = m.get("comandi", {}).get(tipo)
         if c is None:
-            raise Uscita(2, "comando %s non dichiarato per %s" % (tipo, modulo))
+            raise Uscita(2, T("maat-config.cmd_not_declared", t=tipo, m=modulo))
         if isinstance(c, str):
             c = {"comando": c}
     if c.get("se_presente") and not presente(c["se_presente"], radice_abs):
-        raise Uscita(3, "NOT RUN (dichiarato): %s assente per %s.%s" % (c["se_presente"], modulo, tipo))
+        raise Uscita(3, T("maat-config.not_run_missing", x=c["se_presente"], m=modulo, t=tipo))
     cart = cartella_di(m, c.get("cartella", "radice"))
     files = rebase(file, cart)
     tests = rebase(test, cart)
@@ -859,16 +893,16 @@ def comando(cfg, modulo, tipo, file=(), test=(), base=None, cache=None, report=N
     try:
         out.append(espansa(cart, c["comando"], "test", tests))
     except NonRisolto as e:
-        raise Uscita(3, "NOT RUN (dichiarato): %s" % e)
+        raise Uscita(3, T("maat-config.not_run", why=e))
     return out
 
 
 def cmd_comando(args):
     if len(args) < 2:
-        raise Uscita(64, "uso: comando <modulo> <test|lint|build|controlli|controprova> [opzioni]")
+        raise Uscita(64, T("maat-config.usage_comando"))
     nome, tipo = args[0], args[1]
     if tipo not in ("test", "lint", "build", "controlli", "controprova"):
-        raise Uscita(64, "tipo sconosciuto: %s" % tipo)
+        raise Uscita(64, T("maat-config.unknown_type", t=tipo))
     o = opzioni(args[2:], ("file", "test"), ("base", "cache", "report", "nome"))
     cfg, p = carica()
     for cart, riga in comando(cfg, nome, tipo, file=o["file"], test=o["test"], base=o["base"], cache=o["cache"],
@@ -882,16 +916,16 @@ def modulo_della_copia(r):
     if nome:
         m = next((x for x in r["moduli"] if x["nome"] == nome), None)
         if m is None:
-            raise Uscita(2, "modulo sconosciuto: %s (MAAT_MODULO)" % nome)
+            raise Uscita(2, T("maat-config.unknown_module", m=nome) + " (MAAT_MODULO)")
         if not m.get("copia"):
-            raise Uscita(2, "il modulo %s non dichiara copia (MAAT_MODULO)" % nome)
+            raise Uscita(2, T("maat-config.no_copy_module", m=nome))
         return m
     con = [x for x in r["moduli"] if x.get("copia")]
     if len(con) == 1:
         return con[0]
     if not con:
-        raise Uscita(2, "nessun modulo dichiara copia")
-    raise Uscita(64, "più moduli con copia: imposta MAAT_MODULO")
+        raise Uscita(2, T("maat-config.no_copy"))
+    raise Uscita(64, T("maat-config.several_copies"))
 
 
 def relativa(radice, pacchetti):
@@ -900,12 +934,12 @@ def relativa(radice, pacchetti):
         return ""
     if pacchetti == "" or radice.startswith(pacchetti + "/"):
         return radice[len(pacchetti) + 1:] if pacchetti else radice
-    raise Uscita(1, "radice %s fuori da radice_pacchetti %s" % (radice, pacchetti))
+    raise Uscita(1, T("maat-config.outside_packages", r=radice, p=pacchetti))
 
 
 def cmd_copia_modulo(args):
     if args:
-        raise Uscita(64, "uso: copia-modulo")
+        raise Uscita(64, T("maat-config.usage_copia_modulo"))
     cfg, _p = carica()
     m = modulo_della_copia(risolto(cfg))
     print("\n".join([m["nome"], norm(m["radice"]), norm(m["radice_pacchetti"]),
@@ -914,22 +948,22 @@ def cmd_copia_modulo(args):
 
 def cmd_comando_copia(args):
     if len(args) < 2:
-        raise Uscita(64, "uso: comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir> [opzioni]")
+        raise Uscita(64, T("maat-config.usage_comando_copia"))
     nome, tipo = args[0], args[1]
     if tipo not in ("test", "lint", "lint_messaggi"):
-        raise Uscita(64, "tipo sconosciuto: %s" % tipo)
+        raise Uscita(64, T("maat-config.unknown_type", t=tipo))
     o = opzioni(args[2:], ("file", "test"), ("copia", "pacchetto", "cache"))
     if not o["copia"]:
-        raise Uscita(64, "comando-copia: --copia <dir> obbligatoria")
+        raise Uscita(64, T("maat-config.copia_required"))
     copia_dir = o["copia"].replace("\\", "/").rstrip("/")
     cfg, p = carica()
     r = risolto(cfg)
     m = next((x for x in r["moduli"] if x["nome"] == nome), None)
     if m is None:
-        raise Uscita(2, "modulo sconosciuto: %s" % nome)
+        raise Uscita(2, T("maat-config.unknown_module", m=nome))
     c = m.get("copia", {}).get(tipo)
     if c is None:
-        raise Uscita(2, "copia.%s non dichiarato per %s" % (tipo, nome))
+        raise Uscita(2, T("maat-config.copy_not_declared", t=tipo, m=nome))
     gruppo = relativa(norm(m["radice"]), norm(m["radice_pacchetti"]))
 
     def cart_rel(a):
@@ -937,7 +971,7 @@ def cmd_comando_copia(args):
             return norm(o["pacchetto"])
         quale = a.get("cartella", "radice")
         if quale == "repo":
-            raise Uscita(1, "copia.%s di %s: la cartella repo non esiste nella copia" % (tipo, nome))
+            raise Uscita(1, T("maat-config.copy_no_repo", t=tipo, m=nome))
         return gruppo if quale == "radice" else ""
 
     def assoluta(rel):
@@ -951,7 +985,7 @@ def cmd_comando_copia(args):
         scelta = a
         break
     if scelta is None:
-        raise Uscita(2, "copia.%s di %s: nessuna alternativa applicabile (se_esiste)" % (tipo, nome))
+        raise Uscita(2, T("maat-config.copy_no_alt", t=tipo, m=nome))
     cart = cart_rel(scelta)
     valori = {"maat": (os.environ.get("MAAT_ROOT") or PLUGIN).replace("\\", "/"), "cache": o["cache"],
               "file": rebase(o["file"], cart), "test": rebase(o["test"], cart)}
@@ -960,14 +994,14 @@ def cmd_comando_copia(args):
     try:
         riga = espandi(scelta["comando"], valori)
     except NonRisolto as e:
-        raise Uscita(3, "NOT RUN (dichiarato): %s" % e)
+        raise Uscita(3, T("maat-config.not_run", why=e))
     print(assoluta(cart))
     print(riga)
 
 
 def cmd_elenco(args):
     if args:
-        raise Uscita(64, "uso: elenco-moduli")
+        raise Uscita(64, T("maat-config.usage_elenco"))
     cfg, _p = carica()
     for m in cfg["moduli"]:
         print(m["nome"])
@@ -975,7 +1009,7 @@ def cmd_elenco(args):
 
 def cmd_generati(args):
     if args not in ([], ["--verifica"]):
-        raise Uscita(64, "uso: generati [--verifica]")
+        raise Uscita(64, T("maat-config.usage_generati"))
     cfg, p = carica()
     r = risolto(cfg)
     voci = r.get("generati", [])
@@ -991,30 +1025,30 @@ def cmd_generati(args):
         k = "generati.%d" % i
         pg, cart, tst = norm(g["percorso"]), norm(g["cartella"]), norm(g["test"])
         if not os.path.isfile(posixpath.join(root, pg)):
-            errori.append("%s: generato assente: %s" % (k, pg))
+            errori.append(T("maat-config.gen_missing", k=k, p=pg))
         if not os.path.isdir(posixpath.join(root, cart or ".")):
-            errori.append("%s: cartella assente: %s" % (k, cart or "."))
+            errori.append(T("maat-config.gen_dir_missing", k=k, d=cart or "."))
         if not os.path.isfile(posixpath.join(root, tst)):
-            errori.append("%s: test assente: %s" % (k, tst))
+            errori.append(T("maat-config.gen_test_missing", k=k, t=tst))
         script = next((w for w in g["comando"].split() if re.search(r"\.(py|mjs|js|sh)$", w)), None)
         if script is None:
-            errori.append("%s: il comando non nomina uno script (.py .mjs .js .sh)" % k)
+            errori.append(T("maat-config.gen_no_script", k=k))
         elif not os.path.isfile(posixpath.join(root, cart or ".", script)):
-            errori.append("%s: script del comando assente: %s" % (k, posixpath.join(cart, script) if cart else script))
+            errori.append(T("maat-config.gen_script_missing", k=k, s=posixpath.join(cart, script) if cart else script))
         if os.path.isfile(posixpath.join(root, tst)):
             with open(posixpath.join(root, tst), encoding="utf-8", errors="replace") as fh:
                 if posixpath.basename(pg) not in fh.read():
-                    errori.append("%s: %s non nomina %s: non e' il test che lo confronta" % (k, tst, posixpath.basename(pg)))
+                    errori.append(T("maat-config.gen_unrelated", k=k, t=tst, g=posixpath.basename(pg)))
     for e in errori:
-        print("ERRORE: %s" % e)
+        print(T("maat-config.error_line", e=e))
     if errori:
         raise Uscita(1)
-    print("generati: %d voci verificate" % len(voci))
+    print("generati: " + T("maat-config.gen_verified", n=len(voci)))
 
 
 def cmd_sonda(args):
     if args:
-        raise Uscita(64, "uso: sonda-produzione")
+        raise Uscita(64, T("maat-config.usage_sonda"))
     cfg, _p = carica()
     g = cfg.get("guardia", {})
     if g.get("produzione") and g.get("sonde"):
@@ -1072,18 +1106,18 @@ def cmd_componi(args):
             radici.append((n, p))
             i += 2
         elif args[i].startswith("--"):
-            raise Uscita(64, "opzione sconosciuta: %s" % args[i])
+            raise Uscita(64, T("maat-config.unknown_option_only", a=args[i]))
         else:
             nomi.append(args[i])
             i += 1
     if not nomi or len(nomi) != len(radici):
-        raise Uscita(64, "uso: componi <profilo>… --radice <modulo>=<percorso> (una --radice per profilo)")
+        raise Uscita(64, T("maat-config.usage_componi"))
     out = {"versione_schema": VERSIONE_CORRENTE, "lingua": "en"}
     mods = []
     for nome, (mod, rad) in zip(nomi, radici):
         f = posixpath.join(PROFILI, nome + ".json")
         if not os.path.isfile(f):
-            raise Uscita(64, "profilo sconosciuto: %s (in %s)" % (nome, PROFILI))
+            raise Uscita(64, T("maat-config.unknown_profile", n=nome, d=PROFILI))
         with open(f, encoding="utf-8") as fh:
             prof = json.load(fh)
         for k, v in prof.get("sezioni", {}).items():

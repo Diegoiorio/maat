@@ -15,12 +15,14 @@
 _MAAT_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _MAAT_PY="$(dirname "$_MAAT_LIB")/maat-config.py"
 if [ -z "${FIC_PY:-}" ]; then . "$(dirname "$_MAAT_LIB")/python.sh" || true; fi
+# messages (1.4.0): the catalog next to this file; sourced only if the caller has not loaded it (it would empty its cache)
+declare -F msg >/dev/null || . "$_MAAT_LIB/maat-msg.sh"
 declare -gA _MAAT_CACHE=()
 _MAAT_CARICATA=""
 
 maat_conf_carica() {
   local out k v
-  [ -n "${FIC_PY:-}" ] || { echo "maat-conf: interprete Python non trovato" >&2; return 2; }
+  [ -n "${FIC_PY:-}" ] || { echo "maat-conf: $(msg maat-conf.no_python)" >&2; return 2; }
   out=$("$FIC_PY" "$_MAAT_PY" leggi --tutto) || return $?
   _MAAT_CACHE=()
   while IFS=$'\t' read -r k v; do
@@ -38,7 +40,7 @@ maat_conf() {
   elif [ "${2:-}" = --default ] && [ $# -ge 3 ]; then
     printf '%s\n' "$3"
   else
-    echo "maat-conf: chiave assente: $k" >&2
+    echo "maat-conf: $(msg maat-conf.key_missing k="$k")" >&2
     return 3
   fi
 }

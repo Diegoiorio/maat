@@ -1,7 +1,7 @@
 # Benchmark protocol
 
 **Status: not yet run.** This document fixes, before any run, what the Maat benchmark will measure and how. It is
-planned after Maat 1.4.3. Until it is run, the README claims nothing about Maat being better than Claude Code alone.
+planned after Maat 1.5.3. Until it is run, the README claims nothing about Maat being better than Claude Code alone.
 
 ## The two questions
 

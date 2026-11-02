@@ -8,8 +8,8 @@
 # Who catches it: evidence reuse (pt04), which must invalidate the apps/admin gates when a
 # dependency changes, and the review, which must see the file outside apps/admin.
 . "$(dirname "$0")/_lib.sh"
-[ $# -eq 0 ] || die "nessuna opzione prevista"
+[ $# -eq 0 ] || die "$(msg inject.no_options)"
 F=modules/app/packages/ui/src/button/action.vue
 replace_once "$F" 'default: "small",' 'default: "x-small",'
 mark_touched "$F"
-inj_done "$F: size di default small → x-small"
+inj_done "$F: $(msg inject.default_size)"

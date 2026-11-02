@@ -5,6 +5,7 @@
 # To run in WSL:  wsl -- bash -lc 'bash /mnt/c/<maat>/plugins/maat/scripts/test-fast.test.sh'
 # Variant to try: TF=/path/variant.sh (it is copied in place of the script in the plugin copy).
 set -u
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 TF=${TF:-$HERE/test-fast.sh}
@@ -18,6 +19,8 @@ unset MAAT_CONFIG MAAT_MODULO MAAT_ROOT PROJECT_ROOT FIC_REPO FIC_LANE FIC_ALLOW
 HP=$T/maat; mkdir -p "$HP/scripts" "$HP/schemas"
 cp "$TF" "$HP/scripts/test-fast.sh"; cp "$FM" "$HP/scripts/fic-mirror.sh"; cp "$HERE/vitest-fast.sh" "$HP/scripts/vitest-fast.sh"
 cp "$HERE/maat-config.py" "$HERE/python.sh" "$HP/scripts/"; cp "$PLUGIN/schemas/maat-config.schema.json" "$HP/schemas/"
+# 1.4.0: the message catalog and its two readers (test-fast.sh and fic-mirror.sh find them next to themselves)
+mkdir -p "$HP/scripts/lib"; cp "$HERE/lib/maat-msg.sh" "$HERE/lib/messages.tsv" "$HP/scripts/lib/"; cp "$HERE/maat_msg.py" "$HP/scripts/"
 
 # fake repo: .claude/maat.json (the nuxt-fastapi example) + modules/app with two packages
 R=$T/repo; A=$R/modules/app
@@ -163,6 +166,14 @@ check "  .fic-deps aggiornato all'impronta dell'origine, node_modules copiati" '
 check "  .nuxt e cache ripuliti dopo il riallineamento (.fic-sync-gen)" '[ ! -e "$M/apps/admin/.nuxt/marker" ] && grep -q "generati della copia ripuliti" "$T/out"'
 vf tests/a.test.ts
 check "  il run dopo non riallinea di nuovo" '[ "$(rc)" = 0 ] && ! grep -q "dipendenze cambiate" "$T/out"'
+# 1.4.0, English (MAAT_LINGUA=en): the same realignment, the reason lines from the catalog (fic-mirror.sh included),
+# the frozen «vitest-fast: esito=… luogo=…» line as it is; then lock 2 again, the state of the cases below
+old12=$(cut -c1-12 "$M/.fic-deps"); echo '{"lock":4}' > "$A/package-lock.json"; new12=$(fp "$A" | cut -c1-12)
+MAAT_LINGUA=en vf tests/a.test.ts
+check "en: lockfile diverso -> riallineamento in inglese, stessa riga d esito, niente italiano" '[ "$(rc)" = 0 ] && grep -qx "vitest-fast: dependencies changed (fingerprint $old12 -> $new12): copy realigned from the source" "$T/out" && grep -q "^vitest-fast: generated files of the copy cleaned" "$T/out" && grep -q "esito=PASS luogo=copia" "$T/out" && ! grep -qE "dipendenze|impronta|riallineata|generati|ripuliti|allineati|completato" "$T/out"'
+MAAT_LINGUA=en vf
+check "en: senza argomenti -> uso in inglese, exit 64" '[ "$(rc)" = 64 ] && grep -q "^usage: test-fast.sh <test files" "$T/out" && ! grep -q "^uso:" "$T/out"'
+echo '{"lock":2}' > "$A/package-lock.json"; vf tests/a.test.ts
 rm -f "$A/node_modules/dep/nuovo.js"
 # 7a. realignment with an rsync that fails -> BLOCKED with the reason, no fallback; the next run retries
 echo '{"lock":3}' > "$A/package-lock.json"

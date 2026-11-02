@@ -3,6 +3,7 @@
 # test-review-surface (plugins/maat/scripts/test-review-surface.sh). tools/suite.sh refuses a list that misses a suite.
 maat-paths
 maat-config
+messages
 gates
 finalize
 ciclo-worktree

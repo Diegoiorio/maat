@@ -11,14 +11,17 @@
 #   bash script/fic/finalize.test.sh
 #   FZ=/path/variant.sh bash script/fic/finalize.test.sh   # the suite on a variant
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 FZ=${FZ:-$HERE/finalize.sh}
 pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
-# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
-mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
+# the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT;
+# 1.4.0: also the message catalog and its two readers (lib/messages.tsv, lib/maat-msg.sh, maat_msg.py)
+mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$HERE/lib/maat-msg.sh" "$HERE/lib/messages.tsv" "$W/lib/" &&
+  cp "$HERE/maat_msg.py" "$W/"; export MAAT_ROOT=$ROOT
 export HOME="$W/home"; mkdir -p "$HOME"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
@@ -236,6 +239,37 @@ if cmp -s "$FZ" "$M"; then ko "controprova (formato dal nome del gate): la mutaz
   else ko "controprova: col formato scelto dal nome del gate la tabella ha ancora il risultato (il test non discrimina)" "$(row "R1 somma")"; fi
 fi
 unset MAAT_CONFIG; RUN=$RUNX SP=$SPX
+
+# --- 6d. 1.4.0, English (MAAT_LINGUA=en): the detail of the Verification:/Finalize: lines and the Evidence table
+#     follow the language, prefixes and separators do not; «not covered» is counted like «non coperto»; the English
+#     Finalize: line is read back by plan-check.sh closed (the criterion of the chain in basis) and by cycle-state.sh.
+#     Counterproof: the reader of «non coperto» only in Italian -> the English count is 0 (red). ---
+RUNX=$RUN SPX=$SP
+RUN="$WF/spec-en.run"; SP="$WF/spec-en.md"; mkdir -p "$RUN"; cp "$RUNX/touched.txt" "$RUN/"
+MAAT_LINGUA=en gates
+fin_en() { # $1 script: en signature with the merge, provisional Verification confirmed
+  spec APPROVED IMPLEMENTED; sed -i 's/^Verification: VERIFIED$/Verification: VERIFIED (provisional: VERIFY of the driver in parallel)/' "$SP"
+  out=$(MAAT_LINGUA=en bash "$1" --level std --copertura "$W/review.result.json" "$RUN" 2>&1); rc=$?
+}
+fin_en "$FZ"
+chk "en: IMPLEMENTED, Verification e Finalize col dettaglio inglese e i prefissi di sempre" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && grep -q "^Verification: VERIFIED (finalize.sh: gates tests-.* at the current key (evidence/" "$SP" && grep -q "^Finalize: IMPLEMENTED — snapshot $SFP — gates .*counterproofs red on assertion · [0-9T:Z-]*$" "$SP" && printf "%s\n" "$out" | tail -1 | grep -q "^finalize: esito=IMPLEMENTED — confirmed: gates "' "$out $(grep -E "^(Verification|Finalize)" "$SP")"
+chk "en: tabella Evidence in inglese, «not covered» contato" 'row "R6 nessuno" | grep -q "| not covered (no test ID) |$" && row "R3 mancante" | grep -q "| not covered (no result: tests/test_goals.py::test_inesistente) |$" && grep -q "^Requirement evidence (finalize.sh: requirement → test ID → result of VERIFY, evidence/" "$SP" && printf "%s\n" "$out" | grep -q "^finalize: Evidence composed — 6 requirements, 4 not covered$"' "$out $(grep -A8 "^Requirement evidence" "$SP")"
+chk "en: niente italiano del catalogo nella spec" '! grep -qE "non coperto|alla chiave attuale|controprove rosse|requisito → ID|Evidence composta" "$SP"' "$(grep -A8 "^Finalize" "$SP")"
+chk "en: plan-check.sh closed rilegge la riga Finalize inglese (anello chiuso), in en e in it" 'MAAT_LINGUA=en bash "$ROOT/scripts/plan-check.sh" closed "$SP" >/dev/null 2>&1 && MAAT_LINGUA=it bash "$ROOT/scripts/plan-check.sh" closed "$SP" >/dev/null 2>&1' "$(MAAT_LINGUA=en bash "$ROOT/scripts/plan-check.sh" closed "$SP" 2>&1)"
+nx() { MAAT_LINGUA=$1 FIC_DRIVER=0 bash "$ROOT/scripts/cycle-state.sh" "$SP" 2>/dev/null | tr -d '\r' | sed -n 's/^Next: \([A-Z-]*\).*/\1/p'; }
+chk "en: cycle-state.sh legge la riga Finalize inglese: stessa parola di Next in it e in en" '[ -n "$(nx it)" ] && [ "$(nx it)" = "$(nx en)" ]' "it=$(nx it) en=$(nx en)"
+M="$W/mut-uncov.sh"
+sed 's/^UNCOVERED = ("non coperto", "not covered")$/UNCOVERED = ("non coperto",)/' "$FZ" > "$M"
+if cmp -s "$FZ" "$M"; then ko "controprova (lettore di «non coperto» solo italiano): la mutazione non si applica"; else
+  fin_en "$M"
+  if printf '%s\n' "$out" | grep -q "Evidence composed — 6 requirements, 4 not covered"; then
+    ko "controprova: col lettore solo italiano il conteggio inglese resta 4 (il test non discrimina)" "$out"
+  else ok; fi   # expected red: «not covered» no longer counted
+fi
+gates; spec APPROVED IMPLEMENTED; sed -i 's/^Verification: VERIFIED$/Verification: VERIFIED (provvisorio: VERIFY del driver in parallelo)/' "$SP"
+fin --level std --copertura "$W/review.result.json"
+chk "it, stesso run dir: il testo di sempre («non coperto», 4 non coperti, CP-1 senza risultato qui)" '[ $rc -eq 0 ] && printf "%s\n" "$out" | grep -q "Evidence composta — 6 requisiti, 4 non coperti" && row "R6 nessuno" | grep -q "non coperto (nessun ID di test)"' "$out"
+RUN=$RUNX SP=$SPX
 
 # --- 7. nothing to sign: spec untouched ---
 spec NEEDS_CHANGES PLANNED; cp "$SP" "$W/prima"

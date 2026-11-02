@@ -17,6 +17,7 @@
 # «di ripiego»; sha256sum, timeout, rsync and tar together => ATTENZIONE BLOCKED). Mutation counterproofs at the end: the doctor is copied with the plugin
 # into a temporary folder, a sed mutates it, and the case the mutation must break turns red.
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(dirname "$HERE")
 DOC=$HERE/maat-doctor.sh
@@ -286,6 +287,34 @@ for si, atteso in ((True, "OK comando test del modulo m: /opt/maat-prova/run"),
 }
 check "modulo wsl con /opt/…: [ -x ] dentro WSL decide OK o MANCA" 'caso_wsl_assoluto'
 
+# 25b. 1.4.0: --prova-test of a wsl module: the program given to wsl on stdin exports MAAT_LINGUA, resolved (wsl.exe does
+#      not pass the environment; the last line of the trial, a message of test-fast.sh, goes into trial_ko). Fake
+#      shutil.which and subprocess.run: the program is captured, nothing is run.
+V25B=$(variante wsl-prova 'c["moduli"][0]["ambiente"] = "wsl"')
+caso_prova_wsl() { # [doctor]
+  unita "${1:-$DOC}" '
+import io, contextlib
+os = ns["os"]; os.environ["MAAT_CONFIG"] = sys.argv[3]; os.environ["PROJECT_ROOT"] = ns["ROOT"]
+mc = ns["carica_lettore"](); cfg, _p = mc.carica(); r = mc.risolto(cfg); m = r["moduli"][0]
+preso = []
+class R:
+    returncode, stdout = 0, b"ok\n"
+def run(argv, input=None, **kw):
+    preso.append((argv, input))
+    return R()
+ns["shutil"].which = lambda x: "/fake/" + x
+ns["subprocess"].run = run
+for lg in ("it", "en"):
+    os.environ["MAAT_LINGUA"] = lg; preso.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        ns["prova_test"](mc, cfg, m, {})
+    assert preso and preso[0][0][1:] == ["--", "bash", "-l", "-s"], preso
+    prog = preso[0][1].decode("utf-8")
+    assert ("MAAT_LINGUA=%s\n" % ns["sq"](lg)) in prog, prog
+' "$V25B" > "$T/out" 2>&1
+}
+check "--prova-test, modulo wsl: il programma per wsl esporta MAAT_LINGUA (it e en)" 'caso_prova_wsl'
+
 # 26. counterproof tools (pk08): rsync/flock missing -> OK «di ripiego, più lenti»; sha256sum, timeout, rsync and
 #     tar together -> ATTENZIONE BLOCKED. With fake probes (missing by name), then a real run with this machine's PATH.
 V26=$(variante controprova 'c["moduli"][0]["controprova"] = {"runner": "comando", "comando": "bash run-test.sh {test}"}')
@@ -322,6 +351,19 @@ else ATT26='^OK controprove del modulo m: (rsync|flock) assente: (copia|lock) di
 doc MAAT_CONFIG="$V26"
 check "  giro vero su questa macchina: $ATT26" '[ "$rc" = 0 ] && ha "$ATT26" && ! ha "^ATTENZIONE controprove"'
 
+# --- en (1.4.0): MAAT_LINGUA=en, the levels printed as OK|WARNING|MISSING (D3), the text from the catalog, no Italian ---
+IT_DOC='ATTENZIONE|MANCA|guardia:|guardia (di|non)|cartella|modulo|negat|sonda|agganciat|versione|richiesto|scrivibile|assente|valido| del | non '
+doc MAAT_LINGUA=en
+check "en: progetto completo -> exit 0, guardia provata, riepilogo OK/WARNING/MISSING, niente italiano" '[ "$rc" = 0 ] && ha "^OK guard: «git push --force origin prova» denied in a phase and asked in the session$" && ha "^OK guard: production probe «curl -s https://prod\.esempio\.it/» denied in a phase and asked in the session$" && ha "^OK valid maat\.json \(" && ha "^maat-doctor: [0-9]+ OK, 0 WARNING, 0 MISSING$" && ! ha "$IT_DOC"'
+DP=$T/p0 doc MAAT_LINGUA=en
+check "en: senza maat.json -> MISSING «run /maat:setup», exit 1, niente italiano" '[ "$rc" = 1 ] && ha "^MISSING maat\.json missing \(.*\) — run /maat:setup$" && ha "^maat-doctor: [0-9]+ OK, 0 WARNING, 2 MISSING$" && ! ha "$IT_DOC"'
+DP=$T/p5 doc MAAT_LINGUA=en
+check "en: hook doppio -> WARNING (il token interno ATTENZIONE non si vede)" 'ha "^WARNING duplicate guard hook: plugin maat enabled \(.claude/settings\.json\) and project PreToolUse hook" && ha "^maat-doctor: [0-9]+ OK, 1 WARNING, 0 MISSING$" && ! ha "$IT_DOC"'
+doc MAAT_LINGUA=en -- --piattaforma
+check "en: --piattaforma stampa gli stessi valori di sempre" '[ "$rc" = 0 ] && grep -qxE "windows-wsl|windows-senza-wsl|altro" <(tr -d "\r" < "$T/out")'
+doc MAAT_LINGUA=en -- --nonsense
+check "en: opzione sconosciuta -> 64, in inglese" '[ "$rc" = 64 ] && ha "^maat-doctor: unknown option: --nonsense" && ! ha "$IT_DOC"'
+
 # --- mutation counterproofs -------------------------------------------------------------------------------------------------
 mutante() { # <name> <sed expression> -> path of the mutated doctor (with the plugin next to it); empty if the sed changes nothing
   local d="$T/mut/$1"
@@ -342,7 +384,7 @@ m=$(mutante completo 's/\[ "$rc" = 2 \] || { GMOT=/[ "$rc" = 0 ] || { GMOT=/')
 check "controprova: guardia attesa ammettere in fase -> il caso completo è rosso" '[ -n "$m" ] && ! caso_completo "$m"'
 m=$(mutante claude-path 's/^CL=\${CLAUDE_BIN:-}$/CL=${CLAUDE_BIN:-}; [ -n "$CL" ] || CL=$(command -v claude 2>\/dev\/null || true)/')
 check "controprova: claude cercato nel PATH prima dell'estensione -> rosso" '[ -n "$m" ] && ! caso_claude_ext "$m"'
-m=$(mutante python-assente 's/            ok = p is not None and (os.path.isfile(p)/            ok = p is not None or (os.path.isfile(p)/; s/            if ok:   # un interprete/            if False:   # un interprete/')
+m=$(mutante python-assente 's/            ok = p is not None and (os.path.isfile(p)/            ok = p is not None or (os.path.isfile(p)/; s/            if ok:   # an interpreter/            if False:   # an interpreter/')
 check "controprova: interprete assente preso per presente -> niente MANCA python, rosso" '[ -n "$m" ] && ! caso_python_assente "$m"'
 m=$(mutante python-ok 's/            if exe == "{python}" and not py\["ok"\] and not mancanti:/            if False:/')
 check "controprova: {python} assente con lo script presente stampa OK del comando -> rosso" '[ -n "$m" ] && ! caso_python_assente "$m"'
@@ -372,12 +414,14 @@ m=$(mutante copia-semina 's/^    questa, principale = pronta("$FIC_MIRROR\/" + p
 check "controprova: semina cercata nella copia del worktree invece che in quella principale -> rosso" '[ -n "$m" ] && ! caso_copia "$m"'
 m=$(mutante wsl-assoluto 's/^                    if a.startswith("\/") and not a.startswith("\/mnt\/"):$/                    if False:/')
 check "controprova: /opt/… di un modulo wsl guardato lato Windows -> rosso" '[ -n "$m" ] && ! caso_wsl_assoluto "$m"'
+m=$(mutante prova-lingua 's/ MAAT_LINGUA=%s\\ncd %s \&\& %s\\n" % (/\\ncd %s \&\& %s\\n" % (/; s/sq(_m.lingua()), sq(wslp(cart_abs))/sq(wslp(cart_abs))/')
+check "controprova: prova in WSL senza MAAT_LINGUA -> rosso" '[ -n "$m" ] && ! caso_prova_wsl "$m"'
 m=$(mutante strumenti-ripiego 's/^                elif assenti:$/                elif False:/')
 check "controprova: rsync/flock assenti senza la riga di ripiego -> «presenti», rosso" '[ -n "$m" ] && ! caso_strumenti "$m"'
 m=$(mutante strumenti-sha 's/manca = \[s for s in ("sha256sum", "timeout") if not ha\[s\]\]/manca = []/')
 check "controprova: sha256sum e timeout non controllati -> nessun BLOCKED, rosso" '[ -n "$m" ] && ! caso_strumenti "$m"'
 if [ "$WIN" = 1 ]; then
-  m=$(mutante wsl-livello 's/riga("OK", "WSL assente: copia veloce/riga("MANCA", "WSL assente: copia veloce/')
+  m=$(mutante wsl-livello 's/riga("OK", T("maat-doctor.wsl_missing_ok"/riga("MANCA", T("maat-doctor.wsl_missing_ok"/')
   check "controprova: WSL assente come MANCA -> exit 1, rosso" '[ -n "$m" ] && ! caso_wsl_assente "$m"'
   if [ -e /c/Windows/System32/wsl.exe ] || [ -e "${SYSTEMROOT:-C:/Windows}/System32/wsl.exe" ]; then
     # wsl.exe exists in System32: a doctor that ignores PATH finds it anyway (CreateProcess also searches there)

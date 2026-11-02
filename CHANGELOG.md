@@ -2,6 +2,70 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.4.0 — runtime messages in English, `"lingua": "it"` keeps them Italian
+
+**Why 1.4.0 and not a patch:** the output changes for whoever has no `lingua` in `.claude/maat.json`. The messages
+that the scripts print for a person are now **English by default**: the text after `STOP — `, the explanation after
+`VIOLAZIONE` and `AVVISO`, usage errors, remedies, progress lines, the reports of `maat-doctor`, `cycle-report` and
+`phase-usage`. **Remedy, to keep Italian:** add `"lingua": "it"` to `.claude/maat.json`; the output is then byte for
+byte the one of 1.3.0. No behaviour changes: only the text.
+
+- **The language:** `MAAT_LINGUA` (`it` or `en`, for one command or a test run) wins over `"lingua"` of
+  `.claude/maat.json`, which wins over the default `en`. `guard.py` follows the same order. This is what the 1.3.0
+  entry announced for «1.3.1»: it happens here, in 1.4.0.
+- **One catalog:** `scripts/lib/messages.tsv` (`key<TAB>en<TAB>it`), read by `lib/maat-msg.sh` (bash) and
+  `maat_msg.py` (Python) with the same bytes. A missing key or catalog prints the key between `‹ ›` and one warning on
+  stderr; the exit code does not change.
+- **Frozen on purpose** (the same in every language, listed with their reason in
+  `scripts/lib/protocol-strings.list`): a protocol prefix stays, the human text after it follows the language.
+
+| what | examples |
+|---|---|
+| the whole stdout of `plan-check.sh basis` (it enters `State`) and of `contract` (its keys are read by the skills) | `Catena: anello k/n di …`, `Recorded: assente`, `Superfici a rischio:`, `Pavimento:` |
+| chain state, closing line, lines of `cycle-state.sh` read by other scripts | `assente;` `chiuso;` `aperto;`, `Chiusura: IMPLEMENTED — `, `Base anello:`, `STOP — catena`, the step word `CHIUSURA` of `Next:` |
+| harness fingerprint and lock tokens | `UGUALE` `CAMBIATO` `ILLEGGIBILE` `NON-CALCOLABILE`; `--lock-status`: `libero` `occupato` `dentro il ciclo` `sconosciuto` |
+| `key: esito=` lines, block lines, plan fingerprint, markers inside the prompts | `rossi: esito=`, `posteriori: esito=`, `blocco <id>: scrive=… · dopo=…`, `Impronta piano:`, `EVIDENZE DEI GATE`, `DEVIAZIONI DIFENSIVE` |
+| values read by another script | `(assente)`, `(nessuno)`, `nessuna`, `(vuoto)`; the prefixes `finalize non eseguito (` / `finalize fallito (`, `modo=`, `scartato: ` |
+| driver certificate output | `UGUALE` / `DIVERSO`, `certificato: VALIDO\|ASSENTE\|SCADUTO` |
+| identifiers | keys and values of `.claude/maat.json`, run dir file names, sub-commands, the phase name `chiusura` |
+
+- **Keywords that stay Italian:** `VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`, `Scheletro:`, `S2:` are read by
+  the skills and the tests, so they do not change; the explanation after them follows the language. Moving them to
+  English, with both forms read, is a separate change.
+- **Read in both languages:** where one script reads the message of another, the reader accepts the Italian and the
+  English form («python non trovato» / «python not found», «non coperto» / «not covered»). `maat-doctor` prints
+  `OK` · `WARNING` · `MISSING` in English, `OK` · `ATTENZIONE` · `MANCA` in Italian. The `STOP — ` classes of
+  `cycle-report` recognise the English texts too; on the Italian texts they give the same class as in 1.3.0.
+- **Lines written into the spec** (`Verification:`, `Finalize:`, the requirement evidence) follow the language; their
+  prefixes stay, and every reader reads lines written in either language.
+- **Unchanged:** the header and the values of `metrics.csv`, the keys and values of the JSON of `cycle-report`, the
+  keys of the phase result JSON and of `.claude/maat.json`.
+- **Prompts:** where a prompt quotes a message that now follows the language, it quotes both forms. The agents write
+  their free text (after `STOP — `, in the reports) in the language of `lingua`, like the `▶ ` lines; the report
+  keywords stay those of 1.3.0.
+- **The language is part of the harness fingerprint** (the resolved one: `MAAT_LINGUA`, otherwise `lingua`).
+  Changing `lingua`, or running with another `MAAT_LINGUA`, in the middle of a cycle stops it with «harness
+  changed», like any change of the harness. The key of the gate evidence contains the translated reasons, so after a
+  change of language some gates run again.
+- **Tests:** every suite runs with `MAAT_LINGUA=it` and keeps its Italian assertions; English cases are added next
+  to them. `scripts/messages.test.sh` checks the catalog and the anti-leak rule: no literal that its scanner recognises
+  as Italian in a plugin script outside the catalog and `protocol-strings.list` (in the repo only: installed in the
+  cache, that part is skipped). `tools/lingua-inventario.py` measures what is left
+  (`docs/TESTING-harness.md`, «The two languages»).
+- **Driver certificate:** it also covers `messages.tsv`, `lib/maat-msg.sh` and `maat_msg.py`, and `driver.py equiv`
+  runs the proof in both languages.
+- **Proof of compatibility:** on the 15 closed cycles of the driver certificate (all Italian), the 1.3.0 code and
+  the 1.4.0 code with `MAAT_LINGUA=it` give the **whole** `cycle-state.sh` output and the output of `plan-check.sh
+  basis` and `contract` identical, cycle by cycle; with `MAAT_LINGUA=en` the `State`, the last code phase, the step
+  of `Next`, `basis` and `contract` are identical (each side run from its own plugin tree, with the harness
+  fingerprint of the run dirs regenerated for that tree and language). The driver certificate is regenerated in both
+  languages: `spec=15 diverse=0 · jsonl=83 diversi=0` in each.
+- **Roadmap:** what was planned as 1.4.x moves to 1.5.x: multi-platform CI is now 1.5.3, and the benchmark comes
+  after it.
+- **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again. Set
+  `"lingua"` **before** recording the fingerprint, or the next change of language stops the cycle again.
+
 ## 1.3.0 — formats in English, Italian still read
 
 The formats that people and agents write and Maat reads are now written in English. Every reader accepts **both**

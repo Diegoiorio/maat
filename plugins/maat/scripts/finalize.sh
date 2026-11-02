@@ -56,6 +56,10 @@
 # Exit: 0 IMPLEMENTED confirmed · 1 NEEDS_VERIFICATION written · 3 FAIL written · 4 nothing to sign (spec
 # untouched) · 2 usage.
 # Stdout: one line for each missing item, then "finalize: esito=<IMPLEMENTED|NEEDS_VERIFICATION|FAIL|INVARIATO> — <…>".
+# LANGUAGE (1.4.0): the reasons, the detail of the Verification:/Finalize: lines and the Evidence table follow the
+# language of the messages (catalog: English by default, Italian with "lingua": "it"; the quoted texts above are the
+# Italian ones). Prefixes, separators and outcome words stay as they are; «non coperto» and «not covered» are both
+# counted as a requirement not covered.
 # Variables: FIC_GATES gates.sh to use for --verify (default: the one next to this script) · FIC_GATES_ROOT and the other
 # gates.sh variables pass through the environment (FIC_GATES_ROOT is also the project of maat.json; MAAT_CONFIG replaces it) ·
 # FIC_GATES_HARNESS plugin root (default MAAT_ROOT; scripts/plan-check.sh, scripts/python.sh,
@@ -64,6 +68,12 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT (plugin)
+# Messages (1.4.0): the catalog next to this script. The language is resolved once and exported (gates.sh and
+# plan-check.sh read the same one); the embedded Python imports maat_msg.py from MAAT_MSG_PY. The lines written in
+# the spec keep their prefixes and separators here: only the detail ({det}) follows the language.
+. "$HERE/lib/maat-msg.sh"; maat_msg_carica
+maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
 HROOT=${FIC_GATES_HARNESS:-$MAAT_ROOT}
 GATES=${FIC_GATES:-$HERE/gates.sh}
 PC="$HROOT/scripts/plan-check.sh"
@@ -76,16 +86,16 @@ while [ $# -gt 0 ]; do
     --level) [ $# -ge 2 ] || usage; level=$2; shift 2 ;;
     --copertura) [ $# -ge 2 ] || usage; cop=$2; shift 2 ;;
     -h|--help) usage ;;
-    -*) echo "finalize: opzione sconosciuta: $1" >&2; exit 2 ;;
+    -*) echo "finalize: $(msg finalize.unknown_option opt="$1")" >&2; exit 2 ;;
     *) break ;;
   esac
 done
 [ $# -eq 1 ] || usage
 run=${1%/}
-[ -d "$run" ] || { echo "finalize: run dir assente: $run" >&2; exit 2; }
+[ -d "$run" ] || { echo "finalize: $(msg finalize.no_run_dir run="$run")" >&2; exit 2; }
 SPEC="${run%.run}.md"
-[ -f "$SPEC" ] || { echo "finalize: spec assente: $SPEC" >&2; exit 2; }
-. "$HROOT/scripts/python.sh" || { echo "finalize: interprete Python non trovato" >&2; exit 2; }
+[ -f "$SPEC" ] || { echo "finalize: $(msg finalize.no_spec spec="$SPEC")" >&2; exit 2; }
+. "$HROOT/scripts/python.sh" || { echo "finalize: $(msg finalize.no_python)" >&2; exit 2; }
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
 py() { sed '1,/^#__PYTHON__$/d' "$0" | "$FIC_PY" - "$@"; }   # the code comes from a pipe: no temporary file
 WSPEC=$(win "$SPEC")
@@ -95,7 +105,7 @@ st=$(py stato "$WSPEC" | tr -d '\r')
 rs=${st%%|*} fs=${st#*|}
 case "$rs/$fs" in
   APPROVED*/IMPLEMENTED*) ;;
-  *) echo "finalize: esito=INVARIATO — niente da firmare (Review status '${rs}' · Feature status '${fs}')"; exit 4 ;;
+  *) echo "finalize: esito=INVARIATO — $(msg finalize.nothing_to_sign rs="${rs}" fs="${fs}")"; exit 4 ;;
 esac
 
 # --- level in force and required gates ---
@@ -103,7 +113,7 @@ if [ -z "$level" ]; then
   level=$(bash "$PC" contract "$SPEC" 2>/dev/null | tr -d '\r' | sed -n 's/^Test level: \([a-z]*\).*/\1/p' | head -1)
   case $level in min|std|full) ;; *) level=legacy ;; esac
 fi
-case $level in min|std|full|legacy) ;; *) echo "finalize: livello sconosciuto: $level (min|std|full|legacy)" >&2; exit 2 ;; esac
+case $level in min|std|full|legacy) ;; *) echo "finalize: $(msg finalize.unknown_level level="$level")" >&2; exit 2 ;; esac
 FILES=()
 [ -f "$run/touched.txt" ] && mapfile -t FILES < <(tr -d '\r' < "$run/touched.txt" | sed 's|^\./||' | grep -v '^$' | LC_ALL=C sort -u)
 
@@ -123,7 +133,7 @@ if . "$HROOT/scripts/lib/maat-conf.sh" 2>/dev/null && maat_conf_carica 2>/dev/nu
   done
 else
   conf_err=$( { [ -n "${FIC_PY:-}" ] && "$FIC_PY" "$HROOT/scripts/maat-config.py" valida; } 2>&1 | tr -d '\r' | sed 's/^maat-config: //' | head -2 | tr '\n' ' ')
-  conf_err=${conf_err:-lettore non utilizzabile}
+  conf_err=${conf_err:-$(msg finalize.reader_unusable)}
 fi
 
 # --- evidence at the current key: same arguments as gates.sh (level + touched.txt), then --verify ---
@@ -142,9 +152,9 @@ miss=() nfail=0 weak=()
 # "W|…" = counterproof rosso_generico: satisfies (PASS) but is a WEAK proof, declared in the detail and on stdout
 add() { [ -n "$1" ] || return 0; case $1 in F\|*) nfail=$((nfail + 1)) ;; W\|*) weak+=("${1#W|}"); return 0 ;; esac; miss+=("${1#[FN]|}"); }
 if [ -n "$conf_err" ]; then
-  add "N|gate richiesti non determinabili (maat.json: ${conf_err% })"
+  add "N|$(msg finalize.gates_unknown err="${conf_err% }")"
 elif [ -z "$ev" ]; then
-  add "N|nessuna evidenza del driver alla chiave attuale (livello $level, file di touched.txt)${stale:+ — chiavi vecchie:$stale}"
+  add "N|$(msg finalize.no_evidence level="$level" stale="${stale:+ — $(msg finalize.old_keys stale="$stale")}")"
 else
   while IFS= read -r m; do add "$m"; done < <(py gate "$(win "$ev")" ${GM[@]+"${GM[@]}"} | tr -d '\r')
 fi
@@ -160,31 +170,31 @@ while IFS= read -r m; do add "$m"; done < <(py controprove "$(win "$run")" "$WSP
 # Merge requirement -> test ID -> results (harness-pt09): the section's Evidence table, after the signature.
 unisci() {
   [ -n "$cop" ] || return 0
-  if [ ! -f "$cop" ]; then echo "finalize: copertura assente ($cop): nessuna tabella Evidence"; return 0; fi
+  if [ ! -f "$cop" ]; then echo "finalize: $(msg finalize.no_coverage cop="$cop")"; return 0; fi
   py unisci "$WSPEC" "$(win "$cop")" "$([ -n "$ev" ] && win "$ev")" "$(win "$run")" ${MODINFO[@]+"${MODINFO[@]}"} | tr -d '\r'
 }
 
 deboli=""
 if [ ${#weak[@]} -gt 0 ]; then
-  printf 'prova debole: %s\n' "${weak[@]}"
-  deboli=$(printf '%s; ' "${weak[@]}"); deboli=" (prove deboli: ${deboli%; })"
+  for w in "${weak[@]}"; do printf '%s\n' "$(msg finalize.weak_proof w="$w")"; done
+  deboli=$(printf '%s; ' "${weak[@]}"); deboli=" ($(msg finalize.weak_proofs list="${deboli%; }"))"
 fi
 if [ ${#miss[@]} -eq 0 ]; then
-  det="gate ${REQ[*]} alla chiave attuale (evidence/$(basename "$ev" | cut -c1-12)…), controprove rosse su asserzione$deboli"
-  py scrivi "$WSPEC" IMPLEMENTED "$det" || { echo "finalize: spec non scrivibile" >&2; exit 2; }
+  det="$(msg finalize.det_ok gates="${REQ[*]}" key="$(basename "$ev" | cut -c1-12)")$deboli"
+  py scrivi "$WSPEC" IMPLEMENTED "$det" || { echo "finalize: $(msg finalize.spec_unwritable)" >&2; exit 2; }
   unisci
-  echo "finalize: esito=IMPLEMENTED — confermato: $det"
+  echo "finalize: esito=IMPLEMENTED — $(msg finalize.confirmed det="$det")"
   exit 0
 fi
 printf '%s\n' "${miss[@]}"
 det=$(printf '%s; ' "${miss[@]}"); det=${det%; }$deboli
 if [ $nfail -gt 0 ]; then
-  py scrivi "$WSPEC" FAIL "$det" || { echo "finalize: spec non scrivibile" >&2; exit 2; }
+  py scrivi "$WSPEC" FAIL "$det" || { echo "finalize: $(msg finalize.spec_unwritable)" >&2; exit 2; }
   unisci
   echo "finalize: esito=FAIL — $det"
   exit 3
 fi
-py scrivi "$WSPEC" NEEDS_VERIFICATION "$det" || { echo "finalize: spec non scrivibile" >&2; exit 2; }
+py scrivi "$WSPEC" NEEDS_VERIFICATION "$det" || { echo "finalize: $(msg finalize.spec_unwritable)" >&2; exit 2; }
 unisci
 echo "finalize: esito=NEEDS_VERIFICATION — $det"
 exit 1
@@ -192,10 +202,16 @@ exit 1
 #__PYTHON__
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import sys
+
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the message catalog (1.4.0), next to finalize.sh
 
 FENCE = re.compile(r"^[ \t]*(```|~~~)")
 
@@ -210,7 +226,7 @@ def corpo(line):
 
 
 def review(lines):
-    """Indici delle righe della sezione di review fuori dai recinti (come cycle-state.sh)."""
+    """Indexes of the lines of the review section outside the fences (as cycle-state.sh)."""
     out, inf, on = [], False, False
     for i, ln in enumerate(lines):
         t = corpo(ln)
@@ -250,10 +266,10 @@ def load(p):
 
 
 def cmd_gate(ev, *coppie):
-    """Una riga per ogni gate richiesto (coppie «gate=modulo») che non soddisfa: PASS col report, o SKIPPED;
-    chiave = cartella. NOT RUN (dichiarato: modulo senza test, voci saltate) non soddisfa ma non e' un errore:
-    al massimo NEEDS_VERIFICATION, col motivo «nessun test nel modulo X, controlli verdi» (o «controlli saltati»).
-    FAIL di qualunque gate richiesto, controlli-<modulo> compreso: F."""
+    """One line for each required gate («gate=module» pairs) that does not satisfy: PASS with the report, or SKIPPED;
+    key = folder. NOT RUN (declared: module without tests, skipped entries) does not satisfy but is not an error:
+    at most NEEDS_VERIFICATION, with the reason «no test in the module X, checks green» (or «checks skipped»).
+    FAIL of any required gate, controlli-<module> included: F."""
     key = os.path.basename(ev.rstrip("/\\"))
     gm = [c.split("=", 1) for c in coppie]
     nomi = {g for g, _m in gm}
@@ -261,9 +277,9 @@ def cmd_gate(ev, *coppie):
     def gate(g):
         d = load(os.path.join(ev, g + ".json"))
         if not isinstance(d, dict):
-            return None, "N|%s: evidenza assente o illeggibile (evidence/%s)" % (g, key[:12])
+            return None, "N|" + T("finalize.ev_missing", g=g, key=key[:12])
         if d.get("chiave") != key:
-            return None, "N|%s: chiave del JSON diversa dalla cartella dell evidenza" % g
+            return None, "N|" + T("finalize.ev_key", g=g)
         return d, None
 
     for g, m in gm:
@@ -275,25 +291,25 @@ def cmd_gate(ev, *coppie):
         if es == "PASS":
             rep = d.get("report")
             if not rep or not os.path.isfile(os.path.join(ev, rep)):
-                print("N|%s: PASS senza il report del runner" % g)
+                print("N|" + T("finalize.pass_no_report", g=g))
         elif es == "NOT RUN":
             ctl = "controlli-" + m
             if g == "tests-" + m:
                 c = gate(ctl)[0] if ctl in nomi else None
                 ce = c.get("esito") if isinstance(c, dict) else None
                 if ce == "PASS":
-                    print("N|%s: NOT RUN (%s) — nessun test nel modulo %s, controlli verdi" % (g, d.get("motivo") or "dichiarato", m))
+                    print("N|" + T("finalize.nr_checks_green", g=g, why=d.get("motivo") or T("finalize.declared"), m=m))
                 elif ce == "NOT RUN":
-                    print("N|%s: NOT RUN (%s) — nessun test nel modulo %s, controlli saltati: %s" % (
-                        g, d.get("motivo") or "dichiarato", m, c.get("motivo") or "senza motivo"))
+                    print("N|" + T("finalize.nr_checks_skipped", g=g, why=d.get("motivo") or T("finalize.declared"), m=m,
+                                   why2=c.get("motivo") or T("finalize.no_reason")))
                 else:
-                    print("N|%s: NOT RUN (%s) — nessun test nel modulo %s" % (g, d.get("motivo") or "dichiarato", m))
+                    print("N|" + T("finalize.nr_no_test", g=g, why=d.get("motivo") or T("finalize.declared"), m=m))
             elif not (g == ctl and ("tests-" + m) in nomi and
                       (gate("tests-" + m)[0] or {}).get("esito") == "NOT RUN"):
-                print("N|%s: NOT RUN (%s)" % (g, d.get("motivo") or "senza motivo"))
+                print("N|%s: NOT RUN (%s)" % (g, d.get("motivo") or T("finalize.no_reason")))
         elif es != "SKIPPED":
             print("%s|%s: %s (%s)" % ("F" if es == "FAIL" else "N", g, es,
-                                      d.get("motivo") or d.get("riepilogo") or "senza motivo"))
+                                      d.get("motivo") or d.get("riepilogo") or T("finalize.no_reason")))
 
 
 # counterproof.sh outcomes (harness-pt05) that mean "wrong code": FAIL; blocked and absent: missing evidence
@@ -306,7 +322,7 @@ CP_NON_ESEGUITA = "non_eseguita"
 
 def non_eseguita(r):
     m = (r.get("motivo") or "").strip()
-    return m if m.startswith("NOT RUN") else "NOT RUN (dichiarato)" + (": " + m if m else "")
+    return m if m.startswith("NOT RUN") else "NOT RUN (%s)" % T("finalize.declared") + (": " + m if m else "")
 
 
 def cmd_controprove(run, spec, l2file=""):
@@ -314,7 +330,7 @@ def cmd_controprove(run, spec, l2file=""):
     if os.path.isfile(mj):
         lst = load(mj)
         if not isinstance(lst, list):
-            print("N|controprove: mutations.json illeggibile")
+            print("N|" + T("finalize.mj_unreadable"))
             return
         l2 = {}
         if l2file and os.path.isfile(l2file):
@@ -326,24 +342,24 @@ def cmd_controprove(run, spec, l2file=""):
         for e in lst:
             mid = e.get("id") if isinstance(e, dict) else None
             if not mid:
-                print("N|controprove: voce senza id in mutations.json")
+                print("N|" + T("finalize.mj_no_id"))
                 continue
             r = load(os.path.join(run, "counterproof", str(mid) + ".json"))
             if e.get("assorbita") is True:  # L2: counts only if plan-check.sh l2 confirms it on the current code
                 st = l2.get(str(mid))
                 if (st and st[0] == "OK") or (isinstance(r, dict) and r.get("esito") == "rosso_asserzione"):
                     continue
-                print("N|controprova %s: assorbita (L2) non valida: %s" % (mid, st[1] if st else "condizioni non verificate (plan-check.sh l2)"))
+                print("N|" + T("finalize.l2_invalid", mid=mid, why=st[1] if st else T("finalize.l2_unverified")))
                 continue
             if not isinstance(r, dict):
-                print("N|controprova %s: risultato assente (counterproof.sh non eseguito o incompleto)" % mid)
+                print("N|" + T("finalize.cp_no_result", mid=mid))
             elif r.get("esito") == CP_DEBOLE:
-                print("W|controprova %s: rosso_generico, prova debole (%s)" % (mid, r.get("motivo") or "nessuna asserzione verificata"))
+                print("W|" + T("finalize.cp_weak", mid=mid, why=r.get("motivo") or T("finalize.no_assertion")))
             elif r.get("esito") == CP_NON_ESEGUITA:
-                print("N|controprova %s: %s" % (mid, non_eseguita(r)))
+                print("N|" + T("finalize.cp_line", mid=mid, why=non_eseguita(r)))
             elif r.get("esito") != "rosso_asserzione":
-                print("%s|controprova %s: %s (%s)" % ("F" if r.get("esito") in CP_FAIL else "N", mid,
-                                                      r.get("esito"), r.get("motivo") or ""))
+                print("%s|%s" % ("F" if r.get("esito") in CP_FAIL else "N",
+                                 T("finalize.cp_outcome", mid=mid, es=r.get("esito"), why=r.get("motivo") or "")))
         return
     lines = leggi(spec)
     for i in review(lines):
@@ -356,8 +372,8 @@ def cmd_controprove(run, spec, l2file=""):
         if cells[1].lower() == "no":
             continue
         if not cells[3].upper().startswith("PASS"):
-            print("%s|controprova (tabella della review) %s: %s" % ("F" if cells[3].upper().startswith("FAIL") else "N",
-                                                                    cells[0], cells[3] or "senza esito"))
+            print("%s|%s" % ("F" if cells[3].upper().startswith("FAIL") else "N",
+                             T("finalize.cp_table", cell=cells[0], res=cells[3] or T("finalize.no_outcome"))))
 
 
 def cmd_scrivi(spec, stato, det):
@@ -409,11 +425,15 @@ def salva(spec, lines):
 
 # --- merge requirement -> test ID -> VERIFY results (harness-pt09) ---
 EV_HEAD = "Requirement evidence (finalize.sh"
+# An evidence cell that starts with one of these is a requirement not covered (finalize.uncovered_*): the Italian and
+# the English form, so a table written in either language is counted the same (the reviewer writes them too).
+UNCOVERED = ("non coperto", "not covered")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def risultati_junit(ev, gate):
-    """{(classname, name): esito} dal JUnit di un gate (modulo con report junit) all evidenza FRESH; vuoto se non c e."""
+    """{(classname, name): outcome} from the JUnit of a gate (module with a junit report) in the FRESH evidence; empty
+    if there is none."""
     import xml.etree.ElementTree as ET
     out = {}
     d = load(os.path.join(ev, gate + ".json")) if ev else None
@@ -444,7 +464,7 @@ def senza_radice(t, radice):
 
 
 def chiave_junit(tid, radice):
-    """node id pytest (tests/x.py::C::t, anche con la radice del modulo davanti) -> (classname, name) del JUnit."""
+    """pytest node id (tests/x.py::C::t, also with the module root in front) -> (classname, name) of the JUnit."""
     t = senza_radice(tid.strip().replace("\\", "/"), radice)
     parti = t.split("::")
     if len(parti) < 2 or not parti[0].endswith(".py"):
@@ -464,8 +484,8 @@ def log_vitest(ev, gate):
 
 
 def esito_vitest(righe, tid, radice):
-    """Il report del wrapper (test-fast.sh) non ha un esito per test: FAIL dalle righe "FAIL <id>", PASS solo a
-    livello di file (riga "✓ <file>"). Nient altro e' un risultato. La radice del modulo davanti all'ID si toglie."""
+    """The wrapper report (test-fast.sh) has no per-test outcome: FAIL from the "FAIL <id>" lines, PASS only at the
+    file level ("✓ <file>" line). Nothing else is a result. The module root in front of the ID is removed."""
     t = senza_radice(" ".join(tid.strip().replace("\\", "/").split()), radice)
     fine = r"(\s|$)"
     if any(re.match(r"(FAIL|❯|×)\s+" + re.escape(t) + fine, l) for l in righe):
@@ -476,12 +496,12 @@ def esito_vitest(righe, tid, radice):
 
 
 def cmd_unisci(spec, cop, ev, run, *moduli):
-    """moduli: «nome|report|radice»; il formato del report (junit, vitest, nessuno) dice come leggere i risultati
-    del gate tests-<nome>, mai il nome del gate. Un modulo con report nessuno non da' risultati per test."""
+    """moduli: «name|report|root»; the report format (junit, vitest, nessuno) says how to read the results of the
+    gate tests-<name>, never the gate name. A module with report nessuno gives no per-test results."""
     obj = load(cop)
     cov = obj.get("copertura") if isinstance(obj, dict) else None
     if not isinstance(cov, list):
-        print("finalize: nessuna mappa requisito→ID (campo copertura) in %s: nessuna tabella Evidence" % cop)
+        print("finalize: " + T("finalize.no_cov_map", cop=cop))
         return
     mods = [x.split("|", 2) for x in moduli if x.count("|") >= 2]
     ju = [("tests-" + n, rad, risultati_junit(ev, "tests-" + n)) for n, rep, rad in mods if rep == "junit"]
@@ -500,10 +520,11 @@ def cmd_unisci(spec, cop, ev, run, *moduli):
         if isinstance(r, dict) and r.get("esito"):
             es = r["esito"]
             if es == CP_DEBOLE:
-                return "PASS (controprova %s, prova debole)" % es
+                return "PASS (%s)" % T("finalize.cp_weak_cell", es=es)
             if es == CP_NON_ESEGUITA:
-                return "NOT RUN (controprova %s)" % es
-            return "%s (controprova %s)" % ("PASS" if es == "rosso_asserzione" else "BLOCKED" if es == "bloccato" else "FAIL", es)
+                return "NOT RUN (%s)" % T("finalize.cp_cell", es=es)
+            return "%s (%s)" % ("PASS" if es == "rosso_asserzione" else "BLOCKED" if es == "bloccato" else "FAIL",
+                                T("finalize.cp_cell", es=es))
         for g, rad, righe in vi:
             es = esito_vitest(righe, tid, rad)
             if es is not None:
@@ -519,12 +540,12 @@ def cmd_unisci(spec, cop, ev, run, *moduli):
         ris = [(i, risultato(i)) for i in ids]
         senza = [i for i, r in ris if r is None]
         if not ids:
-            evid = "non coperto (nessun ID di test)"
+            evid = T("finalize.uncovered_no_id")
         elif senza:
-            evid = "non coperto (senza risultato: %s)" % "; ".join(senza)
+            evid = T("finalize.uncovered_no_result", ids="; ".join(senza))
         else:
             evid = " · ".join("%s → %s" % (i, r) for i, r in ris)
-        scoperti += evid.startswith("non coperto")
+        scoperti += evid.startswith(UNCOVERED)
         righe.append("| %s | %s | %s |" % (cella(voce.get("requisito", "")), cella("; ".join(ids) or "—"), cella(evid)))
 
     lines = leggi(spec)
@@ -540,12 +561,12 @@ def cmd_unisci(spec, cop, ev, run, *moduli):
             j += 1
         del lines[old:j]
         fi = primo(lines, review(lines), "Finalize:")
-    k12 = os.path.basename(ev.rstrip("/\\"))[:12] if ev else "nessuna chiave attuale"
-    blocco = ["%s: requisito → ID di test → risultato di VERIFY, evidence/%s)" % (EV_HEAD, k12),
+    k12 = os.path.basename(ev.rstrip("/\\"))[:12] if ev else T("finalize.no_current_key")
+    blocco = ["%s: %s)" % (EV_HEAD, T("finalize.ev_head", k12=k12)),
               "| Requirement | Test IDs | Evidence |", "|---|---|---|"] + righe
     lines[fi + 1:fi + 1] = [b + eol for b in blocco]
     salva(spec, lines)
-    print("finalize: Evidence composta — %d requisiti, %d non coperti" % (len(righe), scoperti))
+    print("finalize: " + T("finalize.ev_composed", n=len(righe), k=scoperti))
 
 
 sys.stdout.reconfigure(encoding="utf-8")

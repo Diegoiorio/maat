@@ -14,10 +14,10 @@ while [ $# -gt 0 ]; do
     --file) F=${2:-}; shift 2 ;;
     --from) FROM=${2:-}; shift 2 ;;
     --to) TO=${2:-}; shift 2 ;;
-    *) die "opzione sconosciuta: $1" ;;
+    *) die "$(msg inject.unknown_opt opt="$1")" ;;
   esac
 done
-[ -n "$F" ] && [ -n "$FROM" ] && [ "$FROM" != "$TO" ] || die "--file/--from/--to non validi"
+[ -n "$F" ] && [ -n "$FROM" ] && [ "$FROM" != "$TO" ] || die "$(msg inject.bad_mutation)"
 replace_once "$F" "$FROM" "$TO"
 mark_touched "$F"
 inj_done "$F: «$FROM» → «$TO»"

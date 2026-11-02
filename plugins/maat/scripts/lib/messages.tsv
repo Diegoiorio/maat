@@ -1,0 +1,1407 @@
+# messages.tsv — the catalog of the messages Maat prints for a person (1.4.0): one entry per line, LF, UTF-8.
+# Format: key<TAB>en<TAB>it. Lines starting with # and blank lines are ignored; a line without exactly two TABs too.
+#   key   <script>.<name> (lowercase letters, digits, - and _; one dot at least), unique
+#   en    English text (the default language); it: the Italian text ("lingua": "it" in .claude/maat.json)
+#   both  non-empty, the same placeholders {name}; {{ and }} are literal braces; no other brace, no escape, no %
+# Read by lib/maat-msg.sh (bash: msg) and maat_msg.py (Python: T), both next to this file; checked by messages.test.sh.
+# A message on several lines is several entries. One section per script (block C and D lanes edit different sections).
+
+# --- test entries (messages.test.sh): the only keys that no script uses
+test.plain	A plain message	Un messaggio semplice
+test.value	value: <{v}>	valore: <{v}>
+test.order	{a} first, then {b}	prima {b}, poi {a}
+test.braces	literal {{braces}} around {x}	graffe {{letterali}} attorno a {x}
+test.accents	accents and dashes — · ok	perché già più — · così
+
+# --- cycle-state (lingua-converti.py)
+cycle-state.usage	usage: {script} <spec-<name>.md>	uso: {script} <spec-<name>.md>
+cycle-state.driver_failed	driver.py next failed: cycle-state.sh standalone	driver.py next non riuscito: cycle-state.sh autonomo
+cycle-state.json_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {devs}
+cycle-state.json_blocked	blocked on: 	bloccato su: 
+cycle-state.json_esito	outcome {esito}: {motivo}	esito {esito}: {motivo}
+cycle-state.json_unreadable	result.json unreadable	result.json illeggibile
+cycle-state.json_stop	{label}: {why} (rule in code on {run}/log/{label}.result.json). Decide; to resume after the decision (e.g. migration applied) rename that file to {label}.result.json.visto: the ESITO line of {label}.esito decides (STOP -> the phase is relaunched, in completion). A deviation is accepted by reopening the plan (spec changed), not by renaming	{label}: {why} (regola in codice su {run}/log/{label}.result.json). Decidi; per riprendere dopo la decisione (es. migrazione applicata) rinomina quel file in {label}.result.json.visto: decide la riga ESITO di {label}.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano (spec cambiata), non con la rinomina
+cycle-state.fin_unsigned_none	IMPLEMENTED not signed by finalize.sh (no Finalize: line)	IMPLEMENTED non firmato da finalize.sh (nessuna riga Finalize:)
+cycle-state.fin_unsigned	IMPLEMENTED not signed by finalize.sh (Finalize: {f})	IMPLEMENTED non firmato da finalize.sh (Finalize: {f})
+cycle-state.fin_no_fp	Finalize: line without the fingerprint of the signed snapshot	riga Finalize: senza l'impronta dello snapshot firmato
+cycle-state.fin_other_snap	Finalize: signed on another snapshot (snapshot {fs}), not on the current Reviewed snapshot	Finalize: firmata su un altro snapshot (snapshot {fs}), non sul Reviewed snapshot attuale
+cycle-state.fin_no_time	Finalize: line without a readable time	riga Finalize: senza un'ora leggibile
+cycle-state.fin_review_time	time of the last review ({rl}) not readable	ora dell'ultima review ({rl}) non leggibile
+cycle-state.fin_older	Finalize: older than the last review launched ({rl})	Finalize: piu' vecchia dell'ultima review lanciata ({rl})
+cycle-state.budget_unknown	fix budget not computable: line 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' missing or unreadable ('{rounds}')	budget dei fix non calcolabile: riga 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' assente o illeggibile ('{rounds}')
+cycle-state.budget_spent	fix budget exhausted (Review rounds {n}/3 · post-approval NEEDS_CHANGES {k}/1): a fix that no review will see is not written; a person decides	budget dei fix esaurito (Review rounds {n}/3 · post-approval NEEDS_CHANGES {k}/1): un fix che nessuna review vedra' non si scrive; decide una persona
+cycle-state.attr_no_post	{label} without .post-tree	{label} senza .post-tree
+cycle-state.attr_pre_open	{l} with a .pre-tree still open	{l} con .pre-tree ancora aperto
+cycle-state.attr_gap	attribution not measured ({gap}): the review would not know which files belong to the feature. With the .pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash {rs} tree) >> {run}/touched.txt, then that tree into <label>.post-tree (that is what run-phase does). Without .pre-tree: list the files of the feature by hand in touched.txt, then create the .post-tree — your decision	attribuzione non misurata ({gap}): la review non saprebbe quali file sono della feature. Con il .pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash {rs} tree) >> {run}/touched.txt, poi quel tree in <label>.post-tree (e' cio' che fa run-phase). Senza .pre-tree: elenca a mano in touched.txt i file della feature, poi crea il .post-tree — decisione tua
+cycle-state.testred_stop	{label}: acceptance tests not recorded ({l}). Decide (plan to correct and approve again, or tests to review): correcting the acceptance tests is a human decision. To relaunch the phase: rename {run}/log/{label}.esito to {label}.esito.visto	{label}: test di accettazione non registrati ({l}). Decidi (piano da correggere e riapprovare, o test da rivedere): correggere i test di accettazione e' una decisione umana. Per rilanciare la fase: rinomina {run}/log/{label}.esito in {label}.esito.visto
+cycle-state.testred	format-2 plan approved: acceptance tests and stubs to write and prove red before the implementation	piano in formato 2 approvato: test di accettazione e stub da scrivere e dimostrare rossi prima dell'implementazione
+cycle-state.code_unreadable	snapshot or manifest unreadable	snapshot o manifest illeggibili
+cycle-state.ring_prev	{files} — same chain, previous ring: neither other flows nor mixed ones, no completion	{files} — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+cycle-state.ring_base_missing	missing: the previous ring has no .post-tree	assente: l'anello precedente non ha un .post-tree
+cycle-state.harness_changed	harness changed since {since} (recorded fingerprint {a}, current {b}; the language of the messages counts too): restart the phase or confirm. Remedy: if the change is wanted, {rim} and resume (next phase: {next}); otherwise put the harness back as it was	harness cambiato dal {since} (impronta registrata {a}, attuale {b}): ricomincia la fase o conferma. Rimedio: se il cambio e' voluto, {rim} e riprendi (prossima fase: {next}); altrimenti riporta il harness com'era
+cycle-state.harness_old	fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint {a} since {since}, current {b}). Remedy: if the move to the plugin is wanted, {rim} and resume (next phase: {next}); otherwise resume the cycle with the internal harness	impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata {a} dal {since}, attuale {b}). Rimedio: se il passaggio al plugin e' voluto, {rim} e riprendi (prossima fase: {next}); altrimenti riprendi il ciclo col harness interno
+cycle-state.harness_unreadable	harness.fp unreadable (empty or without a fingerprint, recorded since {since}; current {a}). Remedy: if the current harness is the wanted one, {rim} and resume (next phase: {next})	harness.fp illeggibile (vuoto o senza impronta, registrato dal {since}; attuale {a}). Rimedio: se il harness attuale e' quello voluto, {rim} e riprendi (prossima fase: {next})
+cycle-state.harness_nc	harness fingerprint not computable (plugin files in {root} or .claude/maat.json of {repo} not readable, or repository not found; recorded since {since}): check the plugin and the repository, then resume	impronta del harness non calcolabile (file del plugin in {root} o .claude/maat.json di {repo} non leggibili, oppure repository non trovato; registrata dal {since}): verifica il plugin e il repository, poi riprendi
+cycle-state.ring_plan_wait	the plan of ring {k} starts when the plan of ring {prev} ({pn}) is APPROVED (now: {pst})	il piano dell'anello {k} parte quando il piano dell'anello {prev} ({pn}) e' APPROVED (ora: {pst})
+cycle-state.no_plan	no plan	nessun piano
+cycle-state.ring_impl_wait	the implement of ring {k} waits for ring {prev} ({pn}) IMPLEMENTED; the plan can run	l'implement dell'anello {k} aspetta l'anello {prev} ({pn}) IMPLEMENTED; il piano puo' girare
+cycle-state.ring_no_base	ring {prev} ({pn}) has no .post-tree: the base of ring {k} is not measured. Your decision	l'anello {prev} ({pn}) non ha un .post-tree: la base dell'anello {k} non e' misurata. Decisione tua
+cycle-state.ring_tree	the working tree ({now}) is not the .post-tree of ring {prev} ({base}): changes made after its closing, which ring {k} would claim as its own. Your decision: take them out of the tree and resume; to keep them in the chain add them to the touched.txt of {pn} and record the current tree as its .post-tree (bash {rs} tree)	il working tree ({now}) non e' il .post-tree dell'anello {prev} ({base}): modifiche fatte dopo la sua chiusura, che l'anello {k} si attribuirebbe. Decisione tua: riportale fuori dal tree e riprendi; per tenerle nella catena aggiungile al touched.txt di {pn} e registra il tree attuale come suo .post-tree (bash {rs} tree)
+cycle-state.not_computable	not computable	non calcolabile
+cycle-state.child_missing	the child {c} (ring {i}/{n}) does not exist: the Figlie: line and the files must match	la figlia {c} (anello {i}/{n}) non esiste: la riga Figlie: e i file devono coincidere
+cycle-state.ring_open	ring {i}/{n} ({c}) not closed: the cycle runs on that ring; the mother closes after the last one	anello {i}/{n} ({c}) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+cycle-state.chain_closing	{n} rings closed: full gates on the final tree against the base of the mother (base.txt of the first ring), e2e via /dev-verify if the children have [e2e-locator:	{n} anelli chiusi: gate full sull'albero finale contro la base della madre (base.txt del primo anello), e2e via /dev-verify se le figlie hanno [e2e-locator:
+cycle-state.chain_done	chain closed: {n} rings IMPLEMENTED and closing IMPLEMENTED on the current code	catena chiusa: {n} anelli IMPLEMENTED e chiusura IMPLEMENTED sul codice attuale
+cycle-state.chain_redo	chain code changed after the closing ({st}): it is done again	codice della catena cambiato dopo la chiusura ({st}): si rifa'
+cycle-state.unreadable	unreadable	illeggibile
+cycle-state.chain_failed	closing of the chain failed ({why}): see {run}/log/*-chiusura.*; once the reason is fixed, to relaunch it rename {run}/chiusura.txt to chiusura.txt.visto	chiusura della catena non riuscita ({why}): vedi {run}/log/*-chiusura.*; corretto il motivo, per rilanciarla rinomina {run}/chiusura.txt in chiusura.txt.visto
+cycle-state.review_both	the spec has both '## Review implementazione' and '## Implementation review': the same section in two languages. Keep the heading that was there, move the status lines into that section and remove the other one, then resume	la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione in due lingue. Tieni il titolo che c'era, porta le righe di stato in quella sezione e togli l'altra, poi riprendi
+cycle-state.review_no_plan	review section without a plan: nothing to plan on top of an implementation	sezione di review senza piano: niente da pianificare sopra un'implementazione
+cycle-state.plan_reopened	plan reopened ({plan}) after the review: does the existing review still hold? your decision	piano riaperto ({plan}) dopo la review: la review esistente vale ancora? decisione tua
+cycle-state.plan_draft	plan in DRAFT	piano in DRAFT
+cycle-state.plan_nhd	open decision on the plan (Plan status: NEEDS HUMAN DECISION)	decisione aperta sul piano (Plan status: NEEDS HUMAN DECISION)
+cycle-state.plan_unknown	Plan status not recognised: '{plan}'	Plan status non riconosciuto: '{plan}'
+cycle-state.tests_stale	acceptance tests changed after the test-red phase (Approved basis: tests): a change to the acceptance tests is a deviation, a person decides. If wanted: bash {pc} basis {spec} --write-tests records the current fingerprint; otherwise put the tests back as they were ({run}/test-red/tests.txt)	test di accettazione cambiati dopo la fase test-red (Approved basis: tests): una modifica ai test di accettazione e' una deviazione, decide una persona. Se voluta: bash {pc} basis {spec} --write-tests registra l'impronta attuale; altrimenti riporta i test com'erano ({run}/test-red/tests.txt)
+cycle-state.basis_stale	spec or plan changed after the approval ({basis}): reopen the plan with /plan-review-cycle	spec o piano cambiati dopo l'approvazione ({basis}): riapri il piano con /plan-review-cycle
+cycle-state.impl_done	implementation finished ({label})	implementazione finita ({label})
+cycle-state.impl	plan approved, no review	piano approvato, nessuna review
+cycle-state.review_legacy	legacy review section without status lines: the review does a full round	sezione di review legacy senza righe di stato: la review fa un giro pieno
+cycle-state.contract_stale	spec or plan changed after the review (Reviewed contract different): full-scope round	spec o piano cambiati dopo la review (Reviewed contract diverso): giro a scope pieno
+cycle-state.excluded	the review excluded a file touched by the feature: {tx}. Relaunch /implementation-review-cycle <name>: it reads touched.txt and reviews that file (never the promotion); or, if the file does not belong to the feature, remove it from {run}/touched.txt	la review ha escluso un file toccato dalla feature: {tx}. Rilancia /implementation-review-cycle <name>: legge touched.txt e rivede quel file (mai la promozione); oppure, se il file non e' della feature, toglilo da {run}/touched.txt
+cycle-state.fix_done	fix finished ({label})	correzione finita ({label})
+cycle-state.nv_attempt	one promotion attempt	un tentativo di promozione
+cycle-state.fin_gap	{fg}: in the new regime the final state is signed by {fin} (fail-closed; see log/<label>.finalize)	{fg}: nel nuovo regime lo stato finale lo firma {fin} (fail-closed; vedi log/<label>.finalize)
+cycle-state.done_fresh	code equal to the approved snapshot	codice uguale allo snapshot approvato
+cycle-state.done_legacy	section without a snapshot (legacy): freshness of the code not verifiable	sezione senza snapshot (legacy): freschezza del codice non verificabile
+cycle-state.code_changed	code changed after the approval ({code})	codice cambiato dopo l'approvazione ({code})
+cycle-state.unknown	combination not recognised: Review status '{rs}' · Feature status '{fs}'	combinazione non riconosciuta: Review status '{rs}' · Feature status '{fs}'
+
+# --- driver (lingua-converti.py)
+driver.result_unreadable	unreadable: {e}	illeggibile: {e}
+driver.result_phase	phase {fase} different from {phase}	fase {fase} diversa da {phase}
+driver.lots_no_f2	batches and lanes: plan not in format 2 (or gen failed): the worker decides them, series	lotti e corsie: piano non in formato 2 (o gen non riuscito): li decide il worker, serie
+driver.lot_over	, above the cap	, sopra il tetto
+driver.ev_lots	batches: 	lotti: 
+driver.lots_line	{desc}. One plan-implementer for each batch, in this order: the batch is the unit of work of the agent (estimate of its context below the cap of {cap}k).	{desc}. Un plan-implementer per lotto, in quest'ordine: il lotto e' il blocco di lavoro dell'agente (stima del suo contesto sotto il tetto di {cap}k).
+driver.ev_lanes	lanes: 	corsie: 
+driver.l2_promoted	counterproof {id} no longer absorbed, it is executed: {why}	controprova {id} non piu' assorbita, si esegue: {why}
+driver.l2_unverified	conditions not verified (plan-check.sh l2, exit {rc})	condizioni non verificate (plan-check.sh l2, exit {rc})
+driver.reads_plan_writing	with the writing of the plan	con la scrittura del piano
+driver.reads_plan_reviewer	plan reviewer	revisore del piano
+driver.reads_agent	agent	agente
+driver.reads_reviewer	reviewer	revisore
+driver.missing	MISSING	ASSENTE
+driver.above_cap	ABOVE {cap}	SOPRA {cap}
+driver.conditional	conditional	condizionali
+driver.cert_expired	certificate expired: next from cycle-state.sh ({why})	certificato scaduto: next da cycle-state.sh ({why})
+driver.cert_invalid	driver.equiv not valid for these files	driver.equiv non valido per questi file
+driver.running	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running	log/{label}.running senza .exit: una fase gira ancora (o e' morta senza chiudere); segui il suo log, oppure verifica che nessun processo viva e rimuovi il .running
+driver.antiloop	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}	anti-loop: la fase {label} non ha cambiato lo stato (State {state} prima e dopo): Next {next}
+driver.chain_to	chain: {word} — moving to {dest}	catena: {word} — passo a {dest}
+driver.chain_from	chain: arriving from {next}	catena: arrivo da {next}
+driver.next_unknown	Next not recognised: '{next}'	Next non riconosciuto: '{next}'
+driver.budget	driver budget exhausted: {n} phases launched in this invocation (--max-fasi); next: {next}	budget del driver esaurito: {n} fasi lanciate in questa invocazione (--max-fasi); prossima: {next}
+driver.dry	would launch {label} ({next})	lancerei {label} ({next})
+driver.started	{label} started	{label} avviata
+driver.rp_not_launched	run-phase.sh not launched: {e}	run-phase.sh non lanciato: {e}
+driver.finished	{label} finished: exit {rc} · {esito}	{label} finita: exit {rc} · {esito}
+driver.no_esito	(no ESITO line)	(nessuna riga ESITO)
+driver.busy	run-phase exit 4 (code lock, or plan lock of the same spec): {tail}	run-phase exit 4 (lock di codice, o lock del piano della stessa spec): {tail}
+driver.chain_prefix	chain: 	catena: 
+driver.rp2	usage	uso
+driver.rp3	claude binary not found	binario claude non trovato
+driver.rp5	guard not active: never relaunch without it	guardia non attiva: mai rilanciare senza
+driver.rp6	harness changed since the first launch of the cycle	harness cambiato dal primo lancio del ciclo
+driver.rp_other	sub-session exited {rc}	sotto-sessione uscita {rc}
+driver.result_invalid	result.json of {label} not valid: {errs}	result.json di {label} non valido: {errs}
+driver.nv_done	cycle finished: signature NEEDS_VERIFICATION — to verify: {what}; the promotion to IMPLEMENTED belongs to a later invocation, after the verification	ciclo finito: firma NEEDS_VERIFICATION — da verificare: {what}; la promozione a IMPLEMENTED e' di un'invocazione successiva, dopo la verifica
+driver.nv_no_detail	detail not found in the spec (Finalize:/Verification: lines)	dettaglio non trovato nella spec (righe Finalize:/Verification:)
+driver.equiv_not_found	not found: {t}	non trovato: {t}
+driver.equiv_nothing	no run directory: nothing to certify	nessuna run directory: niente da certificare
+driver.equiv_written	certificate written: {path}	certificato scritto: {path}
+driver.cert_stale	different hashes: {keys} (relaunch driver.py equiv --certifica)	hash diversi: {keys} (rilancia driver.py equiv --certifica)
+driver.usage	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | equiv [--certifica] <folder|spec.md>… | certificato | righe [<cap>]	uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <fase> <result.json> | equiv [--certifica] <cartella|spec.md>… | certificato | righe [<tetto>]
+driver.usage_next	usage: driver.py next <spec-<name>.md>	uso: driver.py next <spec-<name>.md>
+
+# --- run-phase (lingua-converti.py)
+run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
+run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile
+run-phase.usage_fpc	usage: {script} --harness-fp-confronta <harness.fp> [<repo>]	uso: {script} --harness-fp-confronta <harness.fp> [<repo>]
+run-phase.v_keyword	{p}: keyword not supported by the minimal validator: {kw}	{p}: keyword non supportata dal validatore minimo: {kw}
+run-phase.v_type	{p}: expected type {types}	{p}: tipo atteso {types}
+run-phase.v_enum	{p}: value {x} outside {enum}	{p}: valore {x} fuori da {enum}
+run-phase.v_required	{p}: missing {r}	{p}: manca {r}
+run-phase.v_extra	{p}: unexpected field {k}	{p}: campo non previsto {k}
+run-phase.v_short	{p}: string shorter than {n}	{p}: stringa piu corta di {n}
+run-phase.v_min	{p}: below the minimum {min}	{p}: sotto il minimo {min}
+run-phase.v_nojson	no JSON block (structured_output or json fence)	nessun blocco JSON (structured_output o recinto json)
+run-phase.v_badjson	unreadable JSON block: {e}	blocco JSON illeggibile: {e}
+run-phase.v_schema	unreadable schema: {e}	schema illeggibile: {e}
+run-phase.v_phase	phase {fase} different from that of the label ({phase})	fase {fase} diversa da quella dell etichetta ({phase})
+run-phase.v_invalid	invalid output: {msg}	uscita non valida: {msg}
+run-phase.v_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {devs}
+run-phase.v_blocked	blocked on: 	bloccato su: 
+run-phase.v_esito	outcome STOP: 	esito STOP: 
+run-phase.v_json_stop	{stop} (the prose said OK: the most conservative wins)	{stop} (la prosa diceva OK: vale il piu conservativo)
+run-phase.drv_valida_failed	driver.py valida failed: internal validator of run-phase.sh	driver.py valida fallito: validatore interno di run-phase.sh
+run-phase.usage_valida	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>	uso: {script} --valida <log.jsonl> <schema> <fase> <result.json>
+run-phase.no_python	no usable Python interpreter (set FIC_PYTHON)	nessun interprete Python utilizzabile (imposta FIC_PYTHON)
+run-phase.usage_nominati	usage: {script} --nominati <root> <paths-file> <log.jsonl>…	uso: {script} --nominati <radice> <file-dei-path> <log.jsonl>…
+run-phase.lock_unknown	git cannot find the repository of the lock	git non trova il repository del lock
+run-phase.lock_no_repo	git cannot find the repository: lock not computable, phase not launched	git non trova il repository: lock non calcolabile, fase non lanciata
+run-phase.usage_lock	usage: {script} --lock-status	uso: {script} --lock-status
+run-phase.lock_inside	the lock belongs to this phase	il lock e' di questa fase
+run-phase.lock_orphan_free	orphan lock, processes no longer alive: {owner}	lock orfano, processi non piu' vivi: {owner}
+run-phase.usage	usage: {script} <run-dir> <label> <prompt-file> | --lock-status	uso: {script} <run-dir> <etichetta> <file-prompt> | --lock-status
+run-phase.no_prompt	prompt missing: {prompt}	prompt assente: {prompt}
+run-phase.no_claude	claude binary not found (set CLAUDE_BIN)	binario claude non trovato (imposta CLAUDE_BIN)
+run-phase.attr_not_computed	attribution not computed for {f} (no .post-tree: cycle-state.sh will stop the cycle)	attribuzione non calcolata per {f} (niente .post-tree: cycle-state.sh fermera' il ciclo)
+run-phase.attr_diff_failed	git diff failed for {f} (no .post-tree: cycle-state.sh will stop the cycle)	git diff fallito per {f} (niente .post-tree: cycle-state.sh fermera' il ciclo)
+run-phase.names_unverifiable	attribution by name not verifiable (phase log unreadable, without events or without result): no annotation of the other flows	attribuzione per nome non verificabile (log della fase illeggibile, senza eventi o senza result): nessuna annotazione degli altri flussi
+run-phase.other_flow_kept	{p} changed during the phase and never named by the sub-session: it stays in touched.txt (the review sees it), probably from another flow	{p} cambiato durante la fase e mai nominato dalla sotto-sessione: resta in touched.txt (la review lo vede), probabilmente di un altro flusso
+run-phase.busy_retry	Relaunch when it has finished. If you are sure that no phase is running: rm -rf "{lock}"	Rilancia quando ha finito. Se sei certo che nessuna fase stia girando: rm -rf "{lock}"
+run-phase.same_label	same label (or owner not written yet): log/{label}.* not touched	stessa etichetta (o proprietario non ancora scritto): log/{label}.* non toccati
+run-phase.lock_taken	{what} taken over (processes no longer alive)	{what} ripreso (processi non piu' vivi)
+run-phase.lock_plan_busy	plan lock busy: another plan phase on the SAME spec is running	lock del piano occupato: un'altra fase di piano sulla STESSA spec e' in corso
+run-phase.lock_plan_orphan	orphan plan lock	lock del piano orfano
+run-phase.lock_busy	lock busy: another code phase is running	lock occupato: un'altra fase di codice e' in corso
+run-phase.lock_orphan	orphan lock	lock orfano
+run-phase.not_a_repo	not a git repository	non e' un repository git
+run-phase.format2_only	phase {phase}: only for a format-2 plan (Plan format: 2) in the spec next to the run dir ({spec}): not launched	fase {phase}: solo per un piano in formato 2 (Plan format: 2) nella spec accanto alla run dir ({spec}): non lanciata
+run-phase.hfp_changed	harness changed since {since}: restart the phase or confirm (recorded fingerprint {a}, current {b}; plugin files in {root}, .claude/maat.json and the language of the messages, MAAT_LINGUA or lingua of maat.json). Remedy: if the change is wanted, record the current fingerprint — {rim} — and relaunch; otherwise put the harness back as it was	harness cambiato dal {since}: ricomincia la fase o conferma (impronta registrata {a}, attuale {b}; file del plugin in {root} e .claude/maat.json). Rimedio: se il cambio e' voluto, registra l'impronta attuale — {rim} — e rilancia; altrimenti riporta il harness com'era
+run-phase.hfp_old	fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint {a} since {since}, current {b}). Remedy: if the move to the plugin is wanted, record the current fingerprint — {rim} — and relaunch; otherwise resume the cycle with the internal harness	impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata {a} dal {since}, attuale {b}). Rimedio: se il passaggio al plugin e' voluto, registra l'impronta attuale — {rim} — e rilancia; altrimenti riprendi il ciclo col harness interno
+run-phase.hfp_unreadable	harness.fp unreadable (empty or without a fingerprint, recorded since {since}; current {a}). Remedy: if the current harness is the wanted one, record the current fingerprint — {rim} — and relaunch	harness.fp illeggibile (vuoto o senza impronta, registrato dal {since}; attuale {a}). Rimedio: se il harness attuale e' quello voluto, registra l'impronta attuale — {rim} — e rilancia
+run-phase.hfp_nc_stop	harness fingerprint not computable (plugin files in {root} or .claude/maat.json of {repo} not readable, or repository not found; recorded since {since}), phase not launched	impronta del harness non calcolabile (file del plugin in {root} o .claude/maat.json di {repo} non leggibili, oppure repository non trovato; registrata dal {since}), fase non lanciata
+run-phase.hfp_not_recorded	harness fingerprint not computed: this cycle will not be checked	impronta del harness non calcolata: questo ciclo non sara' controllato
+run-phase.guard_no_python	guard not active: no usable Python interpreter (set FIC_PYTHON)	guardia non attiva: nessun interprete Python utilizzabile (imposta FIC_PYTHON)
+run-phase.guard_probe	guard not active: the self-test did not deny the probe «{probe}» ({hook})	guardia non attiva: l'autotest non ha negato la sonda «{probe}» ({hook})
+run-phase.guard_deny_empty	guard not active: empty DENY list ({hook} --deny-list)	guardia non attiva: lista DENY vuota ({hook} --deny-list)
+run-phase.stop_hook_missing	Stop hook missing ({stop}): the sub-session starts without it	hook Stop assente ({stop}): la sotto-sessione parte senza
+run-phase.gates_no_touched	not run (no touched.txt): the gates stay with the phase	non eseguiti (nessun touched.txt): i gate restano alla fase
+run-phase.gates_missing	not run (gates.sh missing: {gates})	non eseguiti (gates.sh assente: {gates})
+run-phase.cp_missing	counterproof.sh missing: {cp}	counterproof.sh assente: {cp}
+run-phase.not_launched	phase not launched	fase non lanciata
+run-phase.mother_missing	mother spec missing: {m}	spec madre assente: {m}
+run-phase.mother_no_children	the mother has no Figlie: line	la madre non ha la riga Figlie:
+run-phase.ring_no_touched	{c} without touched.txt	{c} senza touched.txt
+run-phase.rings_no_files	no file in the touched.txt of the rings	nessun file nei touched.txt degli anelli
+run-phase.first_no_base	base of the first ring missing ({first}.run/base.txt)	base del primo anello assente ({first}.run/base.txt)
+run-phase.red_no_attr	attribution not measured (.pre-tree/.post-tree): scope of the phase not verifiable	attribuzione non misurata (.pre-tree/.post-tree): scope della fase non verificabile
+run-phase.red_outside	writes outside the scope of test-red (tests of the plan and new files): {out}	scritture fuori dallo scope di test-red (test del piano e file nuovi): {out}
+run-phase.red_names	attribution by name not verifiable: phase log unreadable, without events or without result	attribuzione per nome non verificabile: log della fase illeggibile, senza eventi o senza result
+run-phase.red_feature	file of the feature (already in touched.txt before test-red) changed during the phase by another flow (never named by the sub-session): {files} — it stays in touched.txt, it does not go into do-not-touch: you decide (your work to keep or to put back as it was)	file della feature (gia' in touched.txt prima di test-red) cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): {files} — resta in touched.txt, non va in do-not-touch: decidi tu (lavoro tuo da tenere o da riportare com'era)
+run-phase.red_other_flow	{p} changed during the phase by another flow (never named by the sub-session): not attributed, into do-not-touch	{p} cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): non attribuito, in do-not-touch
+run-phase.red_no_gates	verification of the red tests not run (gates.sh missing: {gates})	verifica dei rossi non eseguita (gates.sh assente: {gates})
+run-phase.red_level	test-red: the acceptance tests must be red	test-red: i test di accettazione devono essere rossi
+run-phase.red_no_evidence	verification of the red tests not run (gates.sh exit {rc} without evidence: log/{label}.gates)	verifica dei rossi non eseguita (gates.sh exit {rc} senza evidenza: log/{label}.gates)
+run-phase.red_not_proven	acceptance tests {why} (log/{label}.rossi)	test di accettazione {why} (log/{label}.rossi)
+run-phase.not_proven	not proven	non dimostrati
+run-phase.red_blocked	verification of the red tests BLOCKED: {det} (log/{label}.rossi)	verifica dei rossi BLOCKED: {det} (log/{label}.rossi)
+run-phase.red_closing	closing of test-red not recorded (stubs, test fingerprint or gen: log/{label}.rossi)	chiusura di test-red non registrata (stub, impronta dei test o gen: log/{label}.rossi)
+run-phase.tg_python_only	Python only (ast)	solo Python (ast)
+run-phase.tg_no_rossi	test-red/rossi.json missing or unreadable	test-red/rossi.json assente o illeggibile
+run-phase.tg_no_names	no acceptance test name for the file in rossi.json	nessun nome di test di accettazione per il file in rossi.json
+run-phase.tg_no_base	content of test-red not found (no .post-tree of test-red with its sha256)	contenuto di test-red non ritrovato (nessun .post-tree di test-red col suo sha256)
+run-phase.tg_unparsable	test-red file not parseable	file di test-red non analizzabile
+run-phase.tg_current	(current file missing or not parseable)	(file attuale assente o non analizzabile)
+run-phase.tg_not_found	functions not found in the test-red file: 	funzioni non trovate nel file di test-red: 
+run-phase.tg_ok	acceptance test: {p} changed, change prescribed by the plan (scrive: of {b}); acceptance test functions unchanged since test-red ({x}) — the rest of the file (helpers, fixtures) changed: let the review check it; test fingerprint recorded again	test di accettazione: {p} cambiato, modifica prescritta dal piano (scrive: di {b}); funzioni dei test di accettazione invariate da test-red ({x}) — il resto del file (aiutanti, fixture) e' cambiato: la review lo controlli; impronta dei test riregistrata
+run-phase.tg_unverified	acceptance test: {p} changed, change prescribed by the plan (scrive: of {b}); acceptance test functions NOT verified ({x}): let the review check that the acceptance tests are those of test-red; test fingerprint recorded again	test di accettazione: {p} cambiato, modifica prescritta dal piano (scrive: di {b}); funzioni dei test di accettazione NON verificate ({x}): la review controlli che i test di accettazione siano quelli di test-red; impronta dei test riregistrata
+run-phase.tg_not_recorded	prescribed change of acceptance tests ({files}), but test fingerprint not recorded again (plan-check.sh tests/basis --write-tests: see log/{label}.stderr)	modifica prescritta di test di accettazione ({files}), ma impronta dei test non riregistrata (plan-check.sh tests/basis --write-tests: vedi log/{label}.stderr)
+run-phase.tg_deviation	deviation: acceptance tests changed after test-red ({files}); correcting them is a human decision	deviazione: test di accettazione modificati dopo test-red ({files}); correggerli e' una decisione umana
+run-phase.bi_no_tree	initial tree not computed (no after-the-fact check)	tree iniziale non calcolato (niente controllo a posteriori)
+run-phase.bi_missing	spec, plan-check.sh or blocks-independent.py missing	spec, plan-check.sh o blocks-independent.py assenti
+run-phase.bi_failed	blocks-independent.py failed (exit {rc})	blocks-independent.py fallito (exit {rc})
+run-phase.bi_no_gen	plan-check.sh gen failed (format 1 or malformed plan)	plan-check.sh gen non riuscito (formato 1 o piano malformato)
+run-phase.lane_post	after-the-fact check of the lanes: 	controllo a posteriori delle corsie: 
+run-phase.lane_post_not_run	not run	non eseguito
+run-phase.lane_exit	lane {k}: exit {rc}	corsia {k}: uscita {rc}
+run-phase.lane_no_result	lane {k}: no result event	corsia {k}: nessun evento result
+run-phase.lane_no_json	lane {k}: structured outcome missing or not valid	corsia {k}: esito strutturato assente o non valido
+run-phase.lane_dev_pre	{pre}lane {k}: {d}	{pre}corsia {k}: {d}
+run-phase.lane_item	lane {k}: {d}	corsia {k}: {d}
+run-phase.lane_no_esito	no ESITO line	nessuna riga ESITO
+run-phase.lane_ok	parallel lanes: 	corsie parallele: 
+run-phase.lane_prompt	ONLY the blocks {b} of the plan are yours, in their dopo: order; your files are those of their scrive: ({s}). The other lane implements NOW, in parallel, the blocks {o}: its files are do-not-touch, and the guard denies Edit/Write outside yours (FIC_WRITE_SCOPE). base.txt is written only by lane 1; the preflight lists go into do-not-touch.{k}.txt and mixed.{k}.txt. The suites of the level are run by the driver on the whole tree once the lanes are done: keep only the targeted inner loop. In the JSON, in file, ONLY the files you wrote.	sono tuoi SOLO i blocchi {b} del piano, nel loro ordine di dopo:; i tuoi file sono quelli del loro scrive: ({s}). L'altra corsia implementa ORA, in parallelo, i blocchi {o}: i suoi file sono do-not-touch, e la guardia nega Edit/Write fuori dai tuoi (FIC_WRITE_SCOPE). base.txt lo scrive solo la corsia 1; le liste del preflight vanno in do-not-touch.{k}.txt e mixed.{k}.txt. Le suite del livello le esegue il driver sull'albero intero a corsie finite: tieni solo il ciclo interno mirato. Nel JSON, in file, SOLO i file che hai scritto tu.
+run-phase.post_no_diff	tree diff not computable	diff del tree non calcolabile
+run-phase.tree_not_computed	initial tree not computed for {label} (no .post-tree: cycle-state.sh will stop the cycle)	tree iniziale non calcolato per {label} (niente .post-tree: cycle-state.sh fermera' il ciclo)
+run-phase.s3_outside	{r} outside the scope of test-red, not copied	{r} fuori dallo scope di test-red, non copiato
+run-phase.s3_copied	{n} parked files copied from the staging (plan fingerprint {fp})	{n} file in sosta copiati dallo staging (impronta del piano {fp})
+run-phase.s3_discarded	staging discarded (fingerprint {fp}, current plan {plan})	staging scartato (impronta {fp}, piano attuale {plan})
+run-phase.missing	missing	assente
+run-phase.defensive_prompt	deviations from the plan declared «defensive: » (or «difensiva: ») by implement/fix, which did not stop the cycle (label, text). Pass them to implementation-review-cycle to judge: if one of these deviations is not purely defensive (it changes an observable behaviour, an API contract, an expected visible string, the permissions or the data written in the cases the plan foresees), it is a major finding.	deviazioni dal piano dichiarate «defensive: » (o «difensiva: ») da implement/fix, che non hanno fermato il ciclo (etichetta, testo). Passale a implementation-review-cycle da giudicare: se una di queste deviazioni non e' puramente difensiva (cambia un comportamento osservabile, un contratto API, una stringa visibile prevista, i permessi o i dati scritti nei casi previsti dal piano), e' un finding major.
+run-phase.ring_prompt	ring base {rb} (the .post-tree of the previous ring, never HEAD) → tree {rt}, only the files of the touched.txt of this ring. It is the surface of the review: pass it to implementation-review-cycle; index (path, offset, limit):	base anello {rb} (il .post-tree dell'anello precedente, mai HEAD) → tree {rt}, solo i file del touched.txt di questo anello. E' la superficie della review: passala a implementation-review-cycle; indice (path, offset, limit):
+run-phase.ring_no_diff	ring diff not computed (base {rb}, touched.txt {dir}/touched.txt): the review does not start	diff dell'anello non calcolato (base {rb}, touched.txt {dir}/touched.txt): la review non parte
+run-phase.ring_no_base	no Base anello from cycle-state.sh (the previous ring has no .post-tree?): the review of ring {rk} does not start	nessuna Base anello da cycle-state.sh (l'anello precedente non ha un .post-tree?): la review dell'anello {rk} non parte
+run-phase.no_schema	outcome schema missing or unreadable ({schema}): the phase will close with STOP «invalid output»	schema dell'esito assente o illeggibile ({schema}): la fase chiudera' con STOP «uscita non valida»
+run-phase.seq_approved	review recorded APPROVED: promotion or gate-only (the reviewer may not start) or post-approval round	review registrata APPROVED: promozione o gate-only (il reviewer puo' non partire) o giro post-approvazione
+run-phase.seq_no_key	tree key not computable	chiave del tree non calcolabile
+run-phase.cp_driver	the counterproofs of counterproof/mutations.json (generated by plan-check.sh gen, consistent with the plan) are run by the DRIVER now (do not rewrite mutations.json, do not launch counterproof.sh: the results will be counterproof/<id>.json)	le controprove di counterproof/mutations.json (generata da plan-check.sh gen, coerente col piano) le esegue il DRIVER ora (non riscrivere mutations.json, non lanciare counterproof.sh: i risultati saranno counterproof/<id>.json)
+run-phase.cp_worker	the counterproofs stay yours, as always (Worker review, step 2: write or regenerate counterproof/mutations.json and launch counterproof.sh)	le controprove restano tue, come sempre (Worker review, passo 2: scrivi o rigenera counterproof/mutations.json e lancia counterproof.sh)
+run-phase.verify_prompt	gates.sh runs NOW, outside this session, on the files of touched.txt; {cpn}. Do not wait for and do not run the suites of the level, do not quote their results: for every requirement write in the copertura field of the JSON the IDs of the tests that cover it. The verdict is provisional (Verification: VERIFIED (provisional: …)): finalize.sh ANDs it with the results and composes the Evidence table.	gates.sh gira ORA, fuori da questa sessione, sui file di touched.txt; {cpn}. Non aspettare e non eseguire le suite del livello, non citarne i risultati: per ogni requisito scrivi nel campo copertura del JSON gli ID dei test che lo coprono. Il verdetto e' provvisorio (Verification: VERIFIED (provisional: …)): finalize.sh fa l'AND con i risultati e compone la tabella Evidence.
+run-phase.discarded	key changed during the phase ({k0} -> {k1}): review and VERIFY relaunched in sequence	chiave cambiata durante la fase ({k0} -> {k1}): review e VERIFY rilanciate in sequenza
+run-phase.seq_key_changed	key changed during the parallel phase	chiave cambiata durante la fase parallela
+run-phase.gates_prompt	Pass them to implementation-review-cycle as context (Step 2.5, evidence of the driver).	Passale a implementation-review-cycle come contesto (Step 2.5, evidenza del driver).
+run-phase.s3_result	parked tests (S3) copied from the staging	test in sosta (S3) copiati dallo staging
+run-phase.def_note	- note (defensive deviation, {label}): {text}	- nota (deviazione difensiva, {label}): {text}
+run-phase.def_count	{n} defensive deviations declared (they do not stop the cycle, the review judges them): log/deviazioni-difensive.txt	{n} deviazioni difensive dichiarate (non fermano il ciclo, la review le giudica): log/deviazioni-difensive.txt
+run-phase.def_no_changelog	defensive deviations: the plan has no changelog, no note in the spec	deviazioni difensive: il piano non ha un changelog, nessuna nota nella spec
+run-phase.def_not_written	defensive deviations: note in the changelog not written (exit {rc}, fingerprint {b0} -> {b1}): spec put back as it was	deviazioni difensive: nota nel changelog non scritta (exit {rc}, impronta {b0} -> {b1}): spec rimessa com'era
+run-phase.not_computed	not computed	non calcolata
+run-phase.fin_missing	missing: {fin}	assente: {fin}
+run-phase.fin_failed	exit {rc}, see log/{label}.finalize	exit {rc}, vedi log/{label}.finalize
+run-phase.cp_mirror	mirror not restored (see log/{label}.counterproof)	mirror non ripristinato (vedi log/{label}.counterproof)
+run-phase.chz_gates	gates {g} (see log/{label}.gates)	gates {g} (vedi log/{label}.gates)
+run-phase.chz_e2e_none	not required	non richiesto
+run-phase.chz_e2e_failed	e2e failed ({e2e}): exit {rc}, see log/{label}.jsonl	e2e non riusciti ({e2e}): exit {rc}, vedi log/{label}.jsonl
+run-phase.chz_no_tree	final tree not computed	tree finale non calcolato
+run-phase.chz_ok	chain closed: full gates PASS, e2e {e2e}	catena chiusa: gate full PASS, e2e {e2e}
+
+# --- plan-check (lingua-converti.py)
+plan-check.usage	usage: {script} delta <baseline> <current> | lint <spec> [--baseline <copy>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <mother> [<child>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]	uso: {script} delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]
+plan-check.delta_no_base	baseline missing or empty ({base}) — redo the round at full scope, never APPROVED	baseline assente o vuota ({base}) — rifai il giro a scope pieno, mai APPROVED
+plan-check.delta_no_cur	current file missing: {cur}	file corrente assente: {cur}
+plan-check.delta_empty	empty diff — no revision recorded, or baseline taken after the Edit. Redo the round at full scope, never APPROVED	diff vuoto — nessuna revisione registrata, oppure baseline presa dopo l'Edit. Rifai il giro a scope pieno, mai APPROVED
+plan-check.delta_whole	the diff covers more than 90% of the file (reformatting or line endings) — treat it as a missing baseline: full-scope round	il diff copre oltre il 90% del file (riformattazione o fine riga) — trattalo come baseline mancante: giro a scope pieno
+plan-check.xref_line	line	riga
+plan-check.no_plan	no '## Implementation plan' section (outside code blocks)	nessuna sezione '## Piano di implementazione' (fuori dai blocchi di codice)
+plan-check.lit_dup	'{lit}' appears {n} times at the start of a line in the plan: it must be ONE (the greps downstream take the first)	'{lit}' compare {n} volte a inizio riga nel piano: dev'essere UNA (i grep a valle prendono la prima)
+plan-check.lit_missing	'{lit}' missing from the plan (legacy spec?) — on reopening, Step 1 adds it	'{lit}' assente nel piano (spec legacy?) — in riapertura lo Step 1 la aggiunge
+plan-check.lit_not_next	'{lit}' is not on the line right below the previous status line	'{lit}' non sta nella riga subito sotto la precedente riga di stato
+plan-check.lit_changelog	the changelog quotes the literal '{lit}' in the middle of a line — write it in prose, it is one line break away from becoming a duplicate	il changelog cita il letterale '{lit}' in mezzo a una riga — scrivilo in prosa, e' a un a-capo dal diventare un duplicato
+plan-check.basis_dup	'Approved basis:' appears {n} times at the start of a line in the plan: it must be ONE	'Approved basis:' compare {n} volte a inizio riga nel piano: dev'essere UNA
+plan-check.basis_legacy	APPROVED plan without an 'Approved basis:' line (legacy plan: not touched by hand, the line comes with the next approval)	piano APPROVED senza riga 'Approved basis:' (piano legacy: non si ritocca a mano, la riga arriva alla prossima approvazione)
+plan-check.surf_unknown	unknown surface '{s}' in 'Risk surfaces' — only bare tokens of the vocabulary: {surfaces} (or: none)	superficie sconosciuta '{s}' in 'Superfici a rischio' — solo token nudi del vocabolario: {surfaces} (oppure: nessuna)
+plan-check.surf_none_mixed	'Risk surfaces' says 'none' together with other surfaces	'Superfici a rischio' dice 'nessuna' insieme ad altre superfici
+plan-check.floor_not_critical	[floor: {s}] — the floor applies only to the critical surfaces: {critical}	[pavimento: {s}] — il pavimento vale solo per le superfici critiche: {critical}
+plan-check.floor_undeclared	[floor: {s}] on a surface not declared in 'Risk surfaces'	[pavimento: {s}] su una superficie non dichiarata in 'Superfici a rischio'
+plan-check.floor_dup	more than one [floor: {s}] line — the floor is ONE check for each surface	piu' di una riga [pavimento: {s}] — il pavimento e' UNA verifica per superficie
+plan-check.critical_uncovered	critical surface '{s}' declared without a [floor: {s}] line or a '⚠️ Surface {s} … not covered' line	superficie critica '{s}' dichiarata senza riga [pavimento: {s}] ne' riga '⚠️ Superficie {s} … non coperta'
+plan-check.waiver_no_reason	line {wn}: waiver 'static sufficient:' without a reason on the same line	riga {wn}: deroga 'statica sufficiente:' senza motivo sulla stessa riga
+plan-check.waiver_wrapped	line {wn}: the waiver continues on the next line — 'static sufficient: <reason>' goes on the same line as '⚠️ Surface {s}'	riga {wn}: la deroga continua a capo — 'statica sufficiente: <motivo>' va sulla stessa riga di '⚠️ Superficie {s}'
+plan-check.e2e_cap	{n} [e2e-locator: lines — at most 2; beyond that, a ⚠️ line and the regression-watch	{n} righe [e2e-locator: — al massimo 2; oltre, una riga ⚠️ e il regression-watch
+plan-check.testplan_min	'### Test plan' has {n} lines at level min (cap 1; [floor:, [e2e-locator: and ⚠️ lines excluded)	'### Piano di test' ha {n} righe al livello min (tetto 1; righe [pavimento:, [e2e-locator: e ⚠️ escluse)
+plan-check.testplan_std	'### Test plan' has {n} lines at level std (cap 15; [floor:, [e2e-locator: and ⚠️ lines excluded)	'### Piano di test' ha {n} righe al livello std (tetto 15; righe [pavimento:, [e2e-locator: e ⚠️ escluse)
+plan-check.dup_in_plan	in the plan	nel piano
+plan-check.dup_above_plan	above the plan	sopra il piano
+plan-check.dup_lang	'{it}' and '{en}' together{where}: the same section in two languages (keep the heading that was there; the first is read)	'{it}' e '{en}' insieme{where}: la stessa sezione in due lingue (tieni il titolo che c'era; si legge la prima)
+plan-check.lint_no_base	baseline missing: {base}	baseline assente: {base}
+plan-check.above_changed	the SPEC sections above '## Implementation plan' changed from the baseline — this cycle cannot touch them	le sezioni della SPEC sopra '## Piano di implementazione' sono cambiate rispetto alla baseline — questo ciclo non le puo' toccare
+plan-check.review_changed	the '## Implementation review' section changed — it belongs to /implementation-review-cycle	la sezione '## Review implementazione' e' cambiata — appartiene a /implementation-review-cycle
+plan-check.closed_no_finalize	no Finalize: IMPLEMENTED line	nessuna riga Finalize: IMPLEMENTED
+plan-check.closed_other_snap	Finalize on another snapshot ({fs}), not on the current Reviewed snapshot	Finalize su un altro snapshot ({fs}), non sul Reviewed snapshot attuale
+plan-check.closed_no_fp	no fingerprint	nessuna impronta
+plan-check.closed_no_time	Finalize without a readable time	Finalize senza un'ora leggibile
+plan-check.closed_older	Finalize older than the last review launched ({rl})	Finalize piu' vecchia dell'ultima review lanciata ({rl})
+plan-check.closed_yes	Ring: CLOSED	Anello: CHIUSO
+plan-check.closed_no	Ring: OPEN — {w}	Anello: APERTO — {w}
+plan-check.conf_reader	configuration reader not loadable ({p}): {e}	lettore della configurazione non caricabile ({p}): {e}
+plan-check.conf_invalid	invalid configuration (exit {code})	configurazione non valida (uscita {code})
+plan-check.conf_regex	invalid regex under piano.*: {e}	regex non valida in piano: {e}
+plan-check.mut_bad	unreadable mutation, expected form	mutazione illeggibile, forma attesa
+plan-check.mut_bad_empty	(the replacement may be (empty))	(sostituisci puo essere (vuoto))
+plan-check.mut_empty_fields	mutation: symbol and red-if text cannot be empty	mutazione: simbolo e testo di rosso se non possono essere vuoti
+plan-check.mut_noop	empty mutation: search equal to replacement	mutazione vuota: cerca uguale a sostituisci
+plan-check.fmt_dup	line {n}: Plan format: appears {k} times at the start of a line in the plan, it must be ONE	riga {n}: Plan format: compare {k} volte a inizio riga nel piano, deve essere UNA
+plan-check.sec_dup	line {n}: section ### {name} repeated: it must be one	riga {n}: sezione ### {name} ripetuta: deve essere una
+plan-check.sec_missing	section ### {name} missing (format 2)	manca la sezione ### {name} (formato 2)
+plan-check.tp_no_table	### Test plan without the table | ID | requirement | file | assertion | mutation |	### Piano di test senza la tabella | ID | requisito | file | asserzione | mutazione |
+plan-check.tp_cols	line {n}: the test plan row has {k} columns, 5 are needed	riga {n}: la riga del piano di test ha {k} colonne, ne servono 5
+plan-check.tp_bad_id	line {n}: invalid test ID ({id}): letters, digits, . _ -	riga {n}: ID di test non valido ({id}): lettere, cifre, . _ -
+plan-check.tp_dup_id	line {n}: test ID {id} repeated	riga {n}: ID di test {id} ripetuto
+plan-check.tp_no_backtick	line {n}: test {id}: the file goes between backticks (`path` or `path::name`)	riga {n}: test {id}: il file va fra backtick (`percorso` o `percorso::nome`)
+plan-check.tp_path	line {n}: test {id}: path not relative to the repository: {path}	riga {n}: test {id}: percorso non relativo al repository: {path}
+plan-check.tp_no_assert	line {n}: test {id}: empty assertion (and the red if, where it applies)	riga {n}: test {id}: asserzione vuota (e il rosso se del caso)
+plan-check.tp_why	line {n}: test {id}: {why}	riga {n}: test {id}: {why}
+plan-check.tp_mut_path	line {n}: test {id}: mutation file not relative to the repository: {path}	riga {n}: test {id}: file della mutazione non relativo al repository: {path}
+plan-check.tp_mut_noname	line {n}: test {id}: has a mutation but does not name the test (`path::name`)	riga {n}: test {id}: ha una mutazione ma non nomina il test (`percorso::nome`)
+plan-check.tp_mut_module	line {n}: test {id}: file and test in different modules of maat.json (or outside every module, or test outside the module root): counterproof.sh would reject it	riga {n}: test {id}: file e test in moduli diversi di maat.json (o fuori da ogni modulo, o test fuori dalla radice del modulo): counterproof.sh la rifiuterebbe
+plan-check.blk_dup	line {n}: block {id} repeated	riga {n}: blocco {id} ripetuto
+plan-check.step_cols	line {n}: the step row has {k} columns, 4 are needed (id | file | change | test)	riga {n}: la riga del passo ha {k} colonne, ne servono 4 (id | file | modifica | test)
+plan-check.step_no_block	line {n}: step {id} outside a block (#### Block <id>)	riga {n}: passo {id} fuori da un blocco (#### Blocco <id>)
+plan-check.steps_no_table	### Steps without the table | id | file | change | test |	### Passi senza la tabella | id | file | modifica | test |
+plan-check.steps_no_blocks	### Steps: the steps are not grouped in blocks (#### Block <id> with writes: and after:)	### Passi: i passi non sono raggruppati in blocchi (#### Blocco <id> con scrive: e dopo:)
+plan-check.blk_no_writes	line {n}: block {id} without writes: (the files it writes)	riga {n}: blocco {id} senza scrive: (i file che scrive)
+plan-check.blk_no_after	line {n}: block {id} without after: (write after: none if it depends on no other block)	riga {n}: blocco {id} senza dopo: (scrivi dopo: nessuno se non dipende da altri blocchi)
+plan-check.blk_bad_dep	line {n}: block {id} after {dep}, which does not exist	riga {n}: blocco {id} dopo {dep}, che non esiste
+plan-check.trace_no_rows	### Requirement traceability without rows (| Req | Plan steps | Verification |)	### Tracciabilità requisiti senza righe (| Req | Passi del piano | Verifica |)
+plan-check.req_no_test	line {n}: requirement {r} without a test: no row of the test plan names it (or Verification: not verifiable by test, <reason>)	riga {n}: requisito {r} senza test: nessuna riga del piano di test lo nomina (oppure Verifica: non verificabile a test, <motivo>)
+plan-check.test_bad_req	line {n}: test {id} cites requirement {r}, which is not in the traceability	riga {n}: test {id} cita il requisito {r}, che non e nella tracciabilita
+plan-check.test_no_step	line {n}: test {id} appears in no step (test column)	riga {n}: test {id} non compare in nessun passo (colonna test)
+plan-check.test_no_text	line {n}: test {id}: assertion without a backticked text and without a mutation: the test-red phase cannot prove the red (write the expected text of the error message between backticks)	riga {n}: test {id}: asserzione senza testo fra backtick e senza mutazione: la fase test-red non puo dimostrare il rosso (scrivi il testo atteso del messaggio d errore fra backtick)
+plan-check.test_invariance	line {n}: test {id}: assertion "stays green": an existing regression test is not a row of the Test plan (test-red wants every row red on the stubbed base). Take it out of the table and put it in the note below it ("EXISTING regression tests": file, what stays true, requirement, command if outside the gate); the traceability cites it as "not verifiable by test (invariance, cannot be shown red): <existing test>"	riga {n}: test {id}: asserzione "resta verde": un test esistente di non-regressione non e una riga del Piano di test (test-red pretende ogni riga rossa sulla base con stub). Toglilo dalla tabella e mettilo nella nota sotto di essa ("Test ESISTENTI di non-regressione": file, cosa resta vero, requisito, comando se fuori dal gate); la tracciabilita lo cita come "non verificabile a test (invarianza, non dimostrabile rossa): <test esistente>"
+plan-check.step_bad_test	line {n}: step {id} cites test {t}, which is not in the test plan table	riga {n}: passo {id} cita il test {t}, che non e nella tabella del piano di test
+plan-check.step_not_touched	line {n}: step {id}: {f} is not in the ### Touched files list	riga {n}: passo {id}: {f} non e nella lista ### File toccati
+plan-check.step_path	line {n}: step {id}: path not relative to the repository: {f}	riga {n}: passo {id}: percorso non relativo al repository: {f}
+plan-check.risk_no_test	line {n}: open risk without an assigned test (an ID of the test plan table)	riga {n}: rischio aperto senza un test assegnato (un ID della tabella del piano di test)
+plan-check.str_table	line {n}: ### Strings and data-test wants the table | action | type | value | (plus | verified | optional)	riga {n}: ### Stringhe e data-test vuole la tabella | azione | tipo | valore | (piu | verificato | facoltativa)
+plan-check.str_verified	line {n}: verified wants `file` - reason (file relative to the repository and a reason)	riga {n}: verificato vuole `file` - motivo (file relativo al repository e un motivo)
+plan-check.str_row	line {n}: expected action adds|removes, type string|data-test and a value	riga {n}: attesi azione aggiunge|toglie, tipo stringa|data-test e un valore
+plan-check.str_unused_waiver	line {n}: unused verified waiver: {f} does not cite {tp} {val} in a literal (or does not exist)	riga {n}: deroga verificato inutilizzata: {f} non cita {tp} {val} in un letterale (o non esiste)
+plan-check.str_already	line {n}: {tp} {val} added by the plan but already present in {rel}:{ln}	riga {n}: {tp} {val} aggiunto dal piano ma gia presente in {rel}:{ln}
+plan-check.str_absence	line {n}: {tp} {val} removed by the plan: {rel}:{ln} cites it only in an absence assertion, which stays green	riga {n}: {tp} {val} tolto dal piano: {rel}:{ln} lo cita solo in un asserzione di assenza, che resta verde
+plan-check.str_waived	line {n}: {tp} {val} removed by the plan, asserted by {rel}:{ln}: verified waiver ({why})	riga {n}: {tp} {val} tolto dal piano, asserito da {rel}:{ln}: deroga verificato ({why})
+plan-check.str_asserted	line {n}: {tp} {val} removed by the plan but still asserted by {rel}:{ln}, which the plan does not touch (add it to the steps; an e2e wants its [e2e-locator:] line; or the verified column)	riga {n}: {tp} {val} tolto dal piano ma ancora asserito da {rel}:{ln}, che il piano non tocca (aggiungilo ai passi; un e2e vuole la sua riga [e2e-locator:]; oppure la colonna verificato)
+plan-check.gen_no_wsl_py	WSL python missing for module {m}	python WSL assente per il modulo {m}
+plan-check.gen_unverified	not verified: {py} looked up in the WSL PATH only by gates.sh	non verificato: {py} cercato nel PATH di WSL solo da gates.sh
+plan-check.gen_no_cmd	command {tipo} of module {m} (exit {code})	comando {tipo} del modulo {m} (uscita {code})
+plan-check.gen_l2_reason	new file, red on the stubbed base on the red-if assertion (test-red), green after	file nuovo, rosso alla base con stub sull asserzione di rosso se (test-red), verde dopo
+plan-check.gen_mut_missing	mutation {id}: {f} missing in the working tree (expected if the plan creates it)	mutazione {id}: {f} assente nel working tree (atteso se lo crea il piano)
+plan-check.gen_mut_count	mutation {id}: search appears {k} times in {f} (after the implementation exactly 1 is needed)	mutazione {id}: cerca compare {k} volte in {f} (dopo l implementazione ne serve esattamente 1)
+plan-check.gen_absorbed	mutation {id} absorbed (L2)	mutazione {id} assorbita (L2)
+plan-check.gen_written	written {path}{extra}	scritto {path}{extra}
+plan-check.gen_and_mut	and counterproof/mutations.json	e counterproof/mutations.json
+plan-check.route_plan_line	plan line {n}	piano riga {n}
+plan-check.route_diff_line	diff line {n}	diff riga {n}
+plan-check.route_keyword	keyword {k} ({where})	parola chiave {k} ({where})
+plan-check.route_declared	declared	dichiarata
+plan-check.route_lines	Plan lines: {n} (cap 150)	Righe del piano: {n} (tetto 150)
+plan-check.route_migration	Migration	Migrazione
+plan-check.route_surface	Surface {s}: {ev}	Superficie {s}: {ev}
+plan-check.route_detected	Surfaces detected	Superfici rilevate
+plan-check.route_declared_label	Surfaces declared	Superfici dichiarate
+plan-check.route_why_lines	plan of {n} lines (over 150)	piano di {n} righe (oltre 150)
+plan-check.route_why_mig	migration	migrazione
+plan-check.route_why_det	surfaces detected	superfici rilevate
+plan-check.route_why_nodecl	Risk surfaces line missing	riga Superfici a rischio assente
+plan-check.route_why_decl	declaration other than none	dichiarazione diversa da nessuna
+plan-check.route_det_undecl	detected and not declared	rilevata e non dichiarata
+plan-check.route_decl_undet	declared and not detected	dichiarata e non rilevata
+plan-check.route_mismatch	Mismatch	Discordanza
+plan-check.route_why_mismatch	mismatch with the declaration	discordanza con la dichiarazione
+plan-check.route_light	plan within 150 lines, no migration, no surface detected, declaration consistent	piano entro 150 righe, nessuna migrazione, nessuna superficie rilevata, dichiarazione concorde
+plan-check.skel_no_steps	no step row under ### Steps (| id | file | change | test |): the skeleton counts steps and files from there	nessuna riga di passo sotto ### Passi (| id | file | modifica | test |): lo scheletro conta passi e file da li
+plan-check.skel_steps	Steps: {n} (cap {cap})	Passi: {n} (tetto {cap})
+plan-check.skel_files	Files: {n} (cap {cap})	File: {n} (tetto {cap})
+plan-check.skel_surfaces	Surfaces	Superfici
+plan-check.skel_lines	Plan lines: {n} (cap {cap})	Righe del piano: {n} (tetto {cap})
+plan-check.skel_over_steps	steps {n} > {cap}	passi {n} > {cap}
+plan-check.skel_over_files	files {n} > {cap}	file {n} > {cap}
+plan-check.skel_over_lines	plan lines {n} > {cap}	righe del piano {n} > {cap}
+plan-check.skel_cut_refused	split rejected by the user (Split: line), the single plan goes on, no stop	taglio rifiutato dall utente (riga Taglio:), si prosegue col piano unico, nessuno stop
+plan-check.skel_cut_proposal	split proposal (spec-author, split mode), no waiver	proposta di taglio (spec-author, modalita split), nessuna deroga
+plan-check.skel_under	the full plan starts from this skeleton	il piano completo parte da questo scheletro
+plan-check.stub_absent	absent	assente
+plan-check.stub_none	no symbol	nessun simbolo
+plan-check.l2_no_stubs	stubs not recorded at the close of test-red	stub non registrati alla chiusura di test-red
+plan-check.l2_not_proven	red on the stubbed base not proven	rosso alla base con stub non dimostrato
+plan-check.l2_no_pos	red on the base without a position	rosso alla base senza posizione
+plan-check.l2_other_assert	the red on the base does not hit the red-if assertion ({a})	il rosso alla base non colpisce l asserzione di rosso se ({a})
+plan-check.l2_file_missing	file missing	file assente
+plan-check.l2_symbols	the stubs do not cover all and only the new symbols: exported now {cur}, stubs {sy}	gli stub non coprono tutti e soli i simboli nuovi: esportati ora {cur}, stub {sy}
+plan-check.l2_untested	exported symbol tested by no acceptance test	simbolo esportato non testato da nessun test di accettazione
+plan-check.l2_tests_changed	acceptance test fingerprint changed or not recorded (Tests status: {state})	impronta dei test di accettazione cambiata o non registrata (Tests status: {state})
+plan-check.red_import	red for an import error, not for the assertion: not proven	rosso per un errore d import, non per l asserzione: non dimostrato
+plan-check.red_no_text	no assertion text (backticks in the assertion column or the red if of the mutation): not proven	nessun testo dell asserzione (backtick nella colonna asserzione o rosso se della mutazione): non dimostrato
+plan-check.red_other	red, but not on the declared assertion ({texts}): not proven	rosso, ma non sull asserzione dichiarata ({texts}): non dimostrato
+plan-check.red_no_pos	red without a position in the test file: not proven	rosso senza posizione nel file di test: non dimostrato
+plan-check.red_proven	red on the declared assertion	rosso sull asserzione dichiarata
+plan-check.red_suite_import	the test file does not load (import error): not proven	il file di test non si carica (errore d import): non dimostrato
+plan-check.red_collection	the test file fails at collection: not proven	il file di test fallisce in raccolta: non dimostrato
+plan-check.red_not_collected	test file not collected by the runner: not proven	file di test non raccolto dal runner: non dimostrato
+plan-check.red_green	green on the stubbed base: the test proves nothing	verde sulla base con stub: il test non prova nulla
+plan-check.red_not_run	named test not run (missing or skipped): not proven	test nominato non eseguito (assente o saltato): non dimostrato
+plan-check.red_no_rows	the test plan table has no rows: no acceptance test to prove red	la tabella del piano di test non ha righe: nessun test di accettazione da dimostrare rosso
+plan-check.red_outside	test outside the root of every module of maat.json: the driver does not run it	test fuori dalla radice di ogni modulo di maat.json: il driver non lo esegue
+plan-check.red_no_ev	evidence missing	evidenza assente
+plan-check.red_gate_esito	outcome {esito} ({motivo})	esito {esito} ({motivo})
+plan-check.red_report_bad	report unreadable	report illeggibile
+plan-check.red_report_none	report none: test outcomes not readable	report nessuno: esiti dei test non leggibili
+plan-check.red_collection_case	collection	raccolta
+plan-check.red_vitest_sum	vitest summary: {n} tests failed, {k} FAIL blocks read from the output: evidence not interpretable	riepilogo di vitest: {n} test falliti, {k} blocchi FAIL letti dall output: evidenza non interpretabile
+plan-check.red_absence	{rel}:{ln} asserts the absence of {val}, which the plan adds <-> {near}	{rel}:{ln} asserisce l assenza di {val}, che il piano aggiunge <-> {near}
+plan-check.red_gate_unusable	gate not usable	gate non utilizzabile
+plan-check.red_sum_blocked	gate evidence not usable	evidenza dei gate non utilizzabile
+plan-check.red_sum_bad	not proven	non dimostrato
+plan-check.red_sum_conflict	conflict with the existing suite	conflitto con la suite esistente
+plan-check.red_sum_ok	{n}/{k} acceptance tests red on their assertion	{n}/{k} test di accettazione rossi sulla loro asserzione
+plan-check.not_applicable	{cmd}: does not apply (format 1 plan, without the Plan format: 2 line)	{cmd}: non si applica (piano in formato 1, senza la riga Plan format: 2)
+plan-check.no_python	Python interpreter not found (python.sh of the full cycle)	interprete Python non trovato (python.sh del full cycle)
+plan-check.s2_rejected_over	rejected ({nr}) more than the blockers/majors of the two responses ({tot})	respinti ({nr}) piu' dei blocker/major delle due risposte ({tot})
+plan-check.s2_stop	a reviewer asks for a human decision (delta {dd} · gate {gd})	un revisore chiede una decisione umana (delta {dd} · gate {gd})
+plan-check.s2_fp	delta {dfp} · gate {gfp} · current plan {cur}: relaunch both on the current fingerprint	delta {dfp} · gate {gfp} · piano attuale {cur}: rilancia entrambi sull'impronta attuale
+plan-check.s2_partial	partial response (Blocked on): not an approval	risposta parziale (Blocked on): non e' un'approvazione
+plan-check.s2_fix	{n} blockers/majors to apply (delta {dnb} · gate {gnb} · rejected {nr})	{n} blocker/major da applicare (delta {dnb} · gate {gnb} · respinti {nr})
+plan-check.s2_rejected	{nr} findings rejected: clean means no finding, not even a rejected one; delta and gate are relaunched together, with the list of the rejected ones	{nr} finding respinti: pulito vuol dire nessun finding, nemmeno respinto; si rilanciano delta e gate insieme, con la lista dei respinti
+plan-check.s2_not_approved	Decision without blockers/majors but not APPROVED (delta {dd} · gate {gd})	Decision senza blocker/major ma non APPROVED (delta {dd} · gate {gd})
+plan-check.s2_ok	delta and fresh eyes clean on fingerprint {cur}	delta e occhi freschi puliti sull'impronta {cur}
+plan-check.split_both	the mother has both 'Figlie:' and 'Children:': one is enough (the first is read)	la madre ha sia 'Figlie:' sia 'Children:': ne basta una (si legge la prima)
+plan-check.split_few	a chain wants at least two children (arguments, or the Children: line of the mother)	una catena vuole almeno due figlie (argomenti, oppure la riga Figlie: della madre)
+plan-check.split_kid_missing	child missing: {f}	figlia assente: {f}
+plan-check.split_kid_dup	child repeated in the chain: {n}	figlia ripetuta nella catena: {n}
+plan-check.split_no_ids	the mother defines no ID (RF<n>, CA<n>, or FR<n>, AC<n>) in Functional requirements or Acceptance criteria: the partition cannot be checked	la madre non definisce ID (RF<n>, CA<n>) in Requisiti funzionali o Criteri di accettazione: la partizione non si verifica
+plan-check.split_lost	{id} of the mother is in no child (lost)	{id} della madre non sta in nessuna figlia (perso)
+plan-check.split_twice	{id} is in {n} children: {who} (duplicated)	{id} sta in {n} figlie: {who} (duplicato)
+plan-check.split_foreign	{who}: {id} is not an ID of the mother (the children do not change the requirements)	{who}: {id} non e' un ID della madre (le figlie non cambiano i requisiti)
+plan-check.split_no_line	{spec}: the '{lit}' line is missing (above the plan, at the start of a line)	{spec}: manca la riga '{lit}' (sopra il piano, a inizio riga)
+plan-check.split_ok	{n} IDs of the mother in {k} children, each in exactly one	{n} ID della madre in {k} figlie, ciascuno in una sola
+
+# --- counterproof (lingua-converti.py)
+counterproof.usage	usage: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>	uso: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>
+counterproof.paths_failed	lib/maat-paths.sh cannot be loaded (incomplete plugin: {here})	lib/maat-paths.sh non caricabile (plugin incompleto: {here})
+counterproof.no_root	project root not resolved: set PROJECT_ROOT	radice del progetto non risolta: imposta PROJECT_ROOT
+counterproof.root_access	project root not accessible: {root}	radice del progetto non accessibile: {root}
+counterproof.rsync_tar	rsync and tar	rsync e tar
+counterproof.tools_missing	counterproofs not available: missing {missing}	controprove non disponibili: manca {missing}
+counterproof.fallback_copy	rsync missing: fallback copy (find, sha256 fingerprints, tar)	rsync assente: copia di ripiego (find, impronte sha256, tar)
+counterproof.fallback_lock	flock missing: fallback lock (atomic mkdir)	flock assente: lock di ripiego (mkdir atomico)
+counterproof.fic_mirror_missing	fic-mirror.sh not found next to counterproof.sh	fic-mirror.sh non trovato accanto a counterproof.sh
+counterproof.mj_missing	mutations.json not found: {arg}	mutations.json non trovato: {arg}
+counterproof.count	{nt} mutations, {nu} to run (exact duplicates once only)	{nt} mutazioni, {nu} da eseguire (duplicati esatti una volta sola)
+counterproof.absorbed	{na} absorbed (L2): skipped, <id>.json with esito=assorbita	{na} assorbite (L2): saltate, <id>.json con esito=assorbita
+counterproof.not_run	{nn} NOT RUN (declared): modules without a counterproof, <id>.json with esito=non_eseguita	{nn} NOT RUN (dichiarato): moduli senza controprova, <id>.json con esito=non_eseguita
+counterproof.no_repo_root	repository root not determinable (git): no copy to associate	radice del repository non determinabile (git): nessuna copia associabile
+counterproof.seed_failed	seeding not possible: {why}	semina non possibile: {why}
+counterproof.mirror_missing	mirror missing: run test-fast.sh --setup{why}	mirror assente: eseguire test-fast.sh --setup{why}
+counterproof.mirror_mkdir	mirror cannot be created: {mir}/{pkg}	mirror non creabile: {mir}/{pkg}
+counterproof.fallback_slower	{fallback}; slower, same outcomes	{fallback}; piu' lenti, stessi esiti
+counterproof.busy	mirror busy beyond {wait}s (lock {lock}); no fallback to /mnt/c	mirror occupato oltre {wait}s (lock {lock}); nessun ripiego su /mnt/c
+counterproof.busy_dir	mirror busy beyond {wait}s (lock {lock}.d); no fallback to /mnt/c	mirror occupato oltre {wait}s (lock {lock}.d); nessun ripiego su /mnt/c
+counterproof.deps_failed	stale dependencies, automatic realignment failed: {out}	dipendenze stantie, riallineamento automatico non riuscito: {out}
+counterproof.deps_still	stale dependencies even after the automatic realignment	dipendenze stantie anche dopo il riallineamento automatico
+counterproof.mirror_mkdir_dst	mirror cannot be created: {dst}	mirror non creabile: {dst}
+counterproof.sync_failed	sync failed ({pk})	sync fallito ({pk})
+counterproof.clean_failed	cleanup of the copy failed ({pk})	pulizia della copia fallita ({pk})
+counterproof.manifest_nc	manifest not computable (git) for {pk}	manifest non calcolabile (git) per {pk}
+counterproof.diff_origin	differences between origin and mirror ({pk}):	differenze fra origine e mirror ({pk}):
+counterproof.copy_misaligned	copy not aligned ({pk})	copia non allineata ({pk})
+counterproof.py_missing_run	interpreter of {{python}} missing: {py} (set FIC_PYTEST_PY)	interprete di {{python}} assente: {py} (impostare FIC_PYTEST_PY)
+counterproof.cmd_not_expandable	counterproof command not expandable: {err}	comando della controprova non espandibile: {err}
+counterproof.file_missing_mirror	file missing in the mirror: {f}	file assente nel mirror: {f}
+counterproof.backup_failed	backup copy failed: {f}	copia di sicurezza non riuscita: {f}
+counterproof.not_applicable	mutation not applicable	mutazione non applicabile
+counterproof.not_restored	{mroot} NOT restored after {mut} ({f}):	{mroot} NON ripristinato dopo {mut} ({f}):
+counterproof.result_unwritable	result not writable in {out}	risultato non scrivibile in {out}
+counterproof.not_integer	FIC_CP_PARALLEL and FIC_CP_MEM_MB want an integer	FIC_CP_PARALLEL e FIC_CP_MEM_MB vogliono un intero
+counterproof.integrity_mirror	integrity: mirror not restored, list interrupted	integrita': mirror non ripristinato, lista interrotta
+counterproof.private_mkdir	private copies cannot be created in {home}	copie private non creabili in {home}
+counterproof.private_failed	private copy {i} not created	copia privata {i} non creata
+counterproof.private_nested	private copy {i}: {nm} not copied	copia privata {i}: {nm} non copiato
+counterproof.private_link	private copy {i}: link to node_modules not created	copia privata {i}: link a node_modules non creato
+counterproof.private_differs	private copy {i} not identical to the manifest	copia privata {i} non identica al manifest
+counterproof.step2	step 2 — {par} mutations on {n} private copies in parallel (MemAvailable {avail} MB, {mem} MB each run); mirror lock held until the end	gradino 2 — {par} mutazioni su {n} copie private in parallelo (MemAvailable {avail} MB, {mem} MB a run); lock del mirror tenuto fino alla fine
+counterproof.wt_changed	WARNING: {pkg} changed in the working tree DURING the counterproofs (not by this script): the results apply to the initial state	ATTENZIONE: {pkg} e' cambiato nel working tree DURANTE le controprove (non da questo script): i risultati valgono per lo stato iniziale
+counterproof.integrity_private	integrity: private copy not restored, worker interrupted	integrita': copia privata non ripristinata, worker interrotto
+counterproof.mirror_changed	mirror changed during step 2, sources or node_modules: results not valid, relaunch	mirror cambiato durante il gradino 2, sorgenti o node_modules: risultati non validi, rilanciare
+counterproof.cfg_loader	configuration reader cannot be loaded ({p}): {e}	lettore della configurazione non caricabile ({p}): {e}
+counterproof.outside_modules	outside every module	fuori da ogni modulo
+counterproof.py_wsl_missing	WSL python missing: 	python WSL assente: 
+counterproof.py_missing	python missing: 	python assente: 
+counterproof.no_candidate	no candidate	nessun candidato
+counterproof.cfg_invalid	invalid configuration (exit {code})	configurazione non valida (uscita {code})
+counterproof.mj_unreadable	mutations.json unreadable: {e}	mutations.json illeggibile: {e}
+counterproof.mj_not_list	mutations.json must be a list with at least one entry	mutations.json deve essere una lista non vuota
+counterproof.entry	entry {i}	voce {i}
+counterproof.not_object	not an object	non e un oggetto
+counterproof.bad_id	id missing or invalid (letters, digits, . _ -)	id mancante o non valido (lettere, cifre, . _ -)
+counterproof.dup_id	duplicate id	id duplicato
+counterproof.bad_file	file must be a path relative to the repository, without ..	file deve essere un path relativo al repository, senza ..
+counterproof.no_symbol	`simbolo` missing	simbolo mancante
+counterproof.bad_mutation	mutazione must be {{cerca, sostituisci}} with cerca not empty	mutazione deve essere {{cerca, sostituisci}} con cerca non vuoto
+counterproof.empty_mutation	empty mutazione (cerca equal to sostituisci)	mutazione vuota (cerca uguale a sostituisci)
+counterproof.bad_test_path	test.percorso missing or not relative to the repository	test.percorso mancante o non relativo al repository
+counterproof.bad_test_name	test.nome must be a text	test.nome deve essere un testo
+counterproof.bad_red_if	rosso_se must have test_id and asserzione, both not empty	rosso_se deve avere test_id e asserzione non vuoti
+counterproof.same_module	file and test in the same module of maat.json, with the test under the root of the module (file: {file}; test: {test})	file e test nello stesso modulo di maat.json, con il test sotto la radice del modulo (file: {file}; test: {test})
+counterproof.file_missing_wt	file missing in the working tree: 	file assente nel working tree: 
+counterproof.bad_absorbed	assorbita must be true/false and motivo a text	assorbita deve essere true/false e motivo un testo
+counterproof.module_no_cp	module {mod} declares no counterproof	il modulo {mod} non dichiara controprova
+counterproof.module_no_cmd	controprova.comando not declared for module {mod}	controprova.comando non dichiarato per il modulo {mod}
+counterproof.not_run_declared	NOT RUN (declared): 	NOT RUN (dichiarato): 
+counterproof.several_copies	several modules with copia among the mutations ({mods}): one list for each	più moduli con copia nelle mutazioni ({mods}): una lista per ognuno
+counterproof.bad_module_name	module name not usable as a folder: {nm}	nome di modulo non utilizzabile come cartella: {nm}
+counterproof.pkg_is_root	radice_pacchetti of module {nm} is the root of the repository: the copy needs a folder	radice_pacchetti del modulo {nm} e la radice del repository: la copia vuole una cartella
+counterproof.search_count	mutation not applicable: the text to search appears {n} times in the file (exactly 1 is needed)	mutazione non applicabile: il testo da cercare compare {n} volte nel file (ne serve esattamente 1)
+counterproof.no_json_report	the runner produced no readable JSON report	il runner non ha prodotto un report JSON leggibile
+counterproof.not_collected	test file not collected by the runner	file di test non raccolto dal runner
+counterproof.stays_green	the named test stays green: the mutation is not covered	il test nominato resta verde: la mutazione non e coperta
+counterproof.not_run_named	named test not run (missing or skipped): no proof	test nominato non eseguito (assente o saltato): nessuna prova
+counterproof.red_assert	red on the named test and on the expected assertion	rosso sul test nominato e sull asserzione attesa
+counterproof.red_import	red because of an import error, not because of the assertion: not a proof	rosso per un errore d import, non per l asserzione: non e una prova
+counterproof.red_other	the named test is red, but not on the expected assertion	il test nominato e rosso, ma non sull asserzione attesa
+counterproof.suite_import	the test file does not load (import error): not a proof	il file di test non si carica (errore d import): non e una prova
+counterproof.suite_collect	the test file fails at collection: no test run	il file di test fallisce in raccolta: nessun test eseguito
+counterproof.pytest_collect	pytest did not collect the named test (exit {rc})	pytest non ha raccolto il test nominato (uscita {rc})
+counterproof.no_junit_report	the runner produced no readable JUnit report	il runner non ha prodotto un report JUnit leggibile
+counterproof.cmd_red	the counterproof command exits {rc}: red without a report, weak proof (no assertion checked)	il comando della controprova esce {rc}: rosso senza report, prova debole (nessuna asserzione verificata)
+counterproof.cmd_green	the counterproof command exits 0: the mutation is not covered	il comando della controprova esce 0: la mutazione non e coperta
+counterproof.timeout	runner beyond the time cap (FIC_CP_TIMEOUT)	runner oltre il tetto di tempo (FIC_CP_TIMEOUT)
+
+# --- context-pack (lingua-converti.py)
+context-pack.bad_option	unknown option: {opt}	opzione sconosciuta: {opt}
+context-pack.no_spec	spec not found: {spec}	spec non trovato: {spec}
+context-pack.no_python	Python interpreter not found	interprete Python non trovato
+context-pack.extract_failed	extraction failed	estrazione fallita
+context-pack.unchanged	unchanged ({fp}) — {dir}/context-pack.md	invariato ({fp}) — {dir}/context-pack.md
+context-pack.cfg_loader	configuration reader cannot be loaded ({p}): {e}	lettore della configurazione non caricabile ({p}): {e}
+context-pack.cfg_invalid	invalid configuration (exit {code})	configurazione non valida (uscita {code})
+context-pack.fp_label	Spec fingerprint: 	Impronta spec: 
+context-pack.date_commit	Date: {now} · Commit: {rev} · 	Data: {now} · Commit: {rev} · 
+context-pack.estimate	Estimate: ~{tok} tokens	Stima: ~{tok} token
+context-pack.line_ref	l. {n}	r. {n}
+context-pack.model	model {n} ({file}:{line}): {fields}	modello {n} ({file}:{line}): {fields}
+context-pack.none	none	nessuno
+context-pack.files_header	Files named by the spec	File nominati dallo spec
+context-pack.exists	exists: 	esiste: 
+context-pack.exists_as	exists: {files} (cited as `{q}`)	esiste: {files} (citato come `{q}`)
+context-pack.ambiguous	ambiguous: `{q}` → {n} files ({files})	ambiguo: `{q}` → {n} file ({files})
+context-pack.does_not_exist	DOES NOT EXIST: 	NON ESISTE: 
+context-pack.no_schema	DB schema not declared	schema DB non dichiarato
+context-pack.no_schema_line	DB columns: DB schema not declared (contesto.schema_db_file and schema_db_comando in maat.json).	Colonne DB: schema DB non dichiarato (contesto.schema_db_file e schema_db_comando in maat.json).
+context-pack.db_header	DB columns (information_schema, read only)	Colonne DB (information_schema, sola lettura)
+context-pack.no_table	no table	nessuna tabella
+context-pack.no_table_known	no recognisable table: {what} not declared in maat.json	nessuna tabella riconoscibile: {what} non dichiarato in maat.json
+context-pack.no_table_named	no table named (a `table` in backticks that matches a block of {file})	nessuna tabella nominata (una `tabella` fra backtick che coincide con un blocco di {file})
+context-pack.present	present	presente
+context-pack.not_in_schema	not found in information_schema	non trovata in information_schema
+context-pack.cmd_undeclared	schema command not declared (contesto.schema_db_comando)	comando dello schema non dichiarato (contesto.schema_db_comando)
+context-pack.cmd_exit	schema command exited {rc}{out}	comando dello schema uscito {rc}{out}
+context-pack.db_missing	missing ({why})	assente ({why})
+context-pack.db_missing_line	**missing** — {why}. Tables named: {tables}	**assente** — {why}. Tabelle nominate: {tables}
+context-pack.symbols_header	Named symbols (definition: first in the named files, then in the repository)	Simboli nominati (definizione: prima nei file nominati, poi nel repository)
+context-pack.not_found	not found	non trovato
+context-pack.by_file_header	By file: signatures and the tests that cite it	Per file: firme e test che lo citano
+context-pack.lines	{n} lines	{n} righe
+context-pack.more_sigs	+{n} signatures	+{n} firme
+context-pack.is_test	(it is a test)	(è un test)
+context-pack.more_files	… {n} more files not expanded (cap {cap})	… altri {n} file non espansi (tetto {cap})
+context-pack.dt_header	Tests citing the data-test attributes	Test che citano i data-test
+context-pack.more_dt	… {n} more data-test of the spec	… altri {n} data-test dello spec
+context-pack.dt_vue	in the named .vue files {n} more data-test, {cited} cited by tests; not cited: {orphans}	nei .vue nominati altri {n} data-test, {cited} citati da test; non citati: {orphans}
+context-pack.no_dt	no data-test in the spec nor in the named .vue files	nessun data-test nello spec né nei .vue nominati
+context-pack.strings_header	Tests citing the strings of the spec («…» and "…")	Test che citano le stringhe dello spec («…» e "…")
+context-pack.strings_count	strings searched: {n} · cited by tests: {cited}{shown} · generic (in more than 12 tests, not listed): {generic}	stringhe cercate: {n} · citate da test: {cited}{shown} · generiche (in più di 12 test, non elencate): {generic}
+context-pack.strings_shown	 (20 shown)	 (mostrate 20)
+context-pack.title	Context pack — {spec}	Pacchetto di contesto — {spec}
+context-pack.orientation	Orientation, not authority: the code wins over the pack. Generated by `scripts/context-pack.sh` of the maat plugin	Orientamento, non autorità: il codice vince sul pacchetto. Generato da `scripts/context-pack.sh` del plugin maat
+context-pack.regenerated	(read only); regenerated when the fingerprint of the spec changes.	(sola lettura); si rigenera quando cambia l'impronta dello spec.
+context-pack.truncated	… TRUNCATED at the cap of ~5k tokens: read the rest from the code.	… TRONCATO al tetto di ~5k token: il resto va letto dal codice.
+context-pack.summary	named files {n} ({missing} missing), ~{tok} tokens, DB: {db}	file nominati {n} ({missing} inesistenti), ~{tok} token, DB: {db}
+
+# --- blocks-independent (lingua-converti.py)
+blocks-independent.reader_failed	configuration reader not loadable ({p}): {e}	lettore della configurazione non caricabile ({p}): {e}
+blocks-independent.config_invalid	invalid configuration (exit {rc})	configurazione non valida (uscita {rc})
+blocks-independent.imports	{f} imports {g}	{f} importa {g}
+blocks-independent.uses_nuxt	{f} uses {n} (auto-imported from .nuxt, defined in {g})	{f} usa {n} (auto-importato da .nuxt, definito in {g})
+blocks-independent.uses_derived	{f} uses {n} (auto-imported, name derived from the path of {g})	{f} usa {n} (auto-importato, nome derivato dal percorso di {g})
+blocks-independent.proc_unreadable	procedure unreadable: {e}	procedura illeggibile: {e}
+blocks-independent.dep_scrive	scrive: in common ({files})	scrive: in comune ({files})
+blocks-independent.dep_dopo	dopo: declared	dopo: dichiarato
+blocks-independent.few_blocks	{n} block(s) in the procedure	{n} blocco/i nella procedura
+blocks-independent.shared_in_scrive	shared or generated file in scrive: ({b}: {f})	file condiviso o generato in scrive: ({b}: {f})
+blocks-independent.empty_scope	block without scrive: ({ids}): empty lane scope	blocco senza scrive: ({ids}): scope di corsia vuoto
+blocks-independent.prep_default	the preparation of the module	la preparazione del modulo
+blocks-independent.dts_missing	.nuxt/*.d.ts missing ({root}.nuxt/components.d.ts or imports.d.ts unreadable: graph of the auto-imports not knowable; {prep})	.nuxt/*.d.ts assenti ({root}.nuxt/components.d.ts o imports.d.ts illeggibili: grafo degli auto-import non conoscibile; {prep})
+blocks-independent.dep_line	dependency: {a}~{b} — {why}	dipendenza: {a}~{b} — {why}
+blocks-independent.one_component	dependent blocks (a single component)	blocchi dipendenti (una sola componente)
+blocks-independent.post_unreadable	inputs unreadable: {files}	input illeggibili: {files}
+blocks-independent.post_scope	scopes of the lanes unreadable in {f}	scope delle corsie illeggibili in {f}
+blocks-independent.post_shared	shared or generated file changed during the lanes: {f}	file condiviso o generato cambiato durante le corsie: {f}
+blocks-independent.post_generated	generated file {f} regenerated without a single lane declaring it	generato {f} rigenerato senza una corsia sola che lo dichiari
+blocks-independent.post_outside	{f} changed outside the union of the scrive: of the lanes	{f} cambiato fuori dall'unione degli scrive: delle corsie
+blocks-independent.post_both	{f} written by both lanes	{f} scritto da entrambe le corsie
+blocks-independent.usage_post	usage: blocks-independent.py --posteriori <lanes.txt> <changed.txt> [<declared-1> <declared-2>]	uso: blocks-independent.py --posteriori <corsie.txt> <cambiati.txt> [<dichiarati-1> <dichiarati-2>]
+blocks-independent.usage	usage: blocks-independent.py [--root <repo>] <procedure.txt>	uso: blocks-independent.py [--root <repo>] <procedura.txt>
+
+# --- finalize (lingua-converti.py)
+finalize.unknown_option	unknown option: {opt}	opzione sconosciuta: {opt}
+finalize.no_run_dir	run dir missing: {run}	run dir assente: {run}
+finalize.no_spec	spec missing: {spec}	spec assente: {spec}
+finalize.no_python	Python interpreter not found	interprete Python non trovato
+finalize.nothing_to_sign	nothing to sign (Review status '{rs}' · Feature status '{fs}')	niente da firmare (Review status '{rs}' · Feature status '{fs}')
+finalize.unknown_level	unknown level: {level} (min|std|full|legacy)	livello sconosciuto: {level} (min|std|full|legacy)
+finalize.reader_unusable	reader not usable	lettore non utilizzabile
+finalize.gates_unknown	required gates not determinable (maat.json: {err})	gate richiesti non determinabili (maat.json: {err})
+finalize.no_evidence	no evidence of the driver at the current key (level {level}, files of touched.txt){stale}	nessuna evidenza del driver alla chiave attuale (livello {level}, file di touched.txt){stale}
+finalize.old_keys	old keys:{stale}	chiavi vecchie:{stale}
+finalize.no_coverage	coverage missing ({cop}): no Evidence table	copertura assente ({cop}): nessuna tabella Evidence
+finalize.weak_proof	weak proof: {w}	prova debole: {w}
+finalize.weak_proofs	weak proofs: {list}	prove deboli: {list}
+finalize.det_ok	gates {gates} at the current key (evidence/{key}…), counterproofs red on assertion	gate {gates} alla chiave attuale (evidence/{key}…), controprove rosse su asserzione
+finalize.spec_unwritable	spec not writable	spec non scrivibile
+finalize.confirmed	confirmed: {det}	confermato: {det}
+finalize.ev_missing	{g}: evidence missing or unreadable (evidence/{key})	{g}: evidenza assente o illeggibile (evidence/{key})
+finalize.ev_key	{g}: key of the JSON different from the folder of the evidence	{g}: chiave del JSON diversa dalla cartella dell evidenza
+finalize.pass_no_report	{g}: PASS without the report of the runner	{g}: PASS senza il report del runner
+finalize.nr_checks_green	{g}: NOT RUN ({why}) — no test in the module {m}, checks green	{g}: NOT RUN ({why}) — nessun test nel modulo {m}, controlli verdi
+finalize.declared	declared	dichiarato
+finalize.nr_checks_skipped	{g}: NOT RUN ({why}) — no test in the module {m}, checks skipped: {why2}	{g}: NOT RUN ({why}) — nessun test nel modulo {m}, controlli saltati: {why2}
+finalize.no_reason	no reason	senza motivo
+finalize.nr_no_test	{g}: NOT RUN ({why}) — no test in the module {m}	{g}: NOT RUN ({why}) — nessun test nel modulo {m}
+finalize.mj_unreadable	counterproofs: mutations.json unreadable	controprove: mutations.json illeggibile
+finalize.mj_no_id	counterproofs: entry without id in mutations.json	controprove: voce senza id in mutations.json
+finalize.l2_invalid	counterproof {mid}: absorbed (L2) not valid: {why}	controprova {mid}: assorbita (L2) non valida: {why}
+finalize.l2_unverified	conditions not verified (plan-check.sh l2)	condizioni non verificate (plan-check.sh l2)
+finalize.cp_no_result	counterproof {mid}: result missing (counterproof.sh not run or incomplete)	controprova {mid}: risultato assente (counterproof.sh non eseguito o incompleto)
+finalize.cp_weak	counterproof {mid}: rosso_generico, weak proof ({why})	controprova {mid}: rosso_generico, prova debole ({why})
+finalize.no_assertion	no assertion verified	nessuna asserzione verificata
+finalize.cp_line	counterproof {mid}: {why}	controprova {mid}: {why}
+finalize.cp_outcome	counterproof {mid}: {es} ({why})	controprova {mid}: {es} ({why})
+finalize.cp_table	counterproof (table of the review) {cell}: {res}	controprova (tabella della review) {cell}: {res}
+finalize.no_outcome	no result	senza esito
+finalize.no_cov_map	no requirement→ID map (field copertura) in {cop}: no Evidence table	nessuna mappa requisito→ID (campo copertura) in {cop}: nessuna tabella Evidence
+finalize.cp_weak_cell	counterproof {es}, weak proof	controprova {es}, prova debole
+finalize.cp_cell	counterproof {es}	controprova {es}
+finalize.uncovered_no_id	not covered (no test ID)	non coperto (nessun ID di test)
+finalize.uncovered_no_result	not covered (no result: {ids})	non coperto (senza risultato: {ids})
+finalize.no_current_key	no current key	nessuna chiave attuale
+finalize.ev_head	requirement → test ID → result of VERIFY, evidence/{k12}	requisito → ID di test → risultato di VERIFY, evidence/{k12}
+finalize.ev_composed	Evidence composed — {n} requirements, {k} not covered	Evidence composta — {n} requisiti, {k} non coperti
+
+# --- gates (lingua-converti.py)
+gates.unknown_option	unknown option: {opt}	opzione sconosciuta: {opt}
+gates.verify_usage	--verify wants a folder evidence/<key> with argomenti.txt	--verify vuole una cartella evidence/<chiave> con argomenti.txt
+gates.unknown_level	unknown level: {level} (min|std|full|legacy)	livello sconosciuto: {level} (min|std|full|legacy)
+gates.no_python	Python interpreter not found	interprete Python non trovato
+gates.no_tmp	temporary folder not creatable	cartella temporanea non creabile
+gates.conf_lib	lib/maat-conf.sh not loadable: {err}	lib/maat-conf.sh non caricabile: {err}
+gates.modulo_di	modulo-di {f}: exit {rc} {err}	modulo-di {f}: uscita {rc} {err}
+gates.pyw_missing	python WSL missing: {cands}	python WSL assente: {cands}
+gates.declared_no_test	declared: no test	dichiarato: nessun test
+gates.no_file_under	no file under {root}	nessun file sotto {root}
+gates.no_test_for	no existing test for: {files}	nessun test esistente per: {files}
+gates.test_cmd	test command of {m}: {err}	comando test di {m}: {err}
+gates.declared_why	declared: {why}	dichiarato: {why}
+gates.test_unresolved	test command of {m} not resolved (exit {rc}): {err}	comando test di {m} non risolto (uscita {rc}): {err}
+gates.checks_skipped	checks skipped: {list}	controlli saltati: {list}
+gates.checks_none	no touched file matches the checks of {m}	nessun file toccato corrisponde ai controlli di {m}
+gates.checks_unresolved	checks of {m} not resolved (exit {rc}): {err}	controlli di {m} non risolti (uscita {rc}): {err}
+gates.type_cmd	{tipo} command of {m}: {err}	comando {tipo} di {m}: {err}
+gates.type_unresolved	{tipo} command of {m} not resolved (exit {rc}): {err}	comando {tipo} di {m} non risolto (uscita {rc}): {err}
+gates.no_wsl	WSL missing (wsl.exe not in the PATH): the module {m} has ambiente wsl — set `ambiente: nativo` or install WSL	WSL assente (wsl.exe fuori dal PATH): il modulo {m} ha ambiente wsl — metti `ambiente: nativo` o installa WSL
+gates.no_tree	tree of the working tree not computable: review-surface.sh tree	tree del working tree non calcolabile: review-surface.sh tree
+gates.stale	current key {key}	chiave attuale {key}
+gates.ev_dir	evidence folder not creatable: {ev}	cartella dell'evidenza non creabile: {ev}
+gates.log_exit	exit {rc}	uscita {rc}
+gates.tree_changed	tree changed during the gates (tree {tree} -> {after})	albero cambiato durante i gate (tree {tree} -> {after})
+gates.not_computable	not computable	non calcolabile
+gates.uncovered	not covered: {files} (outside every module of maat.json)	non coperto: {files} (fuori da ogni modulo di maat.json)
+gates.no_junit	no JUnit report (exit {rc}): see {g}.log	nessun report JUnit (uscita {rc}): vedi {g}.log
+gates.junit_summary	{n} tests, {fl} failed, {er} errors, {sk} skipped	{n} test, {fl} falliti, {er} errori, {sk} saltati
+gates.junit_incoherent	exit {rc} inconsistent with the report or no test collected	uscita {rc} incoerente col report o senza test raccolti
+gates.no_output	no output of the runner (exit {rc})	nessun output del runner (uscita {rc})
+gates.checks_summary	{n} entries run, {ko} failed, {sk} skipped	{n} voci eseguite, {ko} fallite, {sk} saltate
+gates.checks_incoherent	exit {rc} inconsistent with the entries	uscita {rc} incoerente con le voci
+gates.not_runnable	command not runnable (exit {rc}: program or environment missing)	comando non eseguibile (uscita {rc}: programma o ambiente assenti)
+gates.no_wrapper_line	no 'esito=' line of the wrapper (exit {rc})	nessuna riga 'esito=' del wrapper (uscita {rc})
+gates.no_vitest_summary	PASS of the wrapper without the vitest summary (Tests … passed)	PASS del wrapper senza il riepilogo di vitest (Tests … passed)
+gates.ev_not_written	evidence not written	evidenza non scritta
+gates.nr_declared	NOT RUN declared: {gates}	NOT RUN dichiarato: {gates}
+
+# --- review-surface (lingua-converti.py)
+review-surface.not_git	not a git repository	non e' un repository git
+review-surface.cd_failed	cannot enter {top}	impossibile entrare in {top}
+review-surface.mktemp_failed	mktemp failed	mktemp fallito
+review-surface.add_failed	git add -A (temporary index) failed	git add -A (indice temporaneo) fallito
+review-surface.write_tree_failed	git write-tree failed	git write-tree fallito
+review-surface.base_unresolvable	base '{ref}' not resolvable	base '{ref}' non risolvibile
+review-surface.paths_missing	paths-file '{f}' does not exist	paths-file '{f}' inesistente
+review-surface.unknown_arg	unknown argument: {arg}	argomento sconosciuto: {arg}
+review-surface.usage_fp	usage: fingerprint --tree <tree> --paths-file <f>	uso: fingerprint --tree <tree> --paths-file <f>
+review-surface.tree_absent	tree {tree} not present	tree {tree} non presente
+review-surface.usage_check	usage: check --base <sha> --tree <tree> --paths-file <f> [--fingerprint <fp>] [--exclude-file <f>]	uso: check --base <sha> --tree <tree> --paths-file <f> [--fingerprint <fp>] [--exclude-file <f>]
+review-surface.base_absent	base {base} not present	base {base} non presente
+review-surface.not_test	not a test file: {p}	non e' un file di test: {p}
+review-surface.test_infra	test infrastructure: {p}	infrastruttura di test: {p}
+review-surface.lines_removed	lines removed or changed in an existing test: {p}	righe tolte o modificate in un test esistente: {p}
+review-surface.shared_setup	shared setup added to an existing test: {p}	setup condiviso aggiunto a un test esistente: {p}
+review-surface.control_flow	control flow added to an existing test: {p}	flusso di controllo aggiunto a un test esistente: {p}
+review-surface.weakening	weakening signals	segnali di indebolimento
+review-surface.unknown_pruned	tree {tree} pruned by gc, no fingerprint recorded	tree {tree} potato da gc, nessuna impronta registrata
+review-surface.stale_fp	delta not reconstructable → round at full scope	delta non ricostruibile → giro a scope pieno
+review-surface.no_delta	delta not reconstructable	delta non ricostruibile
+review-surface.usage_signals	usage: test-signals --from <tree-ish> --to <tree-ish> [--paths-file <f>]	uso: test-signals --from <tree-ish> --to <tree-ish> [--paths-file <f>]
+review-surface.usage_diff	usage: diff --from <tree-ish> --to <tree-ish> --paths-file <f> --out <file>	uso: diff --from <tree-ish> --to <tree-ish> --paths-file <f> --out <file>
+review-surface.no_paths	paths-file empty: no path to show	paths-file vuoto: nessun path da mostrare
+review-surface.diff_failed	git diff failed	git diff fallito
+review-surface.no_diff	no differences	nessuna differenza
+review-surface.subcommand	subcommand: snapshot | fingerprint | check | test-signals | tree | diff	sottocomando: snapshot | fingerprint | check | test-signals | tree | diff
+
+# --- cycle-report (lingua-converti.py)
+cycle-report.b_unmeasurable	not measurable	non misurabile
+cycle-report.head	{spec}  {date}  phases {n}  A {a} min ({phases})  B {b}  ${cost}  quota5h {q}	{spec}  {date}  fasi {n}  A {a} min ({phases})  B {b}  ${cost}  quota5h {q}
+cycle-report.internal	internal harness	harness interno
+cycle-report.missing_tr	B: missing transcripts: {s}	B: transcript mancanti: {s}
+cycle-report.no_sid	(no session_id in the stream)	(nessun session_id nello stream)
+cycle-report.stop_pauses	pauses after a STOP (outside B): {s}	pause dopo STOP (fuori da B): {s}
+cycle-report.unexited_pauses	pauses after phases without a result line (inside B): {s}	pause dopo fasi senza ESITO (dentro B): {s}
+cycle-report.tokens	tokens: cache read {r} · cache written {w} · output {o}	token: cache letti {r} · cache scritti {w} · output {o}
+cycle-report.aggregates_cycle	aggregates (min): (a) reruns {a} [{n}] · (b) gates+counterproofs+polling {b} · (c) model {c} · rest {r} · passive wait {p} · agents (overlapping) {g}	aggregati (min): (a) riesecuzioni {a} [{n}] · (b) gate+controprove+polling {b} · (c) modello {c} · resto {r} · attesa passiva {p} · agenti (sovrapposto) {g}
+cycle-report.outside_a	work outside A (already in the aggregates, min): off-turn {o} · phases without result {r}	lavoro fuori da A (gia' negli aggregati, min): fuori turno {o} · fasi senza result {r}
+cycle-report.model_by_thread	model by thread (min): 	modello per filo (min): 
+cycle-report.b_unmeasurable_n	not measurable ({n} cycles out of {m})	non misurabile ({n} cicli su {m})
+cycle-report.total_head	TOTAL {n} cycles  A {a} min ({phases})  B {b}  ${cost}  cache read {r}  reruns {k}	TOTALE {n} cicli  A {a} min ({phases})  B {b}  ${cost}  cache letti {r}  riesecuzioni {k}
+cycle-report.aggregates	aggregates (min): 	aggregati (min): 
+cycle-report.passive	passive wait {p}	attesa passiva {p}
+cycle-report.bad_header	unknown header in {p}, file not touched: {h} (expected {c})	intestazione di {p} sconosciuta, file non toccato: {h} (attesa {c})
+cycle-report.bad_rows	{p}: rows with a number of fields other than the header's ({r}), file not touched	{p}: righe con un numero di campi diverso dall'intestazione ({r}), file non toccato
+cycle-report.migrate_failed	{p}: migration of the header failed ({e})	{p}: migrazione dell'intestazione non riuscita ({e})
+cycle-report.or_metrics	{e} (or pass --metrics)	{e} (o indica --metrics)
+cycle-report.description	Measurement of a full-cycle run.	Misura di un ciclo del full cycle.
+cycle-report.h_cycles	spec-<name>.run or .jsonl file	spec-<name>.run o file .jsonl
+cycle-report.h_json	JSON output	uscita JSON
+cycle-report.h_append	appends one row for each cycle to the metrics file	aggiunge una riga per ciclo al file delle metriche
+cycle-report.h_metrics	metrics file (default <work folder of the project>/metrics.csv, cartelle.lavoro: .claude/.ai-workflow)	file delle metriche (default <cartella di lavoro del progetto>/metrics.csv, cartelle.lavoro: .claude/.ai-workflow)
+cycle-report.h_projects	root of the Claude Code transcripts	radice dei transcript di Claude Code
+cycle-report.metrics_only	--metrics only goes with --append	--metrics vale solo con --append
+cycle-report.not_found	does not exist: {c}	non esiste: {c}
+cycle-report.appended	metrics: +1 row {s} -> {p}	metrics: +1 riga {s} -> {p}
+
+# --- phase-usage (lingua-converti.py)
+phase-usage.usage_summary	usage: phase-usage.py --summary <spec-<name>.run>	uso: phase-usage.py --summary <spec-<name>.run>
+phase-usage.usage	usage: phase-usage.py <spec-<name>.run | .jsonl file> [...] [--json]	uso: phase-usage.py <spec-<name>.run | file .jsonl> [...] [--json]
+phase-usage.head	== {log}  ${cost}  {m} min  turns {n}  output {out}  quota5h {q}  tools at start {t} (mcp {mcp}){err}	== {log}  ${cost}  {m} min  turni {n}  output {out}  quota5h {q}  tool all'avvio {t} (mcp {mcp}){err}
+phase-usage.error	ERROR	ERRORE
+phase-usage.col_thread	thread	filo
+phase-usage.col_inst	inst.	ist.
+phase-usage.col_calls	calls	chiam.
+phase-usage.col_rereads	rereads	riletture
+phase-usage.chars	ch.	car.
+phase-usage.slow	slow	lento
+
+# --- stop-hook (lingua-converti.py)
+stop-hook.jobs	background jobs not collected: 	job in background non raccolti: 
+stop-hook.jobs_fix	collect them (BashOutput/TaskOutput, until they have finished) or stop them (TaskStop) before closing: in -p nobody wakes you up	raccoglili (BashOutput/TaskOutput, finche' non sono finiti) o fermali (TaskStop) prima di chiudere: in -p nessuno ti risveglia
+stop-hook.no_result	the last message has no `PHASE RESULT <phase>: OK — …` or `PHASE RESULT <phase>: STOP — …` line: complete the phase (or stop it with STOP and the reason) and close with that line	l'ultimo messaggio non ha la riga `PHASE RESULT <phase>: OK — …` o `PHASE RESULT <phase>: STOP — …`: completa la fase (o fermala con STOP e il motivo) e chiudi con quella riga
+
+# --- phase-events (lingua-converti.py)
+phase-events.exit_after	sub-session exited with exit {code} — last turn: {last}	sottosessione uscita con exit {code} — ultimo turno: {last}
+phase-events.no_result	sub-session ended without a result (exit {code}) — see {log} and .stderr	sottosessione terminata senza risultato (exit {code}) — vedi {log} e .stderr
+phase-events.agent	agent	agente
+phase-events.launches	launches {desc}	lancia {desc}
+phase-events.done	done	finito
+phase-events.turns	turns	turni
+phase-events.turn_done	turn finished: 	turno concluso: 
+phase-events.no_line	no PHASE RESULT line	nessuna riga ESITO FASE
+phase-events.phase_done	phase finished (no PHASE RESULT line)	fase finita (nessuna riga ESITO FASE)
+
+# --- maat-paths (lingua-converti.py)
+maat-paths.no_root	MAAT_ROOT='{root}' is not the root of a maat plugin (.claude-plugin/plugin.json missing)	MAAT_ROOT='{root}' non e' la radice di un plugin maat (manca .claude-plugin/plugin.json)
+maat-paths.no_project	the working folder {cwd} is not in a git repository: PROJECT_ROOT not resolved	la cartella di lavoro {cwd} non e' in un repository git: PROJECT_ROOT non risolta
+maat-paths.no_project_fix	(run it from the folder of the project, or set FIC_REPO)	(lancia dalla cartella del progetto, o imposta FIC_REPO)
+maat-paths.no_lavoro	cartelle.lavoro not read from maat.json: using the default {lavoro}	cartelle.lavoro non letta da maat.json: uso il default {lavoro}
+
+# --- maat-conf (lingua-converti.py)
+maat-conf.no_python	Python interpreter not found	interprete Python non trovato
+maat-conf.key_missing	key missing: {k}	chiave assente: {k}
+
+# --- guard-hook (lingua-converti.py)
+guard-hook.crashed	guard in error (exit {rc}): no check run — core rule (a failing guard never lets a command through) — confirm only if the command is safe, and report the error of guard.py	guardia in errore (uscita {rc}): nessun controllo eseguito — regola del nucleo (guardia che fallisce: mai lasciar passare) — conferma solo se il comando è sicuro, e segnala l'errore di guard.py
+guard-hook.no_python	Python not found: guard not available — core rule (a guard without an interpreter asks on every command) — install Python 3.10 or later, or set FIC_PYTHON; confirm only if the command is safe	Python non trovato: guardia non disponibile — regola del nucleo (guardia senza interprete: si chiede su ogni comando) — installa Python 3.10 o superiore, o imposta FIC_PYTHON; conferma solo se il comando è sicuro
+guard-hook.session	session guard	guardia di sessione
+
+# --- watch-phase (lingua-converti.py)
+watch-phase.usage	usage: {script} <run-dir> <label>	uso: {script} <run-dir> <etichetta>
+watch-phase.no_python	no Python (python.sh: set FIC_PYTHON) and no WSL	nessun Python (python.sh: imposta FIC_PYTHON) e nessun WSL
+
+# --- replay (lingua-converti.py)
+replay.refused	REFUSED	RIFIUTO
+replay.no_lib	{s}/worktree-lib.sh or {s}/fic-mirror.sh not found	{s}/worktree-lib.sh o {s}/fic-mirror.sh non trovati
+replay.git_no_repo	git cannot find the repository of {root}	git non trova il repository di {root}
+replay.no_main	main tree not resolved from {common}	tree principale non risolto da {common}
+replay.no_main_git	git dir of the main tree not resolved	git dir del tree principale non risolta
+replay.not_exists	does not exist: {p}	non esiste: {p}
+replay.is_main	it is the main tree or inside it: {c}	e' il tree principale o sta dentro: {c}
+replay.is_project	it is the tree of the project or inside it: {c}	e' il tree del progetto o sta dentro: {c}
+replay.is_plugin	it is the plugin (harness) or inside it: {c}	e' il plugin (harness) o sta dentro: {c}
+replay.bad_name	the name does not start with fic-replay-: {c}	il nome non comincia per fic-replay-: {c}
+replay.not_wt_root	not the root of a git worktree: {c}	non e' la radice di un worktree git: {c}
+replay.no_marker	the marker of replay.sh is missing ({mk})	manca il marcatore di replay.sh ({mk})
+replay.marker_other	the marker points to another path: {path}	il marcatore indica un altro percorso: {path}
+replay.not_listed	not among the worktrees of the main repository: {c}	non e' fra i worktree del repository principale: {c}
+replay.wants_path	wants a path	vuole un percorso
+replay.wants_plugin	wants the root of a plugin	vuole la radice di un plugin
+replay.wants_folder	wants a folder	vuole una cartella
+replay.wants_name	wants a name	vuole un nome
+replay.unknown_opt	unknown option: {opt}	opzione sconosciuta: {opt}
+replay.no_src	folder of the specs missing: {src}	cartella delle spec assente: {src}
+replay.no_more_args	takes no other arguments	non vuole altri argomenti
+replay.not_ours	{p} is not a worktree created by replay.sh: not removing it	{p} non e' un worktree creato da replay.sh: non lo rimuovo
+replay.links_left	links still present in {c}: not removing it (it would follow the dependencies of the main tree)	collegamenti ancora presenti in {c}: non lo rimuovo (seguirebbe le dipendenze del tree principale)
+replay.no_python	Python interpreter not found (set FIC_PYTHON)	interprete Python non trovato (imposta FIC_PYTHON)
+replay.no_conf	configuration reader not found: {p}/lib/maat-conf.sh	lettore della configurazione non trovato: {p}/lib/maat-conf.sh
+replay.no_corpus_file	corpus of cartelle.corpus missing: {root}/{cc}	corpus di cartelle.corpus assente: {root}/{cc}
+replay.no_corpus	no corpus: cartelle.corpus not set in the maat.json of the project ({root})	nessun corpus: cartelle.corpus non impostata nella maat.json del progetto ({root})
+replay.spec_missing	SPEC MISSING ({spec})	SPEC MANCANTE ({spec})
+replay.run_missing	RUN DIRECTORY MISSING ({run})	RUN DIRECTORY MANCANTE ({run})
+replay.base_differs	base.txt ({b}) differs from corpus.json ({base})	base.txt ({b}) diversa da corpus.json ({base})
+replay.base_commit_missing	base commit missing	commit di base assente
+replay.usage	usage: replay.sh <cycle> <phase> [--harness <tree>] [--source <dir>] [--worktree <path>] [--out <dir>] [--inject <name>]... [--dry-run] | --check | --remove <path>	uso: replay.sh <ciclo> <fase> [--harness <tree>] [--source <dir>] [--worktree <path>] [--out <dir>] [--inject <nome>]... [--dry-run] | --check | --remove <path>
+replay.no_spec	spec missing: {p}	spec mancante: {p}
+replay.run_no_log	run directory missing or without log: {p}	run directory mancante o senza log: {p}
+replay.base_mismatch	base of corpus.json ({cbase}) differs from base.txt ({base})	base di corpus.json ({cbase}) diversa da base.txt ({base})
+replay.base_unknown	base of the cycle unknown: {run}/base.txt missing	base del ciclo sconosciuta: manca {run}/base.txt
+replay.base_absent	base commit missing from the repository: {base}	commit di base assente dal repository: {base}
+replay.label_missing	label {fase} missing in {run} (labels: {labels})	etichetta {fase} assente in {run} (etichette: {labels})
+replay.phase_unknown	unknown phase: {fase} (plan|implement|review|fix or an NN-phase label)	fase sconosciuta: {fase} (plan|implement|review|fix o un'etichetta NN-fase)
+replay.no_phase	no phase {fase} in {run} (labels: {labels})	nessuna fase {fase} in {run} (etichette: {labels})
+replay.ambiguous	phase {fase} ambiguous: give the label ({cand})	fase {fase} ambigua: indica l'etichetta ({cand})
+replay.no_prompt	original prompt missing: {p}	prompt originale assente: {p}
+replay.bad_prompt	the first line of the prompt is not /full-implementation-cycle (or /maat:full-implementation-cycle) --worker={phase} <name>: {p}	la prima riga del prompt non e' /full-implementation-cycle (o /maat:full-implementation-cycle) --worker={phase} <nome>: {p}
+replay.tree_gone	the tree {state} ({from}) is no longer in the repository (pruned by git gc): phase state not rebuildable	il tree {state} ({from}) non e' piu' nel repository (potato da git gc): stato della fase non ricostruibile
+replay.no_post_tree	a code phase precedes {label} but no .post-tree records it: code state not rebuildable	una fase di codice precede {label} ma nessun .post-tree la registra: stato del codice non ricostruibile
+replay.deps_differ	dependencies differ between the phase state ({from}) and the main tree: {deps}. The node_modules and venv linked from the main tree would not be those of this code and the gates would not run as in the original. No worktree created. To replay anyway (NOT COMPARABLE replay): --non-confrontabile	dipendenze diverse fra lo stato della fase ({from}) e il tree principale: {deps}. node_modules e venv collegati dal tree principale non sarebbero quelli di questo codice e i gate non girerebbero come nell'originale. Niente worktree creato. Per rigiocare comunque (rigioco NON CONFRONTABILE): --non-confrontabile
+replay.deps_nonconf	dependencies differ from the main tree ({from}): {deps}	dipendenze diverse dal tree principale ({from}): {deps}
+replay.not_comparable	NOT COMPARABLE	NON CONFRONTABILE
+replay.warning	WARNING	AVVISO
+replay.no_harness	harness does not exist	harness inesistente
+replay.not_plugin	--harness is not the root of a plugin (.claude-plugin/plugin.json missing): {h}	--harness non e' la radice di un plugin (manca .claude-plugin/plugin.json): {h}
+replay.no_run_phase	the plugin has no scripts/run-phase.sh: {h}	il plugin non ha scripts/run-phase.sh: {h}
+replay.bad_inject	invalid inject: {n}	inject non valido: {n}
+replay.unknown_inject	unknown inject: {n} (in {here}/inject: {list})	inject sconosciuto: {n} (in {here}/inject: {list})
+replay.wt_name	the worktree must be named fic-replay-*: {wt}	il worktree deve chiamarsi fic-replay-*: {wt}
+replay.wt_exists	{wt} already exists: I did not create it, I do not use it	{wt} esiste gia': non l'ho creato io, non lo uso
+replay.no_parent	the parent folder of {wt} does not exist	la cartella madre di {wt} non esiste
+replay.wt_inside	the worktree cannot be inside the main tree or the harness: {wt}	il worktree non puo' stare dentro il tree principale o il harness: {wt}
+replay.step_failed	step failed: {s}	passo fallito: {s}
+replay.cycle	cycle spec-{name} · phase {label} · base {base} · code from {from} · harness {h}	ciclo spec-{name} · fase {label} · base {base} · codice da {from} · harness {h}
+replay.worktree	worktree {wt} · output {out}	worktree {wt} · uscita {out}
+replay.dry_note	DRY-RUN: nothing is run	DRY-RUN: nulla viene eseguito
+replay.still_running	the phase still looks running: worktree left. When it has finished: bash {script} --remove {wt}	la fase risulta ancora in corso: worktree lasciato. Quando e' finita: bash {script} --remove {wt}
+replay.check_failed	{wt} does not pass the check: NOT removed	{wt} non supera la verifica: NON rimosso
+replay.links_left_wt	links still present in {wt}: worktree NOT removed (it would follow the dependencies of the main tree)	collegamenti ancora presenti in {wt}: worktree NON rimosso (seguirebbe le dipendenze del tree principale)
+replay.remove_failed	removal of the worktree failed: {wt}	rimozione del worktree fallita: {wt}
+replay.dry_check	check: name fic-replay-*, marker with its path, listed by git worktree list; no link left	verifica: nome fic-replay-*, marcatore con il suo percorso, elencato da git worktree list; nessun collegamento rimasto
+replay.finished	phase {label} finished with exit {code} · log and report in {out}	fase {label} finita con uscita {code} · log e report in {out}
+
+# --- inject (lingua-converti.py)
+inject.refused	REFUSED	RIFIUTO
+inject.usage	usage: {script} <corpus worktree> [options]	uso: {script} <worktree del corpus> [opzioni]
+inject.no_path	path does not exist: {p}	percorso inesistente: {p}
+inject.not_repo	not a git repository: {wt}	non e' un repository git: {wt}
+inject.not_root	not the root of a worktree: {wt}	non e' la radice di un worktree: {wt}
+inject.no_common	common git dir not resolved: {wt}	git dir comune non risolta: {wt}
+inject.is_main	it is the main tree or the harness, not a worktree of the corpus: {wt}	e' il tree principale o il harness, non un worktree del corpus: {wt}
+inject.no_marker	the marker of replay.sh is missing: {wt} is not a worktree of the corpus	manca il marcatore di replay.sh: {wt} non e' un worktree del corpus
+inject.marker_other	the marker of replay.sh points to another path: {wt}	il marcatore di replay.sh indica un altro percorso: {wt}
+inject.no_python	Python interpreter not found (set FIC_PYTHON)	interprete Python non trovato (imposta FIC_PYTHON)
+inject.one_run	expected a single run directory in {aiw}	attesa una sola run directory in {aiw}
+inject.no_file	file missing in the worktree: {f}	file assente nel worktree: {f}
+inject.occurrences	occurrences of {a}: {n} (1 expected)	occorrenze di {a}: {n} (attesa 1)
+inject.replace_failed	replacement not applicable in {f}	sostituzione non applicabile in {f}
+inject.no_line	no line matches {rx}	nessuna riga corrisponde a {rx}
+inject.insert_failed	insertion not applicable in {f}	inserimento non applicabile in {f}
+inject.no_target	no target: nothing in touched.txt for /{rx}/ and the fallback missing ({fb}); name it with --file/--test	nessun bersaglio: niente in touched.txt per /{rx}/ e ripiego assente ({fb}); indicalo con --file/--test
+inject.no_prompt	no prompt in {run}/prompts	nessun prompt in {run}/prompts
+inject.applied	applied to {wt}	applicato a {wt}
+inject.no_options	no options expected	nessuna opzione prevista
+inject.no_spec	spec missing in the worktree: {spec}	spec assente nel worktree: {spec}
+inject.no_plan_heading	the spec has no '## Piano di implementazione' (nor '## Implementation plan')	la spec non ha '## Piano di implementazione' (ne' '## Implementation plan')
+inject.no_testplan	no test plan heading ('Piano di test' or 'Test plan') inside the plan of the spec	nessun titolo 'Piano di test' dentro il piano della spec
+inject.contradiction	decision D-FIC and case T-FIC in contradiction	decisione D-FIC e caso T-FIC in contraddizione
+inject.unknown_opt	unknown option: {opt}	opzione sconosciuta: {opt}
+inject.cp_exists	counterproof copy already present: {cp}	copia di controprova gia' presente: {cp}
+inject.copy_failed	copy failed: {cp}	copia non riuscita: {cp}
+inject.mutated	mutated; copy and sidecar in counterproof/	mutato; copia e sidecar in counterproof/
+inject.need_admin_test	needs a test of apps/admin: {t}	serve un test di apps/admin: {t}
+inject.red_declared	red case; declared PASS in {p}	caso rosso; dichiarato PASS in {p}
+inject.need_vue	needs a .vue file: {f}	serve un file .vue: {f}
+inject.eqeqeq	comparison with == after <script setup> (eqeqeq)	confronto con == dopo <script setup> (eqeqeq)
+inject.bad_mutation	--file/--from/--to not valid	--file/--from/--to non validi
+inject.empty_text	--text and --component cannot be empty	--text e --component non possono essere vuoti
+inject.no_quotes	--text and --component cannot hold quotes or backslashes	--text e --component non possono contenere apici o backslash
+inject.no_test	test file missing in the worktree: {t} (an EXISTING test is needed)	file di test assente nel worktree: {t} (serve un test ESISTENTE)
+inject.forbids	case that forbids «{x}» in {c}	caso che vieta «{x}» in {c}
+inject.default_size	default size small → x-small	size di default small → x-small
+
+# --- maat-config (lingua-converti.py)
+maat-config.type_expected	expected type {types}, found {got}	tipo {types} atteso, trovato {got}
+maat-config.or	or	o
+maat-config.not_in_enum	value {v} not in the list (allowed: {allowed})	valore {v} fuori elenco (ammessi: {allowed})
+maat-config.bad_pattern	value {v} does not match the pattern {pattern}	valore {v} non rispetta la forma {pattern}
+maat-config.required_missing	required key missing	chiave obbligatoria mancante
+maat-config.unknown_key	unknown key	chiave sconosciuta
+maat-config.s1	required with regola_test: specchio (S1)	obbligatoria con regola_test: specchio (S1)
+maat-config.s2_test	the test command must contain {{test}} (S2)	il comando di test deve contenere {{test}} (S2)
+maat-config.s2_lint	the lint command must contain {{file}} (S2)	il comando di lint deve contenere {{file}} (S2)
+maat-config.s2_check	the command of a check must contain {{file}} (S2)	il comando di un controllo deve contenere {{file}} (S2)
+maat-config.s3_future	future version: update the plugin ({v}, the reader goes up to {cur}) (S3)	versione futura: aggiorna il plugin ({v}, il lettore arriva a {cur}) (S3)
+maat-config.s3_old	version {v} no longer supported: the reader accepts {accepted} (S3)	versione {v} non più supportata: il lettore accetta {accepted} (S3)
+maat-config.and	and	e
+maat-config.s4	lint_base: true needs a lint command with {{base?…}} (S4)	lint_base: true chiede un comando lint con {{base?…}} (S4)
+maat-config.s5	comandi.{k} uses test-fast.sh: copia.{k} is needed, the command inside the copy (S5)	comandi.{k} usa test-fast.sh: serve copia.{k}, il comando dentro la copia (S5)
+maat-config.s6	a copy command cannot call test-fast.sh (it would call itself) (S6)	un comando di copia non può chiamare test-fast.sh (autorichiamo) (S6)
+maat-config.s7_test	copia.test must contain {{test}} (S7)	copia.test deve contenere {{test}} (S7)
+maat-config.s7_file	copia.{k} must contain {{file}} (S7)	copia.{k} deve contenere {{file}} (S7)
+maat-config.s8	regola_test=nessuna but a test command is declared (S8)	regola nessuna ma comando di test dichiarato (S8)
+maat-config.s9	golden files, snapshots and the lint baseline are not generated files to regenerate (S9)	golden, snapshot e base del lint non sono generati da rigenerare (S9)
+maat-config.s10	preparati needs preparazione, the command that writes them (S10)	preparati chiede preparazione, il comando che li scrive (S10)
+maat-config.r9	{name}: versione_schema {prev} is the previous one: migrate to {cur} (R9)	{name}: versione_schema {prev} è la precedente: migra alla {cur} (R9)
+maat-config.not_configured	project not configured: run /maat:setup ({p} missing)	progetto non configurato: lancia /maat:setup (manca {p})
+maat-config.json_unreadable	{p}: (file): JSON not readable: {e}	{p}: (file): JSON non leggibile: {e}
+maat-config.python_unresolved	python not found: {{python}} cannot be resolved	python non trovato: {{python}} non risolvibile
+maat-config.outside_dir	{f} is outside the directory of the command ({base})	{f} è fuori dalla cartella del comando ({base})
+maat-config.usage_valida	usage: valida [file]	uso: valida [file]
+maat-config.valid	{p} valid	{p} valido
+maat-config.usage_leggi	usage: leggi <dotted.key> [--default x] | leggi --tutto	uso: leggi <chiave.puntata> [--default x] | leggi --tutto
+maat-config.key_missing	key missing: {k}	chiave assente: {k}
+maat-config.usage_modulo_di	usage: modulo-di <file relative to the repo>	uso: modulo-di <file relativo al repo>
+maat-config.unknown_module	unknown module: {m}	modulo sconosciuto: {m}
+maat-config.usage_gate	usage: gate-richiesti <min|std|full|legacy> [--file f]…	uso: gate-richiesti <min|std|full|legacy> [--file f]…
+maat-config.unknown_level	unknown level: {l} (min|std|full|legacy)	livello sconosciuto: {l} (min|std|full|legacy)
+maat-config.usage_test_di	usage: test-di <modulo> [--file f]…	uso: test-di <modulo> [--file f]…
+maat-config.usage_python	usage: python <modulo>	uso: python <modulo>
+maat-config.python_not_found_for	python not found for {m}	python non trovato per {m}
+maat-config.usage_chiave	usage: chiave <modulo>	uso: chiave <modulo>
+maat-config.unknown_option	unknown option or option without a value: {a}	opzione sconosciuta o senza valore: {a}
+maat-config.unknown_type	unknown type: {t}	tipo sconosciuto: {t}
+maat-config.skipped_missing	{cmd} — NOT RUN (declared): {x} missing	{cmd} — NOT RUN (dichiarato): {x} assente
+maat-config.skipped_unresolved	{cmd} — NOT RUN (declared): {why}	{cmd} — NOT RUN (dichiarato): {why}
+maat-config.no_checks	no check for these files in module {m}	nessun controllo per questi file nel modulo {m}
+maat-config.no_counterproof	controprova.comando not declared for {m}	controprova.comando non dichiarato per {m}
+maat-config.cmd_not_declared	command {t} not declared for {m}	comando {t} non dichiarato per {m}
+maat-config.not_run_missing	NOT RUN (declared): {x} missing for {m}.{t}	NOT RUN (dichiarato): {x} assente per {m}.{t}
+maat-config.not_run	NOT RUN (declared): {why}	NOT RUN (dichiarato): {why}
+maat-config.usage_comando	usage: comando <modulo> <test|lint|build|controlli|controprova> [options]	uso: comando <modulo> <test|lint|build|controlli|controprova> [opzioni]
+maat-config.no_copy_module	module {m} declares no copia (MAAT_MODULO)	il modulo {m} non dichiara copia (MAAT_MODULO)
+maat-config.no_copy	no module declares copia	nessun modulo dichiara copia
+maat-config.several_copies	several modules with copia: set MAAT_MODULO	più moduli con copia: imposta MAAT_MODULO
+maat-config.outside_packages	radice {r} outside radice_pacchetti {p}	radice {r} fuori da radice_pacchetti {p}
+maat-config.usage_copia_modulo	usage: copia-modulo	uso: copia-modulo
+maat-config.usage_comando_copia	usage: comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir> [options]	uso: comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir> [opzioni]
+maat-config.copia_required	comando-copia: --copia <dir> is required	comando-copia: --copia <dir> obbligatoria
+maat-config.copy_not_declared	copia.{t} not declared for {m}	copia.{t} non dichiarato per {m}
+maat-config.copy_no_repo	copia.{t} of {m}: the repo directory does not exist in the copy	copia.{t} di {m}: la cartella repo non esiste nella copia
+maat-config.copy_no_alt	copia.{t} of {m}: no applicable alternative (se_esiste)	copia.{t} di {m}: nessuna alternativa applicabile (se_esiste)
+maat-config.usage_elenco	usage: elenco-moduli	uso: elenco-moduli
+maat-config.usage_generati	usage: generati [--verifica]	uso: generati [--verifica]
+maat-config.gen_missing	{k}: generated file missing: {p}	{k}: generato assente: {p}
+maat-config.gen_dir_missing	{k}: directory missing: {d}	{k}: cartella assente: {d}
+maat-config.gen_test_missing	{k}: test missing: {t}	{k}: test assente: {t}
+maat-config.gen_no_script	{k}: the command names no script (.py .mjs .js .sh)	{k}: il comando non nomina uno script (.py .mjs .js .sh)
+maat-config.gen_script_missing	{k}: script of the command missing: {s}	{k}: script del comando assente: {s}
+maat-config.gen_unrelated	{k}: {t} does not name {g}: it is not the test that compares it	{k}: {t} non nomina {g}: non e' il test che lo confronta
+maat-config.error_line	ERROR: {e}	ERRORE: {e}
+maat-config.gen_verified	{n} entries verified	{n} voci verificate
+maat-config.usage_sonda	usage: sonda-produzione	uso: sonda-produzione
+maat-config.unknown_option_only	unknown option: {a}	opzione sconosciuta: {a}
+maat-config.usage_componi	usage: componi <profilo>… --radice <modulo>=<percorso> (one --radice for each profile)	uso: componi <profilo>… --radice <modulo>=<percorso> (una --radice per profilo)
+maat-config.unknown_profile	unknown profile: {n} (in {d})	profilo sconosciuto: {n} (in {d})
+
+# --- maat-doctor (lingua-converti.py)
+maat-doctor.level_warning	WARNING	ATTENZIONE
+maat-doctor.level_missing	MISSING	MANCA
+maat-doctor.summary	{nok} OK, {natt} WARNING, {nman} MISSING	{nok} OK, {natt} ATTENZIONE, {nman} MANCA
+maat-doctor.bad_option	unknown option: {a} (--prova-test | --piattaforma | --help)	opzione sconosciuta: {a} (--prova-test | --piattaforma | --help)
+maat-doctor.no_python_platform	Python not found: cannot determine the platform	Python non trovato: piattaforma non determinabile
+maat-doctor.prova_writes	the test command can write cache and coverage (this run is not read-only)	il comando di test può scrivere cache e coverage (questa esecuzione non è in sola lettura)
+maat-doctor.bash_old	bash {v} below 4 — install bash 4 or later (a recent Git Bash on Windows)	bash {v} sotto la 4 — installa bash 4 o superiore (Git Bash recente su Windows)
+maat-doctor.no_python	Python not found — install Python 3.10 or later, or set FIC_PYTHON	Python non trovato — installa Python 3.10 o superiore, o imposta FIC_PYTHON
+maat-doctor.python_old	Python {pyv} below 3.10 ({py}) — install Python 3.10 or later, or set FIC_PYTHON	Python {pyv} sotto la 3.10 ({py}) — installa Python 3.10 o superiore, o imposta FIC_PYTHON
+maat-doctor.no_git	git not found — install git 2.35 or later	git non trovato — installa git 2.35 o superiore
+maat-doctor.git_old	git {gv} below 2.35 — update git	git {gv} sotto la 2.35 — aggiorna git
+maat-doctor.no_claude	Claude Code not found: version not verified — set CLAUDE_BIN or put claude on the PATH	Claude Code non trovato: versione non verificata — imposta CLAUDE_BIN o metti claude nel PATH
+maat-doctor.claude_no_version	Claude Code ({cl}) does not report its version: version not verified	Claude Code ({cl}) non dice la sua versione: versione non verificata
+maat-doctor.claude_old	Claude Code {cv} below the tested {min} — update Claude Code	Claude Code {cv} sotto la {min} provata — aggiorna Claude Code
+maat-doctor.no_repo	git repository not found from {dir} — run the doctor from the project folder (or set FIC_REPO)	repository git non trovato da {dir} — lancia il doctor dalla cartella del progetto (o imposta FIC_REPO)
+maat-doctor.no_python_config	configuration, modules and guard not checked: Python 3.10 or later is needed — install Python or set FIC_PYTHON	configurazione, moduli e guardia non verificati: serve Python 3.10 o superiore — installa Python o imposta FIC_PYTHON
+maat-doctor.guard_phase_not_denied	not denied in a phase (exit {rc}, expected 2)	in fase non negato (uscita {rc}, attesa 2)
+maat-doctor.guard_session_not_asked	not asked in the session (expected ask)	in sessione non chiesto (atteso ask)
+maat-doctor.guard_not_tested	guard not tested: invalid configuration — fix maat.json, then run the doctor again	guardia non provata: configurazione non valida — correggi maat.json, poi rilancia il doctor
+maat-doctor.guard_ok	guard: «{c}» denied in a phase and asked in the session	guardia: «{c}» negato in fase e chiesto in sessione
+maat-doctor.guard_ko	guard: «{c}» {why} — the guard does not protect: check guard.py and the guardia section of maat.json	guardia: «{c}» {why} — la guardia non protegge: controlla guard.py e la sezione guardia di maat.json
+maat-doctor.no_probe	no production probe: only the core tested	nessuna sonda di produzione: provato solo il nucleo
+maat-doctor.probe_failed	production probe not computable (maat-config.py sonda-produzione exited {src}) — check guardia.sonde	sonda di produzione non calcolabile (maat-config.py sonda-produzione uscito {src}) — controlla guardia.sonde
+maat-doctor.probe_ok	guard: production probe «{sonda}» denied in a phase and asked in the session	guardia: sonda di produzione «{sonda}» negata in fase e chiesta in sessione
+maat-doctor.probe_ko	guard: production probe «{sonda}» {why} — check guardia.produzione and guardia.sonde	guardia: sonda di produzione «{sonda}» {why} — controlla guardia.produzione e guardia.sonde
+maat-doctor.work_missing	working folder {lav} missing — create it (mkdir -p {lav}) or fix cartelle.lavoro	cartella di lavoro {lav} assente — creala (mkdir -p {lav}) o correggi cartelle.lavoro
+maat-doctor.work_readonly	working folder {lav} not writable — grant write permission	cartella di lavoro {lav} non scrivibile — dai i permessi di scrittura
+maat-doctor.work_ignored	working folder {lav} writable, ignored by git	cartella di lavoro {lav} scrivibile, ignorata da git
+maat-doctor.work_tracked	working folder {lav} writable, NOT ignored by git: specs and run dirs show up in git status (add it to .gitignore if you do not want to version them)	cartella di lavoro {lav} scrivibile, NON ignorata da git: spec e run dir compaiono in git status (aggiungila a .gitignore se non vuoi versionarle)
+maat-doctor.wsl_not_on_path	wsl.exe not on the PATH	wsl.exe fuori dal PATH
+maat-doctor.wsl_timeout	`wsl -- true` took longer than {n} s	`wsl -- true` oltre {n} s
+maat-doctor.wsl_cannot_run	`wsl -- true` cannot run: {e}	`wsl -- true` non eseguibile: {e}
+maat-doctor.wsl_exit	`wsl -- true` exited {rc}	`wsl -- true` uscito {rc}
+maat-doctor.config_missing	maat.json missing ({p})	maat.json assente ({p})
+maat-doctor.run_setup	run /maat:setup	lancia /maat:setup
+maat-doctor.config_invalid	invalid maat.json: {d}	maat.json non valido: {d}
+maat-doctor.config_invalid_fix	fix the file (python maat-config.py valida) or run /maat:setup again	correggi il file (python maat-config.py valida) o rilancia /maat:setup
+maat-doctor.config_valid	valid maat.json ({p})	maat.json valido ({p})
+maat-doctor.version_ok	plugin version {vp} compatible with harness {h}	versione del plugin {vp} compatibile con harness {h}
+maat-doctor.version_ko	plugin version {vp} not compatible with harness {h}	versione del plugin {vp} non compatibile con harness {h}
+maat-doctor.version_unknown	unknown	ignota
+maat-doctor.version_fix	update the plugin or fix harness in maat.json	aggiorna il plugin o correggi harness in maat.json
+maat-doctor.version_no_harness	plugin version {vp} (harness not declared)	versione del plugin {vp} (harness non dichiarato)
+maat-doctor.wsl_required	WSL missing ({why}) but piattaforma.copia_wsl requires it	WSL assente ({why}) ma piattaforma.copia_wsl: sì
+maat-doctor.wsl_required_fix	install WSL, or set piattaforma.copia_wsl: auto	installa WSL, o metti piattaforma.copia_wsl: auto
+maat-doctor.wsl_missing_ok	WSL missing: fast test copy not available ({why})	WSL assente: copia veloce dei test non disponibile ({why})
+maat-doctor.wsl_missing	WSL missing ({why})	WSL assente ({why})
+maat-doctor.wsl_missing_below	the wsl modules are listed below	i moduli wsl sono elencati sotto
+maat-doctor.wsl_not_required	WSL not required (piattaforma.copia_wsl: no, no wsl module)	WSL non richiesto (piattaforma.copia_wsl: no, nessun modulo wsl)
+maat-doctor.not_windows	not a Windows platform: WSL not needed	piattaforma non Windows: WSL non serve
+maat-doctor.wsl_reachable	WSL reachable	WSL raggiungibile
+maat-doctor.wsl_no_bash	bash not found in WSL	bash non trovato in WSL
+maat-doctor.wsl_no_bash_fix	install bash in the default WSL distribution	installa bash nella distribuzione predefinita di WSL
+maat-doctor.wsl_no_node	Node not found in WSL ({node})	Node non trovato in WSL ({node})
+maat-doctor.wsl_no_node_fix	install Node in WSL, or set piattaforma.node_wsl	installa Node in WSL, o imposta piattaforma.node_wsl
+maat-doctor.mod_wsl_not_windows	module {nome} ambiente: wsl outside Windows: its gates will be BLOCKED	modulo {nome} ambiente: wsl fuori da Windows: i suoi gate saranno BLOCKED
+maat-doctor.mod_wsl_not_windows_fix	set ambiente: nativo	metti ambiente: nativo
+maat-doctor.mod_wsl_missing	module {nome} ambiente: wsl but WSL missing: its gates will be BLOCKED	modulo {nome} ambiente: wsl ma WSL assente: i suoi gate saranno BLOCKED
+maat-doctor.mod_wsl_missing_fix	set `ambiente: nativo` or install WSL	metti `ambiente: nativo` o installa WSL
+maat-doctor.mod_root_missing	root of module {nome} missing: {rad}	radice del modulo {nome} assente: {rad}
+maat-doctor.mod_root_fix	fix moduli[].radice	correggi moduli[].radice
+maat-doctor.py_wsl_ok	python of module {nome} in WSL: {p}	python del modulo {nome} in WSL: {p}
+maat-doctor.py_wsl_missing	python missing for module {nome} in WSL (looked for: {cand})	python assente per il modulo {nome} in WSL (cercati: {cand})
+maat-doctor.py_wsl_fix	create the module's venv inside WSL or fix moduli[].python	crea il venv del modulo dentro WSL o correggi moduli[].python
+maat-doctor.py_ok	python of module {nome}: {p}	python del modulo {nome}: {p}
+maat-doctor.py_missing	python missing for module {nome} ({p})	python assente per il modulo {nome} ({p})
+maat-doctor.py_no_candidate	no candidate	nessun candidato
+maat-doctor.py_fix	create the module's venv or fix moduli[].python / piattaforma.python	crea il venv del modulo o correggi moduli[].python / piattaforma.python
+maat-doctor.shell_command	shell command	comando della shell
+maat-doctor.check_skipped	{et}: check skipped, {miss} missing	{et}: controllo saltato, {miss} assente
+maat-doctor.check_skipped_fix	install {miss} if you want the check	installa {miss} se vuoi il controllo
+maat-doctor.not_found	{et}: {miss} not found	{et}: {miss} non trovato
+maat-doctor.not_found_fix	install it or fix the command in maat.json	installalo o correggi il comando in maat.json
+maat-doctor.not_found_fix_project	install it or fix maat.json	installalo o correggi maat.json
+maat-doctor.command_of	command {tipo} of module {nome}	comando {tipo} del modulo {nome}
+maat-doctor.folder_missing	{et}: folder {cart} ({quale}) missing	{et}: cartella {cart} ({quale}) assente
+maat-doctor.folder_fix	fix radice or radice_pacchetti	correggi radice o radice_pacchetti
+maat-doctor.not_run_present	{et}: NOT RUN (declared), {sp} missing	{et}: NOT RUN (dichiarato), {sp} assente
+maat-doctor.check_of	check {j} of module {nome} ({glob})	controllo {j} del modulo {nome} ({glob})
+maat-doctor.cp_not_run	counterproofs of module {nome}: NOT RUN (declared)	controprove del modulo {nome}: NOT RUN (dichiarato)
+maat-doctor.cp_of	counterproof of module {nome}	controprova del modulo {nome}
+maat-doctor.cp_blocked	counterproofs of module {nome} not available (BLOCKED): missing {miss}	controprove del modulo {nome} non disponibili (BLOCKED): manca {miss}
+maat-doctor.cp_blocked_fix	install {miss} {where}	installa {miss} {where}
+maat-doctor.here	here	qui
+maat-doctor.rsync_and_tar	rsync and tar	rsync e tar
+maat-doctor.no_rsync	rsync missing: fallback copy, slower	rsync assente: copia di ripiego, più lenta
+maat-doctor.no_flock	flock missing: fallback lock, slower	flock assente: lock di ripiego, più lento
+maat-doctor.no_rsync_flock	rsync/flock missing: fallback copy and lock, slower	rsync/flock assenti: copia e lock di ripiego, più lenti
+maat-doctor.cp_tools	counterproofs of module {nome}: {what}	controprove del modulo {nome}: {what}
+maat-doctor.cp_tools_ok	counterproofs of module {nome}: rsync and flock {where}	controprove del modulo {nome}: rsync e flock {where}
+maat-doctor.present	present	presenti
+maat-doctor.copy_ok	WSL copy of module {nome} present	copia WSL del modulo {nome} presente
+maat-doctor.copy_seed	WSL copy of module {nome} missing in this worktree: it will be seeded on first use from the copy of the main tree (node_modules hardlinked), if the dependencies match	copia WSL del modulo {nome} assente in questo worktree: si seminerà al primo uso dalla copia del tree principale (node_modules in hardlink), se le dipendenze coincidono
+maat-doctor.copy_seed_fix	nothing to do; if the dependencies differ: {setup}	niente da fare; se le dipendenze sono diverse: {setup}
+maat-doctor.copy_missing	WSL copy of module {nome} missing	copia WSL del modulo {nome} assente
+maat-doctor.copy_missing_fix	create it once: {setup}	creala una volta: {setup}
+maat-doctor.prep_ok	prepared file of module {nome} present ({guida})	preparato del modulo {nome} presente ({guida})
+maat-doctor.prep_missing	prepared file missing in module {nome} ({guida})	preparato assente nel modulo {nome} ({guida})
+maat-doctor.prep_fix	run `{prep}` in the root of the module	lancia `{prep}` nella radice del modulo
+maat-doctor.prep_default	the preparation command	la preparazione
+maat-doctor.also_ok	copia_anche of module {nome}: {d}	copia_anche del modulo {nome}: {d}
+maat-doctor.also_missing	copia_anche of module {nome}: {d} does not exist (the counterproofs of the module would fail)	copia_anche del modulo {nome}: {d} non esiste (le controprove del modulo fallirebbero)
+maat-doctor.also_fix	fix moduli[].copia_anche	correggi moduli[].copia_anche
+maat-doctor.link_ok	collega_nel_worktree of module {nome}: {dov} present	collega_nel_worktree del modulo {nome}: {dov} presente
+maat-doctor.link_missing	dependencies not installed: the worktrees of module {nome} will not have {dov}	dipendenze non installate: i worktree del modulo {nome} non avranno {dov}
+maat-doctor.link_fix	install the dependencies in the main tree	installa le dipendenze nel tree principale
+maat-doctor.deps_ok	file_dipendenze of module {nome}: {g}	file_dipendenze del modulo {nome}: {g}
+maat-doctor.deps_untracked	file_dipendenze of module {nome}: glob without tracked files: {g}	file_dipendenze del modulo {nome}: glob senza file tracciati: {g}
+maat-doctor.deps_fix	fix the glob in maat.json	correggi il glob in maat.json
+maat-doctor.trial_no_test	test trial of module {nome}: no test file found by the rule {rule}	prova test del modulo {nome}: nessun file di test trovato dalla regola {rule}
+maat-doctor.trial_no_test_fix	add a test or fix regola_test	aggiungi un test o correggi regola_test
+maat-doctor.trial_unresolved	test trial of module {nome}: command not resolved ({why})	prova test del modulo {nome}: comando non risolto ({why})
+maat-doctor.trial_fix	fix comandi.test	correggi comandi.test
+maat-doctor.trial_timeout	test trial of module {nome}: {t} over 900 s	prova test del modulo {nome}: {t} oltre 900 s
+maat-doctor.trial_timeout_fix	run the command by hand and see where it stops	lancia il comando a mano e guarda dove si ferma
+maat-doctor.trial_ok	test trial of module {nome}: {t}, exit 0	prova test del modulo {nome}: {t}, uscita 0
+maat-doctor.trial_ko	test trial of module {nome}: {t}, exit {rc} ({last})	prova test del modulo {nome}: {t}, uscita {rc} ({last})
+maat-doctor.trial_ko_fix	fix comandi.test or the environment of the module	correggi comandi.test o l'ambiente del modulo
+maat-doctor.session_command	{et}: session command {cmd} (it runs in Claude Code, not verifiable here)	{et}: comando di sessione {cmd} (si lancia in Claude Code, non verificabile qui)
+maat-doctor.suite_missing	guardia.suite: script {nome} not found in the repo	guardia.suite: script {nome} non trovato nel repo
+maat-doctor.suite_fix	fix guardia.suite	correggi guardia.suite
+maat-doctor.regex_invalid	guardia.produzione: invalid regex {p} ({e})	guardia.produzione: regex non valida {p} ({e})
+maat-doctor.regex_fix	fix the regex	correggi la regex
+maat-doctor.probe_covered	probe {s} covered by guardia.produzione	sonda {s} coperta da guardia.produzione
+maat-doctor.probe_uncovered	probe not covered by the guard: {s}	sonda non coperta dalla guardia: {s}
+maat-doctor.probe_uncovered_fix	add to guardia.produzione a regex that covers it	aggiungi a guardia.produzione una regex che la copra
+maat-doctor.rule_untested	production rule not tested: {p}	regola di produzione non provata: {p}
+maat-doctor.rule_untested_fix	add to guardia.sonde a host that matches it	aggiungi a guardia.sonde un host che le corrisponda
+maat-doctor.hook_double	duplicate guard hook: plugin maat enabled ({dove}) and project PreToolUse hook in .claude/settings.json	hook di guardia doppio: plugin maat abilitato ({dove}) e hook PreToolUse di progetto in .claude/settings.json
+maat-doctor.hook_double_fix	remove the project hook: the guard of the plugin is enough	togli l'hook di progetto: la guardia del plugin basta
+maat-doctor.hook_plugin	guard hooked up: plugin maat{mk} enabled ({dove})	guardia agganciata: plugin maat{mk} abilitato ({dove})
+maat-doctor.hook_project	guard hooked up: project PreToolUse hook in .claude/settings.json	guardia agganciata: hook PreToolUse di progetto in .claude/settings.json
+maat-doctor.hook_none	guard not hooked up: neither the maat plugin enabled nor a project hook	guardia non agganciata: né plugin maat abilitato né hook di progetto
+maat-doctor.hook_none_fix	enable the plugin (/plugin)	abilita il plugin (/plugin)
+maat-doctor.marketplace_dir	plugin installed from a folder marketplace ({mk}): the code runs from the source folder, every change arrives at once	plugin installato da un marketplace da cartella ({mk}): il codice gira dalla cartella sorgente, ogni modifica arriva subito
+maat-doctor.marketplace_dir_fix	install from git with a ref	installa da git con un ref
+maat-doctor.bad_mode	unknown mode	modo sconosciuto
+
+# --- fic-mirror (lingua-converti.py)
+fic-mirror.sync_bad_option	option not handled by the fallback without rsync: {opt}	opzione non gestita dal ripiego senza rsync: {opt}
+fic-mirror.sync_usage	needs <source>/ <copy>/	servono <origine>/ <copia>/
+fic-mirror.outside_copy	copy outside {mirror}: {path} (the caller passes $FIC_MIRROR/<directory>)	copia fuori da {mirror}: {path} (il chiamante passa $FIC_MIRROR/<cartella>)
+fic-mirror.copy_uninit	<copy not initialised>	<copia non inizializzata>
+fic-mirror.no_node_modules	the source has no node_modules ({src})	l'origine non ha node_modules ({src})
+fic-mirror.copy_unwritable	copy not writable: {dst}	copia non scrivibile: {dst}
+fic-mirror.rsync_failed	rsync from the source failed (exit {rc})	rsync dall'origine fallito (uscita {rc})
+fic-mirror.fp_unwritable	fingerprint not writable: {dst}/.fic-deps	impronta non scrivibile: {dst}/.fic-deps
+fic-mirror.seed_unreadable	seed source not readable: {mm}	fonte non leggibile: {mm}
+fic-mirror.seed_failed	seeding failed (rsync --link-dest)	semina fallita (rsync --link-dest)
+fic-mirror.orphans	orphan node_modules of the copy cannot be deleted	node_modules orfani della copia non cancellabili
+fic-mirror.missing	{nome} missing ({mm})	manca la {nome} ({mm})
+fic-mirror.lock_unopenable	lock of the {nome} cannot be opened	lock della {nome} non apribile
+fic-mirror.busy	{nome} busy beyond {wait}s	{nome} occupata oltre {wait}s
+fic-mirror.still_stale	{nome} still stale after the realignment	{nome} ancora stantia dopo il riallineamento
+fic-mirror.stale_failed	{nome} stale, realignment failed: {out}	{nome} stantia, riallineamento non riuscito: {out}
+fic-mirror.stale_realigned	{nome} ({mm}) stale: {out}	{nome} ({mm}) stantia: {out}
+fic-mirror.realigned	copy realigned from the source	copia riallineata dall'origine
+fic-mirror.no_nm_main	the source has no node_modules to realign the copy from ({src}): run --setup again where they are	l'origine non ha node_modules da cui riallineare la copia ({src}): rieseguire --setup dove ci sono
+fic-mirror.no_nm_no_main	the source has no node_modules and the copy of the main tree is missing ({mm})	l'origine non ha node_modules e manca la copia del tree principale ({mm})
+fic-mirror.no_nm_deps_differ	the source has no node_modules and its dependencies differ from those of the main tree	l'origine non ha node_modules e le sue dipendenze sono diverse da quelle del tree principale
+fic-mirror.name_main	copy of the main tree	copia del tree principale
+fic-mirror.reseeded	copy seeded again from ~/fic-mirror (node_modules as hardlinks)	copia riseminata da ~/fic-mirror (node_modules in hardlink)
+fic-mirror.lane_reseeded	lane copy seeded again from {base} (node_modules as hardlinks)	copia della corsia riseminata da {base} (node_modules in hardlink)
+fic-mirror.deps_changed	dependencies changed (fingerprint {old} -> {new}): {out}	dipendenze cambiate (impronta {old} -> {new}): {out}
+fic-mirror.fp_absent	absent	assente
+fic-mirror.not_worktree	not the copy of a worktree	non e' la copia di un worktree
+fic-mirror.no_root_copy	the copy of the root is missing ({mm}): a run without FIC_LANE or --setup	manca la copia della radice ({mm}): un run senza FIC_LANE o --setup
+fic-mirror.name_root	copy of the root	copia della radice
+fic-mirror.no_main_copy	the copy of the main tree is missing ({mm})	manca la copia del tree principale ({mm})
+fic-mirror.deps_differ	the worktree dependencies differ from those of the main tree	dipendenze del worktree diverse da quelle del tree principale
+fic-mirror.copy_mkdir	copy cannot be created: {dst}	copia non creabile: {dst}
+fic-mirror.wt_busy	worktree copy busy	copia del worktree occupata
+fic-mirror.no_root	root not determinable (git): {root}	radice non determinabile (git): {root}
+fic-mirror.refuse_wt	refused, not the copy of a worktree: {mirror}	rifiuto, non e' la copia di un worktree: {mirror}
+fic-mirror.no_copy	no copy for {root}	nessuna copia per {root}
+fic-mirror.deleted	copy deleted: {mirror}	copia cancellata: {mirror}
+fic-mirror.in_use	copy in use, left: {dir}	copia in uso, lasciata: {dir}
+fic-mirror.no_lane	lane or root not determinable: {root} {lane}	corsia o radice non determinabile: {root} {lane}
+fic-mirror.refuse_lane	refused, not the copy of a lane: {mirror}	rifiuto, non e' la copia di una corsia: {mirror}
+fic-mirror.no_lane_copy	no copy of lane {lane} for {root}	nessuna copia della corsia {lane} per {root}
+fic-mirror.lane_deleted	lane copy deleted: {mirror}	copia della corsia cancellata: {mirror}
+
+# --- test-fast (lingua-converti.py)
+test-fast.usage	usage: test-fast.sh <test files…> | --lint [--cache] [--base <ref>] <files…> | --setup	uso: test-fast.sh <file di test…> | --lint [--cache] [--base <ref>] <file…> | --setup
+test-fast.usage_lint	usage: test-fast.sh --lint [--cache] [--base <ref>] <files…>	uso: test-fast.sh --lint [--cache] [--base <ref>] <file…>
+test-fast.base_needs_ref	--base needs a git reference	--base richiede un riferimento git
+test-fast.base_is_path	--base wants a git reference, not a path: {base}	--base vuole un riferimento git, non un path: {base}
+test-fast.tools_missing	rsync, flock and sha256sum are needed (it runs in WSL)	servono rsync, flock e sha256sum (va eseguito in WSL)
+test-fast.no_project	project not found above {cwd} (no .git nor .claude/maat.json; or FIC_REPO)	progetto non trovato sopra {cwd} (nessun .git ne' .claude/maat.json; o FIC_REPO)
+test-fast.root_unreachable	project root not accessible: {root}	radice del progetto non accessibile: {root}
+test-fast.no_python	no Python to read maat.json (python.sh)	nessun Python per leggere maat.json (python.sh)
+test-fast.no_module	module of the copy not determinable from maat.json (maat-config.py copia-modulo, exit {rc})	modulo della copia non determinabile da maat.json (maat-config.py copia-modulo, uscita {rc})
+test-fast.pkg_is_root	radice_pacchetti of module {module} is the repository root: the copy needs a directory	radice_pacchetti del modulo {module} e' la radice del repository: la copia vuole una cartella
+test-fast.pkg_missing	{pkg} not found in {root}	{pkg} non trovato in {root}
+test-fast.no_fic_mirror	fic-mirror.sh not found next to test-fast.sh	fic-mirror.sh non trovato accanto a test-fast.sh
+test-fast.bad_lane	FIC_LANE must be a digit from 1 to 9: {lane}	FIC_LANE deve essere una cifra da 1 a 9: {lane}
+test-fast.cmd_unresolved	copia.{type} of module {module} not resolved by maat.json: maat-config.py comando-copia, exit {rc}	copia.{type} del modulo {module} non risolto da maat.json: maat-config.py comando-copia, uscita {rc}
+test-fast.eslint_config	eslint: configuration or environment, exit {rc}	eslint: configurazione o ambiente, uscita {rc}
+test-fast.setup_alone	--setup must be used alone	--setup va usato da solo
+test-fast.setup_no_root	repository root not determinable (git): no copy prepared	radice del repository non determinabile (git): nessuna copia preparata
+test-fast.setup_no_seed	{src} has no node_modules and seeding is not possible: {why}	{src} non ha node_modules e la semina non e' possibile: {why}
+test-fast.setup_seed	setup of the copy in {dst} (node_modules as hardlinks from ~/fic-mirror)…	setup della copia in {dst} (node_modules in hardlink da ~/fic-mirror)…
+test-fast.setup_done	setup done, dependency fingerprint {fp}	setup completato, impronta dipendenze {fp}
+test-fast.setup_full	setup of the copy in {dst} (node_modules included)…	setup della copia in {dst} (node_modules compresi)…
+test-fast.setup_failed	setup failed: {why}	setup fallito: {why}
+test-fast.only_paths	only paths, no options for the runner: {p}	solo path, niente opzioni per il runner: {p}
+test-fast.abs_path	absolute path not allowed: {p}	path assoluto non ammesso: {p}
+test-fast.dotdot	segment '..' not allowed in the path: {p}	segmento '..' non ammesso nel path: {p}
+test-fast.unclassified_no_base	outside {rad}, not classified (no --base):	fuori da {rad}, non classificati (manca --base):
+test-fast.base_unresolvable	base '{base}' not resolvable: classification impossible	base '{base}' non risolvibile: classificazione impossibile
+test-fast.no_eslint_config	{grp} without an eslint configuration (not lintable):	{grp} senza configurazione eslint (non lintabile):
+test-fast.eslint_failed	{grp} eslint not runnable (exit {rc}): classification impossible	{grp} eslint non eseguibile (uscita {rc}): classificazione impossibile
+test-fast.restore_failed	restoring the copy failed ({grp}): the next run will resync it	ripristino della copia non riuscito ({grp}): il prossimo run la risincronizzera'
+test-fast.eslint_base_failed	{grp} eslint on the base not runnable (exit {rc}): classification impossible	{grp} eslint sulla base non eseguibile (uscita {rc}): classificazione impossibile
+test-fast.preexisting	{grp} PREEXISTING (already in the base, outside the gate):	{grp} PREEXISTING (gia' nella base, fuori dal gate):
+test-fast.introduced	{grp} INTRODUCED (absent from the base):	{grp} INTRODUCED (assenti nella base):
+test-fast.clean_vs_base	{grp} clean against the base: {paths}	{grp} pulito contro la base: {paths}
+test-fast.fallback_first	fallback: {why}; declared by FIC_ALLOW_MNT_C=1	ripiego: {why}; dichiarato da FIC_ALLOW_MNT_C=1
+test-fast.fallback_declared	declared fallback: FIC_ALLOW_MNT_C=1	ripiego dichiarato: FIC_ALLOW_MNT_C=1
+test-fast.unclassified_fallback	outside {rad}, NOT classified (fallback on /mnt/c):	fuori da {rad}, NON classificati (ripiego su /mnt/c):
+test-fast.unresolved_fallback	lint outside the root {rad} not classifiable in the fallback	lint fuori dalla radice {rad} non classificabile nel ripiego
+test-fast.outside_root	outside the module root: {rad}	fuori dalla radice del modulo: {rad}
+test-fast.unavailable	copy not usable: {why}; fallback on /mnt/c only with FIC_ALLOW_MNT_C=1	copia non utilizzabile: {why}; ripiego su /mnt/c solo con FIC_ALLOW_MNT_C=1
+test-fast.generated_cleaned	generated files of the copy cleaned (preparati and caches: dependency fingerprint or guide file of the preparati changed)	generati della copia ripuliti (preparati e cache: impronta delle dipendenze o file guida dei preparati cambiati)
+test-fast.not_relative	path not relative to the repository: {p}	path non relativo al repository: {p}
+test-fast.outside_not_linted	outside the module root ({rad}), not linted:	fuori dalla radice del modulo ({rad}), non lintati:
+test-fast.deleted_not_linted	deleted in the working tree, not linted:	eliminati nel working tree, non lintati:
+test-fast.only_deleted	deleted files only	solo file eliminati
+test-fast.prep_unreadable	preparati of module {module} not readable from maat.json	preparati del modulo {module} non leggibili da maat.json
+test-fast.prep_missing	preparato missing: {rad}/{guide}; run '{prep}' in {rad}	preparato assente: {rad}/{guide}; eseguire '{prep}' in {rad}
+test-fast.prep_default	the preparation of the module	la preparazione del modulo
+test-fast.no_manifest_root	manifest not computable (git: repository root not determinable, no copy associated)	manifest non calcolabile (git: radice del repository non determinabile, nessuna copia associabile)
+test-fast.lane_seeded	copy of lane {lane} seeded from {base} (node_modules as hardlinks)	copia della corsia {lane} seminata da {base} (node_modules in hardlink)
+test-fast.wt_seeded	worktree copy seeded from ~/fic-mirror (node_modules as hardlinks)	copia del worktree seminata da ~/fic-mirror (node_modules in hardlink)
+test-fast.lane_seed_failed	seeding from {base} not possible: {why}	semina da {base} non possibile: {why}
+test-fast.wt_seed_failed	seeding from ~/fic-mirror not possible: {why}	semina da ~/fic-mirror non possibile: {why}
+test-fast.copy_missing	copy missing: run --setup{why}	copia assente: eseguire --setup{why}
+test-fast.copy_busy	copy busy with another run beyond {wait}s (FIC_LOCK_WAIT)	copia occupata da un altro run oltre {wait}s (FIC_LOCK_WAIT)
+test-fast.deps_failed	stale dependencies, automatic realignment failed: {out}	dipendenze stantie, riallineamento automatico non riuscito: {out}
+test-fast.deps_still	dependencies still stale after the automatic realignment	dipendenze stantie anche dopo il riallineamento automatico
+test-fast.clean_failed	cleanup of the generated files of the copy failed	pulizia dei generati della copia fallita
+test-fast.no_manifest	manifest not computable (git)	manifest non calcolabile (git)
+test-fast.sync_failed	sync failed	sync fallito
+test-fast.stat_incomplete	stat cache incomplete, full resync	cache stat incompleta, resync completo
+test-fast.sync_incr_failed	incremental sync failed	sync incrementale fallito
+test-fast.prep_copy_failed	preparati of the module cannot be copied	preparati del modulo non copiabili
+test-fast.diff_src_copy	differences between source and copy:	differenze fra origine e copia:
+test-fast.misaligned	copy not aligned: resync	copia non allineata: risincronizzazione
+test-fast.diff_after	differences after the resync:	differenze dopo la risincronizzazione:
+test-fast.misaligned_after	copy not aligned after the resync	copia non allineata dopo la risincronizzazione
+test-fast.sync_incr	{n} files aligned	{n} file allineati
+test-fast.run_wrote	the run wrote into the copy:	il run ha scritto nella copia:
+test-fast.snapshot	snapshots to generate on /mnt/c: run again on /mnt/c and have the generated files reviewed	snapshot da generare su /mnt/c: rilancia su /mnt/c e fai rivedere i file generati
+test-fast.equiv_sync_failed	equivalence: full sync failed	equivalenza: sync completo fallito
+test-fast.equiv_ok	sync {sync} and full sync: same manifest, same exit {rc}	sync {sync} e sync completo: stesso manifest, stessa uscita {rc}
+test-fast.equiv_diff	sync {sync}: exit {rc} · full sync: exit {rc2}	sync {sync}: uscita {rc} · sync completo: uscita {rc2}
+test-fast.equiv_violated	equivalence violated between sync {sync} and full sync	equivalenza violata fra sync {sync} e sync completo
+test-fast.unresolved	lint outside the root {rad} not classifiable	lint fuori dalla radice {rad} non classificabile
+test-fast.skipped_partial	outside the module root: {rad}; {n} classified out of {total}	fuori dalla radice del modulo: {rad}; {n} classificati su {total}
+
+# --- vitest-classify (lingua-converti.py)
+vitest-classify.imports_vue	imports a .vue component: 	importa un componente .vue: 
+vitest-classify.unreadable	unreadable: 	illeggibile: 
+vitest-classify.nuxt_define	Nuxt define {define} in {rel}	define di Nuxt {define} in {rel}
+vitest-classify.nuxt_api	Nuxt API {api} in {rel}	API di Nuxt {api} in {rel}
+vitest-classify.dom_global	DOM global {name} in {rel}	globale del DOM {name} in {rel}
+vitest-classify.auto_component	auto-imported component {name} in {rel}	componente auto-importato {name} in {rel}
+vitest-classify.import_of	import of {spec} in {rel}	import di {spec} in {rel}
+vitest-classify.import_vue	import of a .vue ({spec}) in {rel}	import di un .vue ({spec}) in {rel}
+vitest-classify.unresolvable	unresolvable import {spec} in {rel}	import non risolvibile {spec} in {rel}
+vitest-classify.file_missing	file missing	file assente
+vitest-classify.usage	usage: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]	uso: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]
+vitest-classify.nuxt_missing	missing {dir}/{f} (npx nuxi prepare, or a vitest run in the copy)	manca {dir}/{f} (npx nuxi prepare, o un run di vitest nella copia)
+
+# --- harness-merge (lingua-converti.py)
+harness-merge.usage	usage: {script} <worktree>	uso: {script} <worktree>
+harness-merge.not_git	{wt} is not a git repository	{wt} non e' un repository git
+harness-merge.is_main	{wt} is the main tree, not a linked worktree	{wt} e' il tree principale, non un worktree collegato
+harness-merge.head_unreadable	HEAD of the worktree unreadable	HEAD del worktree illeggibile
+harness-merge.trees	main tree {main} · worktree {wt} ({branch} @ {head})	tree principale {main} · worktree {wt} ({branch} @ {head})
+harness-merge.detached	detached HEAD	HEAD staccato
+harness-merge.lock	Lock of the code phases: {lock}	Lock delle fasi di codice: {lock}
+harness-merge.running_head	Phases running or interrupted (.running without .exit):	Fasi in corso o interrotte (.running senza .exit):
+harness-merge.running_since	{f} (since {since})	{f} (dal {since})
+harness-merge.running_fix	recovery, ONLY if no session is running it (process dead, log still): echo 143 > "{exit}.exit"	recupero, SOLO se nessuna sessione la sta eseguendo (processo morto, log fermo): echo 143 > "{exit}.exit"
+harness-merge.running_none	Phases running or interrupted (.running without .exit): none	Fasi in corso o interrotte (.running senza .exit): nessuna
+harness-merge.refused	REFUSED — a cycle is running or interrupted: launch again when the lock is free and no phase is half done	RIFIUTATO — un ciclo e' in corso o interrotto: rilancia quando il lock e' libero e nessuna fase e' a meta'
+harness-merge.clear	clear to go. Run it yourself, in the main tree:	via libera. Esegui tu, nel tree principale:
+harness-merge.nothing	nothing to bring: no commit of {ref} is missing from the main tree	niente da portare: nessun commit di {ref} manca al tree principale
+harness-merge.not_ancestor	(the main tree is not an ancestor of {ref}: no fast-forward) — cherry-pick of the commits:	(il tree principale non e' un antenato di {ref}: niente fast-forward) — cherry-pick dei commit:
+harness-merge.list_skipped	Unclosed cycles: list skipped (FIC_MERGE_NO_LIST=1)	Cicli non chiusi: elenco saltato (FIC_MERGE_NO_LIST=1)
+harness-merge.no_review	{spec}: no review	{spec}: nessuna review
+harness-merge.open_status	{spec}: Review status {rs} · Feature status {fs}	{spec}: Review status {rs} · Feature status {fs}
+harness-merge.absent	(missing)	(assente)
+harness-merge.open_head	Unclosed cycles (status lines of the spec; they will restart with the new harness):	Cicli non chiusi (righe di stato della spec; ripartiranno col harness nuovo):
+harness-merge.open_none	Unclosed cycles: none	Cicli non chiusi: nessuno
+harness-merge.list_cut	(list truncated after {max}s: FIC_MERGE_LIST_MAX)	(elenco troncato dopo {max}s: FIC_MERGE_LIST_MAX)
+
+# --- worktree-lib (lingua-converti.py)
+worktree-lib.config_invalid	invalid configuration (exit {rc})	configurazione non valida (uscita {rc})
+worktree-lib.no_python	Python interpreter not found (maat.json)	interprete Python non trovato (maat.json)
+worktree-lib.link_src_missing	source of the link missing: {src}	sorgente del collegamento assente: {src}
+worktree-lib.link_exists	{dst} already exists: not replacing it	{dst} esiste gia': non lo sostituisco
+worktree-lib.link_left	link not removed: {r}/{p}	collegamento non rimosso: {r}/{p}
+worktree-lib.relgit_none	WARNING — relative gitdir not computable (different drives?): the absolute one stays, vitest-fast.sh translates it	AVVISO — gitdir relativo non calcolabile (unita' diverse?): resta quello assoluto, che vitest-fast.sh traduce
+worktree-lib.relgit_bad	relative gitdir not valid ({rel}): the absolute one restored	gitdir relativo non valido ({rel}): ripristinato quello assoluto
+worktree-lib.no_mirror	fic-mirror.sh not found: {f}/fic-mirror.sh	fic-mirror.sh non trovato: {f}/fic-mirror.sh
+worktree-lib.fp_same	fingerprint of the copy's dependencies equal to the main tree ({a})	impronta delle dipendenze della copia uguale al tree principale ({a})
+worktree-lib.fp_diff	fingerprint of the copy's dependencies different from the main tree ({b} ≠ {a}): the WSL copy of the worktree is not seeded, test-fast and counterproof will exit BLOCKED (copy missing)	impronta delle dipendenze della copia diversa dal tree principale ({b} ≠ {a}): la copia WSL del worktree non si semina, test-fast e counterproof usciranno BLOCKED (copia assente)
+worktree-lib.fp_warn	WARNING — {w}	AVVISO — {w}
+worktree-lib.forget_left	WARNING — WSL copy of the worktree not entirely deleted (in use?); then, from WSL: . {l} && fic_lane_forget {w} 1; fic_lane_forget {w} 2; fic_mirror_forget {w}	AVVISO — copia WSL del worktree non cancellata del tutto (in uso?); poi, da WSL: . {l} && fic_lane_forget {w} 1; fic_lane_forget {w} 2; fic_mirror_forget {w}
+
+# --- worktree-cycle (lingua-converti.py)
+worktree-cycle.no_lib	{here}/worktree-lib.sh or {here}/fic-mirror.sh not found	{here}/worktree-lib.sh o {here}/fic-mirror.sh non trovati
+worktree-cycle.base_ref	--base wants a ref	--base vuole un ref
+worktree-cycle.unknown_opt	unknown option: {opt}	opzione sconosciuta: {opt}
+worktree-cycle.one_arg	only one positional argument: {a}, {b}	un solo argomento posizionale: {a}, {b}
+worktree-cycle.usage	usage: ciclo-worktree.sh crea <spec> [--base <ref>] | stato <name> | riporta <name> [--forza] | rimuovi <name> [--branch] [--forza]	uso: ciclo-worktree.sh crea <spec> [--base <ref>] | stato <nome> | riporta <nome> [--forza] | rimuovi <nome> [--branch] [--forza]
+worktree-cycle.crea_opts	crea accepts only --base	crea accetta solo --base
+worktree-cycle.stato_opts	stato takes no options	stato non vuole opzioni
+worktree-cycle.riporta_opts	riporta accepts only --forza	riporta accetta solo --forza
+worktree-cycle.rimuovi_opts	rimuovi does not accept --base	rimuovi non accetta --base
+worktree-cycle.not_git	the current folder is not in a git repository	la cartella corrente non e' in un repository git
+worktree-cycle.main_unresolved	main tree not resolved from {common}	tree principale non risolto da {common}
+worktree-cycle.gitdir_unresolved	git dir not resolved	git dir non risolta
+worktree-cycle.from_linked	launch the cycle from the main tree ({main}), or without --worktree: this folder is already a worktree ({top})	lancia il ciclo dal tree principale ({main}), o senza --worktree: questa cartella e' gia' un worktree ({top})
+worktree-cycle.main_invalid	main tree not valid: {main}	tree principale non valido: {main}
+worktree-cycle.conf_unreadable	maat.json of the main tree not readable: nothing to link or to check	maat.json del tree principale non leggibile: niente da collegare ne' da verificare
+worktree-cycle.spec_missing	spec missing: {spec}	spec assente: {spec}
+worktree-cycle.spec_name	the spec must be named spec-<name>.md: {spec}	la spec deve chiamarsi spec-<nome>.md: {spec}
+worktree-cycle.name_invalid	name not valid: {name}	nome non valido: {name}
+worktree-cycle.not_exists	does not exist: {wt}	non esiste: {wt}
+worktree-cycle.not_wt_root	not the root of a git worktree: {c}	non e' la radice di un worktree git: {c}
+worktree-cycle.is_main	it is the main tree: {c}	e' il tree principale: {c}
+worktree-cycle.no_marker	the marker of ciclo-worktree.sh is missing ({mk})	manca il marcatore di ciclo-worktree.sh ({mk})
+worktree-cycle.marker_invalid	marker not valid: {c}/{mk}	marcatore non valido: {c}/{mk}
+worktree-cycle.marker_path	the marker points to another path: {p}	il marcatore indica un altro percorso: {p}
+worktree-cycle.marker_branch	the marker points to another branch: {b}	il marcatore indica un altro branch: {b}
+worktree-cycle.not_on_branch	the worktree is not on branch {b}	il worktree non e' sul branch {b}
+worktree-cycle.not_listed	not among the worktrees of the repository: {c}	non e' fra i worktree del repository: {c}
+worktree-cycle.not_dir	{wt} is not a folder: links not checkable	{wt} non e' una cartella: collegamenti non verificabili
+worktree-cycle.find_failed	find -type l failed on {wt}	find -type l fallito su {wt}
+worktree-cycle.dir_failed	dir /AL /S failed on {wt} (exit {rc}: {err})	dir /AL /S fallito su {wt} (uscita {rc}: {err})
+worktree-cycle.wsl_find_failed	find -type l from WSL failed on {w}	find -type l da WSL fallito su {w}
+worktree-cycle.check_failed	check of the links failed	verifica dei collegamenti non riuscita
+worktree-cycle.links_left	links still present:	collegamenti ancora presenti:
+worktree-cycle.no_python	Python interpreter not found (set FIC_PYTHON)	interprete Python non trovato (imposta FIC_PYTHON)
+worktree-cycle.not_ours	{wt} exists and is not a worktree of ciclo-worktree.sh for {name} ({why}): not using it	{wt} esiste e non e' un worktree di ciclo-worktree.sh per {name} ({why}): non lo uso
+worktree-cycle.resume	resuming the existing worktree: {wt}	ripresa del worktree esistente: {wt}
+worktree-cycle.branch_exists	branch {b} already exists without the worktree {wt}: not mine, not reusing it (if it is a leftover: git worktree prune, then git branch -d {b})	il branch {b} esiste gia' senza il worktree {wt}: non e' mio, non lo riuso (se e' un avanzo: git worktree prune, poi git branch -d {b})
+worktree-cycle.base_invalid	base ref not valid: {ref}	ref di base non valido: {ref}
+worktree-cycle.deps_base	dependencies differ between the base {base} and the main tree: {dd}. node_modules and venvs linked from the main tree would not be those of this code. No worktree created.	dipendenze diverse fra la base {base} e il tree principale: {dd}. node_modules e venv collegati dal tree principale non sarebbero quelli di questo codice. Niente worktree creato.
+worktree-cycle.wt_add_failed	git worktree add failed: {wt}	git worktree add fallito: {wt}
+worktree-cycle.marker_unwritable	marker not writable: {wt}/{mk}	marcatore non scrivibile: {wt}/{mk}
+worktree-cycle.not_ignored	{mk} is not gitignored at the base {base} (rule {aiw}/spec-*): worktree removed	{mk} non e' gitignorato alla base {base} (regola {aiw}/spec-*): worktree rimosso
+worktree-cycle.abs_gitdir	WARNING — .git with an absolute gitdir (vitest-fast.sh translates it)	AVVISO — .git con gitdir assoluto (vitest-fast.sh lo traduce)
+worktree-cycle.created	worktree created: {wt} (branch {b} from {base}); the cycle uses the plugin of the session ({root}), not the harness of the worktree's commit	worktree creato: {wt} (branch {b} da {base}); il ciclo usa il plugin della sessione ({root}), non il harness del commit del worktree
+worktree-cycle.deps_resume	dependencies differ between the worktree and the main tree: {dd}. The links would not hold for this code.	dipendenze diverse fra il worktree e il tree principale: {dd}. I collegamenti non varrebbero per questo codice.
+worktree-cycle.real_dir	WARNING — {p} is a real folder of the worktree: not replacing it	AVVISO — {p} e' una cartella vera del worktree: non la sostituisco
+worktree-cycle.link_failed	link of {p} failed	collegamento di {p} non riuscito
+worktree-cycle.linked	dependencies linked from the main tree: {n} ({links})	dipendenze collegate dal tree principale: {n} ({links})
+worktree-cycle.spec_kept	spec of the worktree already present: not overwriting it ({rel})	spec del worktree gia' presente: non la sovrascrivo ({rel})
+worktree-cycle.spec_changed	WARNING — the spec of the main tree changed since the copy: the cycle uses the worktree's	AVVISO — la spec del tree principale e' cambiata dalla copia: il ciclo usa quella del worktree
+worktree-cycle.spec_copy_failed	copy of the spec failed	copia della spec fallita
+worktree-cycle.spec_copied	spec copied: {rel}	spec copiata: {rel}
+worktree-cycle.run_copy_failed	copy of the run dir failed	copia della run dir fallita
+worktree-cycle.run_copied	run dir copied: {rel}	run dir copiata: {rel}
+worktree-cycle.prep_copy_failed	copy of {rel} failed	copia di {rel} fallita
+worktree-cycle.prep_copied	preparati copied into {rad}: {nc} files ({guida} and the other preparati)	preparati copiati in {rad}: {nc} file ({guida} e gli altri di preparati)
+worktree-cycle.prep_missing	WARNING — the main tree has no {pre}{guida}: run '{cmd}' in {rad} of the main tree, then crea again	AVVISO — il tree principale non ha {pre}{guida}: lancia '{cmd}' in {rad} del tree principale, poi crea di nuovo
+worktree-cycle.fp_warn	WARNING — {w}	AVVISO — {w}
+worktree-cycle.no_copia	no module with copia in maat.json: check of the WSL copy skipped	nessun modulo con copia in maat.json: verifica della copia WSL saltata
+worktree-cycle.wsl_lib	fic-mirror.sh not readable from WSL: {l}	fic-mirror.sh non leggibile da WSL: {l}
+worktree-cycle.wsl_root	git (WSL) does not find the root of the worktree {r}	git (WSL) non determina la radice del worktree {r}
+worktree-cycle.wsl_unexpected	unexpected copy: {fm} (not the copy of a worktree)	copia inattesa: {fm} (non e' la copia di un worktree)
+worktree-cycle.wsl_seeded_already	WSL copy already seeded: {fm} ({p})	copia WSL gia' seminata: {fm} ({p})
+worktree-cycle.wsl_seed_failed	seeding of the WSL copy failed: {why}	semina della copia WSL non riuscita: {why}
+worktree-cycle.wsl_seeded	WSL copy seeded: {fm} ({p}, dependencies hardlinked from ~/fic-mirror)	copia WSL seminata: {fm} ({p}, dipendenze in hardlink da ~/fic-mirror)
+worktree-cycle.wsl_fp	WARNING: fingerprint of the copy different from the worktree's dependencies (test-fast.sh realigns it)	AVVISO: impronta della copia diversa dalle dipendenze del worktree (test-fast.sh la riallinea)
+worktree-cycle.wsl_guide_missing	guide file {g} of the preparati missing in {r}/{d}: the lint would exit BLOCKED	file guida {g} dei preparati assente in {r}/{d}: il lint uscirebbe BLOCKED
+worktree-cycle.wsl_guide_ok	guide file of the preparati present: {d}/{g}	file guida dei preparati presente: {d}/{g}
+worktree-cycle.wsl_failed	check of the WSL copy failed: the worktree stays ({wt}); once the reason is fixed, 'crea' again resumes	verifica della copia WSL non riuscita: il worktree resta ({wt}); risolto il motivo, 'crea' di nuovo riprende
+worktree-cycle.wsl_skipped	check of the WSL copy skipped (FIC_WT_WSL=0)	verifica della copia WSL saltata (FIC_WT_WSL=0)
+worktree-cycle.no_wt	no worktree for {name} ({wt})	nessun worktree per {name} ({wt})
+worktree-cycle.st_path	path: {p}	percorso: {p}
+worktree-cycle.st_detached	(detached)	(staccato)
+worktree-cycle.st_owner	owner: ciclo-worktree.sh ({mk})	proprietario: ciclo-worktree.sh ({mk})
+worktree-cycle.st_not_owner	owner: NOT ciclo-worktree.sh — {why}	proprietario: NON di ciclo-worktree.sh — {why}
+worktree-cycle.st_spec	spec: {wt}/{rel} · brought back to the main tree: {r}	spec: {wt}/{rel} · riportata nel tree principale: {r}
+worktree-cycle.st_cycle	cycle: {c}	ciclo: {c}
+worktree-cycle.st_no_spec	spec: missing in the worktree	spec: assente nel worktree
+worktree-cycle.st_changed	files changed: {n}	file modificati: {n}
+worktree-cycle.not_ours_stop	{wt} is not a worktree of ciclo-worktree.sh for {name} ({why})	{wt} non e' un worktree di ciclo-worktree.sh per {name} ({why})
+worktree-cycle.rp_no_spec	spec missing in the worktree: {wt}/{rel}	spec assente nel worktree: {wt}/{rel}
+worktree-cycle.rp_spec_changed	the spec of the main tree ({rel}) changed after the copy into the worktree: bringing it back would delete those changes. Compare the two files; to overwrite it anyway: --forza	la spec del tree principale ({rel}) e' cambiata dopo la copia nel worktree: riportarla cancellerebbe quelle modifiche. Confronta i due file; per sovrascriverla comunque: --forza
+worktree-cycle.rp_run_changed	the run dir of the main tree ({rel}) changed after the copy into the worktree: aligning it would delete those files. Compare (diff -rq); to overwrite it anyway: --forza	la run dir del tree principale ({rel}) e' cambiata dopo la copia nel worktree: allinearla cancellerebbe quei file. Confronta (diff -rq); per sovrascriverla comunque: --forza
+worktree-cycle.rp_spec_done	spec brought back: {m}/{rel}	spec riportata: {m}/{rel}
+worktree-cycle.rp_prev_kept	previous run dir in {old}	run dir precedente in {old}
+worktree-cycle.rp_copy_failed	copy of the run dir failed (the run dir of the main tree is intact)	copia della run dir fallita (la run dir del tree principale e' intatta)
+worktree-cycle.rp_not_movable	run dir of the main tree not movable (in use?): intact	run dir del tree principale non spostabile (in uso?): intatta
+worktree-cycle.rp_none_prev	run dir not aligned (there was no previous one in the main tree)	run dir non allineata (non ce n'era una precedente nel tree principale)
+worktree-cycle.rp_restored	run dir not aligned: the previous one restored	run dir non allineata: ripristinata la precedente
+worktree-cycle.rp_not_restored	run dir not aligned and NOT restored: the previous run dir is in {old} (put it back by hand in {m}/{rel})	run dir non allineata e NON ripristinata: la run dir precedente e' in {old} (rimettila a mano in {m}/{rel})
+worktree-cycle.rp_differs	run dir brought back differs from the worktree's	run dir riportata diversa da quella del worktree
+worktree-cycle.rp_run_done	run dir aligned: {m}/{rel}	run dir allineata: {m}/{rel}
+worktree-cycle.rp_code_left	code NOT brought back: it stays on branch {b} in {wt} (not committed)	codice NON riportato: resta sul branch {b} in {wt} (non committato)
+worktree-cycle.rm_lock	lock of the code phases of the worktree not free: {out}. A cycle runs there: stop it first	lock delle fasi di codice del worktree non libero: {out}. Un ciclo gira li': prima fermalo
+worktree-cycle.rm_plan_alive	a plan phase of the worktree is alive ({rel}/plan.lock, {k}={p}): stop it first	una fase di piano del worktree e' viva ({rel}/plan.lock, {k}={p}): prima fermala
+worktree-cycle.rm_plan_new	plan lock just taken ({rel}/plan.lock, owner not written yet): a plan phase is starting	lock del piano appena preso ({rel}/plan.lock, owner non ancora scritto): una fase di piano sta partendo
+worktree-cycle.rm_running	phase running in the worktree:{running} (log/<label>.running without .exit): if it still runs, stop it first; if it is dead, --forza	fase in corso nel worktree:{running} (log/<etichetta>.running senza .exit): se gira ancora, prima fermala; se e' morta, --forza
+worktree-cycle.rm_running_forced	WARNING — --forza: phase reported running ignored:{running} (log/<label>.running without .exit)	AVVISO — --forza: fase risultante in corso ignorata:{running} (log/<etichetta>.running senza .exit)
+worktree-cycle.rm_dirty	the worktree has uncommitted changes ({n} files): integrate them first (commit and merge, or git -C {wt} diff | git apply), or --forza to discard them	il worktree ha modifiche non committate ({n} file): integrale prima (commit e merge, oppure git -C {wt} diff | git apply), o --forza per scartarle
+worktree-cycle.rm_nr_spec	the spec ({rel})	la spec ({rel})
+worktree-cycle.rm_nr_and	{nr} and 	{nr} e 
+worktree-cycle.rm_nr_run	{joined}the run dir ({rel})	{joined}la run dir ({rel})
+worktree-cycle.rm_not_back	{nr} of the worktree is not brought back to the main tree: removing the worktree would lose it. First: ciclo-worktree.sh riporta {name} (or --forza to lose it)	{nr} del worktree non e' riportata nel tree principale: rimuovendo il worktree andrebbe persa. Prima: ciclo-worktree.sh riporta {name} (o --forza per perderla)
+worktree-cycle.rm_not_back_forced	WARNING — --forza: {nr} of the worktree not brought back, it is lost	AVVISO — --forza: {nr} del worktree non riportata, va persa
+worktree-cycle.rm_no_wsl	WSL copy not deleted (FIC_WT_WSL=0)	copia WSL non cancellata (FIC_WT_WSL=0)
+worktree-cycle.rm_links_left	links still present in {wt}: worktree NOT removed (the removal would follow the dependencies of the main tree)	collegamenti ancora presenti in {wt}: worktree NON rimosso (la rimozione seguirebbe le dipendenze del tree principale)
+worktree-cycle.rm_unlinked	links removed, none left	collegamenti tolti, nessuno rimasto
+worktree-cycle.rm_failed	git worktree remove failed: {wt}	git worktree remove fallito: {wt}
+worktree-cycle.rm_still	the folder {wt} still exists after git worktree remove	la cartella {wt} esiste ancora dopo git worktree remove
+worktree-cycle.rm_done	worktree removed: {wt}	worktree rimosso: {wt}
+worktree-cycle.rm_branch_kept	branch {b} not deleted (commits not integrated?): it stays; to discard it: git branch -D {b}	branch {b} non cancellato (commit non integrati?): resta; per scartarlo: git branch -D {b}
+worktree-cycle.rm_branch_done	branch deleted: {b}	branch cancellato: {b}
+worktree-cycle.rm_branch_left	branch {b} left (to delete it: --branch)	branch {b} lasciato (per cancellarlo: --branch)

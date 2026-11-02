@@ -3,6 +3,7 @@
 #   bash plugins/maat/scripts/cycle-state.test.sh
 #   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f
 HERE=$(cd "$(dirname "$0")" && pwd)
 CS=${CS:-$HERE/cycle-state.sh}
@@ -26,6 +27,22 @@ expect() { # $1 description, $2 expected regex on the Next line
   local out; out=$(bash "$CS" "$SP" 2>&1)
   if printf '%s\n' "$out" | grep -q "^Next: " && printf '%s\n' "$out" | sed -n "s/^Next: //p" | grep -Eq -- "$2"; then pass=$((pass + 1))
   else fail=$((fail + 1)); echo "FAIL [$1] atteso /$2/"; printf '%s\n' "$out" | sed 's/^/    /'; fi
+  en_twin "$1" "$out"
+}
+# 1.4.0, block B (b): every case above is also run in English (MAAT_LINGUA=en): the same first word of Next and the
+# same State. The English Next lines are collected and checked at the end (en_check): no Italian outside the frozen
+# tokens and the data they share with the Italian line (paths, labels, the text of the fixtures). CS_EN=0 skips it.
+# A run dir with harness.fp is skipped: the language is part of the harness fingerprint, en stops there by design.
+en_twin() { # $1 description, $2 output of the Italian call
+  [ "${CS_EN:-1}" = 1 ] || return 0
+  [ -f "${SP%.md}.run/harness.fp" ] && return 0
+  local en a b
+  en=$(MAAT_LINGUA=en bash "$CS" "$SP" 2>&1)
+  a=$(printf '%s\n' "$2" | sed -n 's/^Next: //p'); b=$(printf '%s\n' "$en" | sed -n 's/^Next: //p')
+  if [ -n "$b" ] && [ "${a%% *}" = "${b%% *}" ] &&
+     [ "$(printf '%s\n' "$2" | sed -n 's/^State: //p')" = "$(printf '%s\n' "$en" | sed -n 's/^State: //p')" ]; then pass=$((pass + 1))
+  else fail=$((fail + 1)); echo "FAIL [en: $1] in inglese la prima parola di Next o State cambiano"; printf 'it: %s\nen: %s\n' "$a" "$b" | sed 's/^/    /'; fi
+  printf '%s\t%s\t%s\n' "$1" "$a" "$b" >> "$O/en-next"
 }
 state() { bash "$CS" "$SP" | sed -n 's/^State: //p'; }
 
@@ -219,6 +236,11 @@ mkdir -p "$RUN/evidence"
 expect "nuovo regime (evidence/) senza Finalize → REVIEW, mai DONE" "^REVIEW — IMPLEMENTED non firmato da finalize.sh \(nessuna riga Finalize:\)"
 sed -i "s/^Feature status: IMPLEMENTED\$/&\nFinalize: IMPLEMENTED — snapshot $SFP — firmato · $(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$SP"
 expect "  con Finalize: IMPLEMENTED sullo snapshot attuale → DONE" "^DONE — codice uguale"
+# 1.4.0: the Finalize: line written in English (finalize.sh with "lingua": "en": the detail follows the language)
+cp "$SP" "$O/spec-it"
+sed -i "s/^Finalize: IMPLEMENTED — snapshot $SFP — firmato · /Finalize: IMPLEMENTED — snapshot $SFP — signed · /" "$SP"
+expect "  1.4.0: la riga Finalize: scritta in inglese («signed») → lo stesso DONE" "^DONE — codice uguale"
+cp "$O/spec-it" "$SP"
 # manual / --inline review: new Reviewed snapshot, no new .jsonl, the old Finalize survives
 cp "$SP" "$O/spec-prima"
 # (base, tree and fingerprint stay the FRESH ones, otherwise row 13 would give REVIEW for the code and 13f would
@@ -274,6 +296,9 @@ out_has() { # $1 spec, $2 description, $3 regex on a line of the output
 }
 ring "$KA" DRAFT src/a.py; printf '%s\n' "# Anello 2" "Dipende da: spec-m-1-a" "Interfaccia per: nessuna" > "$KB"
 SP=$MA; expect "madre, anello 1 aperto → WAIT sull'anello" "^WAIT — catena: anello 1/2 \(spec-m-1-a\) non chiuso"
+export MAAT_LINGUA=en   # 1.4.0, block B (e): the WAIT in English keeps the prefix and (spec-…), read by driver.py run
+expect "  in inglese: WAIT — catena: con (spec-m-1-a)" "^WAIT — catena: ring 1/2 \(spec-m-1-a\) not closed"
+export MAAT_LINGUA=it
 SP=$KB; expect "anello 2 senza piano, piano di 1 in DRAFT → WAIT (L6)" "^WAIT — catena: il piano dell'anello 2 parte quando il piano dell'anello 1 \(spec-m-1-a\) e' APPROVED"
 ring "$KA" APPROVED src/a.py; SP=$KA; with_basis
 SP=$KB; expect "piano di 1 APPROVED → il piano di 2 parte mentre 1 implementa (L6)" "^PLAN — nessun piano"
@@ -342,6 +367,17 @@ printf '%s\n' "# A" "## Requisiti funzionali" "1. RF1 — a" > $CW/spec-s-1-a.md
 mkdir -p $CW/spec-s.run; printf 'Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-09-29T00:00:00Z\n' > $CW/spec-s.run/chiusura.txt
 out_has "$SS" "vincolo 1: State della fixture italiana = quello di 1.2.1 (1d0181258ccc)" "^State: 1d0181258ccc$"
 out_has "$SS" "  e la fixture copre la catena (madre, anello aperto, assente, chiusura)" "^Catena: madre di 2 anelli · spec-s-1-a aperto; spec-s-2-b assente; Chiusura: NEEDS_VERIFICATION"
+# 1.4.0, block B (a): the same State in English and in Italian, from cycle-state.sh (standalone) and from driver.py
+# next: chain_state, the basis and the frozen lines do not go through the catalog
+. "$HERE/python.sh" >/dev/null 2>&1
+for L in it en; do
+  for impl in cycle-state driver; do
+    if [ $impl = driver ]; then st=$(MAAT_LINGUA=$L "$FIC_PY" "$HERE/driver.py" next "$SS" 2>&1 | tr -d '\r' | sed -n 's/^State: //p')
+    else st=$(MAAT_LINGUA=$L FIC_DRIVER=0 bash "$HERE/cycle-state.sh" "$SS" 2>&1 | sed -n 's/^State: //p'); fi
+    if [ "$st" = 1d0181258ccc ]; then pass=$((pass + 1))
+    else fail=$((fail + 1)); echo "FAIL [vincolo 1 (1.4.0): State di $impl in $L = 1d0181258ccc] trovato '$st'"; fi
+  done
+done
 rm -rf "$SS" $CW/spec-s-1-a.md $CW/spec-s.run; reset
 
 # --- row 7t: test-red phase (harness-pt11), format 2 only, between APPROVED plan and implement ---
@@ -407,6 +443,37 @@ echo 0000 > "$RUN/harness.fp"
 unset MAAT_ROOT
 if [ "$fdr_prima" = __non_impostata__ ]; then unset FIC_DRIVER_ROOT; else export FIC_DRIVER_ROOT="$fdr_prima"; fi
 reset
+
+# --- 1.4.0, block B (b, d): explicit English cases. A run dir written in Italian (ESITO FASE … OK — fatto) read with
+# MAAT_LINGUA=en gives the same step and the same destination; then the check of every English Next collected above.
+{ above; plan APPROVED; } > "$SP"; with_basis
+esito 02-implement "ESITO FASE implement: OK — fatto" "$(state)"
+export MAAT_LINGUA=en
+expect "1.4.0 (d): .esito italiano letto in inglese → REVIEW della stessa etichetta" "^REVIEW — implementation finished \(02-implement\)$"
+rm -rf "$RUN"; { above; plan DRAFT; } > "$SP"; expect "1.4.0: PLAN in inglese" "^PLAN — plan in DRAFT$"
+export MAAT_LINGUA=it
+reset
+SCANNER=$(cd "$HERE/../../.." && pwd)/tools/lingua-inventario.py
+if [ "${CS_EN:-1}" = 1 ] && [ -f "$SCANNER" ] && [ -s "$O/en-next" ]; then
+  . "$HERE/python.sh" >/dev/null 2>&1
+  r=$("$FIC_PY" - "$SCANNER" "$O/en-next" <<'EOF' 2>&1
+import importlib.util, re, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("inv", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+FROZEN = re.compile(r"— catena\b|\bCHIUSURA\b|\bBase anello\b|Figlie:")
+for l in open(sys.argv[2], encoding="utf-8"):
+    d, it, en = l.rstrip("\n").split("\t")
+    it0, en0 = FROZEN.sub(" ", it), FROZEN.sub(" ", en)
+    shared = set(it0.split())
+    rest = " ".join(w for w in en0.split() if w not in shared)
+    if m.italian(rest) or (en == it and m.italian(it0)):
+        print("%s\n    it: %s\n    en: %s" % (d, it, en))
+EOF
+)
+  n_en=$(grep -c . "$O/en-next")
+  if [ -z "$r" ]; then pass=$((pass + 1))
+  else fail=$((fail + 1)); echo "FAIL [1.4.0 (b): $n_en Next inglesi senza italiano fuori dai token congelati e dai dati]"; printf '%s\n' "$r" | head -30 | sed 's/^/    /'; fi
+fi
 
 echo "cycle-state.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

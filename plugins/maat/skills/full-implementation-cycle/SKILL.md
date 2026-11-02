@@ -45,7 +45,7 @@ refuses `--with-e2e` (DEV checks later, from the main tree) — `orchestratore.m
 
 ## Worker contract
 
-Nobody can answer you: a needed decision is a STOP. Write a `▶ ` line (one line, in the language of `lingua` in `.claude/maat.json`, default English) at each milestone.
+Nobody can answer you: a needed decision is a STOP. Write a `▶ ` line (one line, in the language of `lingua` in `.claude/maat.json`, default English) at each milestone; the free text after `STOP — ` and in reports uses the same language, while keywords and report labels stay as written here.
 The last line is `PHASE RESULT <phase>: OK — <summary>` or `PHASE RESULT <phase>: STOP — <reason>`, then, in the same
 message, one fenced `json` block valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`:
 

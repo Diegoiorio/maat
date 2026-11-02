@@ -77,8 +77,8 @@ outside the project). It holds:
   finished;
 - `log/<label>.result.json` — the phase's **structured outcome** (harness-pt08), written by `run-phase.sh`
   only when the JSON block of the final `result` event is valid for `${CLAUDE_PLUGIN_ROOT}/schemas/phase-result.schema.json`
-  (see "Worker mode"). Missing or invalid output → no file, and `.esito` says `STOP — uscita non valida:
-  <errors>` with the worker's own `PHASE RESULT` line kept under `originale=`. **`.esito` is the authority**: when
+  (see "Worker mode"). Missing or invalid output → no file, and `.esito` says `STOP — invalid output:
+  <errors>` (Italian: `uscita non valida:`) with the worker's own `PHASE RESULT` line kept under `originale=`. **`.esito` is the authority**: when
   the prose and the JSON disagree the more conservative wins — prose `OK` with a JSON that is `STOP`, has
   `deviazioni` (unless all start with `defensive: ` or `difensiva: `) or a `bloccato_su` → `.esito` is `STOP — JSON: …` (prose under `originale=`); prose `STOP`
   stays `STOP`. `cycle-state.sh` counts a phase as `OK` only if both `.esito` and `result.json` say so;
@@ -93,7 +93,7 @@ outside the project). It holds:
   budget; a `BLOCKED` gate or a missing result stays `NEEDS_VERIFICATION`. With `--copertura
   log/<label>.result.json` it also joins the review's requirement → test-ID map to the results of VERIFY and
   writes the `Requirement evidence (finalize.sh: …)` table under the `Finalize:` line: an ID with no result leaves
-  the requirement «non coperto» (data, not a verdict). The review writes the verdict; the script signs the state.
+  the requirement «not covered» (Italian: «non coperto»; data, not a verdict). The review writes the verdict; the script signs the state.
   **Fail-closed**: finalize missing, or exiting with anything but 0/1/4 → `.esito` is `STOP — finalize non
   eseguito|fallito`; and in a run directory of the new regime (with `evidence/` or any `*.result.json`, also
   renamed `.result.json.visto`) `cycle-state.sh` gives `DONE` only with a `Finalize: IMPLEMENTED — snapshot
@@ -144,7 +144,7 @@ outside the project). It holds:
 - `context-pack.md` — the **context pack**, written only by `${CLAUDE_PLUGIN_ROOT}/scripts/context-pack.sh`: files and symbols
   the spec names (verified: they exist or not), per-file signatures (exports, `.vue` props/emits, FastAPI
   routes, Pydantic models) and the tests that cite them, tests citing the spec's strings and `data-test`,
-  DB columns of the named tables (`contesto` of `.claude/maat.json`: «schema DB non dichiarato» without it; when
+  DB columns of the named tables (`contesto` of `.claude/maat.json`: «DB schema not declared» (Italian: «schema DB non dichiarato») without it; when
   the schema command fails, its exit code and the first line of its output), a header with date, commit
   and the spec's fingerprint; ≤ ~5k tokens. **Orientation, not authority: the code wins over the pack.**
 
@@ -219,7 +219,7 @@ spec-<nome>-1-…, spec-<nome>-2-…`; each **ring** (child) is a spec with its 
 review and `finalize.sh` — no ring closes without its `Finalize: IMPLEMENTED`. The rules are code in
 `cycle-state.sh` (rows C1–C4) and `plan-check.sh basis`; here is what they mean for you.
 
-- **On the mother** `cycle-state.sh` says `WAIT — catena: anello k/n (…) non chiuso` while a ring is open: run
+- **On the mother** `cycle-state.sh` says `WAIT — catena: ring k/n (…) not closed` (Italian: `… anello k/n (…) non chiuso`) while a ring is open: run
   the cycle on that ring's spec. When all rings are closed it says `CHIUSURA`: launch the closure phase on
   the **mother's** run directory, label `NN-chiusura`, prompt `/maat:full-implementation-cycle --worker=chiusura
   <mother>`. `run-phase.sh` does it under the code lock: `touched.txt` = union of the rings', `base.txt` = the
@@ -314,7 +314,7 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Sub-session prohibitions: PROD, ssh/rsync, state-changing git, docker, psql, installs (child-rules) | `guard.py` (PreToolUse hook) | `guard.test.sh` |
 | No end of turn without `PHASE RESULT` or with uncollected jobs (child-rules) | `stop-hook.py` | `stop-hook.test.sh` |
 | Structure of a format-2 plan: traceability ↔ tests ↔ steps ↔ files, blocks, test table, removed strings still asserted, presence/absence by position (PRC «Plan format 2», «Lint») | `plan-check.sh lint2` | `plan-check.test.sh` |
-| EXISTING non-regression tests outside the table of the Piano di test: a row with the assertion «resta verde» (or «rimane verde», «continua a passare») → VIOLAZIONE; they go in the note under the table, traceability «non verificabile a test (invarianza, …)» (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
+| EXISTING non-regression tests outside the table of the Test plan (Piano di test): a row with the assertion «stays green» (or «remains green», «keeps passing»; Italian «resta verde», «rimane verde», «continua a passare») → VIOLAZIONE; they go in the note under the table, traceability «not verifiable by test (invariance, …)» (Italian «non verificabile a test (invarianza, …)») (PRC `autore.md`, harness-pt15) | `plan-check.sh lint2` (`INVARIANZA`) | `plan-check.test.sh` |
 | GENERATED files regenerable by implement/fix without a deviation, with their command (FIC «Worker implement», «Worker fix», harness-pt15); a generated file regenerated by a single lane that declares it is that lane's | `generati` of `.claude/maat.json` (`maat-config.py generati [--verifica]`, S9), `blocks-independent.py --posteriori` | `maat-config.test.sh` §8b, `blocks-independent.test.sh` |
 | Light/full path from the files (path table, thresholds) (PRC «L5») | `plan-check.sh route` | `plan-check.test.sh` |
 | S2 decision: clean on the current fingerprint, rejected findings (PRC «Review ≤4 rounds») | `plan-check.sh s2` | `plan-check.test.sh` |

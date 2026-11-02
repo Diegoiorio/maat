@@ -1,0 +1,217 @@
+# blocco-d.report.tsv — the messages of block D, lane 3: cycle-report.py, phase-usage.py, corpus/replay.sh,
+# corpus/inject/*.sh, stop-hook.py, phase-events.py, maat_paths.py + lib/maat-paths.sh, lib/maat-conf.sh,
+# guard-hook.sh and watch-phase.sh, read by tools/lingua-converti.py (format: its docstring). The first row of a key
+# is its source in v1.3.0, the following ones its twins. Rows of Python sites (.py files, !py, !f, !sq) and of the
+# !aftersq mode feed the catalog and the check; their code was edited by hand, and so were the sites that keep the
+# Italian of v1.3.0 as the fallback without a catalog (lib/maat-paths.sh, maat_paths.py, guard-hook.sh).
+# Frozen and not here (protocol-strings.list): the class names of STOP_CLASSES, the columns and values of metrics.csv
+# and the keys and values of the JSON of cycle-report.py (D7: «non misurabile», «(nessun session_id nello stream)»,
+# «dopo»), the fixture text the injects write into the guide project (an Italian product and corpus).
+
+# ---------------------------------------------------------------- cycle-report.py: the summary (D7: JSON and CSV unchanged)
+cycle-report.b_unmeasurable	scripts/cycle-report.py:591#4	-	-	-	not measurable
+cycle-report.head	scripts/cycle-report.py:592	== 	-	spec date n a phases b cost q	{spec}  {date}  phases {n}  A {a} min ({phases})  B {b}  ${cost}  quota5h {q}
+cycle-report.internal	scripts/cycle-report.py:598#5	-	-	-	internal harness
+cycle-report.missing_tr	scripts/cycle-report.py:600	   	-	s	B: missing transcripts: {s}
+cycle-report.no_sid	scripts/cycle-report.py:425	-	-	-	(no session_id in the stream)
+cycle-report.stop_pauses	scripts/cycle-report.py:602	   	-	s	pauses after a STOP (outside B): {s}
+cycle-report.unexited_pauses	scripts/cycle-report.py:605	   	-	s	pauses after phases without a result line (inside B): {s}
+cycle-report.tokens	scripts/cycle-report.py:608	   	-	r w o	tokens: cache read {r} · cache written {w} · output {o}
+cycle-report.aggregates_cycle	scripts/cycle-report.py:611	   	-	a n b c r p g	aggregates (min): (a) reruns {a} [{n}] · (b) gates+counterproofs+polling {b} · (c) model {c} · rest {r} · passive wait {p} · agents (overlapping) {g}
+cycle-report.outside_a	scripts/cycle-report.py:615	   	-	o r	work outside A (already in the aggregates, min): off-turn {o} · phases without result {r}
+cycle-report.outside_a	scripts/cycle-report.py:642	   	-	o r	work outside A (already in the aggregates, min): off-turn {o} · phases without result {r}
+cycle-report.model_by_thread	scripts/cycle-report.py:618	   	-	-	model by thread (min): 
+cycle-report.model_by_thread	scripts/cycle-report.py:645	   	-	-	model by thread (min): 
+cycle-report.b_unmeasurable_n	scripts/cycle-report.py:634#2	-	-	n m	not measurable ({n} cycles out of {m})
+cycle-report.total_head	scripts/cycle-report.py:636	== 	-	n a phases b cost r k	TOTAL {n} cycles  A {a} min ({phases})  B {b}  ${cost}  cache read {r}  reruns {k}
+cycle-report.aggregates	scripts/cycle-report.py:640	   	-	-	aggregates (min): 
+cycle-report.passive	scripts/cycle-report.py:641	 · 	-	p	passive wait {p}
+cycle-report.bad_header	scripts/cycle-report.py:675	-	-	p h c	unknown header in {p}, file not touched: {h} (expected {c})
+cycle-report.bad_rows	scripts/cycle-report.py:679	-	-	p r	{p}: rows with a number of fields other than the header's ({r}), file not touched
+cycle-report.migrate_failed	scripts/cycle-report.py:694	-	-	p e	{p}: migration of the header failed ({e})
+cycle-report.or_metrics	scripts/cycle-report.py:707	cycle-report.py: 	-	e	{e} (or pass --metrics)
+cycle-report.description	scripts/cycle-report.py:711#2	-	-	-	Measurement of a full-cycle run.
+cycle-report.h_cycles	scripts/cycle-report.py:712#3	-	-	-	spec-<name>.run or .jsonl file
+cycle-report.h_json	scripts/cycle-report.py:713#3	-	-	-	JSON output
+cycle-report.h_append	scripts/cycle-report.py:714#3	-	-	-	appends one row for each cycle to the metrics file
+cycle-report.h_metrics	scripts/cycle-report.py:715#2	-	-	-	metrics file (default <work folder of the project>/metrics.csv, cartelle.lavoro: .claude/.ai-workflow)
+cycle-report.h_projects	scripts/cycle-report.py:718	-	-	-	root of the Claude Code transcripts
+cycle-report.metrics_only	scripts/cycle-report.py:721	-	-	-	--metrics only goes with --append
+cycle-report.not_found	scripts/cycle-report.py:724	-	-	c	does not exist: {c}
+cycle-report.appended	scripts/cycle-report.py:741	-	-	s p	metrics: +1 row {s} -> {p}
+
+# ---------------------------------------------------------------- phase-usage.py: the table (the --summary lines were English already)
+phase-usage.usage_summary	scripts/phase-usage.py:261	-	-	-	usage: phase-usage.py --summary <spec-<name>.run>
+phase-usage.usage	scripts/phase-usage.py:268	-	-	-	usage: phase-usage.py <spec-<name>.run | .jsonl file> [...] [--json]
+phase-usage.head	scripts/phase-usage.py:276	-	-	log cost m n out q t mcp err	== {log}  ${cost}  {m} min  turns {n}  output {out}  quota5h {q}  tools at start {t} (mcp {mcp}){err}
+phase-usage.error	scripts/phase-usage.py:279	  	-	-	ERROR
+phase-usage.col_thread	scripts/phase-usage.py:281	-	-	-	thread
+phase-usage.col_inst	scripts/phase-usage.py:281#2	-	-	-	inst.
+phase-usage.col_calls	scripts/phase-usage.py:281#3	-	-	-	calls
+phase-usage.col_rereads	scripts/phase-usage.py:282	-	-	-	rereads
+phase-usage.chars	scripts/phase-usage.py:284	   %-24s %4d %6d %7s %7s %7s %8s %7s %5d %5d  %d (%s 	)	-	ch.
+phase-usage.slow	scripts/phase-usage.py:289	   	: %-14s %-6s >= %4ds  %s	-	slow
+
+# ---------------------------------------------------------------- stop-hook.py (the reason goes to the sub-session)
+stop-hook.jobs	scripts/stop-hook.py:115	-	-	-	background jobs not collected: 
+stop-hook.jobs_fix	scripts/stop-hook.py:116	 — 	-	-	collect them (BashOutput/TaskOutput, until they have finished) or stop them (TaskStop) before closing: in -p nobody wakes you up
+stop-hook.no_result	scripts/stop-hook.py:119	-	-	-	the last message has no `PHASE RESULT <phase>: OK — …` or `PHASE RESULT <phase>: STOP — …` line: complete the phase (or stop it with STOP and the reason) and close with that line
+
+# ---------------------------------------------------------------- phase-events.py (progress lines in the main chat)
+phase-events.exit_after	scripts/phase-events.py:108!f	✖ 	-	code last	sub-session exited with exit {code} — last turn: {last}
+phase-events.no_result	scripts/phase-events.py:113!f	✖ 	-	code log	sub-session ended without a result (exit {code}) — see {log} and .stderr
+phase-events.agent	scripts/phase-events.py:133#2!sq	-	-	-	agent
+phase-events.launches	scripts/phase-events.py:135!f	  · 	-	desc	launches {desc}
+phase-events.done	scripts/phase-events.py:143#2!sq	-	-	-	done
+phase-events.turns	scripts/phase-events.py:149!f	 · {mins} min · {ev.get('num_turns', '?')} 	-	-	turns
+phase-events.turn_done	scripts/phase-events.py:152!f	  · 	{esito or 'nessuna riga ESITO FASE'}{extra}	-	turn finished: 
+phase-events.no_line	scripts/phase-events.py:152!sq	-	-	-	no PHASE RESULT line
+phase-events.phase_done	scripts/phase-events.py:153!sq	-	-	-	phase finished (no PHASE RESULT line)
+
+# ---------------------------------------------------------------- maat-paths (lib/maat-paths.sh and its twin maat_paths.py): errors that can come before
+# the plugin is known; the code keeps the Italian of v1.3.0 as the fallback without the catalog next to it (Rev. 1 §9)
+maat-paths.no_root	scripts/lib/maat-paths.sh:35	-	-	root	MAAT_ROOT='{root}' is not the root of a maat plugin (.claude-plugin/plugin.json missing)
+maat-paths.no_root	scripts/maat_paths.py:39	-	-	root	MAAT_ROOT='{root}' is not the root of a maat plugin (.claude-plugin/plugin.json missing)
+maat-paths.no_project	scripts/lib/maat-paths.sh:51	-	-	cwd	the working folder {cwd} is not in a git repository: PROJECT_ROOT not resolved
+maat-paths.no_project	scripts/maat_paths.py:54	-	 (lancia dalla cartella del progetto, o imposta FIC_REPO)	cwd	the working folder {cwd} is not in a git repository: PROJECT_ROOT not resolved
+maat-paths.no_project_fix	scripts/lib/maat-paths.sh:52	-	-	-	(run it from the folder of the project, or set FIC_REPO)
+maat-paths.no_project_fix	scripts/maat_paths.py:54	la cartella di lavoro %s non e' in un repository git: PROJECT_ROOT non risolta 	-	-	(run it from the folder of the project, or set FIC_REPO)
+maat-paths.no_lavoro	scripts/lib/maat-paths.sh:64	-	-	lavoro	cartelle.lavoro not read from maat.json: using the default {lavoro}
+maat-paths.no_lavoro	scripts/maat_paths.py:71	maat: 	\n	lavoro	cartelle.lavoro not read from maat.json: using the default {lavoro}
+maat-paths.no_lavoro	scripts/maat_paths.py:73	maat: 	\n	lavoro	cartelle.lavoro not read from maat.json: using the default {lavoro}
+
+# ---------------------------------------------------------------- lib/maat-conf.sh
+maat-conf.no_python	scripts/lib/maat-conf.sh:23#2	maat-conf: 	-	-	Python interpreter not found
+maat-conf.key_missing	scripts/lib/maat-conf.sh:41	maat-conf: 	-	k	key missing: {k}
+
+# ---------------------------------------------------------------- guard-hook.sh (fallback: the Italian of v1.3.0 without the catalog)
+guard-hook.crashed	scripts/guard-hook.sh:17	-	-	rc	guard in error (exit {rc}): no check run — core rule (a failing guard never lets a command through) — confirm only if the command is safe, and report the error of guard.py
+guard-hook.no_python	scripts/guard-hook.sh:19	-	-	-	Python not found: guard not available — core rule (a guard without an interpreter asks on every command) — install Python 3.10 or later, or set FIC_PYTHON; confirm only if the command is safe
+guard-hook.session	scripts/guard-hook.sh:22	-	: %s\n	-	session guard
+
+# ---------------------------------------------------------------- watch-phase.sh
+watch-phase.usage	scripts/watch-phase.sh:12	-	-	script	usage: {script} <run-dir> <label>
+watch-phase.no_python	scripts/watch-phase.sh:24	watch-phase: 	-	-	no Python (python.sh: set FIC_PYTHON) and no WSL
+
+# ---------------------------------------------------------------- corpus/replay.sh (D8: development tool, translated as the rest)
+replay.refused	scripts/corpus/replay.sh:87	replay: 	 — $*	-	REFUSED
+replay.no_lib	scripts/corpus/replay.sh:92#2	-	-	s s	{s}/worktree-lib.sh or {s}/fic-mirror.sh not found
+replay.git_no_repo	scripts/corpus/replay.sh:96	-	-	root	git cannot find the repository of {root}
+replay.no_main	scripts/corpus/replay.sh:97	-	-	common	main tree not resolved from {common}
+replay.no_main_git	scripts/corpus/replay.sh:98	-	-	-	git dir of the main tree not resolved
+replay.not_exists	scripts/corpus/replay.sh:105#2	-	-	p	does not exist: {p}
+replay.is_main	scripts/corpus/replay.sh:107#4	-	-	c	it is the main tree or inside it: {c}
+replay.is_project	scripts/corpus/replay.sh:108#4	-	-	c	it is the tree of the project or inside it: {c}
+replay.is_plugin	scripts/corpus/replay.sh:109#4	-	-	c	it is the plugin (harness) or inside it: {c}
+replay.bad_name	scripts/corpus/replay.sh:110#2	-	-	c	the name does not start with fic-replay-: {c}
+replay.not_wt_root	scripts/corpus/replay.sh:112	-	-	c	not the root of a git worktree: {c}
+replay.no_marker	scripts/corpus/replay.sh:115#2	-	-	mk	the marker of replay.sh is missing ({mk})
+replay.marker_other	scripts/corpus/replay.sh:116#3	-	-	path	the marker points to another path: {path}
+replay.not_listed	scripts/corpus/replay.sh:118	-	-	c	not among the worktrees of the main repository: {c}
+replay.wants_path	scripts/corpus/replay.sh:132#2	--remove 	-	-	wants a path
+replay.wants_path	scripts/corpus/replay.sh:135#2	--worktree 	-	-	wants a path
+replay.wants_plugin	scripts/corpus/replay.sh:133#2	--harness 	-	-	wants the root of a plugin
+replay.wants_folder	scripts/corpus/replay.sh:134#2	--source 	-	-	wants a folder
+replay.wants_folder	scripts/corpus/replay.sh:136#2	--out 	-	-	wants a folder
+replay.wants_name	scripts/corpus/replay.sh:137#2	--inject 	-	-	wants a name
+replay.unknown_opt	scripts/corpus/replay.sh:138	-	-	opt	unknown option: {opt}
+replay.no_src	scripts/corpus/replay.sh:143#2	-	-	src	folder of the specs missing: {src}
+replay.no_more_args	scripts/corpus/replay.sh:148	--remove 	-	-	takes no other arguments
+replay.no_more_args	scripts/corpus/replay.sh:187	--check 	-	-	takes no other arguments
+replay.not_ours	scripts/corpus/replay.sh:149#2	-	-	p	{p} is not a worktree created by replay.sh: not removing it
+replay.links_left	scripts/corpus/replay.sh:156#2	-	-	c	links still present in {c}: not removing it (it would follow the dependencies of the main tree)
+replay.no_python	scripts/corpus/replay.sh:161#2	-	-	-	Python interpreter not found (set FIC_PYTHON)
+replay.no_conf	scripts/corpus/replay.sh:165#2	-	-	p	configuration reader not found: {p}/lib/maat-conf.sh
+replay.no_corpus_file	scripts/corpus/replay.sh:168#2	-	-	root cc	corpus of cartelle.corpus missing: {root}/{cc}
+replay.no_corpus	scripts/corpus/replay.sh:188#2	-	-	root	no corpus: cartelle.corpus not set in the maat.json of the project ({root})
+replay.spec_missing	scripts/corpus/replay.sh:192#2	-	-	spec	SPEC MISSING ({spec})
+replay.run_missing	scripts/corpus/replay.sh:193#2	$s · 	-	run	RUN DIRECTORY MISSING ({run})
+replay.base_differs	scripts/corpus/replay.sh:195#3	$s · 	-	b base	base.txt ({b}) differs from corpus.json ({base})
+replay.base_commit_missing	scripts/corpus/replay.sh:196#3	$s · 	-	-	base commit missing
+replay.usage	scripts/corpus/replay.sh:203	-	-	-	usage: replay.sh <cycle> <phase> [--harness <tree>] [--source <dir>] [--worktree <path>] [--out <dir>] [--inject <name>]... [--dry-run] | --check | --remove <path>
+replay.no_spec	scripts/corpus/replay.sh:213#2	-	-	p	spec missing: {p}
+replay.run_no_log	scripts/corpus/replay.sh:214#2	-	-	p	run directory missing or without log: {p}
+replay.base_mismatch	scripts/corpus/replay.sh:216#5	-	-	cbase base	base of corpus.json ({cbase}) differs from base.txt ({base})
+replay.base_unknown	scripts/corpus/replay.sh:218#2	-	-	run	base of the cycle unknown: {run}/base.txt missing
+replay.base_absent	scripts/corpus/replay.sh:219#3	-	-	base	base commit missing from the repository: {base}
+replay.label_missing	scripts/corpus/replay.sh:225#4	-	-	fase run labels	label {fase} missing in {run} (labels: {labels})
+replay.phase_unknown	scripts/corpus/replay.sh:228#2	-	-	fase	unknown phase: {fase} (plan|implement|review|fix or an NN-phase label)
+replay.no_phase	scripts/corpus/replay.sh:230#2	-	-	fase run labels	no phase {fase} in {run} (labels: {labels})
+replay.ambiguous	scripts/corpus/replay.sh:231#2	-	-	fase cand	phase {fase} ambiguous: give the label ({cand})
+replay.no_prompt	scripts/corpus/replay.sh:236#2	-	-	p	original prompt missing: {p}
+replay.bad_prompt	scripts/corpus/replay.sh:238	-	-	phase p	the first line of the prompt is not /full-implementation-cycle (or /maat:full-implementation-cycle) --worker={phase} <name>: {p}
+replay.tree_gone	scripts/corpus/replay.sh:255	-	-	state from	the tree {state} ({from}) is no longer in the repository (pruned by git gc): phase state not rebuildable
+replay.no_post_tree	scripts/corpus/replay.sh:258	-	-	label	a code phase precedes {label} but no .post-tree records it: code state not rebuildable
+replay.deps_differ	scripts/corpus/replay.sh:263	-	-	from deps	dependencies differ between the phase state ({from}) and the main tree: {deps}. The node_modules and venv linked from the main tree would not be those of this code and the gates would not run as in the original. No worktree created. To replay anyway (NOT COMPARABLE replay): --non-confrontabile
+replay.deps_nonconf	scripts/corpus/replay.sh:264	-	-	from deps	dependencies differ from the main tree ({from}): {deps}
+replay.not_comparable	scripts/corpus/replay.sh:265	replay: 	 — $NONCONF	-	NOT COMPARABLE
+replay.not_comparable	scripts/corpus/replay.sh:371#2	printf '	 — %s\n' $(q "$NONCONF") | tee $(q "$OUT/NON-CONFRONTABILE.txt"); 	-	NOT COMPARABLE
+replay.not_comparable	scripts/corpus/replay.sh:382!sq	 · 	-	-	NOT COMPARABLE
+replay.warning	scripts/corpus/replay.sh:372#2	${MARK}printf '	 — %s\n' $(q "$FPWARN"); 	-	WARNING
+replay.no_harness	scripts/corpus/replay.sh:269	-	-	-	harness does not exist
+replay.not_plugin	scripts/corpus/replay.sh:270#2	-	-	h	--harness is not the root of a plugin (.claude-plugin/plugin.json missing): {h}
+replay.no_run_phase	scripts/corpus/replay.sh:271#2	-	-	h	the plugin has no scripts/run-phase.sh: {h}
+replay.bad_inject	scripts/corpus/replay.sh:273#2	-	-	n	invalid inject: {n}
+replay.unknown_inject	scripts/corpus/replay.sh:274#2	-	-	n here list	unknown inject: {n} (in {here}/inject: {list})
+replay.wt_name	scripts/corpus/replay.sh:280#2	-	-	wt	the worktree must be named fic-replay-*: {wt}
+replay.wt_exists	scripts/corpus/replay.sh:281#2	-	-	wt	{wt} already exists: I did not create it, I do not use it
+replay.no_parent	scripts/corpus/replay.sh:282#2	-	-	wt	the parent folder of {wt} does not exist
+replay.wt_inside	scripts/corpus/replay.sh:285#5	-	-	wt	the worktree cannot be inside the main tree or the harness: {wt}
+replay.step_failed	scripts/corpus/replay.sh:294#4	-	-	s	step failed: {s}
+replay.cycle	scripts/corpus/replay.sh:297	replay: 	-	name label base from h	cycle spec-{name} · phase {label} · base {base} · code from {from} · harness {h}
+replay.worktree	scripts/corpus/replay.sh:298	replay: 	$([ $DRY -eq 1 ] && echo ' · DRY-RUN: nulla viene eseguito')	wt out	worktree {wt} · output {out}
+replay.dry_note	scripts/corpus/replay.sh:298!sq	 · 	-	-	DRY-RUN: nothing is run
+replay.still_running	scripts/corpus/replay.sh:305	replay: 	-	script wt	the phase still looks running: worktree left. When it has finished: bash {script} --remove {wt}
+replay.check_failed	scripts/corpus/replay.sh:310	replay: 	-	wt	{wt} does not pass the check: NOT removed
+replay.links_left_wt	scripts/corpus/replay.sh:312	replay: 	-	wt	links still present in {wt}: worktree NOT removed (it would follow the dependencies of the main tree)
+replay.remove_failed	scripts/corpus/replay.sh:314#3	replay: 	-	wt	removal of the worktree failed: {wt}
+replay.dry_check	scripts/corpus/replay.sh:378	+ (	) git -C $(q "$MAIN") worktree remove --force $(q "$WT")	-	check: name fic-replay-*, marker with its path, listed by git worktree list; no link left
+replay.finished	scripts/corpus/replay.sh:382	replay: 	$([ -n "$NONCONF" ] && echo ' · NON CONFRONTABILE')$([ -n "$FPWARN" ] && echo " · AVVISO: $FPWARN")	label code out	phase {label} finished with exit {code} · log and report in {out}
+
+# ---------------------------------------------------------------- corpus/inject/*.sh (the fixture text they write stays Italian: frozen)
+inject.refused	scripts/corpus/inject/_lib.sh:12	inject $INJ_NAME: 	 — $*	-	REFUSED
+inject.usage	scripts/corpus/inject/_lib.sh:17	-	-	script	usage: {script} <corpus worktree> [options]
+inject.no_path	scripts/corpus/inject/_lib.sh:18#2	-	-	p	path does not exist: {p}
+inject.not_repo	scripts/corpus/inject/_lib.sh:20	-	-	wt	not a git repository: {wt}
+inject.not_root	scripts/corpus/inject/_lib.sh:21#3	-	-	wt	not the root of a worktree: {wt}
+inject.no_common	scripts/corpus/inject/_lib.sh:22	-	-	wt	common git dir not resolved: {wt}
+inject.is_main	scripts/corpus/inject/_lib.sh:24#5	-	-	wt	it is the main tree or the harness, not a worktree of the corpus: {wt}
+inject.no_marker	scripts/corpus/inject/_lib.sh:26#2	-	-	wt	the marker of replay.sh is missing: {wt} is not a worktree of the corpus
+inject.marker_other	scripts/corpus/inject/_lib.sh:27#3	-	-	wt	the marker of replay.sh points to another path: {wt}
+inject.no_python	scripts/corpus/inject/_lib.sh:29#2	-	-	-	Python interpreter not found (set FIC_PYTHON)
+inject.one_run	scripts/corpus/inject/_lib.sh:34#3	-	-	aiw	expected a single run directory in {aiw}
+inject.no_file	scripts/corpus/inject/_lib.sh:40#2	-	-	f	file missing in the worktree: {f}
+inject.no_file	scripts/corpus/inject/_lib.sh:76#2	-	-	f	file missing in the worktree: {f}
+inject.no_file	scripts/corpus/inject/file-lasciato-mutato.sh:21#2	-	-	f	file missing in the worktree: {f}
+inject.no_file	scripts/corpus/inject/lint-vue.sh:18#2	-	-	f	file missing in the worktree: {f}
+inject.occurrences	scripts/corpus/inject/_lib.sh:47!py	-	-	a n	occurrences of {a}: {n} (1 expected)
+inject.replace_failed	scripts/corpus/inject/_lib.sh:49#4!aftersq	-	-	f	replacement not applicable in {f}
+inject.no_line	scripts/corpus/inject/_lib.sh:70!py	-	-	rx	no line matches {rx}
+inject.insert_failed	scripts/corpus/inject/_lib.sh:71#6!aftersq	-	-	f	insertion not applicable in {f}
+inject.no_target	scripts/corpus/inject/_lib.sh:96#2	-	-	rx fb	no target: nothing in touched.txt for /{rx}/ and the fallback missing ({fb}); name it with --file/--test
+inject.no_prompt	scripts/corpus/inject/_lib.sh:104#2	-	-	run	no prompt in {run}/prompts
+inject.applied	scripts/corpus/inject/_lib.sh:108	inject $INJ_NAME: 	 — $*	wt	applied to {wt}
+inject.no_options	scripts/corpus/inject/contraddizione-piano.sh:11	-	-	-	no options expected
+inject.no_options	scripts/corpus/inject/ui-transitiva.sh:11	-	-	-	no options expected
+inject.no_spec	scripts/corpus/inject/contraddizione-piano.sh:12#2	-	-	spec	spec missing in the worktree: {spec}
+inject.no_plan_heading	scripts/corpus/inject/contraddizione-piano.sh:15#2	-	-	-	the spec has no '## Piano di implementazione' (nor '## Implementation plan')
+inject.no_testplan	scripts/corpus/inject/contraddizione-piano.sh:17	-	-	-	no test plan heading ('Piano di test' or 'Test plan') inside the plan of the spec
+inject.contradiction	scripts/corpus/inject/contraddizione-piano.sh:26	$(basename "$SPEC"): 	-	-	decision D-FIC and case T-FIC in contradiction
+inject.unknown_opt	scripts/corpus/inject/file-lasciato-mutato.sh:18	-	-	opt	unknown option: {opt}
+inject.unknown_opt	scripts/corpus/inject/gate-verde-ma-rosso.sh:13	-	-	opt	unknown option: {opt}
+inject.unknown_opt	scripts/corpus/inject/lint-vue.sh:13	-	-	opt	unknown option: {opt}
+inject.unknown_opt	scripts/corpus/inject/mutazione-non-coperta.sh:17	-	-	opt	unknown option: {opt}
+inject.unknown_opt	scripts/corpus/inject/test-in-conflitto.sh:20	-	-	opt	unknown option: {opt}
+inject.cp_exists	scripts/corpus/inject/file-lasciato-mutato.sh:25#2	-	-	cp	counterproof copy already present: {cp}
+inject.copy_failed	scripts/corpus/inject/file-lasciato-mutato.sh:26#4	-	-	cp	copy failed: {cp}
+inject.mutated	scripts/corpus/inject/file-lasciato-mutato.sh:32	$F 	-	-	mutated; copy and sidecar in counterproof/
+inject.need_admin_test	scripts/corpus/inject/gate-verde-ma-rosso.sh:17#2	-	-	t	needs a test of apps/admin: {t}
+inject.red_declared	scripts/corpus/inject/gate-verde-ma-rosso.sh:25	$T: 	-	p	red case; declared PASS in {p}
+inject.need_vue	scripts/corpus/inject/lint-vue.sh:17#2	-	-	f	needs a .vue file: {f}
+inject.eqeqeq	scripts/corpus/inject/lint-vue.sh:21	$F: 	-	-	comparison with == after <script setup> (eqeqeq)
+inject.bad_mutation	scripts/corpus/inject/mutazione-non-coperta.sh:20#5	-	-	-	--file/--from/--to not valid
+inject.empty_text	scripts/corpus/inject/test-in-conflitto.sh:23#3	-	-	-	--text and --component cannot be empty
+inject.no_quotes	scripts/corpus/inject/test-in-conflitto.sh:24#2	-	-	-	--text and --component cannot hold quotes or backslashes
+inject.no_test	scripts/corpus/inject/test-in-conflitto.sh:25#2	-	-	t	test file missing in the worktree: {t} (an EXISTING test is needed)
+inject.forbids	scripts/corpus/inject/test-in-conflitto.sh:32	$T: 	-	x c	case that forbids «{x}» in {c}
+inject.default_size	scripts/corpus/inject/ui-transitiva.sh:15	$F: 	-	-	default size small → x-small

@@ -15,7 +15,9 @@
 #   9 port of cycle-state.test.sh: every call compares the whole output of cycle-state.sh (standalone) and of
 #     `driver.py next`; the cases must pass AND the two outputs must match
 #  10 L2 promotion before the review: assorbita only if it holds finalize's check (plan-check.sh l2)
+#  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 FC=$ROOT/scripts
@@ -25,6 +27,8 @@ export FIC_DRIVER_ROOT=$ROOT
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
 cp "$HERE/maat_paths.py" "$T/"   # the mutated drivers written in $T import maat_paths from next to themselves (pk04a-1)
+# 1.4.0: and maat_msg.py, which reads the catalog next to itself (lib/messages.tsv): a copy uses its own catalog
+cp "$HERE/maat_msg.py" "$T/"; mkdir -p "$T/lib"; cp "$HERE/lib/messages.tsv" "$HERE/lib/maat-msg.sh" "$T/lib/"
 export HOME="$T/home"; mkdir -p "$HOME"
 unset FIC_DRIVER FIC_DRIVER_PY FIC_DRIVER_CERT FIC_RUN_PHASE FIC_CONTEXT_PACK FIC_MAX_FASI FIC_REPO FIC_LOCK
 pass=0 fail=0
@@ -120,7 +124,8 @@ check "cycle-state.sh, FIC_DRIVER=1 → risponde il driver" 'printf "%s\n" "$out
 rm -f "$SPY"; out=$(FIC_DRIVER=0 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
 check "cycle-state.sh, FIC_DRIVER=0 → autonomo, il driver non e' chiamato" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && [ ! -f "$SPY" ]'
 h() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
-printf 'driver %s\ncycle-state %s\nrun-phase %s\n' "$(h "$T/finto-drv.py")" "$(h "$FC/cycle-state.sh")" "$(h "$FC/run-phase.sh")" > "$T/cert-ok"
+msgh() { printf 'messages %s\nmaat-msg %s\nmaat_msg %s\n' "$(h "$FC/lib/messages.tsv")" "$(h "$FC/lib/maat-msg.sh")" "$(h "$FC/maat_msg.py")"; }
+{ printf 'driver %s\ncycle-state %s\nrun-phase %s\n' "$(h "$T/finto-drv.py")" "$(h "$FC/cycle-state.sh")" "$(h "$FC/run-phase.sh")"; msgh; } > "$T/cert-ok"
 printf 'driver %s\ncycle-state %s\n' "$(h "$T/finto-drv.py")" 0000 > "$T/cert-ko"
 out=$(FIC_DRIVER_CERT="$T/cert-ok" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
 check "cycle-state.sh col certificato valido → il driver" 'printf "%s\n" "$out" | grep -qx "Next: FINTO — dal driver"'
@@ -128,6 +133,9 @@ out=$(FIC_DRIVER_CERT="$T/cert-ko" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cyc
 check "  certificato con un altro hash di cycle-state.sh → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
 out=$(FIC_DRIVER_CERT="$T/non-esiste" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
 check "  nessun certificato → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
+grep -v '^maat_msg ' "$T/cert-ok" > "$T/cert-nomsg"; echo "maat_msg 0000" >> "$T/cert-nomsg"
+out=$(FIC_DRIVER_CERT="$T/cert-nomsg" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
+check "  1.4.0: certificato con un altro hash di maat_msg.py → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
 out=$(FINTO_ESCE=1 FIC_DRIVER=1 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>"$T/cs.err")
 check "  driver fallito → autonomo, con AVVISO" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && grep -q "AVVISO: driver.py next non riuscito" "$T/cs.err"'
 # run-phase.sh: outcome validation goes through the driver only when it delegates (spy on a real phase, fake claude)
@@ -154,7 +162,7 @@ rp 1 01-implement
 check "run-phase.sh, FIC_DRIVER=1: esito validato dal driver (spia) → STOP «uscita non valida»" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/01-implement.esito" | grep -q "^PHASE RESULT implement: STOP — uscita non valida: .*FORSE"'
 rp 0 02-implement
 check "run-phase.sh, FIC_DRIVER=0: validatore interno (spia muta), stesso esito" '[ ! -f "$SPY" ] && [ "$(sed -n 1p "$T/rp.run/log/01-implement.esito")" = "$(sed -n 1p "$T/rp.run/log/02-implement.esito")" ]'
-printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" "$(h "$FC/run-phase.sh")" > "$T/cert-rp-ok"
+{ printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" "$(h "$FC/run-phase.sh")"; msgh; } > "$T/cert-rp-ok"
 printf 'driver %s\nrun-phase %s\n' "$(h "$T/spia-drv.py")" 0000 > "$T/cert-rp-ko"
 rpc() { # $1 = certificate, $2 = label (FIC_DRIVER not set: the certificate decides)
   rm -f "$SPY"
@@ -184,7 +192,7 @@ case "$FAKE_MODE" in
   json-rotto) : > "$d/log/$l.jsonl"; echo x > "$d/log/$l.pre-tree"; echo y > "$d/log/$l.post-tree"
     printf '{"fase":"implement","esito":"FORSE"}\n' > "$d/log/$l.result.json"
     printf 'ESITO FASE implement: OK — fatto\nstate=%s\n' "$(st)" > "$d/log/$l.esito"; exit 0 ;;
-  avanza|nv|nv-ver|nv-vuoto)
+  avanza|nv|nv-ver|nv-vuoto|nv-en)
     case "$l" in
       *implement*) : > "$d/log/$l.jsonl"; echo x > "$d/log/$l.pre-tree"; echo y > "$d/log/$l.post-tree"
         printf 'ESITO FASE implement: OK — fatto\nstate=%s\n' "$(st)" > "$d/log/$l.esito" ;;
@@ -195,6 +203,9 @@ case "$FAKE_MODE" in
           "Verification: PARTIAL (finalize.sh: tests-x: NOT RUN (dichiarato: nessun test) — nessun test nel modulo x, controlli verdi)" >> "$spec"
         # pk09: only the Verification: PARTIAL line (no Finalize:), or neither of the two
         [ "$FAKE_MODE" = nv-ver ] && printf '%s\n' "Verification: PARTIAL (finalize.sh: tests-y: NOT RUN (solo la riga Verification))" >> "$spec"
+        # 1.4.0: the lines as finalize.sh writes them in English (the detail follows the language, the prefixes not)
+        [ "$FAKE_MODE" = nv-en ] && printf '%s\n' "Finalize: NEEDS_VERIFICATION — snapshot 0123456789ab — tests-x: NOT RUN (declared: no test) — no test in module x, checks green · 2026-10-29T10:00:00Z" \
+          "Verification: PARTIAL (finalize.sh: tests-x: NOT RUN (declared: no test) — no test in module x, checks green)" >> "$spec"
         printf 'ESITO FASE review: OK — finta\nstate=%s\n' "$(st)" > "$d/log/$l.esito" ;;
     esac; exit 0 ;;
 esac
@@ -239,10 +250,16 @@ drun nv-ver "$SP"
 check "  solo la riga Verification: PARTIAL (nessuna Finalize:) → il dettaglio viene da lì" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-y: NOT RUN (solo la riga Verification); la promozione" "$T/run.out"'
 drun nv-vuoto "$SP"
 check "  nessuna delle due righe → «dettaglio non trovato», sempre STOP (exit 1)" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: dettaglio non trovato nella spec (righe Finalize:/Verification:)" "$T/run.out"'
-# counterproof (pk09, on a copy): the old reason «riprovare ora troverebbe…» turns the case above red
-sed 's/"ciclo finito: firma NEEDS_VERIFICATION — da verificare: %s; /"la review di questa invocazione ha dato NEEDS_VERIFICATION: riprovare ora troverebbe lo stesso ambiente bloccato (%s); /' "$DRV" > "$T/drv-nv-vecchio.py"
-check "controprova NEEDS_VERIFICATION: la mutazione e' applicata" 'grep -q "riprovare ora troverebbe" "$T/drv-nv-vecchio.py"'
-check "controprova NEEDS_VERIFICATION: col vecchio motivo «riprovare ora» il caso diventa rosso" '! DRUN_DRV="$T/drv-nv-vecchio.py" caso_nv && grep -q "riprovare ora troverebbe" "$T/run.out"'
+export MAAT_LINGUA=en; drun nv-en "$SP"; export MAAT_LINGUA=it
+check "  1.4.0: le righe Finalize:/Verification: scritte in inglese, lette in inglese → lo stesso STOP col dettaglio" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — cycle finished: signature NEEDS_VERIFICATION — to verify: tests-x: NOT RUN (declared: no test) — no test in module x, checks green; the promotion" "$T/run.out" && [ "$(calls)" = 2 ]'
+drun nv-en "$SP"
+check "  e lette in italiano: lo stesso dettaglio" '[ $rc -eq 1 ] && grep -qF "Driver result: STOP — ciclo finito: firma NEEDS_VERIFICATION — da verificare: tests-x: NOT RUN (declared: no test) — no test in module x, checks green; la promozione" "$T/run.out"'
+# counterproof (pk09, on a copy): the old reason «riprovare ora troverebbe…» turns the case above red. 1.4.0: the
+# text is in the catalog, so the mutation is made on the catalog of a copy (driver.py + maat_msg.py + lib/messages.tsv)
+NVD="$T/nv-vecchio"; mkdir -p "$NVD/lib"; cp "$DRV" "$NVD/driver.py"; cp "$HERE/maat_paths.py" "$HERE/maat_msg.py" "$NVD/"
+sed 's/\tciclo finito: firma NEEDS_VERIFICATION — da verificare: {what}; /\tla review di questa invocazione ha dato NEEDS_VERIFICATION: riprovare ora troverebbe lo stesso ambiente bloccato ({what}); /' "$HERE/lib/messages.tsv" > "$NVD/lib/messages.tsv"
+check "controprova NEEDS_VERIFICATION: la mutazione e' applicata" 'grep -q "riprovare ora troverebbe" "$NVD/lib/messages.tsv"'
+check "controprova NEEDS_VERIFICATION: col vecchio motivo «riprovare ora» il caso diventa rosso" '! DRUN_DRV="$NVD/driver.py" caso_nv && grep -q "riprovare ora troverebbe" "$T/run.out"'
 drun nulla "$SP" --max-fasi 0
 check "run: budget di fasi esaurito → STOP senza lanci" '[ $rc -eq 1 ] && grep -q "budget del driver esaurito" "$T/run.out" && [ "$(calls)" = 0 ]'
 drun nulla "$SP" --dry-run
@@ -277,6 +294,8 @@ mk_catena() {
 crun() { : > "$FAKE_CALLS"; FAKE_MODE=nulla FIC_DRIVER=1 FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$1" > "$T/run.out" 2>&1; rc=$?; }
 mk_catena; crun $CW/spec-m.md
 check "catena: la madre in WAIT sull'anello 1 → il driver lavora sull'anello 1 (01-implement nella sua run dir)" '[ "$(cat "$FAKE_CALLS")" = 01-implement ] && [ "$(cat $CW/spec-m-1-a.run/prompts/01-implement.md)" = "/maat:full-implementation-cycle --worker=implement m-1-a" ] && grep -q "catena: WAIT — passo a spec-m-1-a" $CW/spec-m.run/driver.log && grep -q "Driver result: STOP — anti-loop" "$T/run.out"'
+mk_catena; export MAAT_LINGUA=en; crun $CW/spec-m.md; export MAAT_LINGUA=it
+check "  1.4.0 (e): in inglese il WAIT conserva (spec-…) e il driver passa all'anello" '[ "$(cat "$FAKE_CALLS")" = 01-implement ] && grep -q "Next: WAIT — catena: ring 1/2 (spec-m-1-a) not closed" "$T/run.out" && grep -q "chain: WAIT — moving to spec-m-1-a" $CW/spec-m.run/driver.log'
 mk_catena
 EFP=$(printf '' | sha256sum | cut -c1-12)
 printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" \
@@ -299,14 +318,28 @@ mkdir -p .claude/.ai-workflow/spec-z.run/log
 printf '%s\n' '{"type":"result","result":"PHASE RESULT fix: OK — done","structured_output":{"fase":"fix","esito":"OK","motivo":"m","deviazioni":["defensive: a.py:1 — branch"],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' > .claude/.ai-workflow/spec-z.run/log/03-fix.jsonl
 drv equiv .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv: tre run dir, next e valida uguali → exit 0" '[ $rc -eq 0 ] && grep -q "^equiv: spec=3 diverse=0 · jsonl=3 diversi=0$" "$T/eq.out"'
+check "  1.4.0 (c): equiv in it e poi in en nello stesso processo, uguale in tutte e due" '[ "$(grep -c "^equiv: spec=3 diverse=0 · jsonl=3 diversi=0$" "$T/eq.out")" = 2 ] && [ "$(grep "^equiv: lingua " "$T/eq.out" | tr "\n" " ")" = "equiv: lingua it equiv: lingua en " ]'
+check "  e in en lo STOP di spec-z e' quello inglese, uguale nei due lati" 'grep -q "^UGUALE spec-z · Next: STOP — the spec has both .## Review implementazione. and .## Implementation review." "$T/eq.out"'
 check "  spec con «## Review implementazione» e «## Implementation review»: lo stesso STOP da cycle-state.sh e driver.py" 'grep -q "^UGUALE spec-z · Next: STOP — la spec ha sia .## Review implementazione. sia .## Implementation review." "$T/eq.out"'
 FIC_DRIVER_CERT="$T/cert" drv equiv --certifica .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv --certifica: scrive il certificato con gli hash attuali" '[ $rc -eq 0 ] && grep -qx "driver $(h "$DRV")" "$T/cert" && grep -qx "cycle-state $(h "$FC/cycle-state.sh")" "$T/cert" && grep -qx "run-phase $(h "$FC/run-phase.sh")" "$T/cert"'
+check "  1.4.0: anche il catalogo e i suoi due lettori (messages, maat-msg, maat_msg), e «lingue it,en» nella riga corpus" 'msgh | while IFS= read -r l; do grep -qxF "$l" "$T/cert" || exit 1; done && grep -q "^corpus spec=3 jsonl=3 · lingue it,en · " "$T/cert"'
 FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
 check "certificato: VALIDO (exit 0)" '[ $rc -eq 0 ] && grep -q "^certificato: VALIDO" "$T/c.out"'
+# 1.4.0: a change to maat_msg.py (here in a copy of the plugin, FIC_DRIVER_ROOT) makes the certificate expire
+MC="$T/plug-mc/maat"; mkdir -p "$T/plug-mc" && cp -r "$ROOT" "$MC" && find "$MC" -name __pycache__ -type d -prune -exec rm -rf {} +
+printf '# changed\n' >> "$MC/scripts/maat_msg.py"
+FIC_DRIVER_ROOT="$MC" FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
+check "  1.4.0: maat_msg.py cambiato → SCADUTO, e il certificato dice maat_msg" '[ $rc -eq 1 ] && grep -q "SCADUTO — hash diversi: maat_msg" "$T/c.out"'
+out=$(FIC_DRIVER_CERT="$T/cert" bash "$MC/scripts/cycle-state.sh" "$SP" 2>&1)
+check "  e l'involucro cycle-state.sh di quella copia resta autonomo (nessun driver)" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && ! printf "%s\n" "$out" | grep -q "AVVISO: driver.py next"'
+rm -rf "$T/plug-mc"
 sed -i 's/^driver .*/driver 0000/' "$T/cert"; FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
 check "  hash del driver diverso → SCADUTO (exit 1)" '[ $rc -eq 1 ] && grep -q "SCADUTO — hash diversi: driver" "$T/c.out"'
-sed 's/"IMPLEMENT — piano approvato, nessuna review"/"IMPLEMENT — diverso"/' "$DRV" > "$T/drv-diverso.py"
+# 1.4.0: the text is in the catalog, shared by the two sides: the mutation stays on a copy of driver.py and makes
+# the Python twin point to another existing key (the same mutation as before: IMPLEMENT with another reason)
+sed 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-state.plan_draft")/' "$DRV" > "$T/drv-diverso.py"
+check "controprova equiv: la mutazione e' applicata (il gemello Python punta a un'altra chiave)" 'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/drv-diverso.py"'
 "$FIC_PY" "$T/drv-diverso.py" equiv .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv: un driver che risponde diverso → DIVERSO, exit 1, niente certificato" '[ $rc -eq 1 ] && grep -q "^DIVERSO spec-x" "$T/eq.out" && grep -q "diverse=2" "$T/eq.out"'
 rm -rf .claude/.ai-workflow/spec-y.md .claude/.ai-workflow/spec-y.run .claude/.ai-workflow/spec-z.md .claude/.ai-workflow/spec-z.run
@@ -443,6 +476,45 @@ printf 'def somma(a, b):\n    return a + b\n' > modules/api/app/services/calc.py
 lrun
 check "L2: stub che coprono tutti e soli i simboli nuovi → resta assorbita, nessuna promozione" 'grep -q "\"assorbita\": true" "$FAKE_CALLS.mut" && [ ! -f "$RUN/counterproof/mutations.json.pre-promozione" ] && [ -f "$RUN/counterproof/T1.json" ]'
 rm -rf "$RUN" "$FAKE_CALLS"* modules
+
+# --- 11. (1.4.0) a whole cycle through the REAL run-phase.sh, MAAT_LINGUA=en and =it: implement -> review -> DONE.
+# The readers no static scan sees (dubbio deciso 5: values built at runtime, exit codes) are on this path: the .esito
+# lines and their state=, the result.json rule, the review section (here with the English heading), the Finalize:
+# line (written in English), the harness fingerprint with the language, the anti-loop. Fake claude by FIC_PHASE,
+# fake gates and finalize; the driver forced on (FIC_DRIVER=1), run-phase.sh and cycle-state.sh the real ones.
+unset MAAT_CONFIG
+cat > "$T/claude-e2e" <<'EOF'
+#!/usr/bin/env bash
+cat > /dev/null
+case "$FIC_PHASE" in
+  implement) echo "e2e $MAAT_LINGUA" >> "$FIC_REPO/src/a.py"
+    echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/a.py"}}]}}'
+    echo '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":{"fase":"implement","esito":"OK","motivo":"done","deviazioni":[],"bloccato_su":"none","file":["src/a.py"],"gate_interni":[],"finding":[]}}' ;;
+  review) printf '%s\n' "" "## Implementation review" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$E2E_SPEC"
+    echo '{"type":"result","result":"PHASE RESULT review: OK — approved","structured_output":{"fase":"review","esito":"OK","motivo":"approved","deviazioni":[],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' ;;
+esac
+EOF
+chmod +x "$T/claude-e2e"
+cat > "$T/fin-e2e" <<EOF
+#!/usr/bin/env bash
+d=\${!#}; printf 'Finalize: IMPLEMENTED — snapshot %s — signed · %s\n' "$EFP" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "\${d%.run}.md"
+echo "finalize: esito=IMPLEMENTED"
+EOF
+chmod +x "$T/fin-e2e"
+e2e() { # $1 language → rc, output in $T/e2e-$1.out, the labels of the .esito in $T/e2e-$1.labels
+  rm -rf "$RUN" "$T/lock"; git checkout -q -- src; spec_approved
+  MAAT_LINGUA=$1 E2E_SPEC="$W/$SP" FIC_DRIVER=1 FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-e2e" FIC_GATES="$T/gates" \
+    FIC_FINALIZE="$T/fin-e2e" FIC_LANES=0 FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/e2e-$1.out" 2>&1 </dev/null
+  rc=$?
+  ls "$RUN/log" 2>/dev/null | sed -n 's/\.esito$//p' | tr '\n' ' ' > "$T/e2e-$1.labels"
+}
+e2e en; rc_en=$rc
+check "11 (1.4.0): ciclo completo in inglese con run-phase.sh vero → DONE (exit 0), implement e review" '[ $rc_en -eq 0 ] && grep -q "^driver: Driver result: DONE — DONE — section without a snapshot (legacy)" "$T/e2e-en.out" && [ "$(cat "$T/e2e-en.labels")" = "01-implement 02-review " ]'
+check "  le righe di esito scritte in inglese (PHASE RESULT), lo State registrato, nessun harness cambiato" 'sed -n 1p "$RUN/log/01-implement.esito" | grep -qx "PHASE RESULT implement: OK — done" && grep -q "^state=[0-9a-f]\{12\}$" "$RUN/log/02-review.esito" && ! grep -qi "harness" "$T/e2e-en.out"'
+check "  gli eventi del driver in inglese" 'grep -q "^driver: ▶ 01-implement started$" "$T/e2e-en.out" && ! grep -q "avviata\|finita" "$T/e2e-en.out"'
+e2e it; rc_it=$rc
+check "  lo stesso ciclo in italiano: stesse fasi, stessa fine" '[ $rc_it -eq 0 ] && [ "$(cat "$T/e2e-it.labels")" = "$(cat "$T/e2e-en.labels")" ] && grep -q "^driver: Driver result: DONE — DONE — sezione senza snapshot (legacy)" "$T/e2e-it.out"'
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src
 
 cd /
 # informative, not a check: with an SCADUTO certificate the wrappers stay standalone (safe direction)

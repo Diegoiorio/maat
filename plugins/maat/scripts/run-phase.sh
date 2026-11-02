@@ -36,7 +36,7 @@
 # disagree: the most conservative wins (prose OK but JSON STOP, deviations or bloccato_su -> .esito STOP with
 # originale=; prose STOP -> stays STOP). .esito is the authority.
 # LANGUAGES (Maat 1.3.0): the result lines this script WRITES are "PHASE RESULT <phase>: OK|STOP — …"; every reader
-# accepts "ESITO FASE …" too (old run dirs, prompts of 1.2.x); the text after "STOP — " stays Italian (1.3.1).
+# accepts "ESITO FASE …" too (old run dirs, prompts of 1.2.x); since 1.4.0 the text after "STOP — " follows the language (catalog).
 # Likewise "## Implementation plan|review", "### Plan review changelog", "Children:", "defensive: " and "none" are
 # read next to the Italian forms. Lines between scripts, run-dir file names and result.json keys do not change.
 # DEFENSIVE DEVIATIONS: a deviation starting with "difensiva: " or "defensive: " (robustness branch, fallback for a case that
@@ -212,6 +212,15 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib/maat-paths.sh" || exit 4   # MAAT_ROOT/MAAT_SCRIPTS (plugin) and PROJECT_ROOT (working folder)
 RS="$MAAT_SCRIPTS/review-surface.sh"
+# Messages (1.4.0): the catalog next to this script. The language is resolved once and exported (the sub-session,
+# cycle-state.sh and the gates read the same one) and it is part of the harness fingerprint (below). The embedded
+# Python (VALIDA_PY, TG_PY, LANE_PY, DIFENSIVE_PY) imports maat_msg.py from MAAT_MSG_PY, in native form (msg_py).
+. "$HERE/lib/maat-msg.sh"; maat_msg_carica
+maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+msg_py() {
+  [ -n "${MAAT_MSG_PY:-}" ] || MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py")
+  export MAAT_MSG_PY
+}
 
 # --- harness fingerprint (see HARNESS FINGERPRINT) ---
 # The SINGLE list of exclusions, used by the computation and by --harness-paths: each entry is a glob matched against EVERY
@@ -219,15 +228,17 @@ RS="$MAAT_SCRIPTS/review-surface.sh"
 # files wherever they are). No .gitignore: every other file under MAAT_ROOT is included.
 HARNESS_EXCLUDE=(__pycache__ assets '*.swp' '*.orig' .DS_Store '*~')
 # The computation in ONE process (standard library): on Windows one process per file cost seconds at every comparison.
-#   argv: elenco|impronta <MAAT_ROOT> <project> -- <HARNESS_EXCLUDE…> · exit 1 = unreadable file
+#   argv: elenco|impronta <MAAT_ROOT> <project> <language> -- <HARNESS_EXCLUDE…> · exit 1 = unreadable file
 # elenco: the harness files relative to MAAT_ROOT (regular files, not links), without the excluded components (fnmatch,
 # case-sensitive), in UTF-8 byte order (= LC_ALL=C sort). impronta: sha256 of the lines
 # "<sha256 of the content without CR> <path>\n" of those files, plus at the end that of <project>/.claude/maat.json
-# (or ".claude/maat.json ASSENTE\n").
+# (or ".claude/maat.json ASSENTE\n") and, since 1.4.0, "lingua <it|en>\n": the RESOLVED language of the messages
+# (MAAT_LINGUA, otherwise maat.json), so that a language changed through the variable in the middle of a cycle stops
+# it as a changed maat.json does, instead of rewriting the lines of the spec in the other language.
 HFP_PY='
 import fnmatch, hashlib, os, sys
-modo, root, prog = sys.argv[1:4]
-esc = sys.argv[5:]
+modo, root, prog, lingua = sys.argv[1:5]
+esc = sys.argv[6:]
 def escluso(rel):
     return any(fnmatch.fnmatchcase(c, p) for c in rel.split("/") for p in esc)
 def h(p):
@@ -258,6 +269,7 @@ try:
         righe += "%s .claude/maat.json\n" % h(mj)
     else:
         righe += ".claude/maat.json ASSENTE\n"
+    righe += "lingua %s\n" % lingua
     out.write(hashlib.sha256(righe.encode("utf-8", "surrogateescape")).hexdigest().encode())
 except OSError:
     sys.exit(1)
@@ -269,7 +281,7 @@ hfp_win() { # $1 = variable, $2 = path → the variable in C:/… form on Window
 }
 hfp_py1() { # "$@" = interpreter → the HFP_PY output if valid (hfp_modo, hfp_r, hfp_p of the caller), otherwise 1
   local o
-  o=$(PYTHONDONTWRITEBYTECODE=1 "$@" -c "$HFP_PY" "$hfp_modo" "$hfp_r" "$hfp_p" -- "${HARNESS_EXCLUDE[@]}" 2>/dev/null) || return 1
+  o=$(PYTHONDONTWRITEBYTECODE=1 "$@" -c "$HFP_PY" "$hfp_modo" "$hfp_r" "$hfp_p" "$MAAT_LINGUA" -- "${HARNESS_EXCLUDE[@]}" 2>/dev/null) || return 1
   if [ "$hfp_modo" = impronta ]; then [[ $o =~ ^[0-9a-f]{64}$ ]] || return 1
   else [[ $'\n'$o$'\n' == *$'\n.claude-plugin/plugin.json\n'* ]] || return 1; fi   # the plugin always has plugin.json
   printf '%s\n' "$o"
@@ -332,14 +344,14 @@ if [ "${1:-}" = "--harness-paths" ]; then
   echo .claude/maat.json; exit 0
 fi
 if [ "${1:-}" = "--harness-fp" ]; then
-  [ $# -le 2 ] || { echo "uso: $0 --harness-fp [<repo>]" >&2; exit 2; }
+  [ $# -le 2 ] || { echo "$(msg run-phase.usage_fp script="$0")" >&2; exit 2; }
   unset MSYS_NO_PATHCONV
   r=${2:-$PROJECT_ROOT}
-  hfp_stampa "$r" || { echo "impronta del harness non calcolabile" >&2; exit 1; }
+  hfp_stampa "$r" || { echo "$(msg run-phase.hfp_nc)" >&2; exit 1; }
   exit 0
 fi
 if [ "${1:-}" = "--harness-fp-confronta" ]; then
-  [ $# -ge 2 ] && [ $# -le 3 ] || { echo "uso: $0 --harness-fp-confronta <harness.fp> [<repo>]" >&2; exit 2; }
+  [ $# -ge 2 ] && [ $# -le 3 ] || { echo "$(msg run-phase.usage_fpc script="$0")" >&2; exit 2; }
   unset MSYS_NO_PATHCONV
   hfp_confronta "$2" "${3:-$PROJECT_ROOT}"
   exit 0
@@ -350,8 +362,13 @@ fi
 # if valid. Arguments: <log.jsonl> <schema> <phase> <result.json>. `run-phase.sh --valida …` runs it on its own
 # (always this one, never the driver): it is the reference for `driver.py equiv`.
 VALIDA_PY='
-import json, os, re, sys
+import importlib.util, json, os, re, sys
+sys.dont_write_bytecode = True
 sys.stdout.reconfigure(encoding="utf-8")
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the catalog, with the same keys as driver.py valida
 log, schema_path, phase, out = sys.argv[1:5]
 res = None
 for ln in open(log, encoding="utf-8", errors="replace"):
@@ -379,32 +396,32 @@ TYPES = {"object": lambda x: isinstance(x, dict), "array": lambda x: isinstance(
          "number": lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)}
 
 def valida(x, s, p):
-    """Validatore minimo: le sole keyword di KEYS; una keyword sconosciuta e un errore (fail-closed)."""
+    """Minimal validator: only the keywords in KEYS; an unknown keyword is an error (fail-closed)."""
     extra = sorted(set(s) - KEYS - ANNOT)
     if extra:
-        return ["%s: keyword non supportata dal validatore minimo: %s" % (p, ", ".join(extra))]
+        return [T("run-phase.v_keyword", p=p, kw=", ".join(extra))]
     if "type" in s:
         ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
         if not any(TYPES.get(t, lambda v: False)(x) for t in ts):
-            return ["%s: tipo atteso %s" % (p, "|".join(ts))]
+            return [T("run-phase.v_type", p=p, types="|".join(ts))]
     errs = []
     if "enum" in s and x not in s["enum"]:
-        errs.append("%s: valore %r fuori da %s" % (p, x, s["enum"]))
+        errs.append(T("run-phase.v_enum", p=p, x=repr(x), enum=s["enum"]))
     if isinstance(x, dict):
         props = s.get("properties", {})
-        errs += ["%s: manca %s" % (p, r) for r in s.get("required", []) if r not in x]
+        errs += [T("run-phase.v_required", p=p, r=r) for r in s.get("required", []) if r not in x]
         for k, v in x.items():
             if k in props:
                 errs += valida(v, props[k], p + "." + k)
             elif s.get("additionalProperties") is False:
-                errs.append("%s: campo non previsto %s" % (p, k))
+                errs.append(T("run-phase.v_extra", p=p, k=k))
     if isinstance(x, list) and "items" in s:
         for i, v in enumerate(x):
             errs += valida(v, s["items"], "%s[%d]" % (p, i))
     if isinstance(x, str) and len(x) < s.get("minLength", 0):
-        errs.append("%s: stringa piu corta di %d" % (p, s["minLength"]))
+        errs.append(T("run-phase.v_short", p=p, n=s["minLength"]))
     if TYPES["number"](x) and "minimum" in s and x < s["minimum"]:
-        errs.append("%s: sotto il minimo %s" % (p, s["minimum"]))
+        errs.append(T("run-phase.v_min", p=p, min=s["minimum"]))
     return errs
 
 def blocco():
@@ -413,11 +430,11 @@ def blocco():
         return so, ""
     recinti = re.findall(r"```json[ \t]*\r?\n(.*?)\r?\n[ \t]*```", text, re.S)
     if not recinti:
-        return None, "nessun blocco JSON (structured_output o recinto json)"
+        return None, T("run-phase.v_nojson")
     try:
         return json.loads(recinti[-1]), ""
     except ValueError as e:
-        return None, "blocco JSON illeggibile: %s" % e
+        return None, T("run-phase.v_badjson", e=e)
 
 obj, errs = blocco()
 errs = [errs] if errs else []
@@ -425,7 +442,7 @@ if obj is not None:
     try:
         schema = json.load(open(schema_path, encoding="utf-8"))
     except (OSError, ValueError) as e:
-        schema, errs = None, ["schema illeggibile: %s" % e]
+        schema, errs = None, [T("run-phase.v_schema", e=e)]
     if schema is not None:
         try:
             import jsonschema
@@ -433,12 +450,12 @@ if obj is not None:
         except ImportError:
             errs = valida(obj, schema, "$")
         if not errs and obj.get("fase") != phase:
-            errs = ["fase %r diversa da quella dell etichetta (%s)" % (obj.get("fase"), phase)]
+            errs = [T("run-phase.v_phase", fase=repr(obj.get("fase")), phase=phase)]
 if errs:
     for e in errs:
-        print("uscita non valida: " + e, file=sys.stderr)
+        print(T("run-phase.v_invalid", msg=e), file=sys.stderr)
     msg = "; ".join(errs[:3]).replace("\n", " ")
-    print("PHASE RESULT %s: STOP — uscita non valida: %s" % (phase, msg))
+    print("PHASE RESULT %s: STOP — %s" % (phase, T("run-phase.v_invalid", msg=msg)))
     if riga:
         print("originale=" + riga)
     sys.exit(0)
@@ -451,16 +468,16 @@ one = lambda s: " ".join(str(s).split())
 dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
 jstop = ""
 if [x for x in dev if not x.startswith(("difensiva: ", "defensive: "))]:   # all defensive -> no STOP for deviation
-    jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
+    jstop = T("run-phase.v_dev", n=len(dev), devs="; ".join(dev))
 elif one(obj["bloccato_su"]).lower() not in ("nessuno", "none"):
-    jstop = "bloccato su: " + one(obj["bloccato_su"])
+    jstop = T("run-phase.v_blocked") + one(obj["bloccato_su"])
 elif obj["esito"] != "OK":
-    jstop = "esito STOP: " + one(obj["motivo"])
+    jstop = T("run-phase.v_esito") + one(obj["motivo"])
 jstop = jstop[:300]
 if not riga:
     print("PHASE RESULT %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
 elif jstop and re.match(r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK", riga):
-    print("PHASE RESULT %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
+    print("PHASE RESULT %s: STOP — JSON: %s" % (obj["fase"], T("run-phase.v_json_stop", stop=jstop)))
     print("originale=" + riga)
 else:
     print(riga)
@@ -469,6 +486,7 @@ else:
 # carries the current hash of driver.py and of THIS file (equivalence proved by `driver.py equiv --certifica`);
 # otherwise the internal validator. FIC_DRIVER=0 forces the internal one, FIC_DRIVER=1 the driver (tests); FIC_DRIVER_PY and
 # FIC_DRIVER_CERT replace driver and certificate (tests). Driver failed -> internal validator, with an AVVISO.
+# Since 1.4.0 the certificate also carries the message catalog and its two readers (messages, maat-msg, maat_msg).
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
 CERT=${FIC_DRIVER_CERT:-$MAAT_SCRIPTS/driver.equiv}
 fic_hash() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
@@ -476,20 +494,23 @@ driver_on() { # 0 = delegate to the driver
   case "${FIC_DRIVER:-}" in 0) return 1 ;; 1) [ -f "$DRV" ]; return ;; esac
   [ -f "$DRV" ] && [ -f "$CERT" ] || return 1
   local c; c=$(tr -d '\r' < "$CERT")
-  grep -qx "driver $(fic_hash "$DRV")" <<< "$c" && grep -qx "run-phase $(fic_hash "${BASH_SOURCE[0]}")" <<< "$c"
+  grep -qx "driver $(fic_hash "$DRV")" <<< "$c" && grep -qx "run-phase $(fic_hash "${BASH_SOURCE[0]}")" <<< "$c" &&
+    grep -qx "messages $(fic_hash "$HERE/lib/messages.tsv")" <<< "$c" &&
+    grep -qx "maat-msg $(fic_hash "$HERE/lib/maat-msg.sh")" <<< "$c" && grep -qx "maat_msg $(fic_hash "$HERE/maat_msg.py")" <<< "$c"
 }
 valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see VALIDA_PY)
   local o
+  msg_py
   if driver_on; then
     if o=$("$FIC_PY" "$DRV" valida "$@"); then [ -n "$o" ] && printf '%s\n' "$o"; return 0; fi
-    echo "AVVISO: driver.py valida fallito: validatore interno di run-phase.sh" >&2
+    echo "AVVISO: $(msg run-phase.drv_valida_failed)" >&2
   fi
   "$FIC_PY" -c "$VALIDA_PY" "$@"
 }
 if [ "${1:-}" = "--valida" ]; then
-  [ $# -eq 5 ] || { echo "uso: $0 --valida <log.jsonl> <schema> <fase> <result.json>" >&2; exit 2; }
-  . "$HERE/python.sh" || { echo "nessun interprete Python utilizzabile (imposta FIC_PYTHON)" >&2; exit 5; }
-  "$FIC_PY" -c "$VALIDA_PY" "$2" "$3" "$4" "$5"; exit $?
+  [ $# -eq 5 ] || { echo "$(msg run-phase.usage_valida script="$0")" >&2; exit 2; }
+  . "$HERE/python.sh" || { echo "$(msg run-phase.no_python)" >&2; exit 5; }
+  msg_py; "$FIC_PY" -c "$VALIDA_PY" "$2" "$3" "$4" "$5"; exit $?
 fi
 
 # --- attribution by name (see OTHER FLOWS): did the subsession name these paths? ---
@@ -612,8 +633,8 @@ for p in paths:
     print(("nominato\t" if nominato(p) else "mai\t") + p)
 '
 if [ "${1:-}" = "--nominati" ]; then
-  [ $# -ge 4 ] || { echo "uso: $0 --nominati <radice> <file-dei-path> <log.jsonl>…" >&2; exit 2; }
-  . "$HERE/python.sh" || { echo "nessun interprete Python utilizzabile (imposta FIC_PYTHON)" >&2; exit 5; }
+  [ $# -ge 4 ] || { echo "$(msg run-phase.usage_nominati script="$0")" >&2; exit 2; }
+  . "$HERE/python.sh" || { echo "$(msg run-phase.no_python)" >&2; exit 5; }
   shift; "$FIC_PY" -c "$NOMI_PY" "$@"; exit $?
 fi
 
@@ -628,8 +649,8 @@ else
   # from the WORKING FOLDER, not from PROJECT_ROOT (which makes FIC_REPO win, exported to the phases): in a linked
   # worktree it is .git/worktrees/<name>, in the main tree .git (pk04a-1, step 3)
   gd=$(git rev-parse --absolute-git-dir 2>/dev/null) && [ -n "$gd" ] || {
-    [ "${1:-}" = "--lock-status" ] && { echo "sconosciuto: git non trova il repository del lock"; exit 1; }
-    echo "git non trova il repository: lock non calcolabile, fase non lanciata" >&2; exit 2; }
+    [ "${1:-}" = "--lock-status" ] && { echo "sconosciuto: $(msg run-phase.lock_unknown)"; exit 1; }
+    echo "$(msg run-phase.lock_no_repo)" >&2; exit 2; }
   LOCK=$gd/full-implementation-cycle.lock
 fi
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
@@ -647,16 +668,17 @@ lock_alive() { # $1 = lock directory (default: the code-phase one)
 }
 
 if [ "${1:-}" = "--lock-status" ]; then
-  [ $# -eq 1 ] || { echo "uso: $0 --lock-status" >&2; exit 2; }
-  case "${FIC_PHASE:-}" in implement|review|fix|chiusura|test-red) echo "dentro il ciclo (fase $FIC_PHASE): il lock e' di questa fase"; exit 0 ;; esac
+  [ $# -eq 1 ] || { echo "$(msg run-phase.usage_lock script="$0")" >&2; exit 2; }
+  case "${FIC_PHASE:-}" in implement|review|fix|chiusura|test-red) echo "dentro il ciclo (fase $FIC_PHASE): $(msg run-phase.lock_inside)"; exit 0 ;; esac
   if [ -d "$LOCK" ] && lock_alive; then echo "occupato: $([ -f "$LOCK/owner" ] && tr '\n' ' ' < "$LOCK/owner")"; exit 1; fi
-  if [ -d "$LOCK" ]; then echo "libero (lock orfano, processi non piu' vivi: $([ -f "$LOCK/owner" ] && tr '\n' ' ' < "$LOCK/owner"))"; else echo "libero"; fi
+  if [ -d "$LOCK" ]; then echo "libero ($(msg run-phase.lock_orphan_free owner="$([ -f "$LOCK/owner" ] && tr '\n' ' ' < "$LOCK/owner")"))"; else echo "libero"; fi
   exit 0
 fi
 
-[ $# -eq 3 ] || { echo "uso: $0 <run-dir> <etichetta> <file-prompt> | --lock-status" >&2; exit 2; }
+[ $# -eq 3 ] || { echo "$(msg run-phase.usage script="$0")" >&2; exit 2; }
 dir=$1 label=$2 prompt=$3
-[ -f "$prompt" ] || { echo "prompt assente: $prompt" >&2; exit 2; }
+msg_py   # the embedded Python below prints messages of the catalog
+[ -f "$prompt" ] || { echo "$(msg run-phase.no_prompt prompt="$prompt")" >&2; exit 2; }
 
 # Binary: CLAUDE_BIN if set; then the most recent version inside the VS Code extension (the
 # path changes at every update, so it is searched for); then `claude` in PATH.
@@ -666,7 +688,7 @@ if [ -z "$CL" ]; then
   [ -n "$ext" ] && [ -f "$ext/resources/native-binary/claude.exe" ] && CL="$ext/resources/native-binary/claude.exe"
 fi
 [ -n "$CL" ] || CL=$(command -v claude 2>/dev/null || true)
-[ -n "$CL" ] || { echo "binario claude non trovato (imposta CLAUDE_BIN)" >&2; exit 3; }
+[ -n "$CL" ] || { echo "$(msg run-phase.no_claude)" >&2; exit 3; }
 
 # DENY by prefix (--disallowedTools): generated by the guard (`guard.py --deny-list`, «guardia» section below):
 # core + guardia.rilascio + guardia.vietati_extra from maat.json (pk05).
@@ -696,9 +718,9 @@ export FIC_PHASE=$phase
 tree_now() { (cd "$FIC_REPO" && bash "$RS" tree) 2>>"$err"; }
 close_pre() { # $1 = .pre-tree file, $2 = its run dir: paths changed between that tree and now → touched.txt
   local pre post
-  pre=$(cat "$1") && post=$(tree_now) && [ -n "$pre" ] && [ -n "$post" ] || { echo "AVVISO: attribuzione non calcolata per $1 (niente .post-tree: cycle-state.sh fermera' il ciclo)" >> "$err"; return 0; }
+  pre=$(cat "$1") && post=$(tree_now) && [ -n "$pre" ] && [ -n "$post" ] || { echo "AVVISO: $(msg run-phase.attr_not_computed f="$1")" >> "$err"; return 0; }
   (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$pre" "$post") >> "$2/touched.txt" 2>>"$err" \
-    || { echo "AVVISO: git diff fallito per $1 (niente .post-tree: cycle-state.sh fermera' il ciclo)" >> "$err"; return 0; }
+    || { echo "AVVISO: $(msg run-phase.attr_diff_failed f="$1")" >> "$err"; return 0; }
   sort -u -o "$2/touched.txt" "$2/touched.txt"
   echo "$post" > "${1%.pre-tree}.post-tree"
 }
@@ -721,13 +743,13 @@ altri_flussi() { # implement/fix, conservative version: the paths changed in the
   (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1") 2>/dev/null | tr -d '\r' | grep -v '^$' > "$c"
   [ -s "$c" ] || return 0
   if ! nm=$(nominati "$c"); then
-    echo "AVVISO: attribuzione per nome non verificabile (log della fase illeggibile, senza eventi o senza result): nessuna annotazione degli altri flussi" >> "$err"
+    echo "AVVISO: $(msg run-phase.names_unverifiable)" >> "$err"
     return 0
   fi
   printf '%s\n' "$nm" | awk -F'\t' '$1 == "mai" { print $2 }' > "$a"
   [ -s "$a" ] || { rm -f "$a"; return 0; }
   while IFS= read -r p; do
-    avviso "AVVISO: $p cambiato durante la fase e mai nominato dalla sotto-sessione: resta in touched.txt (la review lo vede), probabilmente di un altro flusso"
+    avviso "AVVISO: $(msg run-phase.other_flow_kept p="$p")"
   done < "$a"
 }
 
@@ -748,12 +770,12 @@ notes=""   # messages to put into the label's .stderr, once taken
 busy() { # $1 = busy lock directory, $2 = first line of the message
   local msg o_run o_label
   msg="$2 — $([ -f "$1/owner" ] && tr '\n' ' ' < "$1/owner")
-Rilancia quando ha finito. Se sei certo che nessuna fase stia girando: rm -rf \"$1\""
+$(msg run-phase.busy_retry lock="$1")"
   echo "$msg" >&2
   o_run=$(sed -n 's/^run=//p' "$1/owner" 2>/dev/null); o_label=$(sed -n 's/^label=//p' "$1/owner" 2>/dev/null)
   # unreadable owner or same label in the same run dir: the label files belong to the live phase
   if [ -z "$o_label" ] || { [ "$o_run" = "$dir" ] && [ "$o_label" = "$label" ]; }; then
-    echo "stessa etichetta (o proprietario non ancora scritto): log/$label.* non toccati" >&2
+    echo "$(msg run-phase.same_label label="$label")" >&2
     exit 4
   fi
   rm -f "$dir/log/$label.esito" "$dir/log/$label.result.json"; : > "$log"; echo "$msg" > "$err"
@@ -766,8 +788,8 @@ take_lock() { # $1 = lock directory, $2 = message if busy; sets orphan_run
     # Atomic takeover of the orphan: the mv succeeds for ONE contender only; the others retry the mkdir.
     if mv "$L" "$L.orfano.$$" 2>/dev/null; then
       notes="$notes${notes:+
-}$3 ripreso (processi non piu' vivi): $([ -f "$L.orfano.$$/owner" ] && tr '\n' ' ' < "$L.orfano.$$/owner")"
-      echo "$3 ripreso (processi non piu' vivi)" >&2
+}$(msg run-phase.lock_taken what="$3"): $([ -f "$L.orfano.$$/owner" ] && tr '\n' ' ' < "$L.orfano.$$/owner")"
+      echo "$(msg run-phase.lock_taken what="$3")" >&2
       orphan_run=$(sed -n 's/^run=//p' "$L.orfano.$$/owner" 2>/dev/null)
       rm -rf "$L.orfano.$$"
     fi
@@ -781,10 +803,10 @@ code_phase=0
 case "$phase" in implement|review|fix|chiusura|test-red) code_phase=1 ;; esac
 orphan_run=""
 if [ "$phase" = plan ]; then   # per-spec lock (see LOCK): <run-dir>/plan.lock
-  take_lock "$dir/plan.lock" "lock del piano occupato: un'altra fase di piano sulla STESSA spec e' in corso" "lock del piano orfano"
+  take_lock "$dir/plan.lock" "$(msg run-phase.lock_plan_busy)" "$(msg run-phase.lock_plan_orphan)"
   orphan_run=""   # a plan does not change the tree: no attribution to close
 elif [ $code_phase -eq 1 ]; then
-  take_lock "$LOCK" "lock occupato: un'altra fase di codice e' in corso" "lock orfano"
+  take_lock "$LOCK" "$(msg run-phase.lock_busy)" "$(msg run-phase.lock_orphan)"
 fi
 
 # --- from here on the label files are ours: they are reset (also those of a previous launch's watcher) ---
@@ -799,14 +821,14 @@ printf '%s' "${notes:+$notes
 
 # FIC_REPO already set wins (needed by the tests, with a temporary repo).
 FIC_REPO=$PROJECT_ROOT   # = FIC_REPO if set, otherwise the git toplevel of the working folder
-[ -n "$FIC_REPO" ] || { echo "non e' un repository git" >> "$err"; finish 2; }
+[ -n "$FIC_REPO" ] || { echo "$(msg run-phase.not_a_repo)" >> "$err"; finish 2; }
 export FIC_REPO
 PC="$MAAT_SCRIPTS/plan-check.sh"
 SPEC_F="${dir%.run}.md"
 TR="$dir/test-red"
 if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then   # harness-pt11: format 2 only
   { [ -f "$SPEC_F" ] && bash "$PC" contract "$SPEC_F" 2>/dev/null | tr -d '\r' | grep -qx 'Plan format: 2'; } ||
-    { echo "fase $phase: solo per un piano in formato 2 (Plan format: 2) nella spec accanto alla run dir ($SPEC_F): non lanciata" | tee -a "$err" >&2; finish 2; }
+    { echo "$(msg run-phase.format2_only phase="$phase" spec="$SPEC_F")" | tee -a "$err" >&2; finish 2; }
 fi
 
 # --- harness fingerprint: recorded at the first launch, checked at every later phase ---
@@ -819,17 +841,17 @@ if [ -f "$hfp_file" ]; then
     hfp_root=$(maat_cygm "$MAAT_ROOT" 2>/dev/null || printf '%s' "$MAAT_ROOT")
     hfp_rimedio="bash \"$(maat_cygm "$MAAT_SCRIPTS/run-phase.sh" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS/run-phase.sh")\" --harness-fp > \"$hfp_file\""
     case "$hfp_esito" in
-      CAMBIATO) hfp_msg="STOP: harness cambiato dal $hfp_since: ricomincia la fase o conferma (impronta registrata $hfp_a, attuale $hfp_b; file del plugin in $hfp_root e .claude/maat.json). Rimedio: se il cambio e' voluto, registra l'impronta attuale — $hfp_rimedio — e rilancia; altrimenti riporta il harness com'era" ;;
-      FORMATO-PRECEDENTE) hfp_msg="STOP: impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata $hfp_a dal $hfp_since, attuale $hfp_b). Rimedio: se il passaggio al plugin e' voluto, registra l'impronta attuale — $hfp_rimedio — e rilancia; altrimenti riprendi il ciclo col harness interno" ;;
-      ILLEGGIBILE) hfp_msg="STOP: harness.fp illeggibile (vuoto o senza impronta, registrato dal $hfp_since; attuale $hfp_a). Rimedio: se il harness attuale e' quello voluto, registra l'impronta attuale — $hfp_rimedio — e rilancia" ;;
-      *) hfp_msg="STOP: impronta del harness non calcolabile (file del plugin in $hfp_root o .claude/maat.json di $FIC_REPO non leggibili, oppure repository non trovato; registrata dal $hfp_since), fase non lanciata" ;;
+      CAMBIATO) hfp_msg="STOP: $(msg run-phase.hfp_changed since="$hfp_since" a="$hfp_a" b="$hfp_b" root="$hfp_root" rim="$hfp_rimedio")" ;;
+      FORMATO-PRECEDENTE) hfp_msg="STOP: $(msg run-phase.hfp_old a="$hfp_a" since="$hfp_since" b="$hfp_b" rim="$hfp_rimedio")" ;;
+      ILLEGGIBILE) hfp_msg="STOP: $(msg run-phase.hfp_unreadable since="$hfp_since" a="$hfp_a" rim="$hfp_rimedio")" ;;
+      *) hfp_msg="STOP: $(msg run-phase.hfp_nc_stop root="$hfp_root" repo="$FIC_REPO" since="$hfp_since")" ;;
     esac
     echo "$hfp_msg" | tee -a "$err" >&2
     finish 6
   fi
 elif [ $fresh -eq 1 ]; then
   if hfp_now=$(hfp_stampa "$FIC_REPO"); then printf '%s\n' "$hfp_now" > "$hfp_file"
-  else echo "AVVISO: impronta del harness non calcolata: questo ciclo non sara' controllato" >> "$err"; fi
+  else echo "AVVISO: $(msg run-phase.hfp_not_recorded)" >> "$err"; fi
 fi
 
 # The killed phase belonged to ANOTHER feature: its .pre-tree is closed now, before this phase
@@ -841,7 +863,7 @@ if [ -n "$orphan_run" ] && [ "$orphan_run" != "$dir" ] && [ -d "$orphan_run/log"
 fi
 
 # --- guard: a single command, for the self-test and for the hook ---
-. "$HERE/python.sh" || { echo "guardia non attiva: nessun interprete Python utilizzabile (imposta FIC_PYTHON)" | tee -a "$err" >&2; finish 5; }
+. "$HERE/python.sh" || { echo "$(msg run-phase.guard_no_python)" | tee -a "$err" >&2; finish 5; }
 GUARD="$MAAT_SCRIPTS/guard.py"
 HOOK_CMD="\"$FIC_PY\" \"$GUARD\""
 # the project's maat.json for the two guards (this one and the plugin's) and for the self-test: MAAT_CONFIG as an absolute
@@ -869,12 +891,12 @@ probe_esc=${probe_cmd//\\/\\\\}; probe_esc=${probe_esc//\"/\\\"}
 probe='{"tool_name":"Bash","tool_input":{"command":"'"$probe_esc"'"}}'
 printf '%s' "$probe" | eval "$HOOK_CMD" >/dev/null 2>&1
 if [ $? -ne 2 ]; then
-  echo "guardia non attiva: l'autotest non ha negato la sonda «$probe_cmd» ($HOOK_CMD)" | tee -a "$err" >&2
+  echo "$(msg run-phase.guard_probe probe="$probe_cmd" hook="$HOOK_CMD")" | tee -a "$err" >&2
   finish 5
 fi
 mapfile -t DENY < <("$FIC_PY" "$GUARD" --deny-list 2>/dev/null | tr -d '\r')
 if [ ${#DENY[@]} -eq 0 ]; then
-  echo "guardia non attiva: lista DENY vuota ($HOOK_CMD --deny-list)" | tee -a "$err" >&2
+  echo "$(msg run-phase.guard_deny_empty hook="$HOOK_CMD")" | tee -a "$err" >&2
   finish 5
 fi
 # Stop hook (harness-pt04, 1g): denies the end of turn without `PHASE RESULT` or with background jobs not
@@ -882,7 +904,7 @@ fi
 STOP_PY="$MAAT_SCRIPTS/stop-hook.py"
 STOP_CMD=""
 if [ -f "$STOP_PY" ]; then STOP_CMD="\"$FIC_PY\" \"$(cd "$(dirname "$STOP_PY")" && { pwd -W 2>/dev/null || pwd; })/stop-hook.py\""
-else echo "AVVISO: hook Stop assente ($STOP_PY): la sotto-sessione parte senza" >> "$err"; fi
+else echo "AVVISO: $(msg run-phase.stop_hook_missing stop="$STOP_PY")" >> "$err"; fi
 SETTINGS=$("$FIC_PY" -c 'import json, sys
 h = {"PreToolUse": [{"matcher": "Bash|Edit|Write|NotebookEdit|MultiEdit", "hooks": [{"type": "command", "command": sys.argv[1]}]}]}
 if sys.argv[2]:
@@ -903,8 +925,8 @@ gates_level() { # --tests=<l> in the prompt, then the plan's Test level: line (p
 }
 run_gates() { # prints the evidence folder (nothing if the gates did not start)
   local g="$dir/log/$label.gates" lvl rc files=()
-  if [ ! -f "$dir/touched.txt" ]; then echo "gates: non eseguiti (nessun touched.txt): i gate restano alla fase" > "$g"; return 0; fi
-  if [ ! -f "$GATES" ]; then echo "gates: non eseguiti (gates.sh assente: $GATES)" > "$g"; return 0; fi
+  if [ ! -f "$dir/touched.txt" ]; then echo "gates: $(msg run-phase.gates_no_touched)" > "$g"; return 0; fi
+  if [ ! -f "$GATES" ]; then echo "gates: $(msg run-phase.gates_missing gates="$GATES")" > "$g"; return 0; fi
   lvl=$(gates_level)
   mapfile -t files < <(tr -d '\r' < "$dir/touched.txt" | grep -v '^$')
   FIC_GATES_ROOT="$FIC_REPO" bash "$GATES" --run-dir "$dir" "$lvl" ${files[@]+"${files[@]}"} > "$g" 2>&1; rc=$?
@@ -985,11 +1007,12 @@ run_cp() { # driver counterproofs: counterproof.sh (pt05) on mutations.json; out
   local c="$dir/log/$label.counterproof" rc env_w
   cp_clear   # no result of a previous round survives this one
   if [ -n "${FIC_CP_CMD:-}" ]; then "$FIC_CP_CMD" "$MUT" > "$c" 2>&1; rc=$?
-  elif [ ! -f "$CP_SH" ]; then echo "counterproof.sh assente: $CP_SH" > "$c"; rc=127
+  elif [ ! -f "$CP_SH" ]; then echo "$(msg run-phase.cp_missing cp="$CP_SH")" > "$c"; rc=127
   elif cp_in_wsl; then
     # project root and maat.json translated for WSL: counterproof.sh does not derive them from its own location
     env_w="PROJECT_ROOT=$(sq "$(wslp "$FIC_REPO")")"
     [ -n "${MAAT_CONFIG:-}" ] && env_w+=" MAAT_CONFIG=$(sq "$(wslp "$MAAT_CONFIG")")"
+    [ -n "${MAAT_LINGUA:-}" ] && env_w+=" MAAT_LINGUA=$(sq "$MAAT_LINGUA")"
     MSYS_NO_PATHCONV=1 wsl -- bash -lc "$env_w bash $(sq "$(wslp "$CP_SH")") $(sq "$(wslp "$MUT")")" > "$c" 2>&1; rc=$?
   else PROJECT_ROOT=$FIC_REPO bash "$CP_SH" "$MUT" > "$c" 2>&1; rc=$?; fi
   echo "exit=$rc" >> "$c"
@@ -1018,28 +1041,28 @@ is_ring() { # is the spec of this run dir listed in the Figlie: (Children:) line
 }
 if [ "$phase" = implement ] && ! ls "$dir/log" 2>/dev/null | grep -q '\.pre-tree$' && is_ring; then
   cn=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r' | sed -n 's/^Next: //p')
-  case "$cn" in "STOP — catena"*|"WAIT — catena"*) echo "$cn — fase non lanciata" | tee -a "$err" >&2; finish 7 ;; esac
+  case "$cn" in "STOP — catena"*|"WAIT — catena"*) echo "$cn — $(msg run-phase.not_launched)" | tee -a "$err" >&2; finish 7 ;; esac
 fi
 # closing of a chain: prepares the MOTHER's run dir (touched.txt, base.txt) and finds the children's e2e
 chz_fail="" chz_e2e=""
 chiusura_prep() {
   local m="${dir%.run}.md" d c first="" b kids
   d=$(dirname "$m")
-  [ -f "$m" ] || { chz_fail="spec madre assente: $m"; return; }
+  [ -f "$m" ] || { chz_fail="$(msg run-phase.mother_missing m="$m")"; return; }
   kids=$(tr -d '\r' < "$m" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
     /^## (Piano di implementazione|Review implementazione|Implementation plan|Implementation review)/ { exit } /^(Figlie|Children):/ { print; exit }' | grep -o 'spec-[A-Za-z0-9._-]*' | sed 's/\.md$//; s/\.$//')
-  [ -n "$kids" ] || { chz_fail="la madre non ha la riga Figlie:"; return; }
+  [ -n "$kids" ] || { chz_fail="$(msg run-phase.mother_no_children)"; return; }
   : > "$dir/touched.txt.chiusura"
   for c in $kids; do
     [ -n "$first" ] || first=$c
-    [ -f "$d/$c.run/touched.txt" ] || chz_fail="${chz_fail:+$chz_fail; }$c senza touched.txt"
+    [ -f "$d/$c.run/touched.txt" ] || chz_fail="${chz_fail:+$chz_fail; }$(msg run-phase.ring_no_touched c="$c")"
     [ -f "$d/$c.run/touched.txt" ] && tr -d '\r' < "$d/$c.run/touched.txt" >> "$dir/touched.txt.chiusura"
     chz_e2e="$chz_e2e $([ -f "$d/$c.md" ] && tr -d '\r' < "$d/$c.md" | sed -n 's/^[[:space:]]*\([-*]\|[0-9][0-9]*\.\)[[:space:]]\{1,\}\[e2e-locator:[[:space:]]*\([^]]*\)\].*/\2/p' | sed 's/[[:space:]]*$//' | tr '\n' ' ')"
   done
   grep . "$dir/touched.txt.chiusura" | sort -u > "$dir/touched.txt"; rm -f "$dir/touched.txt.chiusura"
-  [ -s "$dir/touched.txt" ] || chz_fail="${chz_fail:+$chz_fail; }nessun file nei touched.txt degli anelli"
+  [ -s "$dir/touched.txt" ] || chz_fail="${chz_fail:+$chz_fail; }$(msg run-phase.rings_no_files)"
   b=$([ -f "$d/$first.run/base.txt" ] && tr -d '\r\n ' < "$d/$first.run/base.txt")
-  if [ -n "$b" ]; then echo "$b" > "$dir/base.txt"; else chz_fail="${chz_fail:+$chz_fail; }base del primo anello assente ($first.run/base.txt)"; fi
+  if [ -n "$b" ]; then echo "$b" > "$dir/base.txt"; else chz_fail="${chz_fail:+$chz_fail; }$(msg run-phase.first_no_base first="$first")"; fi
   chz_e2e=$(printf '%s\n' $chz_e2e | grep . | sort -u | tr '\n' ' ' | sed 's/ $//')
 }
 
@@ -1051,7 +1074,7 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
   # writes of the phase outside its scope (also via Bash, which the guard does not see): tree before and after
   local t0 t1 fuori c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi" nm="" nrc=0 p
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
-  if [ -z "$t0" ] || [ -z "$t1" ]; then why="attribuzione non misurata (.pre-tree/.post-tree): scope della fase non verificabile"
+  if [ -z "$t0" ] || [ -z "$t1" ]; then why="$(msg run-phase.red_no_attr)"
   else
     (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1") 2>/dev/null | tr -d '\r' |
       grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' > "$c"   # SCOPE-DOPO-LA-FASE
@@ -1063,8 +1086,8 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
     fi
     fuori=$(grep -vxF -f "$a" "$c" | head -5 | paste -sd, -)
     if [ -n "$fuori" ]; then
-      why="scritture fuori dallo scope di test-red (test del piano e file nuovi): $fuori"
-      [ $nrc -ne 0 ] && why="$why (attribuzione per nome non verificabile: log della fase illeggibile, senza eventi o senza result)"
+      why="$(msg run-phase.red_outside out="$fuori")"
+      [ $nrc -ne 0 ] && why="$why ($(msg run-phase.red_names))"
     fi
     if [ -s "$a" ]; then
       # already in touched.txt before the phase (feature work): it cannot also be in do-not-touch -> STOP,
@@ -1073,7 +1096,7 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       if [ -f "$tp" ]; then feat=$(grep -xF -f "$tp" "$a"); nuovi=$(grep -vxF -f "$tp" "$a")
       else feat=$(cat "$a"); nuovi=""; fi
       if [ -n "$feat" ]; then
-        why="${why:+$why; }file della feature (gia' in touched.txt prima di test-red) cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): $(printf '%s\n' "$feat" | head -5 | paste -sd, -) — resta in touched.txt, non va in do-not-touch: decidi tu (lavoro tuo da tenere o da riportare com'era)"
+        why="${why:+$why; }$(msg run-phase.red_feature files="$(printf '%s\n' "$feat" | head -5 | paste -sd, -)")"
       fi
       if [ -n "$nuovi" ]; then   # into do-not-touch.txt (preflight form), out of touched.txt (it entered it now)
         { [ -f "$dir/do-not-touch.txt" ] && tr -d '\r' < "$dir/do-not-touch.txt"; printf '%s\n' "$nuovi"; } | sed '/^[[:space:]]*$/d' | sort -u > "$dir/do-not-touch.txt.nuovo" &&
@@ -1083,7 +1106,7 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
           mv -f "$dir/touched.txt.nuovo" "$dir/touched.txt"
         fi
         while IFS= read -r p; do
-          avviso "AVVISO: $p cambiato durante la fase da un altro flusso (mai nominato dalla sotto-sessione): non attribuito, in do-not-touch"
+          avviso "AVVISO: $(msg run-phase.red_other_flow p="$p")"
         done <<< "$nuovi"
       fi
     else rm -f "$a"; fi
@@ -1091,19 +1114,19 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
   mapfile -t files < <({ bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^test //p'
                          [ -f "$dir/touched.txt" ] && tr -d '\r' < "$dir/touched.txt"; } | grep -v '^$' | LC_ALL=C sort -u)
   if [ -n "$why" ]; then :
-  elif [ ! -f "$GATES" ]; then why="verifica dei rossi non eseguita (gates.sh assente: $GATES)"
+  elif [ ! -f "$GATES" ]; then why="$(msg run-phase.red_no_gates gates="$GATES")"
   else
     FIC_GATES_ROOT="$FIC_REPO" bash "$GATES" --run-dir "$dir" std ${files[@]+"${files[@]}"} > "$g" 2>&1; rc=$?
-    echo "exit=$rc livello=std (test-red: i test di accettazione devono essere rossi)" >> "$g"
+    echo "exit=$rc livello=std ($(msg run-phase.red_level))" >> "$g"
     ev=$(sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$g" | tail -1)
-    if [ -z "$ev" ] || [ "$ev" = - ]; then why="verifica dei rossi non eseguita (gates.sh exit $rc senza evidenza: log/$label.gates)"
+    if [ -z "$ev" ] || [ "$ev" = - ]; then why="$(msg run-phase.red_no_evidence rc="$rc" label="$label")"
     else
       bash "$PC" rossi "$SPEC_F" --evidence "$ev" --run-dir "$dir" > "$ro" 2>&1; rc=$?
       case $rc in
         0) ;;
         1) why=$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=STOP — //p' | tail -1)
-           why="test di accettazione ${why:-non dimostrati} (log/$label.rossi)" ;;
-        *) why="verifica dei rossi BLOCKED: $(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1) (log/$label.rossi)" ;;
+           why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")" ;;
+        *) why="$(msg run-phase.red_blocked det="$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1)" label="$label")" ;;
       esac
     fi
   fi
@@ -1111,7 +1134,7 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
     mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base of the prescribed changes (tests_guard): that of THIS test-red
     { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
       bash "$PC" basis "$SPEC_F" --write-tests && bash "$PC" gen "$SPEC_F" --run-dir "$dir"; } >> "$ro" 2>&1 ||
-      why="chiusura di test-red non registrata (stub, impronta dei test o gen: log/$label.rossi)"
+      why="$(msg run-phase.red_closing label="$label")"
   fi
   if [ -z "$why" ]; then printf '%s\n' "$1"
   else printf 'PHASE RESULT test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
@@ -1131,8 +1154,13 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
 # Prescribed change accepted -> the fingerprint is re-recorded with the test-red commands (`plan-check.sh tests` into
 # tests.txt, `basis --write-tests`), so cycle-state.sh (STALE (tests)) and finalize.sh (l2: Tests status FRESH)
 # see the same fingerprint; not recordable (STALE approval) -> STOP.
-TG_PY='import ast, hashlib, json, os, re, subprocess, sys
+TG_PY='import ast, hashlib, importlib.util, json, os, re, subprocess, sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.dont_write_bytecode = True
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the message catalog (msg_py)
 root, procedura, base_txt, rossi, cambiati = sys.argv[1:6]
 trees = sys.argv[6:]
 scrive = {}
@@ -1177,24 +1205,24 @@ for p in [x.strip() for x in open(cambiati, encoding="utf-8") if x.strip()]:
     def nv(why):
         print("nonverificabile\t%s\t%s\t%s" % (p, bl, why))
     if not p.endswith(".py"):
-        nv("solo Python (ast)"); continue
+        nv(T("run-phase.tg_python_only")); continue
     if nomi is None:
-        nv("test-red/rossi.json assente o illeggibile"); continue
+        nv(T("run-phase.tg_no_rossi")); continue
     ns = nomi.get(p, [])
     if not ns or not all(ns):
-        nv("nessun nome di test di accettazione per il file in rossi.json"); continue
+        nv(T("run-phase.tg_no_names")); continue
     vecchio = next((b for b in (blob(t, p) for t in trees) if b is not None and hashlib.sha256(b).hexdigest() == base.get(p)), None)
     if vecchio is None:
-        nv("contenuto di test-red non ritrovato (nessun .post-tree di test-red col suo sha256)"); continue
+        nv(T("run-phase.tg_no_base")); continue
     try:
         av = ast.parse(vecchio.decode("utf-8"))
     except (SyntaxError, UnicodeDecodeError, ValueError):
-        nv("file di test-red non analizzabile"); continue
+        nv(T("run-phase.tg_unparsable")); continue
     try:
         with open(os.path.join(root, p), "rb") as fh:
             an = ast.parse(fh.read().replace(b"\r", b"").decode("utf-8"))
     except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
-        print("cambiato\t%s\t(file attuale assente o non analizzabile)" % p); continue
+        print("cambiato\t%s\t%s" % (p, T("run-phase.tg_current"))); continue
     diversi, nonvisti = [], []
     for n in ns:
         o, c = nodo(av, n), nodo(an, n)
@@ -1205,7 +1233,7 @@ for p in [x.strip() for x in open(cambiati, encoding="utf-8") if x.strip()]:
     if diversi:
         print("cambiato\t%s\t%s" % (p, ", ".join(diversi)))
     elif nonvisti:
-        nv("funzioni non trovate nel file di test-red: " + ", ".join(nonvisti))
+        nv(T("run-phase.tg_not_found") + ", ".join(nonvisti))
     else:
         print("ok\t%s\t%s\t%s" % (p, bl, ", ".join(ns)))'
 tests_guard() { # $1 = outcome; prints the outcome, STOP if an acceptance test file changed (PRESCRIBED CHANGE above)
@@ -1234,21 +1262,21 @@ tests_guard() { # $1 = outcome; prints the outcome, STOP if an acceptance test f
          bash "$PC" basis "$SPEC_F" --write-tests >> "$err" 2>&1; then
         printf '%s\n' "$out" | while IFS=$'\t' read -r k p b x; do
           case $k in
-            ok) avviso "AVVISO: test di accettazione: $p cambiato, modifica prescritta dal piano (scrive: di $b); funzioni dei test di accettazione invariate da test-red ($x) — il resto del file (aiutanti, fixture) e' cambiato: la review lo controlli; impronta dei test riregistrata" ;;
-            nonverificabile) avviso "AVVISO: test di accettazione: $p cambiato, modifica prescritta dal piano (scrive: di $b); funzioni dei test di accettazione NON verificate ($x): la review controlli che i test di accettazione siano quelli di test-red; impronta dei test riregistrata" ;;
+            ok) avviso "AVVISO: $(msg run-phase.tg_ok p="$p" b="$b" x="$x")" ;;
+            nonverificabile) avviso "AVVISO: $(msg run-phase.tg_unverified p="$p" b="$b" x="$x")" ;;
           esac
         done
         printf '%s\n' "$1"; return 0
       fi
-      printf "PHASE RESULT %s: STOP — modifica prescritta di test di accettazione (%s), ma impronta dei test non riregistrata (plan-check.sh tests/basis --write-tests: vedi log/%s.stderr)\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, -)" "$label" "$e1"
+      printf 'PHASE RESULT %s: STOP — %s\noriginale=%s\n' "$phase" "$(msg run-phase.tg_not_recorded files="$(printf '%s\n' "$ch" | paste -sd, -)" label="$label")" "$e1"
       return 0
     fi
     if [ -n "$camb" ]; then
-      printf "PHASE RESULT %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$camb" "$e1"
+      printf 'PHASE RESULT %s: STOP — %s\noriginale=%s\n' "$phase" "$(msg run-phase.tg_deviation files="$camb")" "$e1"
       return 0
     fi
   fi
-  printf "PHASE RESULT %s: STOP — deviazione: test di accettazione modificati dopo test-red (%s); correggerli e' una decisione umana\noriginale=%s\n" "$phase" "$(printf '%s\n' "$ch" | paste -sd, - | sed 's/^$/?/')" "$e1"
+  printf 'PHASE RESULT %s: STOP — %s\noriginale=%s\n' "$phase" "$(msg run-phase.tg_deviation files="$(printf '%s\n' "$ch" | paste -sd, - | sed 's/^$/?/')")" "$e1"
 }
 
 # --- lanes (harness-pt13): see LANES at the top ---
@@ -1256,18 +1284,18 @@ BI=${FIC_BLOCKS_INDEPENDENT:-$MAAT_SCRIPTS/blocks-independent.py}
 lanes_decide() { # writes log/<label>.corsie · 0 = two lanes, otherwise series (with the reason in the file)
   local spec="${dir%.run}.md" t="$dir/log/.gen-corsie.$$" c="$dir/log/$label.corsie" rc=1
   if [ "${FIC_LANES:-1}" = 0 ]; then echo "blocks-independent: esito=serie motivo=FIC_LANES=0" > "$c"; return 1; fi
-  if [ -z "$pre_file" ]; then echo "blocks-independent: esito=serie motivo=tree iniziale non calcolato (niente controllo a posteriori)" > "$c"; return 1; fi
+  if [ -z "$pre_file" ]; then echo "blocks-independent: esito=serie motivo=$(msg run-phase.bi_no_tree)" > "$c"; return 1; fi
   if [ -n "${FIC_CORSIE:-}" ] && [ -f "$FIC_CORSIE" ]; then   # harness-pt14: decided by the driver (same commands)
     tr -d '\r' < "$FIC_CORSIE" > "$c"
     grep -qx 'blocks-independent: esito=parallelo corsie=2' "$c"; return
   fi
-  if [ ! -f "$spec" ] || [ ! -f "$PC_SH" ] || [ ! -f "$BI" ]; then echo "blocks-independent: esito=serie motivo=spec, plan-check.sh o blocks-independent.py assenti" > "$c"; return 1; fi
+  if [ ! -f "$spec" ] || [ ! -f "$PC_SH" ] || [ ! -f "$BI" ]; then echo "blocks-independent: esito=serie motivo=$(msg run-phase.bi_missing)" > "$c"; return 1; fi
   rm -rf "$t"; mkdir -p "$t" || return 1
   if bash "$PC_SH" gen "$spec" --run-dir "$t" >/dev/null 2>&1 && [ -f "$t/gen/procedura.txt" ]; then
     PROJECT_ROOT=$FIC_REPO "$FIC_PY" "$BI" --root "$FIC_REPO" "$t/gen/procedura.txt" 2>>"$err" | tr -d '\r' > "$c"; rc=${PIPESTATUS[0]}
-    [ $rc -le 1 ] || echo "blocks-independent: esito=serie motivo=blocks-independent.py fallito (exit $rc)" > "$c"
+    [ $rc -le 1 ] || echo "blocks-independent: esito=serie motivo=$(msg run-phase.bi_failed rc="$rc")" > "$c"
   else
-    echo "blocks-independent: esito=serie motivo=plan-check.sh gen non riuscito (formato 1 o piano malformato)" > "$c"
+    echo "blocks-independent: esito=serie motivo=$(msg run-phase.bi_no_gen)" > "$c"
   fi
   rm -rf "$t"
   [ $rc -eq 0 ] && grep -qx 'blocks-independent: esito=parallelo corsie=2' "$c"
@@ -1275,8 +1303,13 @@ lanes_decide() { # writes log/<label>.corsie · 0 = two lanes, otherwise series 
 # Lane outcome: `estrai <log> <out>` writes the declared files (JSON "file" field) of the lane;
 # `unisci <log1> <log2> <posteriori> <exit1> <exit2>` (an exit != 0 is STOP «corsia k: uscita N») prints ONE result event with the ESITO and the JSON merged (validation against the
 # schema stays the usual one, on the last result event of <label>.jsonl). The most conservative wins.
-LANE_PY='import json, re, sys
+LANE_PY='import importlib.util, json, os, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.dont_write_bytecode = True
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the message catalog (msg_py)
 def ultimo(log):
     res = None
     try:
@@ -1319,17 +1352,17 @@ if sys.argv[1] == "estrai":
     sys.exit(0)
 logs, post = sys.argv[2:4], open(sys.argv[4], encoding="utf-8", errors="replace").read().strip()
 codici = sys.argv[5:7]
-stop = "" if post.startswith("posteriori: esito=OK") else "controllo a posteriori delle corsie: " + (post.split("— ", 1)[-1] if post else "non eseguito")
+stop = "" if post.startswith("posteriori: esito=OK") else T("run-phase.lane_post") + (post.split("— ", 1)[-1] if post else T("run-phase.lane_post_not_run"))
 prob, objs, righe = [], [], []
 for k, log in enumerate(logs, 1):
     r = ultimo(log)
     o = blocco(r) if r else None
     if len(codici) >= k and codici[k - 1] != "0":
-        prob.append("corsia %d: uscita %s" % (k, codici[k - 1]))
+        prob.append(T("run-phase.lane_exit", k=k, rc=codici[k - 1]))
     elif r is None:
-        prob.append("corsia %d: nessun evento result" % k)
+        prob.append(T("run-phase.lane_no_result", k=k))
     elif not forma(o):
-        prob.append("corsia %d: esito strutturato assente o non valido" % k)
+        prob.append(T("run-phase.lane_no_json", k=k))
     else:
         objs.append((k, o)); righe.append((k, riga(r, o)))
 if prob:
@@ -1339,9 +1372,9 @@ def dev_corsia(k, d):   # the defensive prefix stays at the start (DEFENSIVE DEV
     s = " ".join(str(d).split())
     for pre in ("difensiva: ", "defensive: "):   # the prefix as written (1.3.0: the English one too)
         if s.startswith(pre):
-            return "%scorsia %d: %s" % (pre, k, s[len(pre):])
-    return "corsia %d: %s" % (k, d)
-m = {"fase": "implement", "esito": "OK", "motivo": " · ".join("corsia %d: %s" % (k, o["motivo"]) for k, o in objs),
+            return T("run-phase.lane_dev_pre", pre=pre, k=k, d=s[len(pre):])
+    return T("run-phase.lane_item", k=k, d=d)
+m = {"fase": "implement", "esito": "OK", "motivo": " · ".join(T("run-phase.lane_item", k=k, d=o["motivo"]) for k, o in objs),
      "deviazioni": [dev_corsia(k, d) for k, o in objs for d in o["deviazioni"]], "bloccato_su": "nessuno",
      "file": [], "gate_interni": [g for k, o in objs for g in o["gate_interni"]], "finding": [f for k, o in objs for f in o["finding"]]}
 for k, o in objs:
@@ -1349,7 +1382,7 @@ for k, o in objs:
     if o["esito"] != "OK":
         m["esito"] = "STOP"
     if " ".join(o["bloccato_su"].split()).lower() not in ("nessuno", "none") and m["bloccato_su"] == "nessuno":
-        m["bloccato_su"] = "corsia %d: %s" % (k, o["bloccato_su"])
+        m["bloccato_su"] = T("run-phase.lane_item", k=k, d=o["bloccato_su"])
     if isinstance(o.get("fase"), str) and o["fase"] != "implement":
         m["fase"] = o["fase"]   # the usual validation rejects it: phase different from the one of the label
     if isinstance(o.get("copertura"), list):
@@ -1361,9 +1394,9 @@ ko = [(k, l) for k, l in righe if not re.match(r"(?:PHASE RESULT|ESITO FASE) imp
 if stop:
     testo = "PHASE RESULT implement: STOP — " + stop
 elif ko:
-    testo = "PHASE RESULT implement: STOP — corsia %d: %s" % (ko[0][0], re.sub(r"^(?:PHASE RESULT|ESITO FASE) [^:]*:\s*(STOP\s*—\s*)?", "", ko[0][1]) or "nessuna riga ESITO")
+    testo = "PHASE RESULT implement: STOP — " + T("run-phase.lane_item", k=ko[0][0], d=re.sub(r"^(?:PHASE RESULT|ESITO FASE) [^:]*:\s*(STOP\s*—\s*)?", "", ko[0][1]) or T("run-phase.lane_no_esito"))
 else:
-    testo = "PHASE RESULT implement: OK — corsie parallele: " + m["motivo"]
+    testo = "PHASE RESULT implement: OK — " + T("run-phase.lane_ok") + m["motivo"]
 print(json.dumps({"type": "result", "subtype": "fic_corsie", "result": testo, "structured_output": m}, ensure_ascii=False))'
 launch_lanes() { # two subsessions together (one per lane), then after-the-fact check and merged result event
   local k b s o p c="$dir/log/$label.corsie" c1 c2 pids=() pre post lf=()
@@ -1372,7 +1405,7 @@ launch_lanes() { # two subsessions together (one per lane), then after-the-fact 
   for k in 1 2; do
     b=$(sed -n "s/^corsia $k: //p" "$c"); s=$(sed -n "s/^scope $k: //p" "$c"); o=$(sed -n "s/^corsia $((3 - k)): //p" "$c")
     p="$dir/log/$label.corsia-$k.prompt"; lf+=("$dir/log/$label.corsia-$k.jsonl")
-    { cat "$prompt"; printf '\n%s\n' "CORSIA $k/2 (driver, run-phase.sh): sono tuoi SOLO i blocchi $b del piano, nel loro ordine di dopo:; i tuoi file sono quelli del loro scrive: ($s). L'altra corsia implementa ORA, in parallelo, i blocchi $o: i suoi file sono do-not-touch, e la guardia nega Edit/Write fuori dai tuoi (FIC_WRITE_SCOPE). base.txt lo scrive solo la corsia 1; le liste del preflight vanno in do-not-touch.$k.txt e mixed.$k.txt. Le suite del livello le esegue il driver sull'albero intero a corsie finite: tieni solo il ciclo interno mirato. Nel JSON, in file, SOLO i file che hai scritto tu."; } > "$p"
+    { cat "$prompt"; printf '\n%s\n' "CORSIA $k/2 (driver, run-phase.sh): $(msg run-phase.lane_prompt b="$b" s="$s" o="$o" k="$k" k="$k")"; } > "$p"
     FIC_LANE=$k FIC_WRITE_SCOPE=$s WSLENV="FIC_LANE${WSLENV:+:$WSLENV}" \
       CLAUDE_PLUGIN_ROOT=$MAAT_ROOT "$CL" -p --permission-mode bypassPermissions --disallowedTools "${DENY[@]}" --settings "$SETTINGS" --strict-mcp-config \
       ${SCHEMA_ARGS[@]+"${SCHEMA_ARGS[@]}"} ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} --append-system-prompt "$CHILD_RULES_TXT" \
@@ -1396,7 +1429,7 @@ launch_lanes() { # two subsessions together (one per lane), then after-the-fact 
     for k in 1 2; do "$FIC_PY" -c "$LANE_PY" estrai "${lf[$((k - 1))]}" "$dir/log/$label.corsia-$k.file" 2>>"$err"; done
     "$FIC_PY" "$BI" --posteriori "$c" "$dir/log/$label.cambiati" "$dir/log/$label.corsia-1.file" "$dir/log/$label.corsia-2.file" 2>>"$err" | tr -d '\r' > "$dir/log/$label.posteriori"
   else
-    echo "posteriori: esito=STOP — diff del tree non calcolabile" > "$dir/log/$label.posteriori"
+    echo "posteriori: esito=STOP — $(msg run-phase.post_no_diff)" > "$dir/log/$label.posteriori"
   fi
   "$FIC_PY" -c "$LANE_PY" unisci "${lf[0]}" "${lf[1]}" "$dir/log/$label.posteriori" "$c1" "$c2" 2>>"$err" | tr -d '\r' >> "$log"
 }
@@ -1411,7 +1444,7 @@ pre_file=""
 if [ "$phase" = implement ] || [ "$phase" = fix ] || [ "$phase" = test-red ]; then
   pre_file="$dir/log/$label.pre-tree"
   rm -f "$pre_file" "$dir/log/$label.post-tree"
-  t=$(tree_now) && [ -n "$t" ] && echo "$t" > "$pre_file" || { echo "AVVISO: tree iniziale non calcolato per $label (niente .post-tree: cycle-state.sh fermera' il ciclo)" >> "$err"; pre_file=""; }
+  t=$(tree_now) && [ -n "$t" ] && echo "$t" > "$pre_file" || { echo "AVVISO: $(msg run-phase.tree_not_computed label="$label")" >> "$err"; pre_file=""; }
 fi
 
 # --- test-red / test-stage phases (harness-pt11): guard write scope, parked tests (S3) ---
@@ -1437,14 +1470,14 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
         r=${f#"$dir/staging/"}
         if grep -qxF -- "$r" "$scope"; then
           mkdir -p "$FIC_REPO/$(dirname "$r")" && cp "$f" "$FIC_REPO/$r" && nst=$((nst + 1))
-        else echo "AVVISO: S3: $r fuori dallo scope di test-red, non copiato" >> "$err"; fi
+        else echo "AVVISO: S3: $(msg run-phase.s3_outside r="$r")" >> "$err"; fi
       done < <(find "$dir/staging" -type f | LC_ALL=C sort)
       rm -rf "$dir/staging.copiato"; mv "$dir/staging" "$dir/staging.copiato"; rm -f "$dir/staging.fp"
       [ $nst -gt 0 ] && staged=1
-      echo "S3: $nst file in sosta copiati dallo staging (impronta del piano $sfp)" >> "$err"
+      echo "S3: $(msg run-phase.s3_copied n="$nst" fp="$sfp")" >> "$err"
     else
       rm -rf "$dir/staging" "$dir/staging.fp"
-      echo "S3: staging scartato (impronta ${sfp:-assente}, piano attuale ${plan_fp:-non calcolabile})" >> "$err"
+      echo "S3: $(msg run-phase.s3_discarded fp="${sfp:-$(msg run-phase.missing)}" plan="${plan_fp:-$(msg cycle-state.not_computable)}")" >> "$err"
     fi
   fi
 fi
@@ -1460,7 +1493,7 @@ stdin_file=$prompt
 # relaunch in sequence after a discard (harness-pt09), so the diff is always that of the reviewed tree.
 # DEFENSIVE DEVIATIONS: the review receives the list to judge appended to the starting prompt (the ring's too).
 if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-difensive.txt" ]; then
-  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — deviazioni dal piano dichiarate «defensive: » (o «difensiva: ») da implement/fix, che non hanno fermato il ciclo (etichetta, testo). Passale a implementation-review-cycle da giudicare: se una di queste deviazioni non e' puramente difensiva (cambia un comportamento osservabile, un contratto API, una stringa visibile prevista, i permessi o i dati scritti nei casi previsti dal piano), e' un finding major."; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
+  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — $(msg run-phase.defensive_prompt)"; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
   prompt="$dir/log/$label.prompt-difensive" stdin_file="$dir/log/$label.prompt-difensive"
 fi
 ring_stop() { echo "$1" | tee -a "$err" >&2; rm -f "$dir/log/$label.running"; finish 7; }
@@ -1470,10 +1503,10 @@ ring_prompt() {
   { [ -f "$dir/touched.txt" ] && tr -d '\r' < "$dir/touched.txt"; } | grep . > "$dir/log/$label.anello.paths"
   if [ -s "$dir/log/$label.anello.paths" ] && rt=$(tree_now) && [ -n "$rt" ] \
      && ridx=$(cd "$FIC_REPO" && bash "$RS" diff --from "$rb" --to "$rt" --paths-file "$dir/log/$label.anello.paths" --out "$rd" 2>>"$err"); then
-    { cat "$prompt0"; printf '\n%s\n%s\n' "DIFF DELL'ANELLO (driver, run-phase.sh): $rd — base anello $rb (il .post-tree dell'anello precedente, mai HEAD) → tree $rt, solo i file del touched.txt di questo anello. E' la superficie della review: passala a implementation-review-cycle; indice (path, offset, limit):" "$ridx"; } > "$dir/log/$label.prompt-anello"
+    { cat "$prompt0"; printf '\n%s\n%s\n' "DIFF DELL'ANELLO (driver, run-phase.sh): $rd — $(msg run-phase.ring_prompt rb="$rb" rt="$rt")" "$ridx"; } > "$dir/log/$label.prompt-anello"
     prompt="$dir/log/$label.prompt-anello" stdin_file="$dir/log/$label.prompt-anello"
   else
-    ring_stop "STOP — catena: diff dell'anello non calcolato (base $rb, touched.txt ${dir}/touched.txt): la review non parte"
+    ring_stop "STOP — catena: $(msg run-phase.ring_no_diff rb="$rb" dir="${dir}")"
   fi
 }
 if [ "$phase" = review ] && is_ring; then
@@ -1483,7 +1516,7 @@ if [ "$phase" = review ] && is_ring; then
   if [ "${rk:-1}" -le 1 ]; then :   # ring 1: its base is the usual one
   elif [ -n "$rb" ]; then ring=1; ring_prompt
   else
-    ring_stop "STOP — catena: nessuna Base anello da cycle-state.sh (l'anello precedente non ha un .post-tree?): la review dell'anello $rk non parte"
+    ring_stop "STOP — catena: $(msg run-phase.ring_no_base rk="$rk")"
   fi
 fi
 code=0 skip_cl=0 chz_ev="" esito=""
@@ -1505,7 +1538,7 @@ if [ "$phase" = chiusura ]; then :   # closing is not in the outcome schema: its
 elif [ -f "$SCHEMA" ] && sc=$("$FIC_PY" -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")), separators=(",", ":")))' "$SCHEMA" 2>>"$err" | tr -d '\r') && [ -n "$sc" ]; then
   SCHEMA_ARGS=(--json-schema "$sc")
 else
-  echo "AVVISO: schema dell'esito assente o illeggibile ($SCHEMA): la fase chiudera' con STOP «uscita non valida»" >> "$err"
+  echo "AVVISO: $(msg run-phase.no_schema schema="$SCHEMA")" >> "$err"
 fi
 # --plugin-dir only as an explicit override (MAAT_PLUGIN_DIR; the replay always sets it): normally the subsession
 # finds the plugin because it is enabled in the project (pk01 D1; D8: with the plugin also enabled nothing is duplicated)
@@ -1525,12 +1558,12 @@ if [ "$phase" = review ]; then
   mode=sequenza
   rs_now=$(review_status)
   if [ "${FIC_REVIEW_PARALLEL:-1}" = 0 ]; then why="FIC_REVIEW_PARALLEL=0"
-  elif [ "${rs_now%% *}" = APPROVED ]; then why="review registrata APPROVED: promozione o gate-only (il reviewer puo' non partire) o giro post-approvazione"
+  elif [ "${rs_now%% *}" = APPROVED ]; then why="$(msg run-phase.seq_approved)"
   else
     # driver counterproofs ONLY on a plan-check.sh gen list consistent with the plan (orchestrator decision):
     # a list written by the worker in a previous round stays the worker's, which rewrites it every round
     ! ls "$dir"/counterproof/*.meta >/dev/null 2>&1 && cp_from_gen && cp_driver=1
-    if k0=$(verify_key) && [ -n "$k0" ]; then mode=parallelo; else why="chiave del tree non calcolabile"; cp_driver=0; fi
+    if k0=$(verify_key) && [ -n "$k0" ]; then mode=parallelo; else why="$(msg run-phase.seq_no_key)"; cp_driver=0; fi
   fi
 fi
 if [ "$mode" = parallelo ]; then
@@ -1540,9 +1573,9 @@ if [ "$mode" = parallelo ]; then
   printf 'modo=parallelo controprove=%s chiave=%s\n' "$cpw" "$(printf '%s' "$k0" | sha256sum | cut -c1-12)" > "$par"
   [ -f "${dir%.run}.md" ] && cp "${dir%.run}.md" "$dir/log/$label.spec-pre"
   stdin_file="$dir/log/$label.prompt"
-  if [ $cp_driver -eq 1 ]; then cpn="le controprove di counterproof/mutations.json (generata da plan-check.sh gen, coerente col piano) le esegue il DRIVER ora (non riscrivere mutations.json, non lanciare counterproof.sh: i risultati saranno counterproof/<id>.json)"
-  else cpn="le controprove restano tue, come sempre (Worker review, passo 2: scrivi o rigenera counterproof/mutations.json e lancia counterproof.sh)"; fi
-  { cat "$prompt"; printf '\n%s\n' "VERIFY IN PARALLELO (driver, run-phase.sh): gates.sh gira ORA, fuori da questa sessione, sui file di touched.txt; $cpn. Non aspettare e non eseguire le suite del livello, non citarne i risultati: per ogni requisito scrivi nel campo copertura del JSON gli ID dei test che lo coprono. Il verdetto e' provvisorio (Verification: VERIFIED (provisional: …)): finalize.sh fa l'AND con i risultati e compone la tabella Evidence."; } > "$stdin_file"
+  if [ $cp_driver -eq 1 ]; then cpn="$(msg run-phase.cp_driver)"
+  else cpn="$(msg run-phase.cp_worker)"; fi
+  { cat "$prompt"; printf '\n%s\n' "VERIFY IN PARALLELO (driver, run-phase.sh): $(msg run-phase.verify_prompt cpn="$cpn")"; } > "$stdin_file"
   ( run_gates >/dev/null; [ $cp_driver -eq 1 ] && run_cp ) & vpid=$!
   [ $owned -eq 1 ] && echo "vpid=$vpid" >> "$held/owner"   # lock_alive: a live VERIFY holds the lock
   launch "$stdin_file" ">"
@@ -1550,7 +1583,7 @@ if [ "$mode" = parallelo ]; then
   k1=$(verify_key) || k1=""   # ricalcolo finale della chiave (harness-pt09)
   if [ "$k1" != "$k0" ]; then
     # tree (or mutations.json) changed while review and VERIFY were running: neither result belongs to a single tree
-    msg="scartato: chiave cambiata durante la fase ($(printf '%s' "$k0" | sha256sum | cut -c1-12) -> $(printf '%s' "$k1" | sha256sum | cut -c1-12)): review e VERIFY rilanciate in sequenza"
+    msg="scartato: $(msg run-phase.discarded k0="$(printf '%s' "$k0" | sha256sum | cut -c1-12)" k1="$(printf '%s' "$k1" | sha256sum | cut -c1-12)")"
     echo "$msg" >> "$par"; echo "AVVISO: $msg" >> "$err"
     [ -f "$dir/log/$label.spec-pre" ] && cp "$dir/log/$label.spec-pre" "${dir%.run}.md"
     # the evidence of the parallel window must not stay reusable (gates.sh with an identical key) nor FRESH for
@@ -1563,7 +1596,7 @@ if [ "$mode" = parallelo ]; then
     [ $owned -eq 1 ] && sed -i '/^vpid=/d' "$held/owner" 2>/dev/null
     # the log stays one (the Monitor follows it): an event marks the discard, the outcome is read only after it
     echo '{"type":"system","subtype":"fic_scartato"}' >> "$log"
-    mode=sequenza why="chiave cambiata durante la fase parallela" relaunch=1
+    mode=sequenza why="$(msg run-phase.seq_key_changed)" relaunch=1
   fi
 fi
 if [ "$mode" = sequenza ]; then   # the previous sequence: gates, then the review with the evidence in the prompt
@@ -1573,11 +1606,12 @@ if [ "$mode" = sequenza ]; then   # the previous sequence: gates, then the revie
   ev=$(run_gates)   # with an identical key it is a reuse, not a relaunch
   if [ -n "$ev" ] && [ "$ev" != - ]; then
     stdin_file="$dir/log/$label.prompt"
-    { cat "$prompt"; printf '\n%s\n' "EVIDENZE DEI GATE (driver, run-phase.sh): $ev — $(grep '^gates: esito=' "$dir/log/$label.gates" | tail -1 | sed 's/ chiave=.*//'). Passale a implementation-review-cycle come contesto (Step 2.5, evidenza del driver)."; } > "$stdin_file"
+    { cat "$prompt"; printf '\n%s\n' "EVIDENZE DEI GATE (driver, run-phase.sh): $ev — $(grep '^gates: esito=' "$dir/log/$label.gates" | tail -1 | sed 's/ chiave=.*//'). $(msg run-phase.gates_prompt)"; } > "$stdin_file"
   fi
   launch "$stdin_file" "$([ "${relaunch:-0}" = 1 ] && echo '>>' || echo '>')"
 elif [ $staged -eq 1 ]; then   # S3 (harness-pt11): the parked tests are in the tree, no subsession; the verification is below
-  printf '%s\n' '{"type":"result","result":"PHASE RESULT test-red: OK — test in sosta (S3) copiati dallo staging","structured_output":{"fase":"test-red","esito":"OK","motivo":"test in sosta (S3) copiati dallo staging","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}' > "$log"
+  msg -v s3m run-phase.s3_result   # the text has no quote nor backslash: it goes into the JSON as it is
+  printf '{"type":"result","result":"PHASE RESULT test-red: OK — %s","structured_output":{"fase":"test-red","esito":"OK","motivo":"%s","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}\n' "$s3m" "$s3m" > "$log"
   code=0
 elif [ $lanes -eq 1 ]; then   # lanes (harness-pt13): implement only, after S3 and before the single launch
   launch_lanes
@@ -1599,8 +1633,13 @@ fi
 # (same zones as plan-check.sh annotate, outside fences; lines already present skipped, line ending kept); exit 3
 # if the plan has no changelog.
 DIFENSIVE_PY='
-import json, re, sys
+import importlib.util, json, os, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.dont_write_bytecode = True
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the message catalog (msg_py)
 one = lambda s: " ".join(str(s).split())
 if sys.argv[1] == "estrai":
     dev = [one(x) for x in json.load(open(sys.argv[2], encoding="utf-8")).get("deviazioni") or [] if str(x).strip()]
@@ -1625,7 +1664,7 @@ for i, l in enumerate(righe):
         ultima = i
 if ultima < 0:
     sys.exit(3)
-note = ["- nota (deviazione difensiva, %s): %s" % (label, one(t)) for t in open(elenco, encoding="utf-8").read().splitlines() if t.strip()]
+note = [T("run-phase.def_note", label=label, text=one(t)) for t in open(elenco, encoding="utf-8").read().splitlines() if t.strip()]
 note = [n for n in note if n not in righe]
 if note:
     righe[ultima + 1:ultima + 1] = note
@@ -1640,16 +1679,16 @@ difensive() { # implement/fix finished OK: records the "difensiva: " deviations 
   [ -f "$rj" ] && "$FIC_PY" -c "$DIFENSIVE_PY" estrai "$rj" 2>>"$err" | tr -d '\r' > "$dl" && [ -s "$dl" ] || { rm -f "$dl"; return 0; }
   # one line per deviation, "<label><TAB><text>"; a relaunch of the same label replaces its own
   { [ -f "$f" ] && tr -d '\r' < "$f" | grep -v "^$label	"; awk -v l="$label" '{ print l "\t" $0 }' "$dl"; } > "$f.tmp" && mv -f "$f.tmp" "$f"
-  avviso "AVVISO: $(grep -c . "$dl") deviazioni difensive dichiarate (non fermano il ciclo, la review le giudica): log/deviazioni-difensive.txt"
+  avviso "AVVISO: $(msg run-phase.def_count n="$(grep -c . "$dl")")"
   [ -f "$sp" ] || return 0
   b0=$(bash "$PC_SH" basis "$sp" 2>/dev/null | tr -d '\r' | grep '^Basis: ')
   cp "$sp" "$dl.spec-pre"
   "$FIC_PY" -c "$DIFENSIVE_PY" nota "$sp" "$label" "$dl" 2>>"$err"; rc=$?
   b1=$(bash "$PC_SH" basis "$sp" 2>/dev/null | tr -d '\r' | grep '^Basis: ')
-  if [ $rc -eq 3 ]; then avviso "AVVISO: deviazioni difensive: il piano non ha un changelog, nessuna nota nella spec"
+  if [ $rc -eq 3 ]; then avviso "AVVISO: $(msg run-phase.def_no_changelog)"
   elif [ $rc -ne 0 ] || [ -z "$b0" ] || [ "$b0" != "$b1" ]; then   # never a STALE spec for a note
     cp "$dl.spec-pre" "$sp"
-    avviso "AVVISO: deviazioni difensive: nota nel changelog non scritta (exit $rc, impronta ${b0:-non calcolata} -> ${b1:-non calcolata}): spec rimessa com'era"
+    avviso "AVVISO: $(msg run-phase.def_not_written rc="$rc" b0="${b0:-$(msg run-phase.not_computed)}" b1="${b1:-$(msg run-phase.not_computed)}")"
   fi
   rm -f "$dl.spec-pre"
 }
@@ -1665,18 +1704,18 @@ FINALIZE=${FIC_FINALIZE:-$MAAT_SCRIPTS/finalize.sh}
 fin_fail=""
 if [ "$phase" = review ] && [ $code -eq 0 ] && [ -f "${dir%.run}.md" ]; then
   if [ ! -f "$FINALIZE" ]; then
-    fin_fail="finalize non eseguito (assente: $FINALIZE)"; echo "$fin_fail" > "$dir/log/$label.finalize"
+    fin_fail="finalize non eseguito ($(msg run-phase.fin_missing fin="$FINALIZE"))"; echo "$fin_fail" > "$dir/log/$label.finalize"
   else
     cop_args=(); [ -f "$dir/log/$label.result.json" ] && cop_args=(--copertura "$dir/log/$label.result.json")
     FIC_GATES="$GATES" FIC_GATES_ROOT="$FIC_REPO" bash "$FINALIZE" --level "$(gates_level)" ${cop_args[@]+"${cop_args[@]}"} "$dir" > "$dir/log/$label.finalize" 2>&1
     frc=$?
     echo "exit=$frc" >> "$dir/log/$label.finalize"
-    case $frc in 0|1|3|4) ;; *) fin_fail="finalize fallito (exit $frc, vedi log/$label.finalize)" ;; esac
+    case $frc in 0|1|3|4) ;; *) fin_fail="finalize fallito ($(msg run-phase.fin_failed rc="$frc" label="$label"))" ;; esac
   fi
 fi
 # driver counterproofs with the mirror not restored (counterproof.sh exit 5): we stop, as in the worker
 if [ "$phase" = review ] && [ "$(sed -n 's/^exit=//p' "$dir/log/$label.counterproof" 2>/dev/null | tail -1)" = 5 ]; then
-  fin_fail="counterproof.sh exit 5: mirror non ripristinato (vedi log/$label.counterproof)${fin_fail:+; $fin_fail}"
+  fin_fail="counterproof.sh exit 5: $(msg run-phase.cp_mirror label="$label")${fin_fail:+; $fin_fail}"
 fi
 if [ $code -eq 0 ]; then
   if [ -n "$fin_fail" ]; then
@@ -1705,20 +1744,20 @@ if [ "$phase" = chiusura ]; then
   chz_why="$chz_fail"
   if [ -z "$chz_why" ]; then
     grep -q '^exit=0 ' "$dir/log/$label.gates" 2>/dev/null \
-      || chz_why="gates $(sed -n 's/^gates: esito=\([A-Z]*\).*/\1/p' "$dir/log/$label.gates" 2>/dev/null | tail -1) (vedi log/$label.gates)"
+      || chz_why="$(msg run-phase.chz_gates g="$(sed -n 's/^gates: esito=\([A-Z]*\).*/\1/p' "$dir/log/$label.gates" 2>/dev/null | tail -1)" label="$label")"
   fi
-  chz_e2e_st="non richiesto"
+  chz_e2e_st="$(msg run-phase.chz_e2e_none)"
   if [ -z "$chz_why" ] && [ -n "$chz_e2e" ]; then
     chz_res=$(grep '"type":"result"' "$log" 2>/dev/null | tail -1)
     if [ $code -eq 0 ] && printf '%s' "$chz_res" | grep -Eq '(PHASE RESULT|ESITO FASE) chiusura: OK' && ! printf '%s' "$chz_res" | grep -q '"is_error":true'; then
       chz_e2e_st="OK ($chz_e2e)"
-    else chz_why="e2e non riusciti ($chz_e2e): exit $code, vedi log/$label.jsonl"; fi
+    else chz_why="$(msg run-phase.chz_e2e_failed e2e="$chz_e2e" rc="$code" label="$label")"; fi
   fi
   chz_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  chz_tree=""; [ -z "$chz_why" ] && { chz_tree=$(tree_now) || chz_tree=""; [ -n "$chz_tree" ] || chz_why="tree finale non calcolato"; }
+  chz_tree=""; [ -z "$chz_why" ] && { chz_tree=$(tree_now) || chz_tree=""; [ -n "$chz_tree" ] || chz_why="$(msg run-phase.chz_no_tree)"; }
   if [ -z "$chz_why" ]; then
     printf 'Chiusura: IMPLEMENTED — base %s · tree %s · gates PASS (%s) · e2e %s · %s\n' "$(cat "$dir/base.txt")" "$chz_tree" "${chz_ev:--}" "$chz_e2e_st" "$chz_now" > "$dir/chiusura.txt"
-    chz_esito="PHASE RESULT chiusura: OK — catena chiusa: gate full PASS, e2e $chz_e2e_st"
+    chz_esito="PHASE RESULT chiusura: OK — $(msg run-phase.chz_ok e2e="$chz_e2e_st")"
   else
     printf 'Chiusura: NEEDS_VERIFICATION — %s · %s\n' "$chz_why" "$chz_now" > "$dir/chiusura.txt"
     chz_esito="PHASE RESULT chiusura: STOP — $chz_why"

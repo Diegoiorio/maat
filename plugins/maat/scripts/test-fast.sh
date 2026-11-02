@@ -156,6 +156,11 @@
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+# Messages (1.4.0): the catalog next to this script (lib/maat-msg.sh), English by default, Italian with "lingua": "it".
+# The language is resolved once the project root is known (below) and exported; the few errors before that resolve it
+# from the working directory. Frozen in every language: the `vitest-fast:` prefix, «esito=<STATO> (» … «) luogo=…»,
+# «equivalenza=», «sync=» and the luogo= values; only the text in parentheses and the free lines follow the language.
+. "$HERE/lib/maat-msg.sh" || { echo "vitest-fast: lib/maat-msg.sh not found next to test-fast.sh" >&2; exit 64; }
 DST=""   # derived from the repository root, after the tools check (see mirror_dir)
 EXCL=()   # the sync exclusions: the single core list, FIC_MIRROR_EXCL of fic-mirror.sh (further below)
 
@@ -164,25 +169,25 @@ CACHE=0
 BASE=""
 LINT=(); SKIP=(); EXTRA=(); DELETED=()
 case "${1:-}" in
-  "") echo "uso: test-fast.sh <file di test…> | --lint [--cache] [--base <ref>] <file…> | --setup" >&2; exit 64 ;;
+  "") echo "$(msg test-fast.usage)" >&2; exit 64 ;;
   --lint) MODE=lint; shift
           while :; do
             case "${1:-}" in
               --cache) CACHE=1; shift ;;
               --base)  BASE=${2:-}
-                       [ -n "$BASE" ] || { echo "vitest-fast: --base richiede un riferimento git" >&2; exit 64; }
+                       [ -n "$BASE" ] || { echo "vitest-fast: $(msg test-fast.base_needs_ref)" >&2; exit 64; }
                        # If the value is an existing file the caller forgot the ref: without
                        # this check that path would disappear from the list and the gate would lint half the
                        # surface and exit 0.
-                       [ -e "$BASE" ] && { echo "vitest-fast: --base vuole un riferimento git, non un path: $BASE" >&2; exit 64; }
+                       [ -e "$BASE" ] && { echo "vitest-fast: $(msg test-fast.base_is_path base="$BASE")" >&2; exit 64; }
                        shift 2 ;;
               *) break ;;
             esac
           done
-          [ $# -gt 0 ] || { echo "uso: test-fast.sh --lint [--cache] [--base <ref>] <file…>" >&2; exit 64; } ;;
+          [ $# -gt 0 ] || { echo "$(msg test-fast.usage_lint)" >&2; exit 64; } ;;
 esac
 command -v rsync >/dev/null && command -v flock >/dev/null && command -v sha256sum >/dev/null ||
-  { echo "vitest-fast: servono rsync, flock e sha256sum (va eseguito in WSL)" >&2; exit 64; }
+  { echo "vitest-fast: $(msg test-fast.tools_missing)" >&2; exit 64; }
 
 # Project root: FIC_REPO, otherwise the first directory above the working one with `.git` (directory or file
 # of a worktree) or `.claude/maat.json`. It does not depend on the location of this script, which lives in the plugin.
@@ -195,34 +200,37 @@ trova_radice() {
   done
 }
 if [ -n "${FIC_REPO:-}" ]; then ROOT=$FIC_REPO
-else ROOT=$(trova_radice) || { echo "vitest-fast: progetto non trovato sopra $(pwd) (nessun .git ne' .claude/maat.json; o FIC_REPO)" >&2; exit 64; }
+else ROOT=$(trova_radice) || { echo "vitest-fast: $(msg test-fast.no_project cwd="$(pwd)")" >&2; exit 64; }
 fi
-ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || { echo "vitest-fast: radice del progetto non accessibile: $ROOT" >&2; exit 64; }
+ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || { echo "vitest-fast: $(msg test-fast.root_unreachable root="$ROOT")" >&2; exit 64; }
+# the language of this project (MAAT_LINGUA if set, otherwise its maat.json), exported to fic-mirror.sh and the runners
+PROJECT_ROOT=$ROOT maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+maat_msg_carica
 
 # Module and commands from maat.json, with the single reader (always the same interpreter as the harness).
 . "$HERE/python.sh" 2>/dev/null || true
-[ -n "${FIC_PY:-}" ] || { echo "vitest-fast: nessun Python per leggere maat.json (python.sh)" >&2; exit 64; }
+[ -n "${FIC_PY:-}" ] || { echo "vitest-fast: $(msg test-fast.no_python)" >&2; exit 64; }
 mc() { PROJECT_ROOT=$ROOT "$FIC_PY" "$HERE/maat-config.py" "$@"; }
-MOD_OUT=$(mc copia-modulo) || { echo "vitest-fast: modulo della copia non determinabile da maat.json (maat-config.py copia-modulo, uscita $?)" >&2; exit 64; }
+MOD_OUT=$(mc copia-modulo) || { echo "vitest-fast: $(msg test-fast.no_module rc="$?")" >&2; exit 64; }
 { read -r MODULO; read -r RAD; read -r PKG; read -r LINT_BASE; read -r PREP; } <<< "$MOD_OUT"
-[ -n "$PKG" ] || { echo "vitest-fast: radice_pacchetti del modulo $MODULO e' la radice del repository: la copia vuole una cartella" >&2; exit 64; }
+[ -n "$PKG" ] || { echo "vitest-fast: $(msg test-fast.pkg_is_root module="$MODULO")" >&2; exit 64; }
 if [ "$RAD" = "$PKG" ]; then GROUP=""; else GROUP=${RAD#"$PKG"/}; fi   # the root, relative to radice_pacchetti
 G=${GROUP:+/$GROUP}                                                  # "$DST$G" = the module root in the copy
-SRC=$(cd "$ROOT/$PKG" 2>/dev/null && pwd) || { echo "vitest-fast: $PKG non trovato in $ROOT" >&2; exit 64; }
+SRC=$(cd "$ROOT/$PKG" 2>/dev/null && pwd) || { echo "vitest-fast: $(msg test-fast.pkg_missing pkg="$PKG" root="$ROOT")" >&2; exit 64; }
 export MAAT_MODULO=$MODULO   # the copia commands and a nested call of the reader see the same module
 
 # Destination, dependency fingerprint and seeding: fic-mirror.sh, shared with counterproof.sh (same copy,
 # same lock). Copy of the repository ROOT: ~/fic-mirror for the main tree, ~/fic-mirror-<hash> for a
 # linked worktree, also one created by Git for Windows (gitdir C:/… translated). Never from an argument. Root not
 # determinable -> MIRROR empty.
-. "$HERE/fic-mirror.sh" || { echo "vitest-fast: fic-mirror.sh non trovato accanto a test-fast.sh" >&2; exit 64; }
+. "$HERE/fic-mirror.sh" || { echo "vitest-fast: $(msg test-fast.no_fic_mirror)" >&2; exit 64; }
 EXCL=("${FIC_MIRROR_EXCL[@]}")
 if fic_mirror_init "$ROOT"; then MIRROR=$FIC_MIRROR; else MIRROR=""; fi
 # LANE (harness-pt13): FIC_LANE=k (1..9, from the environment, never from an argument; run-phase.sh passes it to the lanes
 # with WSLENV) -> the lane copy, <copy of the root>-<k>: its own lock, its own vite/vitest caches, node_modules
 # seeded as hardlinks from the copy of the root. Without FIC_LANE, the usual copy.
 if [ -n "${FIC_LANE:-}" ]; then
-  case "$FIC_LANE" in [1-9]) ;; *) echo "vitest-fast: FIC_LANE deve essere una cifra da 1 a 9: $FIC_LANE" >&2; exit 64 ;; esac
+  case "$FIC_LANE" in [1-9]) ;; *) echo "vitest-fast: $(msg test-fast.bad_lane lane="$FIC_LANE")" >&2; exit 64 ;; esac
   [ -n "$MIRROR" ] && fic_lane_init "$FIC_LANE" && MIRROR=$FIC_MIRROR
 fi
 DST=${MIRROR:+$MIRROR/$PKG}
@@ -263,7 +271,7 @@ copia_cmd() {  # <type> --copia <dir> [reader options…]
   CMD_DIR=${out%%$'\n'*}; CMD_LINE=${out#*$'\n'}
 }
 cmd_non_risolto() {  # <type> <reader exit code>: maat.json does not give a runnable command -> BLOCKED, never FAIL
-  echo "vitest-fast: esito=BLOCKED (copia.$1 del modulo $MODULO non risolto da maat.json: maat-config.py comando-copia, uscita $2) luogo=-"
+  echo "vitest-fast: esito=BLOCKED ($(msg test-fast.cmd_unresolved type="$1" module="$MODULO" rc="$2")) luogo=-"
   exit 2
 }
 
@@ -288,7 +296,7 @@ run_cmd() {  # <packages root: copy or source> <files…>  — tests relative to
 esito_di() {
   local rc=$1
   if [ "$rc" -eq 0 ]; then echo PASS
-  elif [ "$MODE" = lint ] && [ "$rc" -ge 2 ]; then echo "BLOCKED (eslint: configurazione o ambiente, uscita $rc)"
+  elif [ "$MODE" = lint ] && [ "$rc" -ge 2 ]; then echo "BLOCKED ($(msg test-fast.eslint_config rc="$rc"))"
   else echo FAIL
   fi
 }
@@ -297,25 +305,25 @@ esito_di() {
 # without linting anything, i.e. an exit 0 that looks like a PASS on a check never made.
 case " $* " in
   *" --setup "*) [ "$1" = --setup ] && [ $# -eq 1 ] ||
-    { echo "vitest-fast: --setup va usato da solo" >&2; exit 64; } ;;
+    { echo "vitest-fast: $(msg test-fast.setup_alone)" >&2; exit 64; } ;;
 esac
 if [ "$1" = --setup ]; then
-  [ -n "$DST" ] || { echo "vitest-fast: radice del repository non determinabile (git): nessuna copia preparata" >&2; exit 1; }
+  [ -n "$DST" ] || { echo "vitest-fast: $(msg test-fast.setup_no_root)" >&2; exit 1; }
   mkdir -p "$DST"
   if [ ! -d "$SRC/node_modules" ]; then
     # Worktree without installed dependencies: node_modules from the copy of the main tree, as hardlinks
     # (fic-mirror.sh, SEEDING), then the sources. Never an install.
     rm -f "$DST/.fic-deps"
     why=$(fic_seed_node_modules "$SRC" "$DST") ||
-      { echo "vitest-fast: $SRC non ha node_modules e la semina non e' possibile: $why" >&2; exit 1; }
-    echo "vitest-fast: setup della copia in $DST (node_modules in hardlink da ~/fic-mirror)…"
+      { echo "vitest-fast: $(msg test-fast.setup_no_seed src="$SRC" why="$why")" >&2; exit 1; }
+    echo "vitest-fast: $(msg test-fast.setup_seed dst="$DST")"
     rsync -a --delete "${EXCL[@]}" "$SRC/" "$DST/" || exit 1
-    echo "vitest-fast: setup completato, impronta dipendenze $(cut -c1-12 < "$DST/.fic-deps")"
+    echo "vitest-fast: $(msg test-fast.setup_done fp="$(cut -c1-12 < "$DST/.fic-deps")")"
     exit 0
   fi
-  echo "vitest-fast: setup della copia in $DST (node_modules compresi)…"
-  why=$(fic_deps_refresh "$SRC" "$DST") || { echo "vitest-fast: setup fallito: $why" >&2; exit 1; }
-  echo "vitest-fast: setup completato, impronta dipendenze $(cut -c1-12 < "$DST/.fic-deps")"
+  echo "vitest-fast: $(msg test-fast.setup_full dst="$DST")"
+  why=$(fic_deps_refresh "$SRC" "$DST") || { echo "vitest-fast: $(msg test-fast.setup_failed why="$why")" >&2; exit 1; }
+  echo "vitest-fast: $(msg test-fast.setup_done fp="$(cut -c1-12 < "$DST/.fic-deps")")"
   exit 0
 fi
 
@@ -325,9 +333,9 @@ fi
 # `--lint`, `--cache` and `--base` have already been consumed above.
 for p in "$@"; do
   case "$p" in
-    -*) echo "vitest-fast: solo path, niente opzioni per il runner: $p" >&2; exit 64 ;;
-    /*) echo "vitest-fast: path assoluto non ammesso: $p" >&2; exit 64 ;;
-    ..|../*|*/../*|*/..) echo "vitest-fast: segmento '..' non ammesso nel path: $p" >&2; exit 64 ;;
+    -*) echo "vitest-fast: $(msg test-fast.only_paths p="$p")" >&2; exit 64 ;;
+    /*) echo "vitest-fast: $(msg test-fast.abs_path p="$p")" >&2; exit 64 ;;
+    ..|../*|*/../*|*/..) echo "vitest-fast: $(msg test-fast.dotdot p="$p")" >&2; exit 64 ;;
   esac
 done
 
@@ -357,12 +365,12 @@ CLASSIFICATI=0
 classify_extra() {
   local has_intro=0 has_unres=0 grp e i q
   if [ -z "$BASE" ]; then
-    echo "vitest-fast: fuori da $RAD, non classificati (manca --base):"
+    echo "vitest-fast: $(msg test-fast.unclassified_no_base rad="$RAD")"
     for e in "${EXTRA[@]}"; do echo "  SKIPPED     ${e##*|}"; done
     return 0
   fi
   if ! git -c safe.directory='*' -C "$SRC" rev-parse --verify -q "$BASE^{commit}" >/dev/null 2>&1; then
-    echo "vitest-fast: base '$BASE' non risolvibile: classificazione impossibile"
+    echo "vitest-fast: $(msg test-fast.base_unresolvable base="$BASE")"
     for e in "${EXTRA[@]}"; do echo "  UNRESOLVED  ${e##*|}"; done
     return 3
   fi
@@ -383,13 +391,13 @@ classify_extra() {
     [ "$cfg" -eq 0 ] && [ -f "$DST/$grp/package.json" ] &&
       grep -q '"eslintConfig"' "$DST/$grp/package.json" && cfg=1
     if [ "$cfg" -eq 0 ]; then
-      echo "vitest-fast: $grp senza configurazione eslint (non lintabile):"
+      echo "vitest-fast: $(msg test-fast.no_eslint_config grp="$grp")"
       printf '  SKIPPED     %s\n' "${paths[@]}"
       continue
     fi
     cur=$(lint_msgs "$DST" "$grp" "${rels[@]}"); rcc=$?
     if [ "$rcc" -ge 2 ]; then
-      echo "vitest-fast: $grp eslint non eseguibile (uscita $rcc): classificazione impossibile"
+      echo "vitest-fast: $(msg test-fast.eslint_failed grp="$grp" rc="$rcc")"
       printf '  UNRESOLVED  %s\n' "${paths[@]}"
       has_unres=1; continue
     fi
@@ -411,12 +419,12 @@ classify_extra() {
     rst=0
     while IFS= read -r q; do [ -n "$q" ] && { cp "$SRC/$q" "$DST/$q" || rst=1; }; done < "$TMPD/swapped"
     if [ "$rst" -ne 0 ]; then
-      echo "vitest-fast: ripristino della copia non riuscito ($grp): il prossimo run la risincronizzera'" >&2
+      echo "vitest-fast: $(msg test-fast.restore_failed grp="$grp")" >&2
     else
       : > "$TMPD/swapped"
     fi
     if [ "$rcc" -ge 2 ]; then
-      echo "vitest-fast: $grp eslint sulla base non eseguibile (uscita $rcc): classificazione impossibile"
+      echo "vitest-fast: $(msg test-fast.eslint_base_failed grp="$grp" rc="$rcc")"
       printf '  UNRESOLVED  %s\n' "${paths[@]}"
       has_unres=1; continue
     fi
@@ -427,18 +435,18 @@ classify_extra() {
 ' "$cur" | grep -v '^$') <(printf '%s
 ' "$base_msgs" | grep -v '^$'))
     if [ -n "$pre" ]; then
-      echo "vitest-fast: $grp PREEXISTING (gia' nella base, fuori dal gate):"
+      echo "vitest-fast: $(msg test-fast.preexisting grp="$grp")"
       printf '%s
 ' "$pre" | sed 's/^/  /'
     fi
     if [ -n "$intro" ]; then
-      echo "vitest-fast: $grp INTRODUCED (assenti nella base):"
+      echo "vitest-fast: $(msg test-fast.introduced grp="$grp")"
       printf '%s
 ' "$intro" | sed 's/^/  /'
       has_intro=1
     fi
     CLASSIFICATI=$((CLASSIFICATI + ${#paths[@]}))
-    [ -n "$pre$intro" ] || echo "vitest-fast: $grp pulito contro la base: ${paths[*]}"
+    [ -n "$pre$intro" ] || echo "vitest-fast: $(msg test-fast.clean_vs_base grp="$grp" paths="${paths[*]}")"
   done <<< "$(printf '%s
 ' "${EXTRA[@]}" | cut -d'|' -f1 | LC_ALL=C sort -u)"
   # An INTRODUCED must not be masked by an UNRESOLVED of another group: blocking wins.
@@ -454,8 +462,8 @@ fallback() {  # <reason> <files…>
   # allineata" and would fall back to /mnt/c forever — the optimisation silently cancelled. The fallback
   # is not the fast path of the inner loop.
   CACHE=0
-  echo "vitest-fast: luogo=mnt-c (ripiego: $why; dichiarato da FIC_ALLOW_MNT_C=1)"
-  local rc=0 dich="luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)"
+  echo "vitest-fast: luogo=mnt-c ($(msg test-fast.fallback_first why="$why"))"
+  local rc=0 dich="luogo=mnt-c ($(msg test-fast.fallback_declared))"
   # With only files outside the root the gate list is empty: nothing to run here.
   if [ "$MODE" != lint ] || [ $# -gt 0 ]; then
     run_cmd "$SRC" "$@"; rc=$?
@@ -467,19 +475,19 @@ fallback() {  # <reason> <files…>
   # would get a BLOCKED every time the copy is busy, i.e. at every ordinary event.
   if [ "$MODE" = lint ] && [ ${#EXTRA[@]} -gt 0 ]; then
     if [ -z "$BASE" ]; then
-      echo "vitest-fast: fuori da $RAD, non classificati (manca --base):"
+      echo "vitest-fast: $(msg test-fast.unclassified_no_base rad="$RAD")"
       for e in "${EXTRA[@]}"; do echo "  SKIPPED     ${e##*|}"; done
     else
-      echo "vitest-fast: fuori da $RAD, NON classificati (ripiego su /mnt/c):"
+      echo "vitest-fast: $(msg test-fast.unclassified_fallback rad="$RAD")"
       for e in "${EXTRA[@]}"; do echo "  UNRESOLVED  ${e##*|}"; done
       if [ "$rc" -eq 0 ]; then
-        echo "vitest-fast: esito=UNRESOLVED (lint fuori dalla radice $RAD non classificabile nel ripiego) $dich"
+        echo "vitest-fast: esito=UNRESOLVED ($(msg test-fast.unresolved_fallback rad="$RAD")) $dich"
         exit 3
       fi
     fi
   fi
   if [ "$MODE" = lint ] && [ $# -eq 0 ]; then
-    echo "vitest-fast: esito=SKIPPED (fuori dalla radice del modulo: $RAD) $dich"
+    echo "vitest-fast: esito=SKIPPED ($(msg test-fast.outside_root rad="$RAD")) $dich"
     exit 0
   fi
   echo "vitest-fast: esito=$(esito_di $rc) $dich"
@@ -491,7 +499,7 @@ fallback() {  # <reason> <files…>
 # in the first line and in the outcome line.
 non_disponibile() {  # <reason> <files…>
   [ "${FIC_ALLOW_MNT_C:-}" = 1 ] && fallback "$@"
-  echo "vitest-fast: esito=BLOCKED (copia non utilizzabile: $1; ripiego su /mnt/c solo con FIC_ALLOW_MNT_C=1) luogo=-"
+  echo "vitest-fast: esito=BLOCKED ($(msg test-fast.unavailable why="$1")) luogo=-"
   exit 3
 }
 
@@ -538,7 +546,7 @@ pulisci_generati() {   # the copy engine's cleanup (fic_mirror_pulisci), the sam
   [ -f "$SYNC_GEN" ] && [ "$(cat "$SYNC_GEN")" = "$k" ] && return 0
   fic_mirror_pulisci "$DST" "$GROUP" "$PUL_RUN" ${PUL_PREP[@]+"${PUL_PREP[@]}"} || return 1
   printf '%s\n' "$k" > "$SYNC_GEN"
-  echo "vitest-fast: generati della copia ripuliti (preparati e cache: impronta delle dipendenze o file guida dei preparati cambiati)"
+  echo "vitest-fast: $(msg test-fast.generated_cleaned)"
 }
 
 # Hashes of the source like `hashes "$SRC" <list>` (same format, same order), but across /mnt/c
@@ -662,24 +670,24 @@ if [ "$MODE" = lint ]; then
         # (absolute, or with a different prefix) is a caller error, not a file outside the perimeter:
         # declaring it SKIPPED would let a file that must be linted pass as "nothing to lint".
         if [[ $p == */"$RAD"/* ]] || { [ -n "$GROUP" ] && [[ $p == */"$GROUP"/* ]]; }; then
-          echo "vitest-fast: path non relativo al repository: $p" >&2; exit 64
+          echo "vitest-fast: $(msg test-fast.not_relative p="$p")" >&2; exit 64
         fi
         SKIP+=("$p") ;;
     esac
   done
   [ ${#SKIP[@]} -eq 0 ] || {
-    echo "vitest-fast: fuori dalla radice del modulo ($RAD), non lintati:"
+    echo "vitest-fast: $(msg test-fast.outside_not_linted rad="$RAD")"
     printf '  %s\n' "${SKIP[@]}"
   }
   [ ${#DELETED[@]} -eq 0 ] || {
-    echo "vitest-fast: eliminati nel working tree, non lintati:"
+    echo "vitest-fast: $(msg test-fast.deleted_not_linted)"
     printf '  %s\n' "${DELETED[@]}"
   }
   if [ ${#LINT[@]} -eq 0 ] && [ ${#EXTRA[@]} -eq 0 ]; then
     if [ ${#SKIP[@]} -eq 0 ]; then
-      echo "vitest-fast: esito=SKIPPED (solo file eliminati) luogo=-"
+      echo "vitest-fast: esito=SKIPPED ($(msg test-fast.only_deleted)) luogo=-"
     else
-      echo "vitest-fast: esito=SKIPPED (fuori dalla radice del modulo: $RAD) luogo=-"
+      echo "vitest-fast: esito=SKIPPED ($(msg test-fast.outside_root rad="$RAD")) luogo=-"
     fi
     exit 0
   fi
@@ -688,9 +696,9 @@ if [ "$MODE" = lint ]; then
   # On /mnt/c they are missing in the same way, so falling back does not help: it is an environment fault, i.e. BLOCKED (Step
   # 2.5), never FAIL on sound code. The remedy is the module's `preparazione`. Module without preparati: no requirement.
   if [ ${#LINT[@]} -gt 0 ]; then
-    preparati_carica || { echo "vitest-fast: esito=BLOCKED (preparati del modulo $MODULO non leggibili da maat.json) luogo=-"; exit 2; }
+    preparati_carica || { echo "vitest-fast: esito=BLOCKED ($(msg test-fast.prep_unreadable module="$MODULO")) luogo=-"; exit 2; }
     if [ -n "$GUIDA" ] && [ ! -f "$SRC$G/$GUIDA" ]; then
-      echo "vitest-fast: esito=BLOCKED (preparato assente: $RAD/$GUIDA; eseguire '${PREP:-la preparazione del modulo}' in $RAD) luogo=-"
+      echo "vitest-fast: esito=BLOCKED ($(msg test-fast.prep_missing rad="$RAD" guide="$GUIDA" prep="${PREP:-$(msg test-fast.prep_default)}" rad="$RAD")) luogo=-"
       exit 2
     fi
   fi
@@ -715,34 +723,34 @@ tsconfig_lint() {
 }
 
 # Without a root there is no copy that can be associated with this tree (nor the manifest, which uses the same git).
-[ -n "$DST" ] || non_disponibile "manifest non calcolabile (git: radice del repository non determinabile, nessuna copia associabile)" "$@"
+[ -n "$DST" ] || non_disponibile "$(msg test-fast.no_manifest_root)" "$@"
 # First use of a worktree's copy: node_modules seeded from the copy of the main tree (hardlinks),
 # if the dependencies match; otherwise it stays "copia assente", with the reason.
 SEED_WHY=""
 if [ "$MIRROR" != "$HOME/fic-mirror" ] && ! { [ -d "$DST/node_modules" ] && [ -f "$DST/.fic-deps" ]; }; then
   if SEED_WHY=$(fic_seed_node_modules "$SRC" "$DST"); then
-    if [ -n "$FIC_LANE_BASE" ]; then echo "vitest-fast: copia della corsia $FIC_LANE seminata da $FIC_LANE_BASE (node_modules in hardlink)"
-    else echo "vitest-fast: copia del worktree seminata da ~/fic-mirror (node_modules in hardlink)"; fi
+    if [ -n "$FIC_LANE_BASE" ]; then echo "vitest-fast: $(msg test-fast.lane_seeded lane="$FIC_LANE" base="$FIC_LANE_BASE")"
+    else echo "vitest-fast: $(msg test-fast.wt_seeded)"; fi
   elif [ -n "$FIC_LANE_BASE" ]; then
-    SEED_WHY="; semina da $FIC_LANE_BASE non possibile: $SEED_WHY"
+    SEED_WHY="; $(msg test-fast.lane_seed_failed base="$FIC_LANE_BASE" why="$SEED_WHY")"
   else
-    SEED_WHY="; semina da ~/fic-mirror non possibile: $SEED_WHY"
+    SEED_WHY="; $(msg test-fast.wt_seed_failed why="$SEED_WHY")"
   fi
 fi
-[ -d "$DST/node_modules" ] && [ -f "$DST/.fic-deps" ] || non_disponibile "copia assente: eseguire --setup$SEED_WHY" "$@"
+[ -d "$DST/node_modules" ] && [ -f "$DST/.fic-deps" ] || non_disponibile "$(msg test-fast.copy_missing why="$SEED_WHY")" "$@"
 exec 9>"$DST/.fic-lock"
 # Copy busy with another run: it WAITS (limit FIC_LOCK_WAIT seconds), it does not fall back to /mnt/c.
 LOCK_WAIT=${FIC_LOCK_WAIT:-900}
-flock -w "$LOCK_WAIT" 9 || non_disponibile "copia occupata da un altro run oltre ${LOCK_WAIT}s (FIC_LOCK_WAIT)" "$@"
+flock -w "$LOCK_WAIT" 9 || non_disponibile "$(msg test-fast.copy_busy wait="${LOCK_WAIT}")" "$@"
 # Stale dependencies: automatic realignment inside the lock (fic-mirror.sh, fic_deps_autorefresh), then deps_ok
 # again. pulisci_generati below sees the new fingerprint and cleans preparati and caches.
 if ! deps_ok; then
   DEPS_OUT=$(fic_deps_autorefresh "$SRC" "$DST") ||
-    non_disponibile "dipendenze stantie, riallineamento automatico non riuscito: $DEPS_OUT" "$@"
+    non_disponibile "$(msg test-fast.deps_failed out="$DEPS_OUT")" "$@"
   echo "vitest-fast: $DEPS_OUT"
-  deps_ok || non_disponibile "dipendenze stantie anche dopo il riallineamento automatico" "$@"
+  deps_ok || non_disponibile "$(msg test-fast.deps_still)" "$@"
 fi
-pulisci_generati || non_disponibile "pulizia dei generati della copia fallita" "$@"
+pulisci_generati || non_disponibile "$(msg test-fast.clean_failed)" "$@"
 
 TMPD=$(mktemp -d)
 # The trap also restores the files swapped with the base version during the classification: if we
@@ -755,13 +763,13 @@ TMPD=$(mktemp -d)
 trap 'exit 143' TERM INT HUP
 trap 'if [ -s "$TMPD/swapped" ]; then while IFS= read -r q; do [ -n "$q" ] && cp "$SRC/$q" "$DST/$q" 2>/dev/null; done < "$TMPD/swapped"; fi; rm -rf "$TMPD"' EXIT
 manifest_list > "$TMPD/list" && git -c safe.directory='*' -C "$SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
-  [ -n "$(git -c safe.directory='*' -C "$SRC" ls-files . | head -1)" ] || non_disponibile "manifest non calcolabile (git)" "$@"
+  [ -n "$(git -c safe.directory='*' -C "$SRC" ls-files . | head -1)" ] || non_disponibile "$(msg test-fast.no_manifest)" "$@"
 # Sync: FULL without copy state (first run, new copy), otherwise INCREMENTAL on the diff of the two
 # manifests (see Guarantees). In both cases the comparison below is the usual one.
 SYNC=incrementale; SYNC_N=0
 if [ ! -f "$SYNC_SRC_CACHE" ]; then
   SYNC=completo
-  risincronizza || non_disponibile "sync fallito" "$@"
+  risincronizza || non_disponibile "$(msg test-fast.sync_failed)" "$@"
 fi
 hashes_src "$TMPD/list" > "$TMPD/src"
 if [ "$SYNC" = completo ]; then
@@ -771,10 +779,10 @@ elif audit_dovuto; then
   if cmp -s "$TMPD/src" "$TMPD/src.full"; then
     audit_registra 0
   else
-    echo "vitest-fast: cache stat incompleta, resync completo"
+    echo "vitest-fast: $(msg test-fast.stat_incomplete)"
     diff "$TMPD/src" "$TMPD/src.full" | head -5 | sed 's/^/  /'
     rm -f "$SYNC_SRC_CACHE"; SYNC=completo
-    risincronizza || non_disponibile "sync fallito" "$@"
+    risincronizza || non_disponibile "$(msg test-fast.sync_failed)" "$@"
     hashes_src "$TMPD/list" > "$TMPD/src"   # cache rebuilt from scratch
     audit_registra 0
   fi
@@ -783,27 +791,27 @@ else
 fi
 hashes "$DST" "$TMPD/list" > "$TMPD/dst"
 if [ "$SYNC" = incrementale ]; then
-  SYNC_N=$(allinea_diff "$TMPD/src" "$TMPD/dst") || non_disponibile "sync incrementale fallito" "$@"
+  SYNC_N=$(allinea_diff "$TMPD/src" "$TMPD/dst") || non_disponibile "$(msg test-fast.sync_incr_failed)" "$@"
   [ "$SYNC_N" -eq 0 ] || hashes "$DST" "$TMPD/list" > "$TMPD/dst"
 fi
-tsconfig_lint || non_disponibile "preparati del modulo non copiabili" "$@"
+tsconfig_lint || non_disponibile "$(msg test-fast.prep_copy_failed)" "$@"
 # Misaligned copy: ONE resync (FULL sync, manifest recomputed, source state
 # rebuilt from scratch), then a new comparison. The dependency fingerprint has nothing to do with it: it was already
 # checked (and realigned if needed) above.
 if ! cmp -s "$TMPD/src" "$TMPD/dst"; then
-  echo "vitest-fast: differenze fra origine e copia:"; diff "$TMPD/src" "$TMPD/dst" | head -5
-  echo "vitest-fast: copia non allineata: risincronizzazione"
+  echo "vitest-fast: $(msg test-fast.diff_src_copy)"; diff "$TMPD/src" "$TMPD/dst" | head -5
+  echo "vitest-fast: $(msg test-fast.misaligned)"
   rm -f "$SYNC_SRC_CACHE"; SYNC=completo
   { risincronizza && tsconfig_lint && manifest_list > "$TMPD/list" &&
       hashes_src "$TMPD/list" > "$TMPD/src" && audit_registra 0 && hashes "$DST" "$TMPD/list" > "$TMPD/dst" &&
       cmp -s "$TMPD/src" "$TMPD/dst"; } || {
-    echo "vitest-fast: differenze dopo la risincronizzazione:"; diff "$TMPD/src" "$TMPD/dst" | head -5
-    non_disponibile "copia non allineata dopo la risincronizzazione" "$@"
+    echo "vitest-fast: $(msg test-fast.diff_after)"; diff "$TMPD/src" "$TMPD/dst" | head -5
+    non_disponibile "$(msg test-fast.misaligned_after)" "$@"
   }
 fi
 
 echo "vitest-fast: luogo=copia"
-if [ "$SYNC" = completo ]; then echo "vitest-fast: sync=completo"; else echo "vitest-fast: sync=incrementale ($SYNC_N file allineati)"; fi
+if [ "$SYNC" = completo ]; then echo "vitest-fast: sync=completo"; else echo "vitest-fast: sync=incrementale ($(msg test-fast.sync_incr n="$SYNC_N"))"; fi
 
 # The classification outside the perimeter writes and restores files of the copy: it must be done BEFORE the stamp,
 # otherwise the detection of the run's writes would see it as a write by the runner.
@@ -825,8 +833,8 @@ written=$( { diff "$TMPD/dst" "$TMPD/after" | sed -n 's/^> [^ ]*  //p'
              (cd "$DST" && find . \( -name node_modules -o -name .nuxt -o -name .output -o -name coverage -o -name .turbo \) -prune \
                 -o -type f -newer "$TMPD/stamp" ! -name '.fic-*' -print | sed 's|^\./||'); } | LC_ALL=C sort -u)
 if [ -n "$written" ]; then
-  echo "vitest-fast: il run ha scritto nella copia:"; echo "$written" | head -10 | sed 's/^/  /'
-  echo "vitest-fast: esito=BLOCKED (snapshot da generare su /mnt/c: rilancia su /mnt/c e fai rivedere i file generati) luogo=copia"
+  echo "vitest-fast: $(msg test-fast.run_wrote)"; echo "$written" | head -10 | sed 's/^/  /'
+  echo "vitest-fast: esito=BLOCKED ($(msg test-fast.snapshot)) luogo=copia"
   exit 4
 fi
 
@@ -845,7 +853,7 @@ stato_copia() {  # manifest of the copy + copy files outside the manifest and mi
 }
 if [ "${FIC_SYNC_EQUIV:-}" = 1 ]; then
   stato_copia > "$TMPD/eq.sync"
-  risincronizza || { echo "vitest-fast: esito=BLOCKED (equivalenza: sync completo fallito) luogo=copia"; exit 3; }
+  risincronizza || { echo "vitest-fast: esito=BLOCKED ($(msg test-fast.equiv_sync_failed)) luogo=copia"; exit 3; }
   tsconfig_lint
   stato_copia > "$TMPD/eq.full"
   rc2=0
@@ -853,11 +861,11 @@ if [ "${FIC_SYNC_EQUIV:-}" = 1 ]; then
     run_cmd "$DST" "$@" > "$TMPD/eq.out" 2>&1; rc2=$?
   fi
   if cmp -s "$TMPD/eq.sync" "$TMPD/eq.full" && [ "$rc" -eq "$rc2" ]; then
-    echo "vitest-fast: equivalenza=OK (sync $SYNC e sync completo: stesso manifest, stessa uscita $rc)"
+    echo "vitest-fast: equivalenza=OK ($(msg test-fast.equiv_ok sync="$SYNC" rc="$rc"))"
   else
-    echo "vitest-fast: equivalenza=DIFF (sync $SYNC: uscita $rc · sync completo: uscita $rc2)"
+    echo "vitest-fast: equivalenza=DIFF ($(msg test-fast.equiv_diff sync="$SYNC" rc="$rc" rc2="$rc2"))"
     diff "$TMPD/eq.sync" "$TMPD/eq.full" | head -10 | sed 's/^/  /'
-    echo "vitest-fast: esito=BLOCKED (equivalenza violata fra sync $SYNC e sync completo) luogo=copia"
+    echo "vitest-fast: esito=BLOCKED ($(msg test-fast.equiv_violated sync="$SYNC")) luogo=copia"
     exit 3
   fi
 fi
@@ -866,13 +874,13 @@ fi
 # then UNRESOLVED, which is "inconclusive" and must never become a PASS.
 if [ "$MODE" = lint ]; then
   if [ "$rc" -ge 2 ]; then
-    echo "vitest-fast: esito=BLOCKED (eslint: configurazione o ambiente, uscita $rc) luogo=copia"; exit 2
+    echo "vitest-fast: esito=BLOCKED ($(msg test-fast.eslint_config rc="$rc")) luogo=copia"; exit 2
   elif [ "$rc" -eq 1 ] || [ "$EXTRA_RC" -eq 1 ]; then
     echo "vitest-fast: esito=FAIL luogo=copia"; exit 1
   elif [ "$EXTRA_RC" -eq 3 ]; then
-    echo "vitest-fast: esito=UNRESOLVED (lint fuori dalla radice $RAD non classificabile) luogo=copia"; exit 3
+    echo "vitest-fast: esito=UNRESOLVED ($(msg test-fast.unresolved rad="$RAD")) luogo=copia"; exit 3
   elif [ ${#LINT[@]} -eq 0 ]; then
-    echo "vitest-fast: esito=SKIPPED (fuori dalla radice del modulo: $RAD; $CLASSIFICATI classificati su ${#EXTRA[@]}) luogo=copia"; exit 0
+    echo "vitest-fast: esito=SKIPPED ($(msg test-fast.skipped_partial rad="$RAD" n="$CLASSIFICATI" total="${#EXTRA[@]}")) luogo=copia"; exit 0
   fi
   echo "vitest-fast: esito=PASS luogo=copia"; exit 0
 fi

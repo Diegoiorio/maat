@@ -79,43 +79,45 @@ set -uo pipefail
 unset MSYS_NO_PATHCONV
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 . "$HERE/../lib/maat-paths.sh" || exit 4   # MAAT_SCRIPTS (plugin) and PROJECT_ROOT (working directory)
+# messages (1.4.0): the catalog of the plugin (lib/maat-msg.sh), English by default, Italian with "lingua": "it"
+. "$MAAT_SCRIPTS/lib/maat-msg.sh"; maat_msg_carica
 maat_progetto || exit 4
 ROOT=$PROJECT_ROOT
 CR="$MAAT_SCRIPTS/cycle-report.py"
 
 die() { echo "replay: $*" >&2; exit 2; }
-refuse() { echo "replay: RIFIUTO — $*" >&2; exit 3; }
+refuse() { echo "replay: $(msg replay.refused) — $*" >&2; exit 3; }
 q() { printf '%q' "$1"; }
 # winpath, canon, linking and unlinking of dependencies, relative .git, fingerprint, WSL copy: the
 # library shared with script/fic/ciclo-worktree.sh (messages with the «replay:» prefix, as before)
 WT_TAG=replay DEP_LINKS_EXTRA=()
-. "$MAAT_SCRIPTS/worktree-lib.sh" || die "$MAAT_SCRIPTS/worktree-lib.sh o $MAAT_SCRIPTS/fic-mirror.sh non trovati"
+. "$MAAT_SCRIPTS/worktree-lib.sh" || die "$(msg replay.no_lib s="$MAAT_SCRIPTS" s="$MAAT_SCRIPTS")"
 LAVORO=.claude/.ai-workflow   # the work directory (cartelle.lavoro), relative to the repository root
 [ -n "$MAAT_WORK" ] && LAVORO=${MAAT_WORK#"$PROJECT_ROOT"/}
 
-common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "git non trova il repository di $ROOT"
-MAIN=$(cd "$(dirname "$common")" && pwd) || die "tree principale non risolto da $common"
-MAINGIT=$(git -C "$MAIN" rev-parse --absolute-git-dir 2>/dev/null) || die "git dir del tree principale non risolta"
+common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "$(msg replay.git_no_repo root="$ROOT")"
+MAIN=$(cd "$(dirname "$common")" && pwd) || die "$(msg replay.no_main common="$common")"
+MAINGIT=$(git -C "$MAIN" rev-parse --absolute-git-dir 2>/dev/null) || die "$(msg replay.no_main_git)"
 MAINC=$(canon "$MAIN") ROOTC=$(canon "$ROOT") MAATC=$(canon "$MAAT_ROOT")
 
 # --- check: is the path a worktree created by replay.sh? (0 = yes; otherwise the reason on stderr) ---
 ours() {
   local p c gd mk w found=0
   p=$1
-  [ -d "$p" ] || { echo "non esiste: $p" >&2; return 1; }
+  [ -d "$p" ] || { echo "$(msg replay.not_exists p="$p")" >&2; return 1; }
   c=$(canon "$p")
-  case "$c" in "$MAINC"|"$MAINC"/*) echo "e' il tree principale o sta dentro: $c" >&2; return 1 ;; esac
-  case "$c" in "$ROOTC"|"$ROOTC"/*) echo "e' il tree del progetto o sta dentro: $c" >&2; return 1 ;; esac
-  case "$c" in "$MAATC"|"$MAATC"/*) echo "e' il plugin (harness) o sta dentro: $c" >&2; return 1 ;; esac
-  case "$(basename "$c")" in fic-replay-*) ;; *) echo "il nome non comincia per fic-replay-: $c" >&2; return 1 ;; esac
+  case "$c" in "$MAINC"|"$MAINC"/*) echo "$(msg replay.is_main c="$c")" >&2; return 1 ;; esac
+  case "$c" in "$ROOTC"|"$ROOTC"/*) echo "$(msg replay.is_project c="$c")" >&2; return 1 ;; esac
+  case "$c" in "$MAATC"|"$MAATC"/*) echo "$(msg replay.is_plugin c="$c")" >&2; return 1 ;; esac
+  case "$(basename "$c")" in fic-replay-*) ;; *) echo "$(msg replay.bad_name c="$c")" >&2; return 1 ;; esac
   [ "$(canon "$(git -C "$c" rev-parse --show-toplevel 2>/dev/null)")" = "$c" ] ||
-    { echo "non e' la radice di un worktree git: $c" >&2; return 1; }
+    { echo "$(msg replay.not_wt_root c="$c")" >&2; return 1; }
   gd=$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)
   mk="$gd/fic-replay"
-  [ -f "$mk" ] || { echo "manca il marcatore di replay.sh ($mk)" >&2; return 1; }
-  [ "$(canon "$(sed -n 's/^path=//p' "$mk")")" = "$c" ] || { echo "il marcatore indica un altro percorso: $(sed -n 's/^path=//p' "$mk")" >&2; return 1; }
+  [ -f "$mk" ] || { echo "$(msg replay.no_marker mk="$mk")" >&2; return 1; }
+  [ "$(canon "$(sed -n 's/^path=//p' "$mk")")" = "$c" ] || { echo "$(msg replay.marker_other path="$(sed -n 's/^path=//p' "$mk")")" >&2; return 1; }
   while IFS= read -r w; do [ "$(canon "$w")" = "$c" ] && found=1; done < <(git -C "$MAIN" worktree list --porcelain | sed -n 's/^worktree //p')
-  [ $found -eq 1 ] || { echo "non e' fra i worktree del repository principale: $c" >&2; return 1; }
+  [ $found -eq 1 ] || { echo "$(msg replay.not_listed c="$c")" >&2; return 1; }
   return 0
 }
 
@@ -129,43 +131,43 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1; shift ;;
     --non-confrontabile) ALLOW_DEPS=1; shift ;;
     --check) MODE=check; shift ;;
-    --remove) MODE=remove; RM_PATH=${2:-}; [ -n "$RM_PATH" ] || die "--remove vuole un percorso"; shift 2 ;;
-    --harness) HARNESS=${2:-}; [ -n "$HARNESS" ] || die "--harness vuole la radice di un plugin"; shift 2 ;;
-    --source) SRC=${2:-}; [ -n "$SRC" ] || die "--source vuole una cartella"; shift 2 ;;
-    --worktree) WT=${2:-}; [ -n "$WT" ] || die "--worktree vuole un percorso"; shift 2 ;;
-    --out) OUT=${2:-}; [ -n "$OUT" ] || die "--out vuole una cartella"; shift 2 ;;
-    --inject) [ -n "${2:-}" ] || die "--inject vuole un nome"; INJECT+=("$2"); shift 2 ;;
-    -*) die "opzione sconosciuta: $1" ;;
+    --remove) MODE=remove; RM_PATH=${2:-}; [ -n "$RM_PATH" ] || die "--remove $(msg replay.wants_path)"; shift 2 ;;
+    --harness) HARNESS=${2:-}; [ -n "$HARNESS" ] || die "--harness $(msg replay.wants_plugin)"; shift 2 ;;
+    --source) SRC=${2:-}; [ -n "$SRC" ] || die "--source $(msg replay.wants_folder)"; shift 2 ;;
+    --worktree) WT=${2:-}; [ -n "$WT" ] || die "--worktree $(msg replay.wants_path)"; shift 2 ;;
+    --out) OUT=${2:-}; [ -n "$OUT" ] || die "--out $(msg replay.wants_folder)"; shift 2 ;;
+    --inject) [ -n "${2:-}" ] || die "--inject $(msg replay.wants_name)"; INJECT+=("$2"); shift 2 ;;
+    -*) die "$(msg replay.unknown_opt opt="$1")" ;;
     *) POS+=("$1"); shift ;;
   esac
 done
 SRC=${SRC:-$MAIN/$LAVORO}
-[ -d "$SRC" ] || die "cartella delle spec assente: $SRC"
+[ -d "$SRC" ] || die "$(msg replay.no_src src="$SRC")"
 SRC=$(cd "$SRC" && pwd)
 
 # --- --remove ---
 if [ "$MODE" = remove ]; then
-  [ ${#POS[@]} -eq 0 ] || die "--remove non vuole altri argomenti"
-  ours "$RM_PATH" || refuse "$RM_PATH non e' un worktree creato da replay.sh: non lo rimuovo"
+  [ ${#POS[@]} -eq 0 ] || die "--remove $(msg replay.no_more_args)"
+  ours "$RM_PATH" || refuse "$(msg replay.not_ours p="$RM_PATH")"
   c=$(canon "$RM_PATH")
   echo "+ forget_mirror $(q "$c")"
   echo "+ unlink_deps $(q "$c")"
   echo "+ git -C $(q "$MAIN") worktree remove --force $(q "$c")"
   [ $DRY -eq 1 ] && exit 0
   forget_mirror "$c"
-  unlink_deps "$c" || refuse "collegamenti ancora presenti in $c: non lo rimuovo (seguirebbe le dipendenze del tree principale)"
+  unlink_deps "$c" || refuse "$(msg replay.links_left c="$c")"
   git -C "$MAIN" worktree remove --force "$c"
   exit $?
 fi
 
-. "$MAAT_SCRIPTS/python.sh" || die "interprete Python non trovato (imposta FIC_PYTHON)"
+. "$MAAT_SCRIPTS/python.sh" || die "$(msg replay.no_python)"
 # the PROJECT corpus (cartelle.corpus of maat.json, relative to the repository), never a plugin one
 CORPUS_W=""
 if [ -n "${MAAT_CONFIG:-}" ] || [ -f "$ROOT/.claude/maat.json" ]; then
-  . "$MAAT_SCRIPTS/lib/maat-conf.sh" || die "lettore della configurazione non trovato: $MAAT_SCRIPTS/lib/maat-conf.sh"
+  . "$MAAT_SCRIPTS/lib/maat-conf.sh" || die "$(msg replay.no_conf p="$MAAT_SCRIPTS")"
   cc=$(PROJECT_ROOT=$ROOT maat_conf cartelle.corpus 2>/dev/null | tr -d '\r') || cc=""
   if [ -n "$cc" ]; then
-    [ -f "$ROOT/$cc" ] || die "corpus di cartelle.corpus assente: $ROOT/$cc"
+    [ -f "$ROOT/$cc" ] || die "$(msg replay.no_corpus_file root="$ROOT" cc="$cc")"
     CORPUS_W=$(winpath "$ROOT/$cc")
   fi
 fi
@@ -184,23 +186,23 @@ for c in cs:
 
 # --- --check ---
 if [ "$MODE" = check ]; then
-  [ ${#POS[@]} -eq 0 ] || die "--check non vuole altri argomenti"
-  [ -n "$CORPUS_W" ] || die "nessun corpus: cartelle.corpus non impostata nella maat.json del progetto ($ROOT)"
+  [ ${#POS[@]} -eq 0 ] || die "--check $(msg replay.no_more_args)"
+  [ -n "$CORPUS_W" ] || die "$(msg replay.no_corpus root="$ROOT")"
   miss=0
   while IFS=$'\t' read -r id run spec base; do
     s="ok"
-    [ -f "$SRC/$spec" ] || { s="SPEC MANCANTE ($spec)"; miss=1; }
-    [ -d "$SRC/$run" ] || { s="$s · RUN DIRECTORY MANCANTE ($run)"; miss=1; }
+    [ -f "$SRC/$spec" ] || { s="$(msg replay.spec_missing spec="$spec")"; miss=1; }
+    [ -d "$SRC/$run" ] || { s="$s · $(msg replay.run_missing run="$run")"; miss=1; }
     b=$(tr -d '\r\n ' 2>/dev/null < "$SRC/$run/base.txt")
-    [ "$b" = "$base" ] || { s="$s · base.txt ($b) diversa da corpus.json ($base)"; miss=1; }
-    git -C "$MAIN" cat-file -e "$base^{commit}" 2>/dev/null || { s="$s · commit di base assente"; miss=1; }
+    [ "$b" = "$base" ] || { s="$s · $(msg replay.base_differs b="$b" base="$base")"; miss=1; }
+    git -C "$MAIN" cat-file -e "$base^{commit}" 2>/dev/null || { s="$s · $(msg replay.base_commit_missing)"; miss=1; }
     echo "$id: $s"
   done < <(corpus)
   exit $miss
 fi
 
 # --- cycle and phase ---
-[ ${#POS[@]} -eq 2 ] || die "uso: replay.sh <ciclo> <fase> [--harness <tree>] [--source <dir>] [--worktree <path>] [--out <dir>] [--inject <nome>]... [--dry-run] | --check | --remove <path>"
+[ ${#POS[@]} -eq 2 ] || die "$(msg replay.usage)"
 CYC=${POS[0]} FASE=${POS[1]}
 row=$(corpus "$CYC")
 if [ -n "$row" ]; then
@@ -210,32 +212,32 @@ else
   NAME=${CYC#spec-}; NAME=${NAME%.run}; NAME=${NAME%.md}; cbase=""
 fi
 RUN_SRC="$SRC/spec-$NAME.run" SPEC_SRC="$SRC/spec-$NAME.md"
-[ -f "$SPEC_SRC" ] || die "spec mancante: $SPEC_SRC"
-[ -d "$RUN_SRC/log" ] || die "run directory mancante o senza log: $RUN_SRC"
+[ -f "$SPEC_SRC" ] || die "$(msg replay.no_spec p="$SPEC_SRC")"
+[ -d "$RUN_SRC/log" ] || die "$(msg replay.run_no_log p="$RUN_SRC")"
 BASE=$(tr -d '\r\n ' 2>/dev/null < "$RUN_SRC/base.txt")
-[ -n "$cbase" ] && [ -n "$BASE" ] && [ "$cbase" != "$BASE" ] && die "base di corpus.json ($cbase) diversa da base.txt ($BASE)"
+[ -n "$cbase" ] && [ -n "$BASE" ] && [ "$cbase" != "$BASE" ] && die "$(msg replay.base_mismatch cbase="$cbase" base="$BASE")"
 BASE=${BASE:-$cbase}
-[ -n "$BASE" ] || die "base del ciclo sconosciuta: manca $RUN_SRC/base.txt"
-git -C "$MAIN" cat-file -e "$BASE^{commit}" 2>/dev/null || die "commit di base assente dal repository: $BASE"
+[ -n "$BASE" ] || die "$(msg replay.base_unknown run="$RUN_SRC")"
+git -C "$MAIN" cat-file -e "$BASE^{commit}" 2>/dev/null || die "$(msg replay.base_absent base="$BASE")"
 
 LABELS=$(for f in "$RUN_SRC"/prompts/*.md "$RUN_SRC"/log/*.jsonl; do
   [ -e "$f" ] || continue; b=$(basename "$f"); b=${b%.md}; b=${b%.jsonl}; echo "$b"
 done | grep -E '^[0-9]+-[a-z]+$' | sort -u)
 if printf '%s' "$FASE" | grep -qE '^[0-9]+-[a-z]+$'; then
-  printf '%s\n' "$LABELS" | grep -qxF "$FASE" || die "etichetta $FASE assente in $RUN_SRC (etichette: $(echo $LABELS))"
+  printf '%s\n' "$LABELS" | grep -qxF "$FASE" || die "$(msg replay.label_missing fase="$FASE" run="$RUN_SRC" labels="$(echo $LABELS)")"
   LABEL=$FASE
 else
-  case "$FASE" in plan|implement|review|fix) ;; *) die "fase sconosciuta: $FASE (plan|implement|review|fix o un'etichetta NN-fase)" ;; esac
+  case "$FASE" in plan|implement|review|fix) ;; *) die "$(msg replay.phase_unknown fase="$FASE")" ;; esac
   cand=$(printf '%s\n' "$LABELS" | grep -E "^[0-9]+-$FASE\$")
-  [ -n "$cand" ] || die "nessuna fase $FASE in $RUN_SRC (etichette: $(echo $LABELS))"
-  [ "$(printf '%s\n' "$cand" | wc -l)" -eq 1 ] || die "fase $FASE ambigua: indica l'etichetta ($(echo $cand))"
+  [ -n "$cand" ] || die "$(msg replay.no_phase fase="$FASE" run="$RUN_SRC" labels="$(echo $LABELS)")"
+  [ "$(printf '%s\n' "$cand" | wc -l)" -eq 1 ] || die "$(msg replay.ambiguous fase="$FASE" cand="$(echo $cand)")"
   LABEL=$cand
 fi
 PHASE=${LABEL#*-} NUM=$((10#${LABEL%%-*}))
 PROMPT_SRC="$RUN_SRC/prompts/$LABEL.md"
-[ -f "$PROMPT_SRC" ] || die "prompt originale assente: $PROMPT_SRC"
+[ -f "$PROMPT_SRC" ] || die "$(msg replay.no_prompt p="$PROMPT_SRC")"
 head -1 "$PROMPT_SRC" | grep -qE "^/(maat:)?full-implementation-cycle --worker=$PHASE [^ ]+" ||
-  die "la prima riga del prompt non e' /full-implementation-cycle (o /maat:full-implementation-cycle) --worker=$PHASE <nome>: $PROMPT_SRC"
+  die "$(msg replay.bad_prompt phase="$PHASE" p="$PROMPT_SRC")"
 
 EARLIER=$(printf '%s\n' "$LABELS" | while read -r l; do [ -n "$l" ] && [ $((10#${l%%-*})) -lt $NUM ] && echo "$l"; done)
 code_before=0
@@ -252,37 +254,37 @@ else
 fi
 if [ -n "$STATE" ]; then
   [ "$(git -C "$MAIN" cat-file -t "$STATE" 2>/dev/null)" = tree ] ||
-    die "il tree $STATE ($STATE_FROM) non e' piu' nel repository (potato da git gc): stato della fase non ricostruibile"
+    die "$(msg replay.tree_gone state="$STATE" from="$STATE_FROM")"
 fi
 [ "$code_before" -eq 1 ] && [ -z "$STATE" ] && [ "$PHASE" != implement ] &&
-  die "una fase di codice precede $LABEL ma nessun .post-tree la registra: stato del codice non ricostruibile"
+  die "$(msg replay.no_post_tree label="$LABEL")"
 
 # dependencies: do the main tree ones fit the phase code? (before creating anything)
 DEPS_DIFF=$(deps_diff "${STATE:-$BASE}") NONCONF=""
 if [ -n "$DEPS_DIFF" ]; then
-  [ $ALLOW_DEPS -eq 1 ] || die "dipendenze diverse fra lo stato della fase ($STATE_FROM) e il tree principale: $(echo $DEPS_DIFF). node_modules e venv collegati dal tree principale non sarebbero quelli di questo codice e i gate non girerebbero come nell'originale. Niente worktree creato. Per rigiocare comunque (rigioco NON CONFRONTABILE): --non-confrontabile"
-  NONCONF="dipendenze diverse dal tree principale ($STATE_FROM): $(echo $DEPS_DIFF)"
-  echo "replay: NON CONFRONTABILE — $NONCONF"
+  [ $ALLOW_DEPS -eq 1 ] || die "$(msg replay.deps_differ from="$STATE_FROM" deps="$(echo $DEPS_DIFF)")"
+  NONCONF="$(msg replay.deps_nonconf from="$STATE_FROM" deps="$(echo $DEPS_DIFF)")"
+  echo "replay: $(msg replay.not_comparable) — $NONCONF"
 fi
 
 # harness and injects
-HARNESS=$(cd "$HARNESS" 2>/dev/null && pwd) || die "harness inesistente"
-[ -f "$HARNESS/.claude-plugin/plugin.json" ] || die "--harness non e' la radice di un plugin (manca .claude-plugin/plugin.json): $HARNESS"
-[ -f "$HARNESS/scripts/run-phase.sh" ] || die "il plugin non ha scripts/run-phase.sh: $HARNESS"
+HARNESS=$(cd "$HARNESS" 2>/dev/null && pwd) || die "$(msg replay.no_harness)"
+[ -f "$HARNESS/.claude-plugin/plugin.json" ] || die "$(msg replay.not_plugin h="$HARNESS")"
+[ -f "$HARNESS/scripts/run-phase.sh" ] || die "$(msg replay.no_run_phase h="$HARNESS")"
 for n in ${INJECT[@]+"${INJECT[@]}"}; do
-  case "$n" in _*|*/*) die "inject non valido: $n" ;; esac
-  [ -f "$HERE/inject/$n.sh" ] || die "inject sconosciuto: $n (in $HERE/inject: $(ls "$HERE/inject" | sed -n 's/\.sh$//p' | grep -v '^_' | tr '\n' ' '))"
+  case "$n" in _*|*/*) die "$(msg replay.bad_inject n="$n")" ;; esac
+  [ -f "$HERE/inject/$n.sh" ] || die "$(msg replay.unknown_inject n="$n" here="$HERE" list="$(ls "$HERE/inject" | sed -n 's/\.sh$//p' | grep -v '^_' | tr '\n' ' ')")"
 done
 
 # worktree and output
 STAMP=$(date +%Y%m%d-%H%M%S)-$$
 [ -n "$WT" ] || WT="$(dirname "$MAIN")/fic-replay-$LABEL-$STAMP"
-case "$(basename "$WT")" in fic-replay-*) ;; *) refuse "il worktree deve chiamarsi fic-replay-*: $WT" ;; esac
-[ -e "$WT" ] && refuse "$WT esiste gia': non l'ho creato io, non lo uso"
-pd=$(canon "$(dirname "$WT")") && [ -n "$pd" ] || refuse "la cartella madre di $WT non esiste"
+case "$(basename "$WT")" in fic-replay-*) ;; *) refuse "$(msg replay.wt_name wt="$WT")" ;; esac
+[ -e "$WT" ] && refuse "$(msg replay.wt_exists wt="$WT")"
+pd=$(canon "$(dirname "$WT")") && [ -n "$pd" ] || refuse "$(msg replay.no_parent wt="$WT")"
 WT="$pd/$(basename "$WT")"   # canonical form: it is also the one written in the marker
 HARNESSC=$(canon "$HARNESS")
-case "$WT" in "$MAINC"/*|"$ROOTC"/*|"$HARNESSC"/*) refuse "il worktree non puo' stare dentro il tree principale o il harness: $WT" ;; esac
+case "$WT" in "$MAINC"/*|"$ROOTC"/*|"$HARNESSC"/*) refuse "$(msg replay.wt_inside wt="$WT")" ;; esac
 OUT=${OUT:-$SRC/spec-$NAME.replay/$LABEL-$STAMP}
 
 AIW="$WT/$LAVORO" RUN_DST="$WT/$LAVORO/spec-$NAME.run"
@@ -291,27 +293,27 @@ LOCK="$MAINGIT/full-implementation-cycle.lock"
 
 # act: prints and runs (in --dry-run only prints); a failed preparation step stops everything (the
 # trap removes the worktree). act_rc: prints, runs and returns the exit code (the phase, the measurement).
-act() { printf '+ %s\n' "$1"; [ $DRY -eq 1 ] && return 0; eval "$1" || die "passo fallito: $1"; }
+act() { printf '+ %s\n' "$1"; [ $DRY -eq 1 ] && return 0; eval "$1" || die "$(msg replay.step_failed s="$1")"; }
 act_rc() { printf '+ %s\n' "$1"; [ $DRY -eq 1 ] && return 0; eval "$1"; }
 
-echo "replay: ciclo spec-$NAME · fase $LABEL · base $BASE · codice da $STATE_FROM · harness $HARNESS"
-echo "replay: worktree $WT · uscita $OUT$([ $DRY -eq 1 ] && echo ' · DRY-RUN: nulla viene eseguito')"
+echo "replay: $(msg replay.cycle name="$NAME" label="$LABEL" base="$BASE" from="$STATE_FROM" h="$HARNESS")"
+echo "replay: $(msg replay.worktree wt="$WT" out="$OUT")$([ $DRY -eq 1 ] && echo " · $(msg replay.dry_note)")"
 
 CREATED="" DONE_CLEAN=0
 cleanup() {
   [ -n "$CREATED" ] && [ $DONE_CLEAN -eq 0 ] || return 0
   DONE_CLEAN=1
   if [ -f "$RUN_DST/log/$LABEL.running" ] && [ ! -f "$RUN_DST/log/$LABEL.exit" ]; then
-    echo "replay: la fase risulta ancora in corso: worktree lasciato. Quando e' finita: bash $(q "$HERE/replay.sh") --remove $(q "$CREATED")" >&2
+    echo "replay: $(msg replay.still_running script="$(q "$HERE/replay.sh")" wt="$(q "$CREATED")")" >&2
     return 0
   fi
   mkdir -p "$OUT" && cp "$RUN_DST"/log/"$LABEL".* "$OUT"/ 2>/dev/null
   if ! ours "$CREATED"; then
-    echo "replay: $CREATED non supera la verifica: NON rimosso" >&2
+    echo "replay: $(msg replay.check_failed wt="$CREATED")" >&2
   elif forget_mirror "$CREATED" && ! unlink_deps "$CREATED"; then   # links first: the removal must never follow them
-    echo "replay: collegamenti ancora presenti in $CREATED: worktree NON rimosso (seguirebbe le dipendenze del tree principale)" >&2
+    echo "replay: $(msg replay.links_left_wt wt="$CREATED")" >&2
   else
-    git -C "$MAIN" worktree remove --force "$CREATED" || echo "replay: rimozione del worktree fallita: $CREATED" >&2
+    git -C "$MAIN" worktree remove --force "$CREATED" || echo "replay: $(msg replay.remove_failed wt="$CREATED")" >&2
   fi
 }
 trap cleanup EXIT
@@ -368,16 +370,16 @@ code=$?
 act_rc "mkdir -p $(q "$OUT") && cp $(q "$RUN_DST/log")/$LABEL.* $(q "$OUT/") && { cp $(q "$RUN_DST/touched.txt") $(q "$OUT/") 2>/dev/null; cp $(q "$AIW/spec-$NAME.md") $(q "$OUT/spec-dopo.md"); true; }"
 OUT_JSONL=$(winpath "$OUT/$LABEL.jsonl")
 MARK=""
-[ -n "$NONCONF" ] && MARK="printf 'NON CONFRONTABILE — %s\n' $(q "$NONCONF") | tee $(q "$OUT/NON-CONFRONTABILE.txt"); "
-[ -n "$FPWARN" ] && MARK="${MARK}printf 'AVVISO — %s\n' $(q "$FPWARN"); "
+[ -n "$NONCONF" ] && MARK="printf '$(msg replay.not_comparable) — %s\n' $(q "$NONCONF") | tee $(q "$OUT/NON-CONFRONTABILE.txt"); "
+[ -n "$FPWARN" ] && MARK="${MARK}printf '$(msg replay.warning) — %s\n' $(q "$FPWARN"); "
 act_rc "{ $MARK$(q "$FIC_PY") $(q "$(winpath "$CR")") $(q "$OUT_JSONL"); } | tee $(q "$OUT/report.txt"); $(q "$FIC_PY") $(q "$(winpath "$CR")") --json $(q "$OUT_JSONL") > $(q "$OUT/report.json")"
 # 8. removal, only if the path passes the check and after removing the links
 if [ $DRY -eq 1 ]; then
   echo "+ forget_mirror $(q "$WT")"
   echo "+ unlink_deps $(q "$WT")"
-  echo "+ (verifica: nome fic-replay-*, marcatore con il suo percorso, elencato da git worktree list; nessun collegamento rimasto) git -C $(q "$MAIN") worktree remove --force $(q "$WT")"
+  echo "+ ($(msg replay.dry_check)) git -C $(q "$MAIN") worktree remove --force $(q "$WT")"
   exit 0
 fi
 cleanup
-echo "replay: fase $LABEL finita con uscita $code · log e report in $OUT$([ -n "$NONCONF" ] && echo ' · NON CONFRONTABILE')$([ -n "$FPWARN" ] && echo " · AVVISO: $FPWARN")"
+echo "replay: $(msg replay.finished label="$LABEL" code="$code" out="$OUT")$([ -n "$NONCONF" ] && echo " · $(msg replay.not_comparable)")$([ -n "$FPWARN" ] && echo " · $(msg replay.warning): $FPWARN")"
 exit $code

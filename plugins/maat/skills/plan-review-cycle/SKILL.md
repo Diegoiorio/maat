@@ -40,6 +40,8 @@ $ARGUMENTS
 
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" <cmd> …` — exit 0 ok · 1 `VIOLAZIONE` · 2 usage; an
 `AVVISO` never changes the exit. A `VIOLAZIONE` is fixed before a reviewer sees the plan.
+The keywords (`VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`, `Scheletro:`, `S2:`) are the same in every language;
+the explanation after them follows `lingua` of `.claude/maat.json` (Maat 1.4.0).
 
 | command | what it decides |
 |---|---|

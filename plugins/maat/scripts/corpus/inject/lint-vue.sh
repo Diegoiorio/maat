@@ -10,12 +10,12 @@ F=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --file) F=${2:-}; shift 2 ;;
-    *) die "opzione sconosciuta: $1" ;;
+    *) die "$(msg inject.unknown_opt opt="$1")" ;;
   esac
 done
 [ -n "$F" ] || F=$(pick '^modules/app/apps/admin/.*\.vue$' modules/app/apps/admin/components/goals/SummaryCard.vue) || exit
-case "$F" in *.vue) ;; *) die "serve un file .vue: $F" ;; esac
-[ -f "$WT/$F" ] || die "file assente nel worktree: $F"
+case "$F" in *.vue) ;; *) die "$(msg inject.need_vue f="$F")" ;; esac
+[ -f "$WT/$F" ] || die "$(msg inject.no_file f="$F")"
 insert_line "$WT/$F" '^<script setup' after 'const sameGoalValue = (a: unknown, b: unknown): boolean => a == b'
 mark_touched "$F"
-inj_done "$F: confronto con == dopo <script setup> (eqeqeq)"
+inj_done "$F: $(msg inject.eqeqeq)"

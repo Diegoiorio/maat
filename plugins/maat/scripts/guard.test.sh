@@ -8,6 +8,7 @@
 #   3. core alone, maat.json missing or invalid, project root, MAAT_CONFIG;
 #   4. plugin wrappers (step 3-bis); 5. DENY list; 6. three-part reasons, language, reminder in the skills (R11).
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 # C:/… form where cygpath exists (Git Bash), otherwise the path as is (Linux, pk08)
 nat() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
@@ -160,6 +161,29 @@ hrun 2   "ls -la" "$T/py-rotto" Bash implement
 n=$((n + 1))
 m=$(hout "ls -la" "$T/py-rotto" | motivo)
 case $m in "guardia in errore (uscita 1)"*) ;; *) fail=$((fail + 1)); echo "FAIL: motivo di py-rotto: $m" ;; esac
+# 1.4.0, English (MAAT_LINGUA=en): the two fixed reasons from the catalog next to guard-hook.sh, and the prefix on stderr
+# («session guard», «phase guard» from guard.py's WHO table); a copy without the catalog keeps the Italian of 1.3.0
+n=$((n + 1))
+m=$(MAAT_LINGUA=en hout "git push" "$NOPY" | motivo)
+case $m in "Python not found: guard not available — core rule (a guard without an interpreter asks on every command) — "*) ;;
+  *) fail=$((fail + 1)); echo "FAIL: en: motivo senza Python: $m" ;; esac
+n=$((n + 1))
+m=$(MAAT_LINGUA=en hout "ls -la" "$T/py-rotto" | motivo)
+case $m in "guard in error (exit 1): no check run — core rule"*) ;; *) fail=$((fail + 1)); echo "FAIL: en: motivo di py-rotto: $m" ;; esac
+n=$((n + 1))
+e=$(ujson "git push" "$REPO" Bash | env -u MAAT_CONFIG CLAUDE_PROJECT_DIR="$PDIR" FIC_PYTHON="$NOPY" FIC_PHASE=implement MAAT_LINGUA=en bash "$HERE/guard-hook.sh" 2>&1 >/dev/null)
+case $e in "session guard: Python not found: guard not available"*) ;; *) fail=$((fail + 1)); echo "FAIL: en: stderr di guard-hook in una sotto-sessione: $e" ;; esac
+n=$((n + 1))
+e=$(ujson "git push" "$REPO" Bash | env -u MAAT_CONFIG FIC_PHASE=implement FIC_REPO="$REPO" MAAT_LINGUA=en "$FIC_PY" "$HERE/guard.py" 2>&1 >/dev/null | tr -d '\r')
+case $e in "phase guard: "*) case $e in *guardia*fase*|*"regola del"*) fail=$((fail + 1)); echo "FAIL: en: italiano nel diniego di fase: $e" ;; esac ;;
+  *) fail=$((fail + 1)); echo "FAIL: en: prefisso del diniego di fase: $e" ;; esac
+n=$((n + 1))
+e=$(ujson "git push" "$REPO" Bash | env -u MAAT_CONFIG FIC_PHASE=implement FIC_REPO="$REPO" "$FIC_PY" "$HERE/guard.py" 2>&1 >/dev/null | tr -d '\r')
+case $e in "guardia di fase: "*) ;; *) fail=$((fail + 1)); echo "FAIL: it: prefisso del diniego di fase: $e" ;; esac
+GN="$T/hook senza catalogo"; mkdir -p "$GN"; cp "$HERE/guard-hook.sh" "$HERE/python.sh" "$GN/"
+n=$((n + 1))
+m=$(ujson "git push" "$REPO" Bash | env -u MAAT_CONFIG CLAUDE_PROJECT_DIR="$PDIR" FIC_PYTHON="$NOPY" FIC_PHASE= MAAT_LINGUA=en bash "$GN/guard-hook.sh" 2>/dev/null | motivo)
+case $m in "Python non trovato: guardia non disponibile"*) ;; *) fail=$((fail + 1)); echo "FAIL: senza catalogo: l'italiano di 1.3.0: $m" ;; esac
 # in a sub-session the plugin hook calls --universal with no early exits: it reads the content of bash <script>
 # (counterproof: an early exit «exit 0 se FIC_PHASE» turns it into 0)
 mkdir -p "$T/main/script"
@@ -304,16 +328,24 @@ sys.exit(1 if bad else 0)' "$HERE/guard.py" || { fail=$((fail + 1)); echo "FAIL:
 "$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1])); c["lingua"]=sys.argv[3]; json.dump(c,open(sys.argv[2],"w"))' "$MIN/maat.json" "$T/it.json" it
 "$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1])); c["lingua"]=sys.argv[3]; json.dump(c,open(sys.argv[2],"w"))' "$MIN/maat.json" "$T/en.json" en
 "$FIC_PY" -c 'import json,sys; c=json.load(open(sys.argv[1])); c["lingua"]=sys.argv[3]; json.dump(c,open(sys.argv[2],"w"))' "$MIN/maat.json" "$T/xx.json" xx
-lingua() { # $1 expected (it|en), $2 file
+lingua() { # $1 expected (it|en), $2 file, $3 MAAT_LINGUA (unset if missing: these cases read maat.json)
   n=$((n + 1))
-  local m; m=$(ujson "git push" "$REPO" | MAAT_CONFIG=$(nat "$2") "$FIC_PY" "$HERE/guard.py" --universal 2>/dev/null | motivo)
-  case "$1:$m" in "it:"*" — regola del nucleo"*|"en:"*" — core rule"*) ;; *) fail=$((fail + 1)); echo "FAIL: lingua $1 con $2: $m" ;; esac
+  local m e=(env -u MAAT_LINGUA)
+  [ $# -ge 3 ] && e+=("MAAT_LINGUA=$3")
+  m=$(ujson "git push" "$REPO" | "${e[@]}" MAAT_CONFIG="$(nat "$2")" "$FIC_PY" "$HERE/guard.py" --universal 2>/dev/null | motivo)
+  case "$1:$m" in "it:"*" — regola del nucleo"*|"en:"*" — core rule"*) ;; *) fail=$((fail + 1)); echo "FAIL: lingua $1 con $2 ${3+MAAT_LINGUA=$3}: $m" ;; esac
 }
 lingua it "$T/it.json"
 lingua en "$T/en.json"
 lingua en "$T/xx.json"
 lingua en "$T/rotta.json"
 lingua en "$T/non-esiste.json"
+# 1.4.0: MAAT_LINGUA wins over maat.json (same precedence as maat_msg.lingua()); a value not in the table is en, empty is unset
+lingua it "$T/en.json" it
+lingua en "$T/it.json" en
+lingua it "$T/non-esiste.json" it
+lingua en "$T/it.json" xx
+lingua it "$T/it.json" ""
 # reminder of the command-description rule in the 5 skills of the main session (R11.1)
 n=$((n + 1))
 [ -s "$MAAT/docs/descrizione-comandi.md" ] || { fail=$((fail + 1)); echo "FAIL: docs/descrizione-comandi.md assente"; }

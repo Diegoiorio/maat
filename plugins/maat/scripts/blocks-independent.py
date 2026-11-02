@@ -53,11 +53,19 @@ largest first, into the less loaded lane). A single component => serie, as befor
 Declared limit: the dependency of a NEW file on the other block (what the file will import) cannot be
 known before writing it. The driver covers it: gate on the whole tree once the lanes are done (gates.sh).
 Tests: the plugin's scripts/blocks-independent.test.sh.
+
+MESSAGES (1.4.0): the reasons come from the catalog lib/messages.tsv (maat_msg.T, next to this file): English by
+default, Italian with "lingua": "it". Frozen in every language: the prefixes "blocks-independent: esito=… motivo=",
+"posteriori: esito=OK|STOP — ", the lines "corsia k:"/"scope k:" (read by run-phase.sh) and the "(nessuno)" value.
 """
 import os
 import re
 import subprocess
 import sys
+
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from maat_msg import T  # noqa: E402
 
 CONDIVISI = re.compile(
     r"(^|/)__init__\.py$|(^|/)index\.(ts|js|mjs|cjs)$"                          # barrel
@@ -68,6 +76,8 @@ CONDIVISI = re.compile(
     r"|(^|/)migrations/")                                                         # migrations
 EXT = (".d.ts", ".tsx", ".ts", ".mjs", ".cjs", ".js", ".vue", ".py")
 CODE_EXT = (".ts", ".tsx", ".js", ".mjs", ".cjs", ".vue", ".py")
+SERIE = "blocks-independent: esito=serie motivo="   # frozen prefixes (protocol lines), the reason follows the language
+POST_STOP = "posteriori: esito=STOP — "
 BLOCCO = re.compile(r"^blocco[ \t]+(\S+):[ \t]*scrive=(.*?)[ \t]*·[ \t]*dopo=(.*)$")
 JS_IMPORT = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"\n]+)['"]""")
 PY_FROM = re.compile(r"^[ \t]*from[ \t]+(\.*[\w.]*)[ \t]+import[ \t]+\(?([^\n#]*)", re.M)
@@ -139,13 +149,13 @@ def configurazione(root):
         mc = importlib.util.module_from_spec(sp)
         sp.loader.exec_module(mc)
     except Exception as e:
-        raise SystemExit("blocks-independent: lettore della configurazione non caricabile (%s): %s" % (p, e))
+        raise SystemExit("blocks-independent: " + T("blocks-independent.reader_failed", p=p, e=e))
     try:
         cfg, _p = mc.carica(os.environ.get("MAAT_CONFIG") or os.path.join(root, ".claude", "maat.json"))
     except mc.Uscita as u:
         if u.codice == 4:
             return mc, [], []
-        raise SystemExit("blocks-independent: maat.json: %s" % (u.messaggio or "configurazione non valida (uscita %d)" % u.codice))
+        raise SystemExit("blocks-independent: maat.json: %s" % (u.messaggio or T("blocks-independent.config_invalid", rc=u.codice)))
     r = mc.risolto(cfg)
     return mc, r["moduli"], r.get("framework", [])
 
@@ -287,21 +297,21 @@ class Grafo:
             for t in sorted(self.py_targets(f, text)):
                 g = refers(t, other)
                 if g:
-                    return "%s importa %s" % (f, g)
+                    return T("blocks-independent.imports", f=f, g=g)
             return None
         for m in JS_IMPORT.finditer(text):
             t = self.js_target(f, m.group(1))
             g = refers(t, other, m.group(1).startswith("@repo/")) if t else None
             if g:
-                return "%s importa %s" % (f, g)
+                return T("blocks-independent.imports", f=f, g=g)
         idents = set(IDENT.findall(text)) | {pascal(t) for t in KEBAB_TAG.findall(text)}
         for n in sorted(idents):
             for k in sorted(self.auto.get(n, ())):
                 g = refers(k, other)
                 if g:
-                    return "%s usa %s (auto-importato da .nuxt, definito in %s)" % (f, n, g)
+                    return T("blocks-independent.uses_nuxt", f=f, n=n, g=g)
             if n in other_new_names:
-                return "%s usa %s (auto-importato, nome derivato dal percorso di %s)" % (f, n, other_new_names[n])
+                return T("blocks-independent.uses_derived", f=f, n=n, g=other_new_names[n])
         return None
 
 
@@ -310,7 +320,7 @@ def leggi_procedura(path):
     try:
         lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
     except OSError as e:
-        raise SystemExit("blocks-independent: procedura illeggibile: %s" % e)
+        raise SystemExit("blocks-independent: " + T("blocks-independent.proc_unreadable", e=e))
     for ln in lines:
         m = BLOCCO.match(ln.strip())
         if m:
@@ -324,9 +334,9 @@ def dipendenza(a, b, g):
     for f in a["files"]:
         for h in b["files"]:
             if overlap(f, h):
-                return "scrive: in comune (%s)" % (f if f == h else f + " / " + h)
+                return T("blocks-independent.dep_scrive", files=f if f == h else f + " / " + h)
     if b["id"] in a["dopo"] or a["id"] in b["dopo"]:
-        return "dopo: dichiarato"
+        return T("blocks-independent.dep_dopo")
     for x, y in ((a, b), (b, a)):
         new_names = {}   # names derived from the path: new and existing files (an old .nuxt lacks them)
         for h in y["files"]:
@@ -343,19 +353,18 @@ def decidi(root, procedura):
     blocks = leggi_procedura(procedura)
     out = []
     if len(blocks) < 2:
-        return 1, ["blocks-independent: esito=serie motivo=%d blocco/i nella procedura" % len(blocks)]
+        return 1, [SERIE + T("blocks-independent.few_blocks", n=len(blocks))]
     cond = [(b["id"], f) for b in blocks for f in b["files"] if CONDIVISI.search(f)]
     if cond:
-        return 1, ["blocks-independent: esito=serie motivo=file condiviso o generato in scrive: (%s: %s)" % cond[0]]
+        return 1, [SERIE + T("blocks-independent.shared_in_scrive", b=cond[0][0], f=cond[0][1])]
     vuoti = [b["id"] for b in blocks if not b["files"]]
     if vuoti:
-        return 1, ["blocks-independent: esito=serie motivo=blocco senza scrive: (%s): scope di corsia vuoto" % ",".join(vuoti)]
+        return 1, [SERIE + T("blocks-independent.empty_scope", ids=",".join(vuoti))]
     g = Grafo(root)
     ko = next((g.sotto_nuxt(f) for b in blocks for f in b["files"] if g.sotto_nuxt(f) in g.dts_ko), None)
     if ko is not None:
-        prep = next((m.get("preparazione") for m in g.mods if g.mc.norm(m["radice"]) == ko), None) or "la preparazione del modulo"
-        return 1, ["blocks-independent: esito=serie motivo=.nuxt/*.d.ts assenti (%s.nuxt/components.d.ts o imports.d.ts "
-                   "illeggibili: grafo degli auto-import non conoscibile; %s)" % (ko + "/" if ko else "", prep)]
+        prep = next((m.get("preparazione") for m in g.mods if g.mc.norm(m["radice"]) == ko), None) or T("blocks-independent.prep_default")
+        return 1, [SERIE + T("blocks-independent.dts_missing", root=ko + "/" if ko else "", prep=prep)]
     ids = [b["id"] for b in blocks]
     parent = {i: i for i in ids}
 
@@ -369,14 +378,14 @@ def decidi(root, procedura):
         for b in blocks[i + 1:]:
             why = dipendenza(a, b, g)
             if why:
-                out.append("dipendenza: %s~%s — %s" % (a["id"], b["id"], why))
+                out.append(T("blocks-independent.dep_line", a=a["id"], b=b["id"], why=why))
                 parent[find(a["id"])] = find(b["id"])
     comps = {}
     for i in ids:
         comps.setdefault(find(i), []).append(i)
     groups = sorted(comps.values(), key=lambda c: (-len(c), ids.index(c[0])))
     if len(groups) < 2:
-        return 1, ["blocks-independent: esito=serie motivo=blocchi dipendenti (una sola componente)"] + out
+        return 1, [SERIE + T("blocks-independent.one_component")] + out
     lanes = [[], []]
     for c in groups:
         min(lanes, key=len).extend(c)
@@ -415,34 +424,34 @@ def generati():
 def posteriori(corsie, cambiati, dichiarati):
     illeggibili = [p for p in [corsie, cambiati] + list(dichiarati) if lista(p) is None]
     if illeggibili:
-        return 1, "posteriori: esito=STOP — input illeggibili: %s" % ", ".join(illeggibili)
+        return 1, POST_STOP + T("blocks-independent.post_unreadable", files=", ".join(illeggibili))
     scope = {}
     for ln in lista(corsie):
         m = re.match(r"^scope ([12]): (.*)$", ln)
         if m:
             scope[int(m.group(1))] = [posix(x) for x in m.group(2).split(",") if x.strip()]
     if set(scope) != {1, 2}:
-        return 1, "posteriori: esito=STOP — scope delle corsie illeggibili in %s" % corsie
+        return 1, POST_STOP + T("blocks-independent.post_scope", f=corsie)
     dich = {k: set(lista(p)) for k, p in zip((1, 2), dichiarati)}
     per = {1: [], 2: []}
     gen = generati()
     for f in lista(cambiati):
         if CONDIVISI.search(f):
-            return 1, "posteriori: esito=STOP — file condiviso o generato cambiato durante le corsie: %s" % f
+            return 1, POST_STOP + T("blocks-independent.post_shared", f=f)
         dentro = [k for k in (1, 2) if any(overlap(f, s) for s in scope[k])]
         if not dentro and f in gen:
             # A configured generated file, regenerated by its command (E): it belongs to the lane that declares it
             # in its «file»; declared by both or by neither => not attributable, STOP like a file outside the union.
             chi = [k for k in (1, 2) if f in dich.get(k, ())]
             if len(chi) != 1:
-                return 1, "posteriori: esito=STOP — generato %s rigenerato senza una corsia sola che lo dichiari" % f
+                return 1, POST_STOP + T("blocks-independent.post_generated", f=f)
             per[chi[0]].append(f)
             continue
         if not dentro:
-            return 1, "posteriori: esito=STOP — %s cambiato fuori dall'unione degli scrive: delle corsie" % f
+            return 1, POST_STOP + T("blocks-independent.post_outside", f=f)
         chi = set(dentro) | {k for k in (1, 2) if f in dich.get(k, ())}
         if len(chi) > 1:
-            return 1, "posteriori: esito=STOP — %s scritto da entrambe le corsie" % f
+            return 1, POST_STOP + T("blocks-independent.post_both", f=f)
         per[dentro[0]].append(f)
     return 0, "posteriori: esito=OK corsia 1: %s · corsia 2: %s" % (
         ",".join(per[1]) or "(nessuno)", ",".join(per[2]) or "(nessuno)")
@@ -453,7 +462,7 @@ def main(argv):
         sys.stdout.reconfigure(encoding="utf-8")
     if argv[:1] == ["--posteriori"]:
         if len(argv) not in (3, 5):
-            print("uso: blocks-independent.py --posteriori <corsie.txt> <cambiati.txt> [<dichiarati-1> <dichiarati-2>]", file=sys.stderr)
+            print(T("blocks-independent.usage_post"), file=sys.stderr)
             return 2
         rc, line = posteriori(argv[1], argv[2], argv[3:5])
         print(line)
@@ -462,7 +471,7 @@ def main(argv):
     if argv[:1] == ["--root"] and len(argv) >= 2:
         root, argv = argv[1], argv[2:]
     if len(argv) != 1:
-        print("uso: blocks-independent.py [--root <repo>] <procedura.txt>", file=sys.stderr)
+        print(T("blocks-independent.usage"), file=sys.stderr)
         return 2
     try:
         rc, lines = decidi(root, argv[0])

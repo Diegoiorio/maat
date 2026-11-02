@@ -4,10 +4,13 @@
 #   bash script/fic/blocks-independent.test.sh
 # Counterproof by mutation: ignoring .nuxt/components.d.ts => the auto-import case becomes «parallelo» (red).
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/python.sh" || { echo "interprete Python non trovato" >&2; exit 2; }
 BI="$HERE/blocks-independent.py"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# the mutants written in $T import the message catalog next to themselves (1.4.0: maat_msg.py and lib/messages.tsv)
+mkdir -p "$T/lib" && cp "$HERE/maat_msg.py" "$T/" && cp "$HERE/lib/messages.tsv" "$T/lib/"
 fail=0 n=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
 
@@ -134,6 +137,16 @@ out=$(MAAT_CONFIG="$T/maat-gen.json" "$FIC_PY" "$BI" --posteriori "$T/corsie.txt
 check "a posteriori: generato dichiarato da una corsia => OK, suo" '[ $rc -eq 0 ] && [ "$out" = "posteriori: esito=OK corsia 1: modules/api/app/services/altro.py,docs/gen.md · corsia 2: (nessuno)" ]'
 check "a posteriori: generato non dichiarato => STOP" 'MAAT_CONFIG="$T/maat-gen.json" og "generato docs/gen.md rigenerato senza una corsia sola" "$FIC_PY" "$BI" --posteriori "$T/corsie.txt" "$T/diff4.txt" "$T/d2g" "$T/d2g"'
 check "a posteriori: file fuori elenco e fuori unione => STOP come prima" 'MAAT_CONFIG="$T/maat-gen.json" og "fuori dall.unione" "$FIC_PY" "$BI" --posteriori "$T/corsie.txt" "$T/diff2.txt" "$T/d1g" "$T/d2g"'
+
+# 6en. 1.4.0, English (MAAT_LINGUA=en): the reasons from the catalog, the protocol prefixes as they are
+out=$(MAAT_LINGUA=en "$FIC_PY" "$BI" --root "$R" "$T/p5"); rc=$?
+check "en: import Python esplicito => serie, prefisso congelato e motivo inglese" '[ $rc -eq 1 ] && printf "%s\n" "$out" | grep -qx "blocks-independent: esito=serie motivo=dependent blocks (a single component)" && printf "%s\n" "$out" | grep -qx "dependency: B1~B2 — modules/api/app/routers/goals.py imports modules/api/app/services/goals.py"'
+out=$(MAAT_LINGUA=en "$FIC_PY" "$BI" --posteriori "$T/corsie.txt" "$T/diff.txt" "$T/d1" "$T/d2"); rc=$?
+check "en: a posteriori, file di entrambe le corsie => STOP col prefisso di sempre" '[ $rc -eq 1 ] && [ "$out" = "posteriori: esito=STOP — modules/api/app/services/altro.py written by both lanes" ]'
+out=$(MAAT_LINGUA=en "$FIC_PY" "$BI" --posteriori "$T/corsie.txt" "$T/diff4.txt" "$T/d1g" "$T/d2g"); rc=$?
+check "en: niente italiano del catalogo (riga OK con il valore «(nessuno)» congelato)" '! printf "%s\n" "$out" | grep -qE "cambiato fuori|scritto da|dipendenza|blocchi dipendenti"'
+out=$(MAAT_LINGUA=en "$FIC_PY" "$BI" 2>&1); rc=$?
+check "en: uso in inglese, uscita 2" '[ $rc -eq 2 ] && printf "%s\n" "$out" | grep -q "^usage: blocks-independent.py"' "$out"
 
 # 7. counterproof: ignoring the contents of .nuxt/components.d.ts (read, not parsed) => case 2c becomes
 #    «parallelo» (the test above would be red)

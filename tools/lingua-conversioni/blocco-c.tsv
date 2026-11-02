@@ -1,0 +1,543 @@
+# blocco-c.tsv — the messages of block C: plan-check.sh, counterproof.sh, context-pack.sh, finalize.sh, gates.sh,
+# blocks-independent.py and review-surface.sh, read by tools/lingua-converti.py (format: its docstring). The first row
+# of a key is its source in v1.3.0, the following ones its twins. Rows of Python sites (.py files, !py, !f) and of
+# the !awk mode feed the catalog and the check; their code was edited by hand. Three parts, one per lane of the
+# block, each with its own header below.
+
+# blocco-c.plan-check.tsv — the messages of plan-check.sh (block C, lane P), read by tools/lingua-converti.py.
+# key <TAB> at <TAB> pre <TAB> post <TAB> names <TAB> en (format: the docstring of lingua-converti.py). Section
+# plan-check. The stdout of basis and contract is NOT here (constraint 2: frozen in protocol-strings.list); the
+# keywords VIOLAZIONE, AVVISO, ERRORE DURO, Percorso:, Scheletro:, S2: stay in the code (D2) and only the explanation
+# after them is in the catalog. !py rows are the embedded Python PY2 (edited by hand: _msg.T), !awk rows strings of
+# an awk program (edited by hand: the text reaches awk through ENVIRON).
+
+# ---------------------------------------------------------------- usage, delta
+plan-check.usage	scripts/plan-check.sh:116	-	-	script	usage: {script} delta <baseline> <current> | lint <spec> [--baseline <copy>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <mother> [<child>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]
+plan-check.delta_no_base	scripts/plan-check.sh:214#2	ERRORE DURO: 	-	base	baseline missing or empty ({base}) — redo the round at full scope, never APPROVED
+plan-check.delta_no_cur	scripts/plan-check.sh:215#2	-	-	cur	current file missing: {cur}
+plan-check.delta_empty	scripts/plan-check.sh:218#2	ERRORE DURO: 	-	-	empty diff — no revision recorded, or baseline taken after the Edit. Redo the round at full scope, never APPROVED
+plan-check.delta_whole	scripts/plan-check.sh:239!awk	ERRORE DURO: 	-	-	the diff covers more than 90% of the file (reformatting or line endings) — treat it as a missing baseline: full-scope round
+plan-check.xref_line	scripts/plan-check.sh:271#3!awk	xref: 	 	-	line
+
+# ---------------------------------------------------------------- lint
+plan-check.no_plan	scripts/plan-check.sh:291	-	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2151#2	VIOLAZIONE: 	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2168#2	VIOLAZIONE: 	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2199#2	VIOLAZIONE: 	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2281#2	VIOLAZIONE: 	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2223#2	-	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.no_plan	scripts/plan-check.sh:2256#2	-	-	-	no '## Implementation plan' section (outside code blocks)
+plan-check.lit_dup	scripts/plan-check.sh:300#2	-	-	lit n	'{lit}' appears {n} times at the start of a line in the plan: it must be ONE (the greps downstream take the first)
+plan-check.lit_missing	scripts/plan-check.sh:301#2	-	-	lit	'{lit}' missing from the plan (legacy spec?) — on reopening, Step 1 adds it
+plan-check.lit_not_next	scripts/plan-check.sh:304#4	-	-	lit	'{lit}' is not on the line right below the previous status line
+plan-check.lit_changelog	scripts/plan-check.sh:308	-	-	lit	the changelog quotes the literal '{lit}' in the middle of a line — write it in prose, it is one line break away from becoming a duplicate
+plan-check.basis_dup	scripts/plan-check.sh:315#2	-	-	n	'Approved basis:' appears {n} times at the start of a line in the plan: it must be ONE
+plan-check.basis_legacy	scripts/plan-check.sh:318	-	-	-	APPROVED plan without an 'Approved basis:' line (legacy plan: not touched by hand, the line comes with the next approval)
+plan-check.surf_unknown	scripts/plan-check.sh:332	-	-	s surfaces	unknown surface '{s}' in 'Risk surfaces' — only bare tokens of the vocabulary: {surfaces} (or: none)
+plan-check.surf_none_mixed	scripts/plan-check.sh:335#3	-	-	-	'Risk surfaces' says 'none' together with other surfaces
+plan-check.floor_not_critical	scripts/plan-check.sh:343#3	-	-	s critical	[floor: {s}] — the floor applies only to the critical surfaces: {critical}
+plan-check.floor_undeclared	scripts/plan-check.sh:344#3	-	-	s	[floor: {s}] on a surface not declared in 'Risk surfaces'
+plan-check.floor_dup	scripts/plan-check.sh:346#3	VIOLAZIONE: 	-	s	more than one [floor: {s}] line — the floor is ONE check for each surface
+plan-check.critical_uncovered	scripts/plan-check.sh:358	-	-	s s s	critical surface '{s}' declared without a [floor: {s}] line or a '⚠️ Surface {s} … not covered' line
+plan-check.waiver_no_reason	scripts/plan-check.sh:363	-	-	wn	line {wn}: waiver 'static sufficient:' without a reason on the same line
+plan-check.waiver_wrapped	scripts/plan-check.sh:367	-	-	wn s	line {wn}: the waiver continues on the next line — 'static sufficient: <reason>' goes on the same line as '⚠️ Surface {s}'
+plan-check.e2e_cap	scripts/plan-check.sh:373#2	-	-	n	{n} [e2e-locator: lines — at most 2; beyond that, a ⚠️ line and the regression-watch
+plan-check.testplan_min	scripts/plan-check.sh:385#2	-	-	n	'### Test plan' has {n} lines at level min (cap 1; [floor:, [e2e-locator: and ⚠️ lines excluded)
+plan-check.testplan_std	scripts/plan-check.sh:386#2	-	-	n	'### Test plan' has {n} lines at level std (cap 15; [floor:, [e2e-locator: and ⚠️ lines excluded)
+plan-check.dup_in_plan	scripts/plan-check.sh:404#4!awk	\t 	-	-	in the plan
+plan-check.dup_above_plan	scripts/plan-check.sh:405!awk	Figlie:\tChildren:\t 	-	-	above the plan
+plan-check.dup_lang	scripts/plan-check.sh:409#2	-	-	it en where	'{it}' and '{en}' together{where}: the same section in two languages (keep the heading that was there; the first is read)
+plan-check.lint_no_base	scripts/plan-check.sh:414#2	-	-	base	baseline missing: {base}
+plan-check.above_changed	scripts/plan-check.sh:421#3	-	-	-	the SPEC sections above '## Implementation plan' changed from the baseline — this cycle cannot touch them
+plan-check.review_changed	scripts/plan-check.sh:424#3	-	-	-	the '## Implementation review' section changed — it belongs to /implementation-review-cycle
+
+# ---------------------------------------------------------------- closed (its stdout is read by nobody: cycle-state.sh reads the exit code)
+plan-check.closed_no_finalize	scripts/plan-check.sh:549#3	-	-	-	no Finalize: IMPLEMENTED line
+plan-check.closed_other_snap	scripts/plan-check.sh:552#4	-	-	fs=${fs12:-$(msg plan-check.closed_no_fp)}	Finalize on another snapshot ({fs}), not on the current Reviewed snapshot
+plan-check.closed_no_fp	scripts/plan-check.sh:552!d	-	-	-	no fingerprint
+plan-check.closed_no_time	scripts/plan-check.sh:555#2	-	-	-	Finalize without a readable time
+plan-check.closed_older	scripts/plan-check.sh:559#4	-	-	rl	Finalize older than the last review launched ({rl})
+plan-check.closed_yes	scripts/plan-check.sh:565#2	-	-	-	Ring: CLOSED
+plan-check.closed_no	scripts/plan-check.sh:566	-	-	w	Ring: OPEN — {w}
+
+# ---------------------------------------------------------------- PY2: configuration, mutations, build
+plan-check.conf_reader	scripts/plan-check.sh:848!py	plan-check: 	\n	p e	configuration reader not loadable ({p}): {e}
+plan-check.conf_invalid	scripts/plan-check.sh:856#2!py	-	-	code	invalid configuration (exit {code})
+plan-check.conf_regex	scripts/plan-check.sh:865!py	plan-check: maat.json: 	\n	e	invalid regex under piano.*: {e}
+plan-check.mut_bad	scripts/plan-check.sh:914!py	-	: 	-	unreadable mutation, expected form
+plan-check.mut_bad_empty	scripts/plan-check.sh:914#2!py	 	-	-	(the replacement may be (empty))
+plan-check.mut_empty_fields	scripts/plan-check.sh:932!py	-	-	-	mutation: symbol and red-if text cannot be empty
+plan-check.mut_noop	scripts/plan-check.sh:934!py	-	-	-	empty mutation: search equal to replacement
+plan-check.fmt_dup	scripts/plan-check.sh:973!py	-	-	n k	line {n}: Plan format: appears {k} times at the start of a line in the plan, it must be ONE
+plan-check.sec_dup	scripts/plan-check.sh:983!py	-	-	n name	line {n}: section ### {name} repeated: it must be one
+plan-check.sec_missing	scripts/plan-check.sh:986!py	-	-	name	section ### {name} missing (format 2)
+plan-check.tp_no_table	scripts/plan-check.sh:1006!py	-	-	-	### Test plan without the table | ID | requirement | file | assertion | mutation |
+plan-check.tp_cols	scripts/plan-check.sh:1010!py	-	-	n k	line {n}: the test plan row has {k} columns, 5 are needed
+plan-check.tp_bad_id	scripts/plan-check.sh:1014!py	-	-	n id	line {n}: invalid test ID ({id}): letters, digits, . _ -
+plan-check.tp_dup_id	scripts/plan-check.sh:1017!py	-	-	n id	line {n}: test ID {id} repeated
+plan-check.tp_no_backtick	scripts/plan-check.sh:1025!py	-	-	n id	line {n}: test {id}: the file goes between backticks (`path` or `path::name`)
+plan-check.tp_path	scripts/plan-check.sh:1027!py	-	-	n id path	line {n}: test {id}: path not relative to the repository: {path}
+plan-check.tp_no_assert	scripts/plan-check.sh:1029!py	-	-	n id	line {n}: test {id}: empty assertion (and the red if, where it applies)
+plan-check.tp_why	scripts/plan-check.sh:1032!py	-	-	n id why	line {n}: test {id}: {why}
+plan-check.tp_mut_path	scripts/plan-check.sh:1035!py	-	-	n id path	line {n}: test {id}: mutation file not relative to the repository: {path}
+plan-check.tp_mut_noname	scripts/plan-check.sh:1037!py	-	-	n id	line {n}: test {id}: has a mutation but does not name the test (`path::name`)
+plan-check.tp_mut_module	scripts/plan-check.sh:1039!py	-	-	n id	line {n}: test {id}: file and test in different modules of maat.json (or outside every module, or test outside the module root): counterproof.sh would reject it
+plan-check.blk_dup	scripts/plan-check.sh:1053!py	-	-	n id	line {n}: block {id} repeated
+plan-check.step_cols	scripts/plan-check.sh:1066!py	-	-	n k	line {n}: the step row has {k} columns, 4 are needed (id | file | change | test)
+plan-check.step_no_block	scripts/plan-check.sh:1071!py	-	-	n id	line {n}: step {id} outside a block (#### Block <id>)
+plan-check.steps_no_table	scripts/plan-check.sh:1079!py	-	-	-	### Steps without the table | id | file | change | test |
+plan-check.steps_no_blocks	scripts/plan-check.sh:1081!py	-	-	-	### Steps: the steps are not grouped in blocks (#### Block <id> with writes: and after:)
+plan-check.blk_no_writes	scripts/plan-check.sh:1087!py	-	-	n id	line {n}: block {id} without writes: (the files it writes)
+plan-check.blk_no_after	scripts/plan-check.sh:1089!py	-	-	n id	line {n}: block {id} without after: (write after: none if it depends on no other block)
+plan-check.blk_bad_dep	scripts/plan-check.sh:1092!py	-	-	n id dep	line {n}: block {id} after {dep}, which does not exist
+plan-check.trace_no_rows	scripts/plan-check.sh:1102!py	-	-	-	### Requirement traceability without rows (| Req | Plan steps | Verification |)
+
+# ---------------------------------------------------------------- PY2: lint2
+plan-check.req_no_test	scripts/plan-check.sh:1214!py	-	-	n r	line {n}: requirement {r} without a test: no row of the test plan names it (or Verification: not verifiable by test, <reason>)
+plan-check.test_bad_req	scripts/plan-check.sh:1218!py	-	-	n id r	line {n}: test {id} cites requirement {r}, which is not in the traceability
+plan-check.test_no_step	scripts/plan-check.sh:1222!py	-	-	n id	line {n}: test {id} appears in no step (test column)
+plan-check.test_no_text	scripts/plan-check.sh:1225!py	-	-	n id	line {n}: test {id}: assertion without a backticked text and without a mutation: the test-red phase cannot prove the red (write the expected text of the error message between backticks)
+plan-check.test_invariance	scripts/plan-check.sh:1229!py	-	-	n id	line {n}: test {id}: assertion "stays green": an existing regression test is not a row of the Test plan (test-red wants every row red on the stubbed base). Take it out of the table and put it in the note below it ("EXISTING regression tests": file, what stays true, requirement, command if outside the gate); the traceability cites it as "not verifiable by test (invariance, cannot be shown red): <existing test>"
+plan-check.step_bad_test	scripts/plan-check.sh:1234!py	-	-	n id t	line {n}: step {id} cites test {t}, which is not in the test plan table
+plan-check.step_not_touched	scripts/plan-check.sh:1237!py	-	-	n id f	line {n}: step {id}: {f} is not in the ### Touched files list
+plan-check.step_path	scripts/plan-check.sh:1239!py	-	-	n id f	line {n}: step {id}: path not relative to the repository: {f}
+plan-check.risk_no_test	scripts/plan-check.sh:1242!py	-	-	n	line {n}: open risk without an assigned test (an ID of the test plan table)
+plan-check.str_table	scripts/plan-check.sh:1246!py	-	-	n	line {n}: ### Strings and data-test wants the table | action | type | value | (plus | verified | optional)
+plan-check.str_verified	scripts/plan-check.sh:1258!py	-	-	n	line {n}: verified wants `file` - reason (file relative to the repository and a reason)
+plan-check.str_row	scripts/plan-check.sh:1266!py	-	-	n	line {n}: expected action adds|removes, type string|data-test and a value
+plan-check.str_unused_waiver	scripts/plan-check.sh:1278!py	-	-	n f tp val	line {n}: unused verified waiver: {f} does not cite {tp} {val} in a literal (or does not exist)
+plan-check.str_already	scripts/plan-check.sh:1282!py	-	-	n tp val rel ln	line {n}: {tp} {val} added by the plan but already present in {rel}:{ln}
+plan-check.str_absence	scripts/plan-check.sh:1288!py	-	-	n tp val rel ln	line {n}: {tp} {val} removed by the plan: {rel}:{ln} cites it only in an absence assertion, which stays green
+plan-check.str_waived	scripts/plan-check.sh:1290!py	-	-	n tp val rel ln why	line {n}: {tp} {val} removed by the plan, asserted by {rel}:{ln}: verified waiver ({why})
+plan-check.str_asserted	scripts/plan-check.sh:1292!py	-	-	n tp val rel ln	line {n}: {tp} {val} removed by the plan but still asserted by {rel}:{ln}, which the plan does not touch (add it to the steps; an e2e wants its [e2e-locator:] line; or the verified column)
+
+# ---------------------------------------------------------------- PY2: gen (the keys of procedura.txt and NON DISPONIBILE stay: protocol-strings.list)
+plan-check.gen_no_wsl_py	scripts/plan-check.sh:1367!py	NON DISPONIBILE — 	-	m	WSL python missing for module {m}
+plan-check.gen_unverified	scripts/plan-check.sh:1369!py	  # 	-	py	not verified: {py} looked up in the WSL PATH only by gates.sh
+plan-check.gen_no_cmd	scripts/plan-check.sh:1377#2!py	-	-	tipo m code	command {tipo} of module {m} (exit {code})
+plan-check.gen_l2_reason	scripts/plan-check.sh:1460#2!py	L2: 	-	-	new file, red on the stubbed base on the red-if assertion (test-red), green after
+plan-check.gen_mut_missing	scripts/plan-check.sh:1465!py	AVVISO: 	-	id f	mutation {id}: {f} missing in the working tree (expected if the plan creates it)
+plan-check.gen_mut_count	scripts/plan-check.sh:1474!py	AVVISO: 	-	id k f	mutation {id}: search appears {k} times in {f} (after the implementation exactly 1 is needed)
+plan-check.gen_absorbed	scripts/plan-check.sh:1508!py	gen: 	-	id	mutation {id} absorbed (L2)
+plan-check.gen_written	scripts/plan-check.sh:1509!py	gen: 	-	path extra	written {path}{extra}
+plan-check.gen_and_mut	scripts/plan-check.sh:1509#5!py	 	-	-	and counterproof/mutations.json
+
+# ---------------------------------------------------------------- PY2: route (Percorso: leggero|pieno stays, D2)
+plan-check.route_plan_line	scripts/plan-check.sh:1547!py	-	-	n	plan line {n}
+plan-check.route_diff_line	scripts/plan-check.sh:1556!py	-	-	n	diff line {n}
+plan-check.route_keyword	scripts/plan-check.sh:1567#2!py	-	-	k where	keyword {k} ({where})
+plan-check.route_declared	scripts/plan-check.sh:1571#2!py	-	-	-	declared
+plan-check.route_lines	scripts/plan-check.sh:1574!py	-	-	n	Plan lines: {n} (cap 150)
+plan-check.route_migration	scripts/plan-check.sh:1575!py	-	: 	-	Migration
+plan-check.route_surface	scripts/plan-check.sh:1577!py	-	-	s ev	Surface {s}: {ev}
+plan-check.route_detected	scripts/plan-check.sh:1578!py	-	: 	-	Surfaces detected
+plan-check.route_declared_label	scripts/plan-check.sh:1579!py	-	: 	-	Surfaces declared
+plan-check.route_why_lines	scripts/plan-check.sh:1582!py	-	-	n	plan of {n} lines (over 150)
+plan-check.route_why_mig	scripts/plan-check.sh:1584!py	-	-	-	migration
+plan-check.route_why_det	scripts/plan-check.sh:1586!py	-	: 	-	surfaces detected
+plan-check.route_why_nodecl	scripts/plan-check.sh:1588!py	-	-	-	Risk surfaces line missing
+plan-check.route_why_decl	scripts/plan-check.sh:1590!py	-	: 	-	declaration other than none
+plan-check.route_det_undecl	scripts/plan-check.sh:1596!py	-	: 	-	detected and not declared
+plan-check.route_decl_undet	scripts/plan-check.sh:1598!py	-	: 	-	declared and not detected
+plan-check.route_mismatch	scripts/plan-check.sh:1599!py	-	: 	-	Mismatch
+plan-check.route_why_mismatch	scripts/plan-check.sh:1600!py	-	-	-	mismatch with the declaration
+plan-check.route_light	scripts/plan-check.sh:1604!py	Percorso: leggero — 	-	-	plan within 150 lines, no migration, no surface detected, declaration consistent
+
+# ---------------------------------------------------------------- PY2: skeleton (Scheletro: SOPRA|SOTTO IL TETTO stays, D2)
+plan-check.skel_no_steps	scripts/plan-check.sh:1620!py	AVVISO: 	-	-	no step row under ### Steps (| id | file | change | test |): the skeleton counts steps and files from there
+plan-check.skel_steps	scripts/plan-check.sh:1622!py	-	-	n cap	Steps: {n} (cap {cap})
+plan-check.skel_files	scripts/plan-check.sh:1623!py	-	-	n cap	Files: {n} (cap {cap})
+plan-check.skel_surfaces	scripts/plan-check.sh:1624!py	-	: 	-	Surfaces
+plan-check.skel_lines	scripts/plan-check.sh:1625!py	-	-	n cap	Plan lines: {n} (cap {cap})
+plan-check.skel_over_steps	scripts/plan-check.sh:1628!py	-	-	n cap	steps {n} > {cap}
+plan-check.skel_over_files	scripts/plan-check.sh:1630!py	-	-	n cap	files {n} > {cap}
+plan-check.skel_over_lines	scripts/plan-check.sh:1632!py	-	-	n cap	plan lines {n} > {cap}
+plan-check.skel_cut_refused	scripts/plan-check.sh:1637!py	: 	-	-	split rejected by the user (Split: line), the single plan goes on, no stop
+plan-check.skel_cut_proposal	scripts/plan-check.sh:1641!py	: 	-	-	split proposal (spec-author, split mode), no waiver
+plan-check.skel_under	scripts/plan-check.sh:1643!py	Scheletro: SOTTO IL TETTO — 	-	-	the full plan starts from this skeleton
+
+# ---------------------------------------------------------------- PY2: stubs, l2 (the line "L2 <id>: OK | NO — <reason>" stays, the reason follows the language)
+plan-check.stub_absent	scripts/plan-check.sh:1772#2!py	-	-	-	absent
+plan-check.stub_none	scripts/plan-check.sh:1772#4!py	(	)	-	no symbol
+plan-check.l2_no_stubs	scripts/plan-check.sh:1781!py	-	-	-	stubs not recorded at the close of test-red
+plan-check.l2_not_proven	scripts/plan-check.sh:1784!py	-	-	-	red on the stubbed base not proven
+plan-check.l2_no_pos	scripts/plan-check.sh:1786!py	-	-	-	red on the base without a position
+plan-check.l2_other_assert	scripts/plan-check.sh:1788!py	-	-	a	the red on the base does not hit the red-if assertion ({a})
+plan-check.l2_file_missing	scripts/plan-check.sh:1793!py	-	-	-	file missing
+plan-check.l2_symbols	scripts/plan-check.sh:1795!py	-	-	cur sy	the stubs do not cover all and only the new symbols: exported now {cur}, stubs {sy}
+plan-check.l2_untested	scripts/plan-check.sh:1799!py	-	: 	-	exported symbol tested by no acceptance test
+plan-check.l2_tests_changed	scripts/plan-check.sh:1822!py	-	-	state	acceptance test fingerprint changed or not recorded (Tests status: {state})
+
+# ---------------------------------------------------------------- PY2: rossi (the outcome tokens rosso_*, dimostrato… and "rossi: esito=" stay)
+plan-check.red_import	scripts/plan-check.sh:1915#2!py	-	-	-	red for an import error, not for the assertion: not proven
+plan-check.red_no_text	scripts/plan-check.sh:1917#2!py	-	-	-	no assertion text (backticks in the assertion column or the red if of the mutation): not proven
+plan-check.red_other	scripts/plan-check.sh:1919#2!py	-	-	texts	red, but not on the declared assertion ({texts}): not proven
+plan-check.red_no_pos	scripts/plan-check.sh:1921#2!py	-	-	-	red without a position in the test file: not proven
+plan-check.red_proven	scripts/plan-check.sh:1922#2!py	-	-	-	red on the declared assertion
+plan-check.red_suite_import	scripts/plan-check.sh:1926#2!py	-	-	-	the test file does not load (import error): not proven
+plan-check.red_collection	scripts/plan-check.sh:1927#2!py	-	-	-	the test file fails at collection: not proven
+plan-check.red_not_collected	scripts/plan-check.sh:1929#2!py	-	-	-	test file not collected by the runner: not proven
+plan-check.red_green	scripts/plan-check.sh:1931#2!py	-	-	-	green on the stubbed base: the test proves nothing
+plan-check.red_not_run	scripts/plan-check.sh:1932#2!py	-	-	-	named test not run (missing or skipped): not proven
+plan-check.red_no_rows	scripts/plan-check.sh:1968!py	AVVISO: 	-	-	the test plan table has no rows: no acceptance test to prove red
+plan-check.red_outside	scripts/plan-check.sh:1974#2!py	-	-	-	test outside the root of every module of maat.json: the driver does not run it
+plan-check.red_no_ev	scripts/plan-check.sh:1978!py	-	-	-	evidence missing
+plan-check.red_gate_esito	scripts/plan-check.sh:1979!py	-	-	esito motivo	outcome {esito} ({motivo})
+plan-check.red_report_bad	scripts/plan-check.sh:1980!py	-	-	-	report unreadable
+plan-check.red_report_none	scripts/plan-check.sh:1980#3!py	-	-	-	report none: test outcomes not readable
+plan-check.red_collection_case	scripts/plan-check.sh:2033#3!py	(	)	-	collection
+plan-check.red_vitest_sum	scripts/plan-check.sh:2040!py	-	-	n k	vitest summary: {n} tests failed, {k} FAIL blocks read from the output: evidence not interpretable
+plan-check.red_absence	scripts/plan-check.sh:2058!py	-	-	rel ln val near	{rel}:{ln} asserts the absence of {val}, which the plan adds <-> {near}
+plan-check.red_gate_unusable	scripts/plan-check.sh:2061#2!py	-	-	-	gate not usable
+plan-check.red_sum_blocked	scripts/plan-check.sh:2067#2!py	-	: 	-	gate evidence not usable
+plan-check.red_sum_bad	scripts/plan-check.sh:2069!py	-	: 	-	not proven
+plan-check.red_sum_conflict	scripts/plan-check.sh:2071!py	-	: 	-	conflict with the existing suite
+plan-check.red_sum_ok	scripts/plan-check.sh:2074#2!py	-	-	n k	{n}/{k} acceptance tests red on their assertion
+plan-check.not_applicable	scripts/plan-check.sh:2108!py	-	-	cmd	{cmd}: does not apply (format 1 plan, without the Plan format: 2 line)
+plan-check.not_applicable	scripts/plan-check.sh:2111!py	-	-	cmd	{cmd}: does not apply (format 1 plan, without the Plan format: 2 line)
+
+# ---------------------------------------------------------------- need_py, s2, split
+plan-check.no_python	scripts/plan-check.sh:2140	plan-check: 	-	-	Python interpreter not found (python.sh of the full cycle)
+plan-check.s2_rejected_over	scripts/plan-check.sh:2262#3	-	-	nr tot	rejected ({nr}) more than the blockers/majors of the two responses ({tot})
+plan-check.s2_stop	scripts/plan-check.sh:2263#2	S2: STOP — 	-	dd gd	a reviewer asks for a human decision (delta {dd} · gate {gd})
+plan-check.s2_fp	scripts/plan-check.sh:2265	S2: IMPRONTA DIVERSA — 	-	dfp gfp cur	delta {dfp} · gate {gfp} · current plan {cur}: relaunch both on the current fingerprint
+plan-check.s2_partial	scripts/plan-check.sh:2267#3	S2: RILANCIA — 	-	-	partial response (Blocked on): not an approval
+plan-check.s2_fix	scripts/plan-check.sh:2268	S2: CORREGGI — 	-	n dnb gnb nr	{n} blockers/majors to apply (delta {dnb} · gate {gnb} · rejected {nr})
+plan-check.s2_rejected	scripts/plan-check.sh:2269#2	S2: RILANCIA — 	-	nr	{nr} findings rejected: clean means no finding, not even a rejected one; delta and gate are relaunched together, with the list of the rejected ones
+plan-check.s2_not_approved	scripts/plan-check.sh:2271	S2: RILANCIA — 	-	dd gd	Decision without blockers/majors but not APPROVED (delta {dd} · gate {gd})
+plan-check.s2_ok	scripts/plan-check.sh:2273	S2: APPROVA — 	-	cur	delta and fresh eyes clean on fingerprint {cur}
+plan-check.split_both	scripts/plan-check.sh:2297	-	-	-	the mother has both 'Figlie:' and 'Children:': one is enough (the first is read)
+plan-check.split_few	scripts/plan-check.sh:2299	-	-	-	a chain wants at least two children (arguments, or the Children: line of the mother)
+plan-check.split_kid_missing	scripts/plan-check.sh:2300#3	-	-	f	child missing: {f}
+plan-check.split_kid_dup	scripts/plan-check.sh:2302#2	-	-	n	child repeated in the chain: {n}
+plan-check.split_no_ids	scripts/plan-check.sh:2305	-	-	-	the mother defines no ID (RF<n>, CA<n>, or FR<n>, AC<n>) in Functional requirements or Acceptance criteria: the partition cannot be checked
+plan-check.split_lost	scripts/plan-check.sh:2315#2	-	-	id	{id} of the mother is in no child (lost)
+plan-check.split_twice	scripts/plan-check.sh:2316#2	-	-	id n who	{id} is in {n} children: {who} (duplicated)
+plan-check.split_foreign	scripts/plan-check.sh:2320#3	-	-	who id	{who}: {id} is not an ID of the mother (the children do not change the requirements)
+plan-check.split_no_line	scripts/plan-check.sh:2324#2	-	-	spec lit	{spec}: the '{lit}' line is missing (above the plan, at the start of a line)
+plan-check.split_ok	scripts/plan-check.sh:2327	split: OK — 	-	n k	{n} IDs of the mother in {k} children, each in exactly one
+
+# blocco-c.counterproof.tsv — the messages of counterproof.sh and context-pack.sh (block C, lane Q), read by
+# tools/lingua-converti.py (format: its docstring). Frozen in the code: the last line «counterproof: esito=… prove=…
+# fail=… bloccate=… tempo=… luogo=…» and its fields, the outcome values of <id>.json (esito, controprova), the JSON keys
+# of mutations.json named in the reasons, the «## »/«### » markers of the context pack.
+
+# ---------------------------------------------------------------- counterproof.sh (bash)
+counterproof.usage	scripts/counterproof.sh:142	-	-	-	usage: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>
+counterproof.paths_failed	scripts/counterproof.sh:150#2	counterproof: 	-	here	lib/maat-paths.sh cannot be loaded (incomplete plugin: {here})
+counterproof.no_root	scripts/counterproof.sh:152	counterproof: 	-	-	project root not resolved: set PROJECT_ROOT
+counterproof.root_access	scripts/counterproof.sh:153	counterproof: 	-	root	project root not accessible: {root}
+counterproof.rsync_tar	scripts/counterproof.sh:161	${manca:+, }	-	-	rsync and tar
+counterproof.tools_missing	scripts/counterproof.sh:163#2	counterproof: esito=BLOCKED (	) luogo=-	missing	counterproofs not available: missing {missing}
+counterproof.fallback_copy	scripts/counterproof.sh:166	-	-	-	rsync missing: fallback copy (find, sha256 fingerprints, tar)
+counterproof.fallback_lock	scripts/counterproof.sh:167#2	${RIPIEGO:+; }	-	-	flock missing: fallback lock (atomic mkdir)
+counterproof.fic_mirror_missing	scripts/counterproof.sh:172#2	counterproof: 	-	-	fic-mirror.sh not found next to counterproof.sh
+counterproof.mj_missing	scripts/counterproof.sh:179#2	counterproof: 	-	arg	mutations.json not found: {arg}
+counterproof.count	scripts/counterproof.sh:658	counterproof: 	, luogo=mirror	nt nu	{nt} mutations, {nu} to run (exact duplicates once only)
+counterproof.absorbed	scripts/counterproof.sh:659#4	counterproof: 	-	na	{na} absorbed (L2): skipped, <id>.json with esito=assorbita
+counterproof.not_run	scripts/counterproof.sh:662	counterproof: 	-	nn	{nn} NOT RUN (declared): modules without a counterproof, <id>.json with esito=non_eseguita
+counterproof.no_repo_root	scripts/counterproof.sh:670#2	-	-	-	repository root not determinable (git): no copy to associate
+counterproof.seed_failed	scripts/counterproof.sh:708#2	; 	-	why	seeding not possible: {why}
+counterproof.mirror_missing	scripts/counterproof.sh:710#3	-	-	why	mirror missing: run test-fast.sh --setup{why}
+counterproof.mirror_mkdir	scripts/counterproof.sh:712#2	-	-	mir pkg	mirror cannot be created: {mir}/{pkg}
+counterproof.fallback_slower	scripts/counterproof.sh:713#2	counterproof: 	-	fallback	{fallback}; slower, same outcomes
+counterproof.busy	scripts/counterproof.sh:716#2	-	-	wait lock	mirror busy beyond {wait}s (lock {lock}); no fallback to /mnt/c
+counterproof.busy_dir	scripts/counterproof.sh:718#3	-	-	wait lock	mirror busy beyond {wait}s (lock {lock}.d); no fallback to /mnt/c
+counterproof.deps_failed	scripts/counterproof.sh:726	-	-	out	stale dependencies, automatic realignment failed: {out}
+counterproof.deps_still	scripts/counterproof.sh:728#3	-	-	-	stale dependencies even after the automatic realignment
+counterproof.mirror_mkdir_dst	scripts/counterproof.sh:732#2	-	-	dst	mirror cannot be created: {dst}
+counterproof.sync_failed	scripts/counterproof.sh:734#4	-	-	pk	sync failed ({pk})
+counterproof.sync_failed	scripts/counterproof.sh:742#3	-	-	pk	sync failed ({pk})
+counterproof.clean_failed	scripts/counterproof.sh:736#4	-	-	pk	cleanup of the copy failed ({pk})
+counterproof.manifest_nc	scripts/counterproof.sh:745#4	-	-	pk	manifest not computable (git) for {pk}
+counterproof.diff_origin	scripts/counterproof.sh:749	counterproof: 	-	pk	differences between origin and mirror ({pk}):
+counterproof.copy_misaligned	scripts/counterproof.sh:750	-	-	pk	copy not aligned ({pk})
+counterproof.py_missing_run	scripts/counterproof.sh:793	-	-	py	interpreter of {{python}} missing: {py} (set FIC_PYTEST_PY)
+counterproof.cmd_not_expandable	scripts/counterproof.sh:795	-	-	err	counterproof command not expandable: {err}
+counterproof.cmd_not_expandable	scripts/counterproof.sh:461!py	-	-	err	counterproof command not expandable: {err}
+counterproof.file_missing_mirror	scripts/counterproof.sh:797	-	-	f	file missing in the mirror: {f}
+counterproof.backup_failed	scripts/counterproof.sh:799	-	-	f	backup copy failed: {f}
+counterproof.not_applicable	scripts/counterproof.sh:806!d	-	-	-	mutation not applicable
+counterproof.not_restored	scripts/counterproof.sh:812	counterproof: 	-	mroot mut f	{mroot} NOT restored after {mut} ({f}):
+counterproof.result_unwritable	scripts/counterproof.sh:818	counterproof: 	-	out	result not writable in {out}
+counterproof.not_integer	scripts/counterproof.sh:835#2	counterproof: 	-	-	FIC_CP_PARALLEL and FIC_CP_MEM_MB want an integer
+counterproof.integrity_mirror	scripts/counterproof.sh:868	counterproof: esito=BLOCKED (	) luogo=mirror	-	integrity: mirror not restored, list interrupted
+counterproof.private_mkdir	scripts/counterproof.sh:883	-	-	home	private copies cannot be created in {home}
+counterproof.private_failed	scripts/counterproof.sh:888#4	-	-	i	private copy {i} not created
+counterproof.private_nested	scripts/counterproof.sh:891#3	-	-	i nm	private copy {i}: {nm} not copied
+counterproof.private_link	scripts/counterproof.sh:893#3	-	-	i	private copy {i}: link to node_modules not created
+counterproof.private_differs	scripts/counterproof.sh:895#3	-	-	i	private copy {i} not identical to the manifest
+counterproof.step2	scripts/counterproof.sh:898	counterproof: 	-	par n avail mem	step 2 — {par} mutations on {n} private copies in parallel (MemAvailable {avail} MB, {mem} MB each run); mirror lock held until the end
+counterproof.wt_changed	scripts/counterproof.sh:926	counterproof: 	-	pkg	WARNING: {pkg} changed in the working tree DURING the counterproofs (not by this script): the results apply to the initial state
+counterproof.integrity_private	scripts/counterproof.sh:931	counterproof: esito=BLOCKED (	) $SUM	-	integrity: private copy not restored, worker interrupted
+counterproof.mirror_changed	scripts/counterproof.sh:934	counterproof: esito=BLOCKED (	) $SUM	-	mirror changed during step 2, sources or node_modules: results not valid, relaunch
+
+# ---------------------------------------------------------------- counterproof.sh (embedded Python, PY)
+counterproof.cfg_loader	scripts/counterproof.sh:205!py	-	-	p e	configuration reader cannot be loaded ({p}): {e}
+counterproof.outside_modules	scripts/counterproof.sh:232!py	-	-	-	outside every module
+counterproof.py_wsl_missing	scripts/counterproof.sh:264#2!py	-	-	-	WSL python missing: 
+counterproof.py_missing	scripts/counterproof.sh:268!py	-	-	-	python missing: 
+counterproof.no_candidate	scripts/counterproof.sh:268#2!py	-	-	-	no candidate
+counterproof.cfg_invalid	scripts/counterproof.sh:281#2!py	-	-	code	invalid configuration (exit {code})
+counterproof.mj_unreadable	scripts/counterproof.sh:287!py	-	-	e	mutations.json unreadable: {e}
+counterproof.mj_not_list	scripts/counterproof.sh:289!py	-	-	-	mutations.json must be a list with at least one entry
+counterproof.entry	scripts/counterproof.sh:292!py	-	-	i	entry {i}
+counterproof.not_object	scripts/counterproof.sh:294!py	: 	-	-	not an object
+counterproof.bad_id	scripts/counterproof.sh:297!py	: 	-	-	id missing or invalid (letters, digits, . _ -)
+counterproof.dup_id	scripts/counterproof.sh:300!py	: 	-	-	duplicate id
+counterproof.bad_file	scripts/counterproof.sh:304!py	: 	-	-	file must be a path relative to the repository, without ..
+counterproof.no_symbol	scripts/counterproof.sh:306!py	: 	-	-	`simbolo` missing
+counterproof.bad_mutation	scripts/counterproof.sh:308!py	: 	-	-	mutazione must be {{cerca, sostituisci}} with cerca not empty
+counterproof.empty_mutation	scripts/counterproof.sh:310!py	: 	-	-	empty mutazione (cerca equal to sostituisci)
+counterproof.bad_test_path	scripts/counterproof.sh:312!py	: 	-	-	test.percorso missing or not relative to the repository
+counterproof.bad_test_name	scripts/counterproof.sh:315!py	: 	-	-	test.nome must be a text
+counterproof.bad_red_if	scripts/counterproof.sh:317!py	: 	-	-	rosso_se must have test_id and asserzione, both not empty
+counterproof.same_module	scripts/counterproof.sh:321!py	: 	-	file test	file and test in the same module of maat.json, with the test under the root of the module (file: {file}; test: {test})
+counterproof.file_missing_wt	scripts/counterproof.sh:325!py	: 	-	-	file missing in the working tree: 
+counterproof.bad_absorbed	scripts/counterproof.sh:328!py	: 	-	-	assorbita must be true/false and motivo a text
+counterproof.module_no_cp	scripts/counterproof.sh:334!py	-	-	mod	module {mod} declares no counterproof
+counterproof.module_no_cmd	scripts/counterproof.sh:334#3!py	-	-	mod	controprova.comando not declared for module {mod}
+counterproof.not_run_declared	scripts/counterproof.sh:358#6!py	-	-	-	NOT RUN (declared): 
+counterproof.several_copies	scripts/counterproof.sh:364!py	-	-	mods	several modules with copia among the mutations ({mods}): one list for each
+counterproof.bad_module_name	scripts/counterproof.sh:369!py	-	-	nm	module name not usable as a folder: {nm}
+counterproof.pkg_is_root	scripts/counterproof.sh:372!py	-	-	nm	radice_pacchetti of module {nm} is the root of the repository: the copy needs a folder
+counterproof.search_count	scripts/counterproof.sh:478!py	-	-	n	mutation not applicable: the text to search appears {n} times in the file (exactly 1 is needed)
+counterproof.no_json_report	scripts/counterproof.sh:501#2!py	-	-	-	the runner produced no readable JSON report
+counterproof.not_collected	scripts/counterproof.sh:504#2!py	-	-	-	test file not collected by the runner
+counterproof.stays_green	scripts/counterproof.sh:515#2!py	-	-	-	the named test stays green: the mutation is not covered
+counterproof.stays_green	scripts/counterproof.sh:563#2!py	-	-	-	the named test stays green: the mutation is not covered
+counterproof.not_run_named	scripts/counterproof.sh:516#2!py	-	-	-	named test not run (missing or skipped): no proof
+counterproof.not_run_named	scripts/counterproof.sh:564#2!py	-	-	-	named test not run (missing or skipped): no proof
+counterproof.red_assert	scripts/counterproof.sh:520#2!py	-	-	-	red on the named test and on the expected assertion
+counterproof.red_import	scripts/counterproof.sh:522#2!py	-	-	-	red because of an import error, not because of the assertion: not a proof
+counterproof.red_other	scripts/counterproof.sh:523#2!py	-	-	-	the named test is red, but not on the expected assertion
+counterproof.suite_import	scripts/counterproof.sh:527#2!py	-	-	-	the test file does not load (import error): not a proof
+counterproof.suite_collect	scripts/counterproof.sh:528#2!py	-	-	-	the test file fails at collection: no test run
+counterproof.pytest_collect	scripts/counterproof.sh:532#2!py	-	-	rc	pytest did not collect the named test (exit {rc})
+counterproof.no_junit_report	scripts/counterproof.sh:536#2!py	-	-	-	the runner produced no readable JUnit report
+counterproof.cmd_red	scripts/counterproof.sh:569#2!py	-	-	rc	the counterproof command exits {rc}: red without a report, weak proof (no assertion checked)
+counterproof.cmd_green	scripts/counterproof.sh:570#2!py	-	-	-	the counterproof command exits 0: the mutation is not covered
+counterproof.timeout	scripts/counterproof.sh:582#2!py	-	-	-	runner beyond the time cap (FIC_CP_TIMEOUT)
+
+# ---------------------------------------------------------------- context-pack.sh (bash)
+context-pack.bad_option	scripts/context-pack.sh:44	context-pack: 	-	opt	unknown option: {opt}
+context-pack.no_spec	scripts/context-pack.sh:51#2	context-pack: 	-	spec	spec not found: {spec}
+context-pack.no_python	scripts/context-pack.sh:56#2	context-pack: 	-	-	Python interpreter not found
+context-pack.extract_failed	scripts/context-pack.sh:63	context-pack: 	-	-	extraction failed
+context-pack.unchanged	scripts/context-pack.sh:66	context-pack: 	-	fp dir	unchanged ({fp}) — {dir}/context-pack.md
+
+# ---------------------------------------------------------------- context-pack.sh (Python after #__PYTHON__)
+context-pack.cfg_loader	scripts/context-pack.sh:108!py	context-pack: 	\n	p e	configuration reader cannot be loaded ({p}): {e}
+context-pack.cfg_invalid	scripts/context-pack.sh:115#2!py	-	-	code	invalid configuration (exit {code})
+context-pack.fp_label	scripts/context-pack.sh:175!py	-	-	-	Spec fingerprint: 
+context-pack.fp_label	scripts/context-pack.sh:609!py	Data: %s · Commit: %s · 	%s	-	Spec fingerprint: 
+context-pack.fp_label	scripts/context-pack.sh:617!py	-	%s\n	-	Spec fingerprint: 
+context-pack.fp_label	scripts/context-pack.sh:617#2!py	-	%s · Stima: ~%d token\n	-	Spec fingerprint: 
+context-pack.date_commit	scripts/context-pack.sh:609!py	-	Impronta spec: %s	now rev	Date: {now} · Commit: {rev} · 
+context-pack.estimate	scripts/context-pack.sh:617#2!py	Impronta spec: %s · 	\n	tok	Estimate: ~{tok} tokens
+context-pack.line_ref	scripts/context-pack.sh:379!py	%s %s%s → %s%s (	)	n	l. {n}
+context-pack.line_ref	scripts/context-pack.sh:383!py	%s (	)	n	l. {n}
+context-pack.line_ref	scripts/context-pack.sh:395!py	%s (	)	n	l. {n}
+context-pack.model	scripts/context-pack.sh:390!py	-	-	n file line fields	model {n} ({file}:{line}): {fields}
+context-pack.none	scripts/context-pack.sh:422!py	-	-	-	none
+context-pack.none	scripts/context-pack.sh:493!py	- 	-	-	none
+context-pack.none	scripts/context-pack.sh:534!py	- 	-	-	none
+context-pack.none	scripts/context-pack.sh:584!py	-	-	-	none
+context-pack.files_header	scripts/context-pack.sh:475!py	## 	-	-	Files named by the spec
+context-pack.exists	scripts/context-pack.sh:482!py	- 	-	-	exists: 
+context-pack.exists_as	scripts/context-pack.sh:484!py	- 	-	files q	exists: {files} (cited as `{q}`)
+context-pack.ambiguous	scripts/context-pack.sh:486!py	- 	-	q n files	ambiguous: `{q}` → {n} files ({files})
+context-pack.does_not_exist	scripts/context-pack.sh:488!py	- 	-	-	DOES NOT EXIST: 
+context-pack.no_schema	scripts/context-pack.sh:498!py	-	-	-	DB schema not declared
+context-pack.no_schema_line	scripts/context-pack.sh:499#2!py	-	-	-	DB columns: DB schema not declared (contesto.schema_db_file and schema_db_comando in maat.json).
+context-pack.db_header	scripts/context-pack.sh:501#2!py	## 	-	-	DB columns (information_schema, read only)
+context-pack.db_header	scripts/context-pack.sh:509#2!py	## 	-	-	DB columns (information_schema, read only)
+context-pack.no_table	scripts/context-pack.sh:502!py	-	-	-	no table
+context-pack.no_table_known	scripts/context-pack.sh:504!py	- 	-	what	no recognisable table: {what} not declared in maat.json
+context-pack.no_table_named	scripts/context-pack.sh:507!py	- 	-	file	no table named (a `table` in backticks that matches a block of {file})
+context-pack.present	scripts/context-pack.sh:513!py	-	-	-	present
+context-pack.not_in_schema	scripts/context-pack.sh:516#2!py	-	-	-	not found in information_schema
+context-pack.cmd_undeclared	scripts/context-pack.sh:519!py	-	-	-	schema command not declared (contesto.schema_db_comando)
+context-pack.cmd_exit	scripts/context-pack.sh:524!py	-	-	rc out	schema command exited {rc}{out}
+context-pack.db_missing	scripts/context-pack.sh:525!py	-	-	why	missing ({why})
+context-pack.db_missing_line	scripts/context-pack.sh:526!py	- 	-	why tables	**missing** — {why}. Tables named: {tables}
+context-pack.symbols_header	scripts/context-pack.sh:529#2!py	## 	-	-	Named symbols (definition: first in the named files, then in the repository)
+context-pack.not_found	scripts/context-pack.sh:532#3!py	-	-	-	not found
+context-pack.by_file_header	scripts/context-pack.sh:537#2!py	## 	-	-	By file: signatures and the tests that cite it
+context-pack.lines	scripts/context-pack.sh:540!py	### %s (	)	n	{n} lines
+context-pack.more_sigs	scripts/context-pack.sh:555!py	- … 	-	n	+{n} signatures
+context-pack.is_test	scripts/context-pack.sh:558!py	- 	-	-	(it is a test)
+context-pack.more_files	scripts/context-pack.sh:562!py	- 	-	n cap	… {n} more files not expanded (cap {cap})
+context-pack.dt_header	scripts/context-pack.sh:564#2!py	## 	-	-	Tests citing the data-test attributes
+context-pack.more_dt	scripts/context-pack.sh:577!py	- 	-	n	… {n} more data-test of the spec
+context-pack.dt_vue	scripts/context-pack.sh:581!py	- 	-	n cited orphans	in the named .vue files {n} more data-test, {cited} cited by tests; not cited: {orphans}
+context-pack.no_dt	scripts/context-pack.sh:586!py	- 	-	-	no data-test in the spec nor in the named .vue files
+context-pack.strings_header	scripts/context-pack.sh:588#2!py	## 	-	-	Tests citing the strings of the spec («…» and "…")
+context-pack.strings_count	scripts/context-pack.sh:601!py	- 	-	n cited shown generic	strings searched: {n} · cited by tests: {cited}{shown} · generic (in more than 12 tests, not listed): {generic}
+context-pack.strings_shown	scripts/context-pack.sh:602!py	-	-	-	 (20 shown)
+context-pack.title	scripts/context-pack.sh:606!py	# 	-	spec	Context pack — {spec}
+context-pack.orientation	scripts/context-pack.sh:607!py	> 	-	-	Orientation, not authority: the code wins over the pack. Generated by `scripts/context-pack.sh` of the maat plugin
+context-pack.regenerated	scripts/context-pack.sh:608!py	> 	-	-	(read only); regenerated when the fingerprint of the spec changes.
+context-pack.truncated	scripts/context-pack.sh:614#2!py	\n	\n	-	… TRUNCATED at the cap of ~5k tokens: read the rest from the code.
+context-pack.summary	scripts/context-pack.sh:622!py	context-pack: %s — 	-	n missing tok db	named files {n} ({missing} missing), ~{tok} tokens, DB: {db}
+
+# blocco-c.main.tsv — the messages of blocks-independent.py, finalize.sh, gates.sh and review-surface.sh (block C, main
+# lane), read by tools/lingua-converti.py (format: its docstring). Python rows (.py files, !py, !f) are edited by hand.
+
+# ---------------------------------------------------------------- blocks-independent.py
+blocks-independent.reader_failed	scripts/blocks-independent.py:142	blocks-independent: 	-	p e	configuration reader not loadable ({p}): {e}
+blocks-independent.config_invalid	scripts/blocks-independent.py:148#2	-	-	rc	invalid configuration (exit {rc})
+blocks-independent.imports	scripts/blocks-independent.py:290	-	-	f g	{f} imports {g}
+blocks-independent.imports	scripts/blocks-independent.py:296	-	-	f g	{f} imports {g}
+blocks-independent.uses_nuxt	scripts/blocks-independent.py:302	-	-	f n g	{f} uses {n} (auto-imported from .nuxt, defined in {g})
+blocks-independent.uses_derived	scripts/blocks-independent.py:304	-	-	f n g	{f} uses {n} (auto-imported, name derived from the path of {g})
+blocks-independent.proc_unreadable	scripts/blocks-independent.py:313	blocks-independent: 	-	e	procedure unreadable: {e}
+blocks-independent.dep_scrive	scripts/blocks-independent.py:327	-	-	files	scrive: in common ({files})
+blocks-independent.dep_dopo	scripts/blocks-independent.py:329	-	-	-	dopo: declared
+blocks-independent.few_blocks	scripts/blocks-independent.py:346	blocks-independent: esito=serie motivo=	-	n	{n} block(s) in the procedure
+blocks-independent.shared_in_scrive	scripts/blocks-independent.py:349	blocks-independent: esito=serie motivo=	-	b f	shared or generated file in scrive: ({b}: {f})
+blocks-independent.empty_scope	scripts/blocks-independent.py:352	blocks-independent: esito=serie motivo=	-	ids	block without scrive: ({ids}): empty lane scope
+blocks-independent.prep_default	scripts/blocks-independent.py:356#3	-	-	-	the preparation of the module
+blocks-independent.dts_missing	scripts/blocks-independent.py:357	blocks-independent: esito=serie motivo=	-	root prep	.nuxt/*.d.ts missing ({root}.nuxt/components.d.ts or imports.d.ts unreadable: graph of the auto-imports not knowable; {prep})
+blocks-independent.dep_line	scripts/blocks-independent.py:372	-	-	a b why	dependency: {a}~{b} — {why}
+blocks-independent.one_component	scripts/blocks-independent.py:379	blocks-independent: esito=serie motivo=	-	-	dependent blocks (a single component)
+blocks-independent.post_unreadable	scripts/blocks-independent.py:418	posteriori: esito=STOP — 	-	files	inputs unreadable: {files}
+blocks-independent.post_scope	scripts/blocks-independent.py:425	posteriori: esito=STOP — 	-	f	scopes of the lanes unreadable in {f}
+blocks-independent.post_shared	scripts/blocks-independent.py:431	posteriori: esito=STOP — 	-	f	shared or generated file changed during the lanes: {f}
+blocks-independent.post_generated	scripts/blocks-independent.py:438	posteriori: esito=STOP — 	-	f	generated file {f} regenerated without a single lane declaring it
+blocks-independent.post_outside	scripts/blocks-independent.py:442	posteriori: esito=STOP — 	-	f	{f} changed outside the union of the scrive: of the lanes
+blocks-independent.post_both	scripts/blocks-independent.py:445	posteriori: esito=STOP — 	-	f	{f} written by both lanes
+blocks-independent.usage_post	scripts/blocks-independent.py:456	-	-	-	usage: blocks-independent.py --posteriori <lanes.txt> <changed.txt> [<declared-1> <declared-2>]
+blocks-independent.usage	scripts/blocks-independent.py:465	-	-	-	usage: blocks-independent.py [--root <repo>] <procedure.txt>
+
+# ---------------------------------------------------------------- finalize.sh (bash; the "finalize: esito=…" prefixes
+# and the N|/F|/W| tags between the Python and bash stay in the code; the Verification:/Finalize: lines get only {det})
+finalize.unknown_option	scripts/finalize.sh:79	finalize: 	-	opt	unknown option: {opt}
+finalize.no_run_dir	scripts/finalize.sh:85#2	finalize: 	-	run	run dir missing: {run}
+finalize.no_spec	scripts/finalize.sh:87#2	finalize: 	-	spec	spec missing: {spec}
+finalize.no_python	scripts/finalize.sh:88#2	finalize: 	-	-	Python interpreter not found
+finalize.nothing_to_sign	scripts/finalize.sh:98	finalize: esito=INVARIATO — 	-	rs fs	nothing to sign (Review status '{rs}' · Feature status '{fs}')
+finalize.unknown_level	scripts/finalize.sh:106	finalize: 	-	level	unknown level: {level} (min|std|full|legacy)
+finalize.reader_unusable	scripts/finalize.sh:126!d	-	-	-	reader not usable
+finalize.gates_unknown	scripts/finalize.sh:145	N|	-	err	required gates not determinable (maat.json: {err})
+finalize.no_evidence	scripts/finalize.sh:147	N|	-	level stale=${stale:+ — $(msg finalize.old_keys stale="$stale")}	no evidence of the driver at the current key (level {level}, files of touched.txt){stale}
+finalize.old_keys	scripts/finalize.sh:147!d	 — 	-	stale	old keys:{stale}
+finalize.no_coverage	scripts/finalize.sh:163#2	finalize: 	-	cop	coverage missing ({cop}): no Evidence table
+finalize.weak_proof	scripts/finalize.sh:169!printf	-	\n	w	weak proof: {w}
+finalize.weak_proofs	scripts/finalize.sh:170	 (	)	list	weak proofs: {list}
+finalize.det_ok	scripts/finalize.sh:173	-	$deboli	gates key	gates {gates} at the current key (evidence/{key}…), counterproofs red on assertion
+finalize.spec_unwritable	scripts/finalize.sh:174#3	finalize: 	-	-	spec not writable
+finalize.spec_unwritable	scripts/finalize.sh:182#3	finalize: 	-	-	spec not writable
+finalize.spec_unwritable	scripts/finalize.sh:187#3	finalize: 	-	-	spec not writable
+finalize.confirmed	scripts/finalize.sh:176	finalize: esito=IMPLEMENTED — 	-	det	confirmed: {det}
+# ---------------------------------------------------------------- finalize.sh (embedded Python, edited by hand: T)
+finalize.ev_missing	scripts/finalize.sh:264!py	N|	-	g key	{g}: evidence missing or unreadable (evidence/{key})
+finalize.ev_key	scripts/finalize.sh:266!py	N|	-	g	{g}: key of the JSON different from the folder of the evidence
+finalize.pass_no_report	scripts/finalize.sh:278!py	N|	-	g	{g}: PASS without the report of the runner
+finalize.nr_checks_green	scripts/finalize.sh:285!py	N|	-	g why m	{g}: NOT RUN ({why}) — no test in the module {m}, checks green
+finalize.declared	scripts/finalize.sh:285#3!py	-	-	-	declared
+finalize.nr_checks_skipped	scripts/finalize.sh:287!py	N|	-	g why m why2	{g}: NOT RUN ({why}) — no test in the module {m}, checks skipped: {why2}
+finalize.declared	scripts/finalize.sh:288#2!py	-	-	-	declared
+finalize.no_reason	scripts/finalize.sh:288#4!py	-	-	-	no reason
+finalize.nr_no_test	scripts/finalize.sh:290!py	N|	-	g why m	{g}: NOT RUN ({why}) — no test in the module {m}
+finalize.declared	scripts/finalize.sh:290#3!py	-	-	-	declared
+finalize.no_reason	scripts/finalize.sh:293#3!py	-	-	-	no reason
+finalize.no_reason	scripts/finalize.sh:296#3!py	-	-	-	no reason
+finalize.declared	scripts/finalize.sh:309#2!py	NOT RUN (	)	-	declared
+finalize.mj_unreadable	scripts/finalize.sh:317!py	N|	-	-	counterproofs: mutations.json unreadable
+finalize.mj_no_id	scripts/finalize.sh:329!py	N|	-	-	counterproofs: entry without id in mutations.json
+finalize.l2_invalid	scripts/finalize.sh:336!py	N|	-	mid why	counterproof {mid}: absorbed (L2) not valid: {why}
+finalize.l2_unverified	scripts/finalize.sh:336#2!py	-	-	-	conditions not verified (plan-check.sh l2)
+finalize.cp_no_result	scripts/finalize.sh:339!py	N|	-	mid	counterproof {mid}: result missing (counterproof.sh not run or incomplete)
+finalize.cp_weak	scripts/finalize.sh:341!py	W|	-	mid why	counterproof {mid}: rosso_generico, weak proof ({why})
+finalize.no_assertion	scripts/finalize.sh:341#3!py	-	-	-	no assertion verified
+finalize.cp_line	scripts/finalize.sh:343!py	N|	-	mid why	counterproof {mid}: {why}
+finalize.cp_outcome	scripts/finalize.sh:345!py	%s|	-	mid es why	counterproof {mid}: {es} ({why})
+finalize.cp_table	scripts/finalize.sh:359!py	%s|	-	cell res	counterproof (table of the review) {cell}: {res}
+finalize.no_outcome	scripts/finalize.sh:360!py	-	-	-	no result
+finalize.no_cov_map	scripts/finalize.sh:484!py	finalize: 	-	cop	no requirement→ID map (field copertura) in {cop}: no Evidence table
+finalize.cp_weak_cell	scripts/finalize.sh:503!py	PASS (	)	es	counterproof {es}, weak proof
+finalize.cp_cell	scripts/finalize.sh:505!py	NOT RUN (	)	es	counterproof {es}
+finalize.cp_cell	scripts/finalize.sh:506!py	%s (	)	es	counterproof {es}
+finalize.uncovered_no_id	scripts/finalize.sh:522!py	-	-	-	not covered (no test ID)
+finalize.uncovered_no_result	scripts/finalize.sh:524!py	-	-	ids	not covered (no result: {ids})
+finalize.no_current_key	scripts/finalize.sh:543#2!py	-	-	-	no current key
+finalize.ev_head	scripts/finalize.sh:544!py	%s: 	)	k12	requirement → test ID → result of VERIFY, evidence/{k12}
+finalize.ev_composed	scripts/finalize.sh:548!py	finalize: 	-	n k	Evidence composed — {n} requirements, {k} not covered
+
+# ---------------------------------------------------------------- gates.sh (bash; the "gates: esito=…" prefixes stay in
+# the code, and so do the components of the key that are not reasons: «assente», «node=wsl non raggiungibile»,
+# «<non impostata>», and the state tokens eseguito/riuso of the gate lines)
+gates.unknown_option	scripts/gates.sh:96	gates: 	-	opt	unknown option: {opt}
+gates.verify_usage	scripts/gates.sh:101#2	gates: 	-	-	--verify wants a folder evidence/<key> with argomenti.txt
+gates.unknown_level	scripts/gates.sh:111	gates: 	-	level	unknown level: {level} (min|std|full|legacy)
+gates.no_python	scripts/gates.sh:113#2	gates: 	-	-	Python interpreter not found
+gates.no_tmp	scripts/gates.sh:118	-	-	-	temporary folder not creatable
+gates.conf_lib	scripts/gates.sh:124#3	-	-	err=$(reader_err)	lib/maat-conf.sh not loadable: {err}
+gates.modulo_di	scripts/gates.sh:154	-	-	f rc err=$(reader_err)	modulo-di {f}: exit {rc} {err}
+gates.pyw_missing	scripts/gates.sh:194	-	-	cands	python WSL missing: {cands}
+gates.declared_no_test	scripts/gates.sh:226	-	-	-	declared: no test
+gates.no_file_under	scripts/gates.sh:227	-	-	root	no file under {root}
+gates.no_file_under	scripts/gates.sh:245	-	-	root	no file under {root}
+gates.no_file_under	scripts/gates.sh:262	-	-	root	no file under {root}
+gates.no_test_for	scripts/gates.sh:232	-	-	files	no existing test for: {files}
+gates.test_cmd	scripts/gates.sh:238	-	-	m err=$C_NR	test command of {m}: {err}
+gates.declared_why	scripts/gates.sh:239	-	-	why	declared: {why}
+gates.declared_why	scripts/gates.sh:269	-	-	why	declared: {why}
+gates.test_unresolved	scripts/gates.sh:240	-	-	m rc err	test command of {m} not resolved (exit {rc}): {err}
+gates.checks_skipped	scripts/gates.sh:256	-	-	list	checks skipped: {list}
+gates.checks_none	scripts/gates.sh:257	-	-	m	no touched file matches the checks of {m}
+gates.checks_unresolved	scripts/gates.sh:258	-	-	m rc err	checks of {m} not resolved (exit {rc}): {err}
+gates.type_cmd	scripts/gates.sh:268	-	-	tipo m err=$C_NR	{tipo} command of {m}: {err}
+gates.type_unresolved	scripts/gates.sh:270	-	-	tipo m rc err	{tipo} command of {m} not resolved (exit {rc}): {err}
+gates.no_wsl	scripts/gates.sh:280	-	-	m	WSL missing (wsl.exe not in the PATH): the module {m} has ambiente wsl — set `ambiente: nativo` or install WSL
+gates.no_tree	scripts/gates.sh:291#2	-	-	-	tree of the working tree not computable: review-surface.sh tree
+gates.stale	scripts/gates.sh:349	STALE (	)	key	current key {key}
+gates.ev_dir	scripts/gates.sh:353#2	gates: esito=BLOCKED (	) chiave=$KEY evidence=-	ev	evidence folder not creatable: {ev}
+gates.log_exit	scripts/gates.sh:384!printf	== 	\n	rc	exit {rc}
+gates.tree_changed	scripts/gates.sh:409#3	-	-	tree after=${after:-$(msg gates.not_computable)}	tree changed during the gates (tree {tree} -> {after})
+gates.not_computable	scripts/gates.sh:409!d	-	-	-	not computable
+gates.uncovered	scripts/gates.sh:413	-	-	files	not covered: {files} (outside every module of maat.json)
+# ---------------------------------------------------------------- gates.sh (embedded Python, edited by hand: T)
+gates.no_junit	scripts/gates.sh:489!f	-	-	rc g	no JUnit report (exit {rc}): see {g}.log
+gates.junit_summary	scripts/gates.sh:491!f	-	-	n fl er sk	{n} tests, {fl} failed, {er} errors, {sk} skipped
+gates.junit_incoherent	scripts/gates.sh:496!f	-	-	rc	exit {rc} inconsistent with the report or no test collected
+gates.no_output	scripts/gates.sh:500!f	-	-	rc	no output of the runner (exit {rc})
+gates.checks_summary	scripts/gates.sh:505!py	-	-	n ko sk	{n} entries run, {ko} failed, {sk} skipped
+gates.checks_incoherent	scripts/gates.sh:510!f	-	-	rc	exit {rc} inconsistent with the entries
+gates.not_runnable	scripts/gates.sh:516!f	-	-	rc	command not runnable (exit {rc}: program or environment missing)
+gates.no_wrapper_line	scripts/gates.sh:520!f	-	-	rc	no 'esito=' line of the wrapper (exit {rc})
+gates.no_vitest_summary	scripts/gates.sh:526#2!py	-	-	-	PASS of the wrapper without the vitest summary (Tests … passed)
+gates.ev_not_written	scripts/gates.sh:600#4!py	-	-	-	evidence not written
+gates.nr_declared	scripts/gates.sh:617!py	 (	)	gates	NOT RUN declared: {gates}
+
+# ---------------------------------------------------------------- review-surface.sh (die adds «review-surface: »; the
+# «Status: …» and «Gate-only eligible: no — » prefixes stay in the code, read by the review skill)
+review-surface.not_git	scripts/review-surface.sh:54	-	-	-	not a git repository
+review-surface.cd_failed	scripts/review-surface.sh:56#2	-	-	top	cannot enter {top}
+review-surface.mktemp_failed	scripts/review-surface.sh:92	-	-	-	mktemp failed
+review-surface.mktemp_failed	scripts/review-surface.sh:222	-	-	-	mktemp failed
+review-surface.add_failed	scripts/review-surface.sh:94#3	-	-	-	git add -A (temporary index) failed
+review-surface.write_tree_failed	scripts/review-surface.sh:95#2	-	-	-	git write-tree failed
+review-surface.base_unresolvable	scripts/review-surface.sh:103#2	-	-	ref	base '{ref}' not resolvable
+review-surface.paths_missing	scripts/review-surface.sh:108#2	-	-	f	paths-file '{f}' does not exist
+review-surface.unknown_arg	scripts/review-surface.sh:170	-	-	arg	unknown argument: {arg}
+review-surface.usage_fp	scripts/review-surface.sh:188#3	-	-	-	usage: fingerprint --tree <tree> --paths-file <f>
+review-surface.tree_absent	scripts/review-surface.sh:189#2	-	-	tree	tree {tree} not present
+review-surface.usage_check	scripts/review-surface.sh:193#4	-	-	-	usage: check --base <sha> --tree <tree> --paths-file <f> [--fingerprint <fp>] [--exclude-file <f>]
+review-surface.base_absent	scripts/review-surface.sh:194#2	-	-	base	base {base} not present
+review-surface.not_test	scripts/review-surface.sh:233#5	-	-	p	not a test file: {p}
+review-surface.test_infra	scripts/review-surface.sh:234#4	-	-	p	test infrastructure: {p}
+review-surface.lines_removed	scripts/review-surface.sh:237#4	-	-	p	lines removed or changed in an existing test: {p}
+review-surface.shared_setup	scripts/review-surface.sh:238#5	-	-	p	shared setup added to an existing test: {p}
+review-surface.control_flow	scripts/review-surface.sh:239#4	-	-	p	control flow added to an existing test: {p}
+review-surface.weakening	scripts/review-surface.sh:241#3	-	-	-	weakening signals
+review-surface.unknown_pruned	scripts/review-surface.sh:244#2	Status: UNKNOWN (	)	tree	tree {tree} pruned by gc, no fingerprint recorded
+review-surface.stale_fp	scripts/review-surface.sh:247	Status: STALE (via fingerprint; 	)	-	delta not reconstructable → round at full scope
+review-surface.no_delta	scripts/review-surface.sh:249	Gate-only eligible: no — 	-	-	delta not reconstructable
+review-surface.usage_signals	scripts/review-surface.sh:253#3	-	-	-	usage: test-signals --from <tree-ish> --to <tree-ish> [--paths-file <f>]
+review-surface.usage_diff	scripts/review-surface.sh:260#5	-	-	-	usage: diff --from <tree-ish> --to <tree-ish> --paths-file <f> --out <file>
+review-surface.no_paths	scripts/review-surface.sh:262	-	-	-	paths-file empty: no path to show
+review-surface.diff_failed	scripts/review-surface.sh:263#5	-	-	-	git diff failed
+review-surface.no_diff	scripts/review-surface.sh:264#2	(	)	-	no differences
+review-surface.subcommand	scripts/review-surface.sh:273	-	-	-	subcommand: snapshot | fingerprint | check | test-signals | tree | diff

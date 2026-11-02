@@ -4,7 +4,7 @@ A format-1 plan is never converted. Everything of `SKILL.md` holds, with these d
 
 - **Budget: 10 iterations**, not 4 (one fan-out, one delta round or one fresh-eyes run = one iteration).
 - **No S2**: after round 1 the rounds are one delta reviewer (below), and the fresh-eyes gate runs once at the end,
-  under its triggers. `lint2`, `gen`, `skeleton`, `route` say `non si applica`.
+  under its triggers. `lint2`, `gen`, `skeleton`, `route` say `does not apply` (Italian: `non si applica`).
 
    the legacy plan lacks, and — if a critical surface is declared — its `[floor:` or `⚠️`
    line (a legacy plan keeps its Italian headings; the lines you add may use either form, autore.md

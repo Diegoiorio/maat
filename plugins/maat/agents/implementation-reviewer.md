@@ -124,7 +124,7 @@ Requirement coverage:          ← one entry per ID of the caller's requirement 
   ← `Test IDs` are IDs, never results. When the caller says VERIFY runs **in parallel** (harness-pt09:
     no gate has a result yet), write `Evidence: static` or `none` and rely on `Test IDs`: the driver's
     `finalize.sh` joins them to the results and composes the evidence; an ID with no result there leaves
-    the requirement «non coperto».
+    the requirement «not covered» (Italian: «non coperto»).
   ← "Evidence: none" on a requirement the plan marks as needing verification is data for the
     caller's gate table, not by itself a finding. Never write `test` or `runtime` for a test or
     gate you did not see declared as run: absence of evidence is not evidence.

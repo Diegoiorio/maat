@@ -1,0 +1,161 @@
+# blocco-d.worktree.tsv — the messages of block D, lane 2a: harness-merge.sh, ciclo-worktree.sh and worktree-lib.sh,
+# read by tools/lingua-converti.py (format: its docstring). Sections harness-merge, worktree-cycle
+# (the messages of ciclo-worktree.sh: «ciclo» in every key would read as Italian to the scanner) and worktree-lib.
+# Frozen in the code: the tokens of run-phase.sh --lock-status (libero, occupato, dentro il ciclo, sconosciuto) that
+# harness-merge.sh reads with a case; the text of cmd.exe read by ciclo-worktree.sh (non trovato|not found).
+
+# ---------------------------------------------------------------- harness-merge.sh
+harness-merge.usage	scripts/harness-merge.sh:30#2	-	-	script	usage: {script} <worktree>
+harness-merge.not_git	scripts/harness-merge.sh:34#3	harness-merge: 	-	wt	{wt} is not a git repository
+harness-merge.is_main	scripts/harness-merge.sh:35#3	harness-merge: 	-	wt	{wt} is the main tree, not a linked worktree
+harness-merge.head_unreadable	scripts/harness-merge.sh:38	harness-merge: 	-	-	HEAD of the worktree unreadable
+harness-merge.trees	scripts/harness-merge.sh:39	harness-merge: 	-	main wt branch=${branch:-$(msg harness-merge.detached)} head	main tree {main} · worktree {wt} ({branch} @ {head})
+harness-merge.detached	scripts/harness-merge.sh:39!d	-	-	-	detached HEAD
+harness-merge.lock	scripts/harness-merge.sh:50	-	-	lock	Lock of the code phases: {lock}
+harness-merge.running_head	scripts/harness-merge.sh:60	-	-	-	Phases running or interrupted (.running without .exit):
+harness-merge.running_since	scripts/harness-merge.sh:62	  	-	f since	{f} (since {since})
+harness-merge.running_fix	scripts/harness-merge.sh:63	    	-	exit	recovery, ONLY if no session is running it (process dead, log still): echo 143 > "{exit}.exit"
+harness-merge.running_none	scripts/harness-merge.sh:66	-	-	-	Phases running or interrupted (.running without .exit): none
+harness-merge.refused	scripts/harness-merge.sh:70	harness-merge: 	-	-	REFUSED — a cycle is running or interrupted: launch again when the lock is free and no phase is half done
+harness-merge.clear	scripts/harness-merge.sh:74	harness-merge: 	-	-	clear to go. Run it yourself, in the main tree:
+harness-merge.nothing	scripts/harness-merge.sh:80	  	-	ref	nothing to bring: no commit of {ref} is missing from the main tree
+harness-merge.not_ancestor	scripts/harness-merge.sh:82	  	-	ref	(the main tree is not an ancestor of {ref}: no fast-forward) — cherry-pick of the commits:
+harness-merge.list_skipped	scripts/harness-merge.sh:101	-	-	-	Unclosed cycles: list skipped (FIC_MERGE_NO_LIST=1)
+harness-merge.no_review	scripts/harness-merge.sh:109#2	-	-	spec	{spec}: no review
+harness-merge.open_status	scripts/harness-merge.sh:110	-	-	spec rs=${rs:-$(msg harness-merge.absent)} fs=${fs:-$(msg harness-merge.absent)}	{spec}: Review status {rs} · Feature status {fs}
+harness-merge.absent	scripts/harness-merge.sh:110!d	-	-	-	(missing)
+harness-merge.absent	scripts/harness-merge.sh:110#2!d	-	-	-	(missing)
+harness-merge.open_head	scripts/harness-merge.sh:113	-	-	-	Unclosed cycles (status lines of the spec; they will restart with the new harness):
+harness-merge.open_none	scripts/harness-merge.sh:115	-	-	-	Unclosed cycles: none
+harness-merge.list_cut	scripts/harness-merge.sh:117	  	-	max	(list truncated after {max}s: FIC_MERGE_LIST_MAX)
+
+# ---------------------------------------------------------------- worktree-lib.sh (WT_TAG: the caller's prefix, as it is)
+worktree-lib.config_invalid	scripts/worktree-lib.sh:48#2!py	-	-	rc	invalid configuration (exit {rc})
+worktree-lib.no_python	scripts/worktree-lib.sh:76#3	${WT_TAG:-replay}: 	-	-	Python interpreter not found (maat.json)
+worktree-lib.link_src_missing	scripts/worktree-lib.sh:110#2	${WT_TAG:-replay}: 	-	src	source of the link missing: {src}
+worktree-lib.link_exists	scripts/worktree-lib.sh:111#3	${WT_TAG:-replay}: 	-	dst	{dst} already exists: not replacing it
+worktree-lib.link_left	scripts/worktree-lib.sh:128#2	${WT_TAG:-replay}: 	-	r p	link not removed: {r}/{p}
+worktree-lib.relgit_none	scripts/worktree-lib.sh:138	${WT_TAG:-replay}: 	-	-	WARNING — relative gitdir not computable (different drives?): the absolute one stays, vitest-fast.sh translates it
+worktree-lib.relgit_bad	scripts/worktree-lib.sh:144	${WT_TAG:-replay}: 	-	rel	relative gitdir not valid ({rel}): the absolute one restored
+worktree-lib.no_mirror	scripts/worktree-lib.sh:150#3	worktree-lib: 	-	f	fic-mirror.sh not found: {f}/fic-mirror.sh
+worktree-lib.fp_same	scripts/worktree-lib.sh:161#3	${WT_TAG:-replay}: 	-	a	fingerprint of the copy's dependencies equal to the main tree ({a})
+worktree-lib.fp_diff	scripts/worktree-lib.sh:162	-	-	b a	fingerprint of the copy's dependencies different from the main tree ({b} ≠ {a}): the WSL copy of the worktree is not seeded, test-fast and counterproof will exit BLOCKED (copy missing)
+worktree-lib.fp_warn	scripts/worktree-lib.sh:163	${WT_TAG:-replay}: 	-	w	WARNING — {w}
+worktree-lib.forget_left	scripts/worktree-lib.sh:181	${WT_TAG:-replay}: 	-	l w w w	WARNING — WSL copy of the worktree not entirely deleted (in use?); then, from WSL: . {l} && fic_lane_forget {w} 1; fic_lane_forget {w} 2; fic_mirror_forget {w}
+
+# ---------------------------------------------------------------- ciclo-worktree.sh (say/die/stop add «ciclo-worktree: », and «STOP — »; the sub-commands crea, stato, riporta, rimuovi and --forza stay)
+worktree-cycle.no_lib	scripts/ciclo-worktree.sh:80#2	-	-	here here	{here}/worktree-lib.sh or {here}/fic-mirror.sh not found
+worktree-cycle.base_ref	scripts/ciclo-worktree.sh:95#2	-	-	-	--base wants a ref
+worktree-cycle.base_ref	scripts/ciclo-worktree.sh:96#2	-	-	-	--base wants a ref
+worktree-cycle.unknown_opt	scripts/ciclo-worktree.sh:99	-	-	opt	unknown option: {opt}
+worktree-cycle.one_arg	scripts/ciclo-worktree.sh:100#2	-	-	a b	only one positional argument: {a}, {b}
+worktree-cycle.usage	scripts/ciclo-worktree.sh:103	-	-	-	usage: ciclo-worktree.sh crea <spec> [--base <ref>] | stato <name> | riporta <name> [--forza] | rimuovi <name> [--branch] [--forza]
+worktree-cycle.crea_opts	scripts/ciclo-worktree.sh:106	-	-	-	crea accepts only --base
+worktree-cycle.stato_opts	scripts/ciclo-worktree.sh:107#2	-	-	-	stato takes no options
+worktree-cycle.riporta_opts	scripts/ciclo-worktree.sh:108#2	-	-	-	riporta accepts only --forza
+worktree-cycle.rimuovi_opts	scripts/ciclo-worktree.sh:109#2	-	-	-	rimuovi does not accept --base
+worktree-cycle.not_git	scripts/ciclo-worktree.sh:114	-	-	-	the current folder is not in a git repository
+worktree-cycle.main_unresolved	scripts/ciclo-worktree.sh:115	-	-	common	main tree not resolved from {common}
+worktree-cycle.gitdir_unresolved	scripts/ciclo-worktree.sh:118	-	-	-	git dir not resolved
+worktree-cycle.from_linked	scripts/ciclo-worktree.sh:119#3	-	-	main top	launch the cycle from the main tree ({main}), or without --worktree: this folder is already a worktree ({top})
+worktree-cycle.main_invalid	scripts/ciclo-worktree.sh:121#3	-	-	main	main tree not valid: {main}
+worktree-cycle.conf_unreadable	scripts/ciclo-worktree.sh:123	-	-	-	maat.json of the main tree not readable: nothing to link or to check
+worktree-cycle.spec_missing	scripts/ciclo-worktree.sh:127#2	-	-	spec	spec missing: {spec}
+worktree-cycle.spec_name	scripts/ciclo-worktree.sh:129#2	-	-	spec	the spec must be named spec-<name>.md: {spec}
+worktree-cycle.name_invalid	scripts/ciclo-worktree.sh:135#4	-	-	name	name not valid: {name}
+worktree-cycle.not_exists	scripts/ciclo-worktree.sh:150#2	-	-	wt	does not exist: {wt}
+worktree-cycle.not_wt_root	scripts/ciclo-worktree.sh:152#3	-	-	c	not the root of a git worktree: {c}
+worktree-cycle.is_main	scripts/ciclo-worktree.sh:153#3	-	-	c	it is the main tree: {c}
+worktree-cycle.no_marker	scripts/ciclo-worktree.sh:154#2	-	-	mk	the marker of ciclo-worktree.sh is missing ({mk})
+worktree-cycle.marker_invalid	scripts/ciclo-worktree.sh:155#2	-	-	c mk	marker not valid: {c}/{mk}
+worktree-cycle.marker_path	scripts/ciclo-worktree.sh:156#3	-	-	p	the marker points to another path: {p}
+worktree-cycle.marker_branch	scripts/ciclo-worktree.sh:157#3	-	-	b	the marker points to another branch: {b}
+worktree-cycle.not_on_branch	scripts/ciclo-worktree.sh:158#3	-	-	b	the worktree is not on branch {b}
+worktree-cycle.not_listed	scripts/ciclo-worktree.sh:160	-	-	c	not among the worktrees of the repository: {c}
+worktree-cycle.not_dir	scripts/ciclo-worktree.sh:181#2	$TAG: 	-	wt	{wt} is not a folder: links not checkable
+worktree-cycle.find_failed	scripts/ciclo-worktree.sh:182	$TAG: 	-	wt	find -type l failed on {wt}
+worktree-cycle.dir_failed	scripts/ciclo-worktree.sh:189	$TAG: 	-	wt rc err	dir /AL /S failed on {wt} (exit {rc}: {err})
+worktree-cycle.wsl_find_failed	scripts/ciclo-worktree.sh:195	$TAG: 	-	w	find -type l from WSL failed on {w}
+worktree-cycle.check_failed	scripts/ciclo-worktree.sh:203	$TAG: 	-	-	check of the links failed
+worktree-cycle.links_left	scripts/ciclo-worktree.sh:206	$TAG: 	-	-	links still present:
+worktree-cycle.no_python	scripts/ciclo-worktree.sh:212#2	-	-	-	Python interpreter not found (set FIC_PYTHON)
+worktree-cycle.not_ours	scripts/ciclo-worktree.sh:215	-	-	wt name why	{wt} exists and is not a worktree of ciclo-worktree.sh for {name} ({why}): not using it
+worktree-cycle.resume	scripts/ciclo-worktree.sh:217	-	-	wt	resuming the existing worktree: {wt}
+worktree-cycle.branch_exists	scripts/ciclo-worktree.sh:219	-	-	b wt b	branch {b} already exists without the worktree {wt}: not mine, not reusing it (if it is a leftover: git worktree prune, then git branch -d {b})
+worktree-cycle.base_invalid	scripts/ciclo-worktree.sh:222	-	-	ref	base ref not valid: {ref}
+worktree-cycle.deps_base	scripts/ciclo-worktree.sh:225#2	-	-	base dd	dependencies differ between the base {base} and the main tree: {dd}. node_modules and venvs linked from the main tree would not be those of this code. No worktree created.
+worktree-cycle.wt_add_failed	scripts/ciclo-worktree.sh:226#5	-	-	wt	git worktree add failed: {wt}
+worktree-cycle.marker_unwritable	scripts/ciclo-worktree.sh:229	-	-	wt mk	marker not writable: {wt}/{mk}
+worktree-cycle.not_ignored	scripts/ciclo-worktree.sh:232	-	-	mk base aiw	{mk} is not gitignored at the base {base} (rule {aiw}/spec-*): worktree removed
+worktree-cycle.abs_gitdir	scripts/ciclo-worktree.sh:234#2	-	-	-	WARNING — .git with an absolute gitdir (vitest-fast.sh translates it)
+worktree-cycle.created	scripts/ciclo-worktree.sh:235	-	-	wt b base root	worktree created: {wt} (branch {b} from {base}); the cycle uses the plugin of the session ({root}), not the harness of the worktree's commit
+worktree-cycle.deps_resume	scripts/ciclo-worktree.sh:243#2	-	-	dd	dependencies differ between the worktree and the main tree: {dd}. The links would not hold for this code.
+worktree-cycle.real_dir	scripts/ciclo-worktree.sh:250#2	-	-	p	WARNING — {p} is a real folder of the worktree: not replacing it
+worktree-cycle.link_failed	scripts/ciclo-worktree.sh:251#3	-	-	p	link of {p} failed
+worktree-cycle.linked	scripts/ciclo-worktree.sh:255	-	-	n links	dependencies linked from the main tree: {n} ({links})
+worktree-cycle.spec_kept	scripts/ciclo-worktree.sh:259	-	-	rel	spec of the worktree already present: not overwriting it ({rel})
+worktree-cycle.spec_changed	scripts/ciclo-worktree.sh:261	-	-	-	WARNING — the spec of the main tree changed since the copy: the cycle uses the worktree's
+worktree-cycle.spec_copy_failed	scripts/ciclo-worktree.sh:263#3	-	-	-	copy of the spec failed
+worktree-cycle.spec_copied	scripts/ciclo-worktree.sh:264	-	-	rel	spec copied: {rel}
+worktree-cycle.run_copy_failed	scripts/ciclo-worktree.sh:267#3	-	-	-	copy of the run dir failed
+worktree-cycle.run_copied	scripts/ciclo-worktree.sh:268	-	-	rel	run dir copied: {rel}
+worktree-cycle.prep_copy_failed	scripts/ciclo-worktree.sh:288#4	-	-	rel	copy of {rel} failed
+worktree-cycle.prep_copied	scripts/ciclo-worktree.sh:292	-	-	rad nc guida	preparati copied into {rad}: {nc} files ({guida} and the other preparati)
+worktree-cycle.prep_missing	scripts/ciclo-worktree.sh:294	-	-	pre guida cmd rad	WARNING — the main tree has no {pre}{guida}: run '{cmd}' in {rad} of the main tree, then crea again
+worktree-cycle.fp_warn	scripts/ciclo-worktree.sh:298#2	-	-	w	WARNING — {w}
+worktree-cycle.no_copia	scripts/ciclo-worktree.sh:308	-	-	-	no module with copia in maat.json: check of the WSL copy skipped
+worktree-cycle.wsl_lib	scripts/ciclo-worktree.sh:312#2	-	-	l	fic-mirror.sh not readable from WSL: {l}
+worktree-cycle.wsl_root	scripts/ciclo-worktree.sh:313#2	-	-	r	git (WSL) does not find the root of the worktree {r}
+worktree-cycle.wsl_unexpected	scripts/ciclo-worktree.sh:314#3	-	-	fm	unexpected copy: {fm} (not the copy of a worktree)
+worktree-cycle.wsl_seeded_already	scripts/ciclo-worktree.sh:318	-	-	fm p	WSL copy already seeded: {fm} ({p})
+worktree-cycle.wsl_seed_failed	scripts/ciclo-worktree.sh:320	-	-	why	seeding of the WSL copy failed: {why}
+worktree-cycle.wsl_seeded	scripts/ciclo-worktree.sh:321	-	-	fm p	WSL copy seeded: {fm} ({p}, dependencies hardlinked from ~/fic-mirror)
+worktree-cycle.wsl_fp	scripts/ciclo-worktree.sh:323#3	-	-	-	WARNING: fingerprint of the copy different from the worktree's dependencies (test-fast.sh realigns it)
+worktree-cycle.wsl_guide_missing	scripts/ciclo-worktree.sh:325#2	-	-	g r d	guide file {g} of the preparati missing in {r}/{d}: the lint would exit BLOCKED
+worktree-cycle.wsl_guide_ok	scripts/ciclo-worktree.sh:326	-	-	d g	guide file of the preparati present: {d}/{g}
+worktree-cycle.wsl_failed	scripts/ciclo-worktree.sh:331	$TAG: 	-	wt	check of the WSL copy failed: the worktree stays ({wt}); once the reason is fixed, 'crea' again resumes
+worktree-cycle.wsl_skipped	scripts/ciclo-worktree.sh:333	-	-	-	check of the WSL copy skipped (FIC_WT_WSL=0)
+worktree-cycle.no_wt	scripts/ciclo-worktree.sh:341#2	-	-	name wt	no worktree for {name} ({wt})
+worktree-cycle.st_path	scripts/ciclo-worktree.sh:342	-	-	p	path: {p}
+worktree-cycle.st_detached	scripts/ciclo-worktree.sh:343!sq	-	-	-	(detached)
+worktree-cycle.st_owner	scripts/ciclo-worktree.sh:344	-	-	mk	owner: ciclo-worktree.sh ({mk})
+worktree-cycle.st_not_owner	scripts/ciclo-worktree.sh:344#2	-	-	why	owner: NOT ciclo-worktree.sh — {why}
+worktree-cycle.st_spec	scripts/ciclo-worktree.sh:347	-	-	wt rel r	spec: {wt}/{rel} · brought back to the main tree: {r}
+worktree-cycle.st_cycle	scripts/ciclo-worktree.sh:349	-	-	c	cycle: {c}
+worktree-cycle.st_no_spec	scripts/ciclo-worktree.sh:351	-	-	-	spec: missing in the worktree
+worktree-cycle.st_changed	scripts/ciclo-worktree.sh:356	-	-	n	files changed: {n}
+worktree-cycle.not_ours_stop	scripts/ciclo-worktree.sh:361	-	-	wt name why	{wt} is not a worktree of ciclo-worktree.sh for {name} ({why})
+worktree-cycle.rp_no_spec	scripts/ciclo-worktree.sh:365#2	-	-	wt rel	spec missing in the worktree: {wt}/{rel}
+worktree-cycle.rp_spec_changed	scripts/ciclo-worktree.sh:368	-	-	rel	the spec of the main tree ({rel}) changed after the copy into the worktree: bringing it back would delete those changes. Compare the two files; to overwrite it anyway: --forza
+worktree-cycle.rp_run_changed	scripts/ciclo-worktree.sh:372	-	-	rel	the run dir of the main tree ({rel}) changed after the copy into the worktree: aligning it would delete those files. Compare (diff -rq); to overwrite it anyway: --forza
+worktree-cycle.spec_copy_failed	scripts/ciclo-worktree.sh:374#4	-	-	-	copy of the spec failed
+worktree-cycle.rp_spec_done	scripts/ciclo-worktree.sh:375	-	-	m rel	spec brought back: {m}/{rel}
+worktree-cycle.rp_prev_kept	scripts/ciclo-worktree.sh:381#2!insq	$TAG: 	-	old	previous run dir in {old}
+worktree-cycle.rp_copy_failed	scripts/ciclo-worktree.sh:382#4	-	-	-	copy of the run dir failed (the run dir of the main tree is intact)
+worktree-cycle.rp_not_movable	scripts/ciclo-worktree.sh:383#5	-	-	-	run dir of the main tree not movable (in use?): intact
+worktree-cycle.rp_none_prev	scripts/ciclo-worktree.sh:386#2	-	-	-	run dir not aligned (there was no previous one in the main tree)
+worktree-cycle.rp_restored	scripts/ciclo-worktree.sh:387#3	-	-	-	run dir not aligned: the previous one restored
+worktree-cycle.rp_not_restored	scripts/ciclo-worktree.sh:388	-	-	old m rel	run dir not aligned and NOT restored: the previous run dir is in {old} (put it back by hand in {m}/{rel})
+worktree-cycle.rp_differs	scripts/ciclo-worktree.sh:392#3	-	-	-	run dir brought back differs from the worktree's
+worktree-cycle.rp_run_done	scripts/ciclo-worktree.sh:393	-	-	m rel	run dir aligned: {m}/{rel}
+worktree-cycle.rp_code_left	scripts/ciclo-worktree.sh:397	-	-	b wt	code NOT brought back: it stays on branch {b} in {wt} (not committed)
+worktree-cycle.rm_lock	scripts/ciclo-worktree.sh:405	-	-	out	lock of the code phases of the worktree not free: {out}. A cycle runs there: stop it first
+worktree-cycle.rm_plan_alive	scripts/ciclo-worktree.sh:413#3	-	-	rel k p	a plan phase of the worktree is alive ({rel}/plan.lock, {k}={p}): stop it first
+worktree-cycle.rm_plan_new	scripts/ciclo-worktree.sh:416	-	-	rel	plan lock just taken ({rel}/plan.lock, owner not written yet): a plan phase is starting
+worktree-cycle.rm_running	scripts/ciclo-worktree.sh:425	-	-	running	phase running in the worktree:{running} (log/<label>.running without .exit): if it still runs, stop it first; if it is dead, --forza
+worktree-cycle.rm_running_forced	scripts/ciclo-worktree.sh:427#2	-	-	running	WARNING — --forza: phase reported running ignored:{running} (log/<label>.running without .exit)
+worktree-cycle.rm_dirty	scripts/ciclo-worktree.sh:430	-	-	n wt	the worktree has uncommitted changes ({n} files): integrate them first (commit and merge, or git -C {wt} diff | git apply), or --forza to discard them
+worktree-cycle.rm_nr_spec	scripts/ciclo-worktree.sh:434#4	-	-	rel	the spec ({rel})
+worktree-cycle.rm_nr_and	scripts/ciclo-worktree.sh:435!d	-	-	nr	{nr} and 
+worktree-cycle.rm_nr_run	scripts/ciclo-worktree.sh:435#4	-	-	joined=${nr:+$(msg worktree-cycle.rm_nr_and nr="$nr")} rel	{joined}the run dir ({rel})
+worktree-cycle.rm_not_back	scripts/ciclo-worktree.sh:437	-	-	nr name	{nr} of the worktree is not brought back to the main tree: removing the worktree would lose it. First: ciclo-worktree.sh riporta {name} (or --forza to lose it)
+worktree-cycle.rm_not_back_forced	scripts/ciclo-worktree.sh:438	-	-	nr	WARNING — --forza: {nr} of the worktree not brought back, it is lost
+worktree-cycle.rm_no_wsl	scripts/ciclo-worktree.sh:440#2	-	-	-	WSL copy not deleted (FIC_WT_WSL=0)
+worktree-cycle.rm_links_left	scripts/ciclo-worktree.sh:441#2	-	-	wt	links still present in {wt}: worktree NOT removed (the removal would follow the dependencies of the main tree)
+worktree-cycle.rm_unlinked	scripts/ciclo-worktree.sh:442	-	-	-	links removed, none left
+worktree-cycle.rm_failed	scripts/ciclo-worktree.sh:444	-	-	wt	git worktree remove failed: {wt}
+worktree-cycle.rm_still	scripts/ciclo-worktree.sh:445#2	-	-	wt	the folder {wt} still exists after git worktree remove
+worktree-cycle.rm_done	scripts/ciclo-worktree.sh:446	-	-	wt	worktree removed: {wt}
+worktree-cycle.rm_branch_kept	scripts/ciclo-worktree.sh:448#3	-	-	b b	branch {b} not deleted (commits not integrated?): it stays; to discard it: git branch -D {b}
+worktree-cycle.rm_branch_done	scripts/ciclo-worktree.sh:449	-	-	b	branch deleted: {b}
+worktree-cycle.rm_branch_left	scripts/ciclo-worktree.sh:451	-	-	b	branch {b} left (to delete it: --branch)

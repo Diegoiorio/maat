@@ -12,6 +12,7 @@
 # On Linux everything runs (there is no wsl); only the doctor's «WSL assente» line is Windows-specific: SALTATO with the reason.
 #   bash plugins/maat/scripts/senza-wsl.test.sh          (Git Bash or Linux)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 . "$HERE/python.sh" || true
@@ -66,6 +67,7 @@ gates "$HERE/gates.sh" g1; rc=$?
 check "gates: modulo wsl senza WSL -> controlli BLOCKED con il motivo, esito BLOCKED (exit 3), mai PASS" '[ "$rc" = 3 ] && grep -q "^controlli-w: BLOCKED (eseguito) — WSL assente (wsl\.exe fuori dal PATH): il modulo w ha ambiente wsl" "$T/out" && ! grep -q "^[a-z-]*-w: PASS" "$T/out" && grep -q "^gates: esito=BLOCKED " "$T/out"'
 check "  il modulo nativo accanto gira senza WSL (controlli-n PASS)" 'grep -q "^controlli-n: PASS (eseguito)" "$T/out"'
 mkdir -p "$T/gm/lib"; cp "$HERE/lib/maat-paths.sh" "$T/gm/lib/"
+cp "$HERE/lib/messages.tsv" "$HERE/lib/maat-msg.sh" "$T/gm/lib/"; cp "$HERE/maat_msg.py" "$T/gm/"   # 1.4.0: the catalog next to the copy
 sed 's/^if \[ -z "\${FIC_GATES_WSL:-}" \] && ! command -v wsl /if false \&\& ! command -v wsl /' "$HERE/gates.sh" > "$T/gm/gates.sh"
 if cmp -s "$HERE/gates.sh" "$T/gm/gates.sh"; then fail=$((fail + 1)); echo "FAIL: controprova gates: la mutazione non si applica"
 else

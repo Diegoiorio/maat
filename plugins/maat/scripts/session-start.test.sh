@@ -9,6 +9,7 @@
 #   5. counterproof by mutation: the language fixed to English => the «it» case is red.
 #   bash plugins/maat/scripts/session-start.test.sh          (Git Bash or Linux)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 . "$HERE/python.sh" || { echo "Python interpreter not found" >&2; exit 2; }
@@ -21,7 +22,7 @@ nat() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 # ctx <script> <project> [env…]: the additionalContext of the JSON output (empty if the output is not that JSON)
 ctx() {
   local s=$1 p=$2; shift 2
-  (cd "$T" && env -u MAAT_CONFIG CLAUDE_PROJECT_DIR="$p" "$@" bash "$s" </dev/null) | "$FIC_PY" -c '
+  (cd "$T" && env -u MAAT_CONFIG -u MAAT_LINGUA CLAUDE_PROJECT_DIR="$p" "$@" bash "$s" </dev/null) | "$FIC_PY" -c '
 import json, sys
 try:
     d = json.load(sys.stdin)["hookSpecificOutput"]
@@ -64,7 +65,7 @@ c=$(ctx "$SS" "$(nat "$T/en")" MAAT_CONFIG="$(nat "$T/it/.claude/maat.json")")
 case $c in *"in Italian,"*) ok ;; *) ko "MAAT_CONFIG wins over the project's maat.json" "$c" ;; esac
 
 # --- 4. no Python; no rule file ---
-out=$(cd "$T" && env -u MAAT_CONFIG CLAUDE_PROJECT_DIR="$(nat "$T/it")" FIC_PYTHON="$T/no-python" bash "$SS" </dev/null); rc=$?
+out=$(cd "$T" && env -u MAAT_CONFIG -u MAAT_LINGUA CLAUDE_PROJECT_DIR="$(nat "$T/it")" FIC_PYTHON="$T/no-python" bash "$SS" </dev/null); rc=$?
 [ $rc -eq 0 ] && printf '%s\n' "$out" | grep -qxF -- "$RULE1" && ! printf '%s\n' "$out" | grep -q hookSpecificOutput && ok \
   || ko "without Python: the rule as plain stdout, exit 0" "rc=$rc $out"
 C="$T/copy"; mkdir -p "$C"; cp -r "$PLUGIN/scripts" "$C/scripts"

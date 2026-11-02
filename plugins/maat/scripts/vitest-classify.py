@@ -25,10 +25,17 @@ A `@vitest-environment <x>` docblock other than `node` -> nuxt. With `node` the 
 above: the `unit` project lacks the Nuxt pipeline (auto-imports, `#…` aliases), which in the `nuxt` project the file
 keeps having even with the docblock's `node` environment.
 Block comments and comment-only lines do not count; everything else (strings included) does.
+
+MESSAGES (1.4.0): the reasons and the errors come from the catalog lib/messages.tsv (maat_msg.T, next to this file):
+English by default, Italian with "lingua": "it". The classes `unit`/`nuxt` and the TAB-separated lines stay.
 """
 import os
 import re
 import sys
+
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from maat_msg import T  # noqa: E402
 
 DOM_GLOBALS = [
     'document', 'window', 'navigator', 'localStorage', 'sessionStorage', 'location', 'history',
@@ -180,22 +187,22 @@ class Classifier:
     def _reason(self, path, stack):
         rel = os.path.relpath(path, self.admin)
         if path.endswith('.vue'):
-            return 'importa un componente .vue: ' + rel
+            return T('vitest-classify.imports_vue') + rel
         try:
             raw = open(path, encoding='utf-8').read()
         except OSError:
-            return 'illeggibile: ' + rel
+            return T('vitest-classify.unreadable') + rel
         src = strip_comments(raw)
         m = re.search(NUXT_DEFINES, src)
         if m:
-            return f'define di Nuxt {m.group(0)} in {rel}'
+            return T('vitest-classify.nuxt_define', define=m.group(0), rel=rel)
         m = self.api_re.search(src)
         if m:
-            return f'API di Nuxt {m.group(1)} in {rel}'
+            return T('vitest-classify.nuxt_api', api=m.group(1), rel=rel)
         if self.dom_re:
             m = self.dom_re.search(src)
             if m:
-                return f'globale del DOM {m.group(1)} in {rel}'
+                return T('vitest-classify.dom_global', name=m.group(1), rel=rel)
         known = local_names(src)
         if self.auto_re:
             # An auto-imported name inside a '…' or "…" string is not a runtime reference ('Manager' as a
@@ -210,18 +217,18 @@ class Classifier:
         if self.comp_re:
             m = self.comp_re.search(src)
             if m and m.group(1) not in known:
-                return f'componente auto-importato {m.group(1)} in {rel}'
+                return T('vitest-classify.auto_component', name=m.group(1), rel=rel)
         for m in SPEC_RE.finditer(src):
             spec = m.group(2)
             if NUXT_SPECS.match(spec):
-                return f'import di {spec} in {rel}'
+                return T('vitest-classify.import_of', spec=spec, rel=rel)
             if spec.split('?')[0].endswith('.vue'):
-                return f'import di un .vue ({spec}) in {rel}'
+                return T('vitest-classify.import_vue', spec=spec, rel=rel)
             dep = self.resolve(spec, path)
             if dep is None:
                 continue
             if dep == '':
-                return f'import non risolvibile {spec} in {rel}'
+                return T('vitest-classify.unresolvable', spec=spec, rel=rel)
             why = self.reason(dep, stack)
             if why:
                 return why
@@ -232,7 +239,7 @@ class Classifier:
         try:
             raw = open(path, encoding='utf-8').read()
         except OSError:
-            return 'nuxt', 'file assente'
+            return 'nuxt', T('vitest-classify.file_missing')
         m = ENV_RE.search(raw)
         if m and m.group(1) != 'node':
             return 'nuxt', f'docblock @vitest-environment {m.group(1)}'
@@ -254,18 +261,18 @@ def main(argv):
     if '--nuxt-dir' in args:
         i = args.index('--nuxt-dir')
         if i + 1 >= len(args):
-            print('uso: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]', file=sys.stderr)
+            print(T('vitest-classify.usage'), file=sys.stderr)
             return 2
         nuxt_dir = args[i + 1]
         del args[i:i + 2]
     if not args or not os.path.isdir(args[0]):
-        print('uso: vitest-classify.py <apps/admin> [--nuxt-dir <dir>] [file…]', file=sys.stderr)
+        print(T('vitest-classify.usage'), file=sys.stderr)
         return 2
     admin = args[0]
     nuxt_dir = nuxt_dir or os.path.join(admin, '.nuxt')
     for f in ('imports.d.ts', 'components.d.ts'):
         if not os.path.isfile(os.path.join(nuxt_dir, f)):
-            print(f'vitest-classify: manca {nuxt_dir}/{f} (npx nuxi prepare, o un run di vitest nella copia)',
+            print('vitest-classify: ' + T('vitest-classify.nuxt_missing', dir=nuxt_dir, f=f),
                   file=sys.stderr)
             return 2
     c = Classifier(admin, nuxt_dir)

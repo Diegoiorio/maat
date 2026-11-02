@@ -45,7 +45,7 @@
 # tree; if a run holds it (any of its <dir>/.fic-lock locks), it stays. replay.sh calls it
 # at the end of a replay. The locks are looked up in the copy (fic__locks): deletion does not depend on the directory.
 #
-# SYNC EXCLUSIONS (FIC_MIRROR_EXCL, the only variable that sourcing defines): a single list of the core,
+# SYNC EXCLUSIONS (FIC_MIRROR_EXCL, the only variable of its own that sourcing defines; MESSAGES below): a single list of the core,
 # used by test-fast.sh and counterproof.sh for every module — installed dependencies, generated files and runner caches
 # (node_modules, .nuxt, .output, coverage, .turbo, .venv, __pycache__, .pytest_cache) and the copy state
 # (/.fic-*). A directory that a module lacks changes nothing; counterproof.sh adds the directories of
@@ -92,6 +92,16 @@
 # a pid; and a narrow window remains (the stalled process writes the pid exactly between the check of the taker and its
 # rm) that only an operating-system lock would close.
 # Release is up to the caller (trap EXIT): fic_unlock_dir removes the directory only if the pid is its own.
+#
+# MESSAGES (1.4.0): the reasons come from the catalog next to this file (lib/maat-msg.sh, lib/messages.tsv): English by
+# default, Italian with "lingua": "it" or MAAT_LINGUA=it. Sourcing defines msg only if the caller has not (test-fast.sh
+# and counterproof.sh load it themselves); never maat_msg_carica here: a caller that sources this file in WSL (worktree-lib.sh,
+# the probes of maat-doctor.sh) pays the catalog only when a message is printed. Frozen: the «interrotto» value of .fic-deps.
+
+_fic_dir=${BASH_SOURCE[0]%/*}; [ "$_fic_dir" = "${BASH_SOURCE[0]}" ] && _fic_dir=.
+declare -F msg >/dev/null 2>&1 || . "$_fic_dir/lib/maat-msg.sh" ||
+  { echo "fic-mirror: lib/maat-msg.sh not found next to fic-mirror.sh" >&2; unset _fic_dir; return 1; }
+unset _fic_dir
 
 FIC_MIRROR_EXCL=(--exclude=node_modules --exclude=.nuxt --exclude=.output --exclude=coverage --exclude=.turbo
   --exclude=.venv --exclude=__pycache__ --exclude=.pytest_cache --exclude='/.fic-*')
@@ -137,11 +147,11 @@ fic__sync_ripiego() { # the arguments of fic_sync, without rsync: find + sha256s
       --delete) del=1 ;;
       --checksum) ;;   # the fallback always compares the content
       --exclude=*) ex+=("${1#--exclude=}") ;;
-      *) echo "fic_sync: opzione non gestita dal ripiego senza rsync: $1" >&2; return 2 ;;
+      *) echo "fic_sync: $(msg fic-mirror.sync_bad_option opt="$1")" >&2; return 2 ;;
     esac
     shift
   done
-  [ $# -eq 2 ] || { echo "fic_sync: servono <origine>/ <copia>/" >&2; return 2; }
+  [ $# -eq 2 ] || { echo "fic_sync: $(msg fic-mirror.sync_usage)" >&2; return 2; }
   src=${1%/} dst=${2%/}
   [ -d "$src" ] && mkdir -p "$dst" || return 23
   fic__escludi ${ex[@]+"${ex[@]}"}
@@ -257,7 +267,7 @@ fic_mirror_init() { # $1 root → FIC_TOP, FIC_MAIN (main tree), FIC_MIRROR; 1 i
 fic__pkg() { # <copy> → <dir> (stdout), if <copy> = $FIC_MIRROR/<dir>; otherwise reason and 1
   case "$1" in
     "$FIC_MIRROR"/?*) printf '%s\n' "${1#"$FIC_MIRROR"/}" ;;
-    *) echo "copia fuori da ${FIC_MIRROR:-<copia non inizializzata>}: $1 (il chiamante passa \$FIC_MIRROR/<cartella>)"; return 1 ;;
+    *) echo "$(msg fic-mirror.outside_copy mirror="${FIC_MIRROR:-$(msg fic-mirror.copy_uninit)}" path="$1")"; return 1 ;;
   esac
 }
 
@@ -285,11 +295,11 @@ fic_deps_refresh() { # <source with node_modules> <copy> → 0 done · 1 no, rea
   # During the rsync .fic-deps holds "interrotto": a failed rsync leaves the copy stale (the next run retries),
   # never with the old fingerprint on half-copied node_modules.
   local src=$1 dst=$2 rc
-  [ -d "$src/node_modules" ] || { echo "l'origine non ha node_modules ($src)"; return 1; }
-  mkdir -p "$dst" && echo interrotto > "$dst/.fic-deps" || { echo "copia non scrivibile: $dst"; return 1; }
+  [ -d "$src/node_modules" ] || { echo "$(msg fic-mirror.no_node_modules src="$src")"; return 1; }
+  mkdir -p "$dst" && echo interrotto > "$dst/.fic-deps" || { echo "$(msg fic-mirror.copy_unwritable dst="$dst")"; return 1; }
   rsync -a --delete --exclude=.nuxt --exclude=.output --exclude=coverage --exclude=.turbo --exclude='/.fic-*' "$src/" "$dst/"
-  rc=$?; [ "$rc" -eq 0 ] || { echo "rsync dall'origine fallito (uscita $rc)"; return 1; }
-  fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }
+  rc=$?; [ "$rc" -eq 0 ] || { echo "$(msg fic-mirror.rsync_failed rc="$rc")"; return 1; }
+  fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "$(msg fic-mirror.fp_unwritable dst="$dst")"; return 1; }
 }
 
 fic__seed_copy() { # <seed source> <source> <copy>: node_modules as hardlinks, then the fingerprint
@@ -297,33 +307,33 @@ fic__seed_copy() { # <seed source> <source> <copy>: node_modules as hardlinks, t
   # node_modules directories of the copy that are no longer in the seed source (package removed) are deleted: they are
   # hardlinks, the seed source is not touched.
   local mm=$1 src=$2 dst=$3 nms
-  if [ -f "$dst/.fic-deps" ]; then echo interrotto > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }; fi
-  nms=$(cd "$mm" && find . -name node_modules -type d -prune -print | sed 's|^\./||') || { echo "fonte non leggibile: $mm"; return 1; }
+  if [ -f "$dst/.fic-deps" ]; then echo interrotto > "$dst/.fic-deps" || { echo "$(msg fic-mirror.fp_unwritable dst="$dst")"; return 1; }; fi
+  nms=$(cd "$mm" && find . -name node_modules -type d -prune -print | sed 's|^\./||') || { echo "$(msg fic-mirror.seed_unreadable mm="$mm")"; return 1; }
   printf '%s\n' "$nms" | while IFS= read -r nm; do
     [ -n "$nm" ] || continue
     mkdir -p "$dst/$nm" &&
       rsync -a --delete --link-dest="$mm/$nm/" --exclude=.cache --exclude=.vite --exclude=.vitest "$mm/$nm/" "$dst/$nm/" || exit 1
-  done || { echo "semina fallita (rsync --link-dest)"; return 1; }
+  done || { echo "$(msg fic-mirror.seed_failed)"; return 1; }
   (cd "$dst" && find . -name node_modules -type d -prune -print | sed 's|^\./||') | while IFS= read -r nm; do
     printf '%s\n' "$nms" | grep -qxF -- "$nm" || rm -rf "${dst:?}/$nm" || exit 1
-  done || { echo "node_modules orfani della copia non cancellabili"; return 1; }
-  fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "impronta non scrivibile: $dst/.fic-deps"; return 1; }
+  done || { echo "$(msg fic-mirror.orphans)"; return 1; }
+  fic_deps_fp "$src" > "$dst/.fic-deps" || { echo "$(msg fic-mirror.fp_unwritable dst="$dst")"; return 1; }
 }
 
 fic__source_fresh() { # <origin of the seed source> <seed source> <name> <dir>: the seed source is valid for its origin
   # If it is stale it realigns it, under ITS lock (fd 8), like the copy of a root (fic__refresh_root).
   # 0 valid · 1 no, reason on stdout. One line on stderr when it realigns.
   local o=$1 mm=$2 nome=$3 pkg=$4 out
-  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "manca la $nome ($mm)"; return 1; }
+  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "$(msg fic-mirror.missing nome="$nome" mm="$mm")"; return 1; }
   fic_deps_ok "$o" "$mm" && return 0
   out=$(
-    exec 8>"$mm/.fic-lock" || { echo "lock della $nome non apribile"; exit 1; }
-    flock -w "${FIC_LOCK_WAIT:-900}" 8 || { echo "$nome occupata oltre ${FIC_LOCK_WAIT:-900}s"; exit 1; }
+    exec 8>"$mm/.fic-lock" || { echo "$(msg fic-mirror.lock_unopenable nome="$nome")"; exit 1; }
+    flock -w "${FIC_LOCK_WAIT:-900}" 8 || { echo "$(msg fic-mirror.busy nome="$nome" wait="${FIC_LOCK_WAIT:-900}")"; exit 1; }
     fic_deps_ok "$o" "$mm" && exit 0   # realigned meanwhile by another run
     fic__refresh_root "$o" "$mm" "$pkg" || exit 1
-    fic_deps_ok "$o" "$mm" || { echo "$nome ancora stantia dopo il riallineamento"; exit 1; }
-  ) || { echo "$nome stantia, riallineamento non riuscito: ${out//$'\n'/; }"; return 1; }
-  [ -z "$out" ] || echo "fic-mirror: $nome ($mm) stantia: ${out//$'\n'/; }" >&2
+    fic_deps_ok "$o" "$mm" || { echo "$(msg fic-mirror.still_stale nome="$nome")"; exit 1; }
+  ) || { echo "$(msg fic-mirror.stale_failed nome="$nome" out="${out//$'\n'/; }")"; return 1; }
+  [ -z "$out" ] || echo "fic-mirror: $(msg fic-mirror.stale_realigned nome="$nome" mm="$mm" out="${out//$'\n'/; }")" >&2
 }
 
 fic__refresh_root() { # <source> <copy of the root> <dir>, lock of the copy already taken
@@ -331,14 +341,14 @@ fic__refresh_root() { # <source> <copy of the root> <dir>, lock of the copy alre
   # realigned first if stale. Stdout: what it did, or the reason (exit 1).
   local src=$1 dst=$2 pkg=$3 mm main
   mm=$HOME/fic-mirror/$pkg
-  if [ -d "$src/node_modules" ]; then fic_deps_refresh "$src" "$dst" && echo "copia riallineata dall'origine"; return; fi
-  [ "$dst" != "$mm" ] || { echo "l'origine non ha node_modules da cui riallineare la copia ($src): rieseguire --setup dove ci sono"; return 1; }
+  if [ -d "$src/node_modules" ]; then fic_deps_refresh "$src" "$dst" && echo "$(msg fic-mirror.realigned)"; return; fi
+  [ "$dst" != "$mm" ] || { echo "$(msg fic-mirror.no_nm_main src="$src")"; return 1; }
   main=$FIC_MAIN/$pkg
-  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "l'origine non ha node_modules e manca la copia del tree principale ($mm)"; return 1; }
+  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "$(msg fic-mirror.no_nm_no_main mm="$mm")"; return 1; }
   [ -d "$main" ] && [ "$(fic_deps_fp "$src")" = "$(fic_deps_fp "$main")" ] ||
-    { echo "l'origine non ha node_modules e le sue dipendenze sono diverse da quelle del tree principale"; return 1; }
-  fic__source_fresh "$main" "$mm" "copia del tree principale" "$pkg" || return 1
-  fic__seed_copy "$mm" "$src" "$dst" && echo "copia riseminata da ~/fic-mirror (node_modules in hardlink)"
+    { echo "$(msg fic-mirror.no_nm_deps_differ)"; return 1; }
+  fic__source_fresh "$main" "$mm" "$(msg fic-mirror.name_main)" "$pkg" || return 1
+  fic__seed_copy "$mm" "$src" "$dst" && echo "$(msg fic-mirror.reseeded)"
 }
 
 fic_deps_autorefresh() { # <source> <copy = $FIC_MIRROR/<dir>>: realigns a copy with stale dependencies
@@ -349,34 +359,34 @@ fic_deps_autorefresh() { # <source> <copy = $FIC_MIRROR/<dir>>: realigns a copy 
   pkg=$(fic__pkg "$dst") || { echo "$pkg"; return 1; }
   old=$(cut -c1-12 "$dst/.fic-deps" 2>/dev/null); new=$(fic_deps_fp "$src" | cut -c1-12)
   if [ -n "${FIC_LANE_BASE:-}" ]; then
-    out=$(fic__source_fresh "$src" "$FIC_LANE_BASE/$pkg" "copia della radice" "$pkg") &&
+    out=$(fic__source_fresh "$src" "$FIC_LANE_BASE/$pkg" "$(msg fic-mirror.name_root)" "$pkg") &&
       out=$(fic__seed_copy "$FIC_LANE_BASE/$pkg" "$src" "$dst") &&
-      out="copia della corsia riseminata da $FIC_LANE_BASE (node_modules in hardlink)"
+      out="$(msg fic-mirror.lane_reseeded base="$FIC_LANE_BASE")"
   else
     out=$(fic__refresh_root "$src" "$dst" "$pkg")
   fi || { echo "${out//$'\n'/; }"; return 1; }
-  echo "dipendenze cambiate (impronta ${old:-assente} -> $new): $out"
+  echo "$(msg fic-mirror.deps_changed old="${old:-$(msg fic-mirror.fp_absent)}" new="$new" out="$out")"
 }
 
 fic_seed_node_modules() { # <source> <copy = $FIC_MIRROR/<dir>> → 0 seeded · 1 no, reason on stdout
   # Requires fic_mirror_init already called on the root of the source. A stale seed source is realigned (fic__source_fresh).
   local src=$1 dst=$2 mm pkg
-  [ -n "$FIC_MIRROR" ] && [ "$FIC_MIRROR" != "$HOME/fic-mirror" ] || { echo "non e' la copia di un worktree"; return 1; }
+  [ -n "$FIC_MIRROR" ] && [ "$FIC_MIRROR" != "$HOME/fic-mirror" ] || { echo "$(msg fic-mirror.not_worktree)"; return 1; }
   pkg=$(fic__pkg "$dst") || { echo "$pkg"; return 1; }
   mm=$HOME/fic-mirror/$pkg
   if [ -n "${FIC_LANE_BASE:-}" ]; then   # lane copy: from the copy of ITS root (fic_lane_init)
     mm=$FIC_LANE_BASE/$pkg
-    [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "manca la copia della radice ($mm): un run senza FIC_LANE o --setup"; return 1; }
-    fic__source_fresh "$src" "$mm" "copia della radice" "$pkg" || return 1
+    [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "$(msg fic-mirror.no_root_copy mm="$mm")"; return 1; }
+    fic__source_fresh "$src" "$mm" "$(msg fic-mirror.name_root)" "$pkg" || return 1
   else
-  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "manca la copia del tree principale ($mm)"; return 1; }
+  [ -d "$mm/node_modules" ] && [ -f "$mm/.fic-deps" ] || { echo "$(msg fic-mirror.no_main_copy mm="$mm")"; return 1; }
   [ -d "$FIC_MAIN/$pkg" ] && [ "$(fic_deps_fp "$src")" = "$(fic_deps_fp "$FIC_MAIN/$pkg")" ] ||
-    { echo "dipendenze del worktree diverse da quelle del tree principale"; return 1; }
-  fic__source_fresh "$FIC_MAIN/$pkg" "$mm" "copia del tree principale" "$pkg" || return 1
+    { echo "$(msg fic-mirror.deps_differ)"; return 1; }
+  fic__source_fresh "$FIC_MAIN/$pkg" "$mm" "$(msg fic-mirror.name_main)" "$pkg" || return 1
   fi
-  mkdir -p "$dst" || { echo "copia non creabile: $dst"; return 1; }
+  mkdir -p "$dst" || { echo "$(msg fic-mirror.copy_mkdir dst="$dst")"; return 1; }
   (
-    flock -w "${FIC_LOCK_WAIT:-900}" 9 || { echo "copia del worktree occupata"; exit 1; }
+    flock -w "${FIC_LOCK_WAIT:-900}" 9 || { echo "$(msg fic-mirror.wt_busy)"; exit 1; }
     [ -d "$dst/node_modules" ] && [ -f "$dst/.fic-deps" ] && exit 0   # seeded meanwhile by another run
     fic__seed_copy "$mm" "$src" "$dst" || exit 1
   ) 9>"$dst/.fic-lock"
@@ -384,11 +394,11 @@ fic_seed_node_modules() { # <source> <copy = $FIC_MIRROR/<dir>> → 0 seeded · 
 
 fic_mirror_forget() { # <root of a worktree>: deletes ITS copy · 0 done or nothing to do · 1 refused or in use
   local lk
-  fic_mirror_init "$1" || { echo "fic-mirror: radice non determinabile (git): $1"; return 1; }
-  case "$FIC_MIRROR" in "$HOME"/fic-mirror-????????????) ;; *) echo "fic-mirror: rifiuto, non e' la copia di un worktree: $FIC_MIRROR"; return 1 ;; esac
-  [ -d "$FIC_MIRROR" ] || { echo "fic-mirror: nessuna copia per $1"; return 0; }
+  fic_mirror_init "$1" || { echo "fic-mirror: $(msg fic-mirror.no_root root="$1")"; return 1; }
+  case "$FIC_MIRROR" in "$HOME"/fic-mirror-????????????) ;; *) echo "fic-mirror: $(msg fic-mirror.refuse_wt mirror="$FIC_MIRROR")"; return 1 ;; esac
+  [ -d "$FIC_MIRROR" ] || { echo "fic-mirror: $(msg fic-mirror.no_copy root="$1")"; return 0; }
   fic__forget_dir "$FIC_MIRROR" || return 1
-  echo "fic-mirror: copia cancellata: $FIC_MIRROR"
+  echo "fic-mirror: $(msg fic-mirror.deleted mirror="$FIC_MIRROR")"
 }
 
 fic__forget_dir() { # <copy of the root>: deleted if none of its locks is held · 1 in use, left
@@ -396,7 +406,7 @@ fic__forget_dir() { # <copy of the root>: deleted if none of its locks is held �
   ( local lk fd
     while IFS= read -r lk; do
       [ -n "$lk" ] || continue
-      exec {fd}>"$lk" && flock -n "$fd" || { echo "fic-mirror: copia in uso, lasciata: $1"; exit 1; }
+      exec {fd}>"$lk" && flock -n "$fd" || { echo "fic-mirror: $(msg fic-mirror.in_use dir="$1")"; exit 1; }
     done < <(fic__locks "$1")
     rm -rf "$1" )
 }
@@ -408,10 +418,10 @@ fic_lane_init() { # <k>: after fic_mirror_init, FIC_MIRROR = copy of lane k · 1
 }
 
 fic_lane_forget() { # <root> <k>: deletes the copy of lane k · 0 done or nothing to do · 1 refused or in use
-  fic_mirror_init "$1" && fic_lane_init "${2:-}" || { echo "fic-mirror: corsia o radice non determinabile: $1 ${2:-}"; return 1; }
+  fic_mirror_init "$1" && fic_lane_init "${2:-}" || { echo "fic-mirror: $(msg fic-mirror.no_lane root="$1" lane="${2:-}")"; return 1; }
   case "$FIC_MIRROR" in "$HOME"/fic-mirror-[1-9]|"$HOME"/fic-mirror-????????????-[1-9]) ;;
-    *) echo "fic-mirror: rifiuto, non e' la copia di una corsia: $FIC_MIRROR"; return 1 ;; esac
-  [ -d "$FIC_MIRROR" ] || { echo "fic-mirror: nessuna copia della corsia $2 per $1"; return 0; }
+    *) echo "fic-mirror: $(msg fic-mirror.refuse_lane mirror="$FIC_MIRROR")"; return 1 ;; esac
+  [ -d "$FIC_MIRROR" ] || { echo "fic-mirror: $(msg fic-mirror.no_lane_copy lane="$2" root="$1")"; return 0; }
   fic__forget_dir "$FIC_MIRROR" || return 1
-  echo "fic-mirror: copia della corsia cancellata: $FIC_MIRROR"
+  echo "fic-mirror: $(msg fic-mirror.lane_deleted mirror="$FIC_MIRROR")"
 }

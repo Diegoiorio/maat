@@ -6,20 +6,26 @@
 # Never fail-open. Without Python, or when guard.py exits with a code other than 0 and 2 (crash):
 #   - in the session (FIC_PHASE empty)   → "ask" on EVERY command, with the three-part reason (R11);
 #   - in a sub-session (FIC_PHASE)       → exit 2 with the reason on stderr: there "ask" is not a denial.
-# The two reasons are fixed texts, in Italian: in these cases neither guard.py's table nor maat.json can be read.
+# The two reasons come from the message catalog next to this file (lib/messages.tsv, 1.4.0), loaded only on these two
+# paths: MAAT_LINGUA, otherwise lingua of maat.json when Python is there, otherwise en. A copy of the plugin without the
+# catalog keeps the Italian text of 1.3.0 (frozen in protocol-strings.list): the guard asks all the same.
 # Reduced guard: FIC_SESSION_GUARD=prod, applied by guard.py.
 HERE=$(cd "$(dirname "$0")" && pwd)
 input=$(cat)
+catalogo() { [ -f "$HERE/lib/messages.tsv" ] && . "$HERE/lib/maat-msg.sh" 2>/dev/null; }
 if . "$HERE/python.sh" >/dev/null 2>&1 && [ -n "${FIC_PY:-}" ]; then
   printf '%s' "$input" | "$FIC_PY" "$HERE/guard.py" --universal
   rc=$?
   if [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ]; then exit "$rc"; fi
-  why="guardia in errore (uscita $rc): nessun controllo eseguito — regola del nucleo (guardia che fallisce: mai lasciar passare) — conferma solo se il comando è sicuro, e segnala l'errore di guard.py"
+  if catalogo; then why=$(msg guard-hook.crashed rc="$rc")
+  else why="guardia in errore (uscita $rc): nessun controllo eseguito — regola del nucleo (guardia che fallisce: mai lasciar passare) — conferma solo se il comando è sicuro, e segnala l'errore di guard.py"; fi
 else
-  why="Python non trovato: guardia non disponibile — regola del nucleo (guardia senza interprete: si chiede su ogni comando) — installa Python 3.10 o superiore, o imposta FIC_PYTHON; conferma solo se il comando è sicuro"
+  if catalogo; then why=$(msg guard-hook.no_python)
+  else why="Python non trovato: guardia non disponibile — regola del nucleo (guardia senza interprete: si chiede su ogni comando) — installa Python 3.10 o superiore, o imposta FIC_PYTHON; conferma solo se il comando è sicuro"; fi
 fi
 if [ -n "${FIC_PHASE:-}" ]; then
-  printf 'guardia di sessione: %s\n' "$why" >&2
+  if declare -F msg >/dev/null; then who=$(msg guard-hook.session); else who='guardia di sessione'; fi
+  printf '%s: %s\n' "$who" "$why" >&2
   exit 2
 fi
 printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": "%s"}}\n' "$why"

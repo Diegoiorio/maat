@@ -1,4 +1,4 @@
-# CI: all the plugin suites on Linux (tools/suite.sh), one at a time. Windows and macOS come later (1.4.3).
+# CI: all the plugin suites on Linux (tools/suite.sh), one at a time. Windows and macOS come later (1.5.3).
 name: CI
 on:
   push:

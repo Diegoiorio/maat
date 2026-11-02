@@ -5,6 +5,7 @@
 # The real lock is not touched: FIC_LOCK points to a temporary directory (except the case that tests the
 # default lock, which lives in the temporary repository's .git).
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 HM=${HM:-$HERE/harness-merge.sh}
 HARNESS_MERGE_HARNESS=$(cd "$HERE/.." && pwd); export HARNESS_MERGE_HARNESS   # plugin root
@@ -30,11 +31,17 @@ s0=$(gitstate)
 hm "$WT"
 check "tutto libero -> 0 e comando stampato" '[ "$(rc)" = 0 ] && grep -q "git merge --ff-only harness/fic-v2" "$T/out" && grep -q "Lock delle fasi di codice: libero" "$T/out"'
 check "  nessuna scrittura di git (HEAD, status, branch dei due tree)" '[ "$(gitstate)" = "$s0" ]'
+# 1en. 1.4.0, English: the --lock-status token «libero» stays (frozen, read by the case), so the verdict is the same
+MAAT_LINGUA=en hm "$WT"
+check "en: lock libero con MAAT_LINGUA=en -> via libera (0), comando stampato, testo inglese" '[ "$(rc)" = 0 ] && grep -q "git merge --ff-only harness/fic-v2" "$T/out" && grep -q "^Lock of the code phases: libero" "$T/out" && grep -q "^harness-merge: clear to go. Run it yourself, in the main tree:" "$T/out" && grep -q "^Unclosed cycles: none" "$T/out"'
+check "  en: niente italiano nell'uscita (fuori dal token congelato)" '! grep -Eq "tree principale|via libera|Esegui|nessun|Cicli|Fasi in corso|staccato" "$T/out"'
 
 # 2. lock held (live PID: this shell) -> 4, no command
 mkdir -p "$FIC_LOCK"; printf 'run=x\nlabel=03-review\nsince=x\npid=%s\n' "$$" > "$FIC_LOCK/owner"
 hm "$WT"
 check "lock occupato -> 4, senza comando" '[ "$(rc)" = 4 ] && grep -q "occupato" "$T/out" && grep -q RIFIUTATO "$T/out" && ! grep -q "git merge" "$T/out"'
+MAAT_LINGUA=en hm "$WT"
+check "en: lock occupato -> 4, REFUSED, token «occupato» com'e'" '[ "$(rc)" = 4 ] && grep -q "^Lock of the code phases: occupato" "$T/out" && grep -q "^harness-merge: REFUSED — a cycle is running" "$T/out" && ! grep -q "git merge" "$T/out" && ! grep -q RIFIUTATO "$T/out"'
 rm -rf "$FIC_LOCK"
 # the default lock is the main tree's, not the worktree's
 mkdir -p "$M/.git/full-implementation-cycle.lock"; printf 'run=x\nlabel=05-fix\nsince=x\npid=%s\n' "$$" > "$M/.git/full-implementation-cycle.lock/owner"

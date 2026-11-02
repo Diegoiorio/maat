@@ -6,6 +6,7 @@
 #   bash script/fic/context-pack.test.sh
 #   CP=/path/variant.sh bash script/fic/context-pack.test.sh   # the suite on a variant
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 CP=${CP:-$HERE/context-pack.sh}
@@ -13,7 +14,9 @@ pass=0 fail=0
 W=$(mktemp -d) || exit 2
 trap 'rm -rf "$W"' EXIT
 # the mutants written in $W include the resolver next to themselves ($W/lib) and find the plugin from MAAT_ROOT
-mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$W/lib/"; export MAAT_ROOT=$ROOT
+# (1.4.0: and the message catalog with its two readers, next to themselves as in the plugin)
+mkdir -p "$W/lib" && cp "$HERE/lib/maat-paths.sh" "$HERE/lib/maat-msg.sh" "$HERE/lib/messages.tsv" "$W/lib/" &&
+  cp "$HERE/maat_msg.py" "$W/"; export MAAT_ROOT=$ROOT
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/    /'; }
 
@@ -268,7 +271,7 @@ grep -qx -- "- esiste: modules/db/prisma/schema.prisma" "$R/.claude/.ai-workflow
   ok || ko "schema_db_file nominato dallo spec: tra i file (estensione dalla configurazione)" "$o"
 # counterproof: the old table of codes (3 = VPN tunnel) instead of the first line => the «esce 3» case is red
 M2="$W/mut-esiti.sh"
-sed 's/^            why = "comando dello schema uscito %d%s" % (rc, (": " + first\[:200\]) if first else "")$/            why = {3: "tunnel VPN non connesso"}.get(rc, "uscito %d" % rc)/' "$CP" > "$M2"
+sed 's/^            why = T("context-pack.cmd_exit", rc=rc, out=(": " + first\[:200\]) if first else "")$/            why = {3: "tunnel VPN non connesso"}.get(rc, "uscito %d" % rc)/' "$CP" > "$M2"
 if cmp -s "$CP" "$M2"; then ko "controprova esiti: la mutazione non si applica"; elif caso_x "$M2"; then ko "controprova esiti: il caso «esce 3» resta verde col codice cablato"; else ok; fi
 rm -rf "$RUN"
 
@@ -292,6 +295,29 @@ if cmp -s "$CP" "$M"; then ko "controprova: la mutazione non si applica"; else
     ko "controprova: il caso «file inesistente» resta verde sul mutante"
   else ok; fi
 fi
+
+# --- 1.4.0: the pack in English (MAAT_LINGUA=en): same structure and markers, English text, no Italian of the
+#     catalog; a pack written in Italian is not «unchanged» for an English run (its fingerprint line differs) ---
+rm -rf "$RUN"; gen "$CP" sql-down
+MAAT_LINGUA=en gen "$CP" sql-down
+fpe=$(sha256sum "$S" | cut -c1-16)
+[ $rc -eq 0 ] && printf '%s
+' "$out" | grep -q "^context-pack: .* — named files 4 (1 missing), ~[0-9]* tokens, DB: missing (schema command exited 3: $DOWN)$" &&
+  ok || ko "en: pacchetto italiano rigenerato in inglese, riga di sintesi" "$out"
+hasx "- exists: modules/app/apps/admin/components/goals/Section.vue"
+hasx "- exists: modules/app/apps/admin/store/goals.ts (cited as \`store/goals.ts\`)"
+hasx "- DOES NOT EXIST: modules/api/app/services/inesistente_service.py"
+hasx "- GET /goals/plan → get_plan · response_model GoalPlanView (l. 7)"
+hasx "- \`nonEsisteSimbolo\` → not found"
+has "- **missing** — schema command exited 3: $DOWN. Tables named: goal_plan, user_goal"
+grep -q "^## Files named by the spec$" "$PACK" && grep -q "^### modules/app/apps/admin/components/goals/Section.vue ([0-9]* lines)$" "$PACK" &&
+  grep -q "^Date: .* · Commit: n/d · Spec fingerprint: sha256:$fpe · Estimate: ~[0-9]* tokens$" "$PACK" && ok || ko "en: intestazione e marcatori" "$(head -12 "$PACK")"
+grep -qE "esiste:|NON ESISTE|Impronta spec|Stima:|\(r\. [0-9]|nominat|Colonne DB|il codice vince|non trovato|righe\)|citano" "$PACK" &&
+  ko "en: italiano del catalogo nel pacchetto" "$(grep -nE "esiste:|NON ESISTE|Impronta spec|Stima:|nominat|Colonne DB|il codice vince|non trovato|citano" "$PACK")" || ok
+MAAT_LINGUA=en gen "$CP" sql-down
+[ $rc -eq 0 ] && printf '%s
+' "$out" | grep -q '^context-pack: unchanged (sha256:' && ok || ko "en: stessa impronta e stessa lingua: «unchanged»" "$out"
+rm -rf "$RUN"
 
 echo "context-pack.test.sh: $pass ok, $fail falliti"
 [ $fail -eq 0 ]

@@ -4,6 +4,7 @@
 # collected is denied, collected (notification, final TaskOutput, TaskStop) is allowed; broken hook -> lets it close.
 #   bash script/fic/stop-hook.test.sh
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/python.sh" || { echo "interprete Python non trovato" >&2; exit 2; }
 SH="$HERE/stop-hook.py"
@@ -67,6 +68,17 @@ hook allow "BashOutput con stato completed: ammesso"
 hook allow "TaskStop sul job: ammesso"
 { BG_START; use tu5 Bash '{"command":"sleep 5","run_in_background":true}'; res tu5 'Command running in background with ID: b456. Output is being written to: C:\\x'; notif b123 completed; txt "$OK_LINE"; } > "$TR"
 hook block "due job, uno solo concluso: negato per l'altro" false "b456"
+
+# --- 1.4.0, English (MAAT_LINGUA=en, inherited by the sub-session from run-phase.sh): both reasons from the catalog ---
+{ BG_START; txt "ho finito"; } > "$TR"
+n=$((n + 1))
+out=$(printf '{"session_id":"s","transcript_path":"%s","stop_hook_active":false,"hook_event_name":"Stop"}' "$WTR" |
+      MAAT_LINGUA=en "$FIC_PY" "$SH" 2>&1); rc=$?
+printf '%s' "$out" | "$FIC_PY" -c 'import json, sys
+r = json.loads(sys.stdin.buffer.read().decode("utf-8"))["reason"]
+ok = r.startswith("hook Stop: background jobs not collected: b123 — collect them") and "the last message has no `PHASE RESULT <phase>: OK" in r
+sys.exit(0 if ok and not any(w in r for w in ("raccolti", "messaggio", "riga", "fase", "chiudere")) else 1)' && [ $rc -eq 0 ] ||
+  { fail=$((fail + 1)); echo "FAIL en: due motivi in inglese, nessun italiano (rc=$rc)"; echo "    $out"; }
 
 # --- broken hook: never hold the session back ---
 rm -f "$TR"

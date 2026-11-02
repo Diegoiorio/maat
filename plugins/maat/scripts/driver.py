@@ -8,7 +8,8 @@
                                                the structured outcome of a phase (the same as run-phase.sh)
     driver.py equiv [--certifica] <folder|spec.md>…
                                                equivalence proof against cycle-state.sh and the validator of
-                                               run-phase.sh; with --certifica, if it passes, writes driver.equiv
+                                               run-phase.sh, in each language (it, then en); with --certifica, if
+                                               both pass, writes driver.equiv
     driver.py certificato                      certificate status: VALIDO (exit 0) · ASSENTE/SCADUTO (exit 1)
     driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
                                                exceeds the cap (default 300); separately, with no cap, the conditional files,
@@ -49,6 +50,12 @@ The end line is "Driver result: <DONE|STOP|WAIT|BUSY|RUNNING|DRY-RUN> — …" (
 OCCUPATO and IN CORSO). The phase result lines are read in both languages (PHASE RESULT / ESITO FASE).
 Events: "driver: …" lines on stdout and in <run-dir>/driver.log.
 
+MESSAGES (1.4.0): the text for a person comes from the catalog lib/messages.tsv (maat_msg.T), with the same keys as
+cycle-state.sh and the validator of run-phase.sh: English by default, Italian with "lingua": "it" or MAAT_LINGUA=it.
+The language is resolved once at the start and exported. The protocol stays as it is in both languages: the first
+word of Next, "STOP — catena", "Catena:", "Chiusura:", the harness fingerprint tokens, chain_state and every line
+that enters State. The certificate also covers the catalog and its two readers (messages, maat-msg, maat_msg).
+
 Variables: FIC_BASH (bash to use) · FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK
 (context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) · FIC_DRIVER_CERT (certificate, tests) ·
 FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
@@ -71,6 +78,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT (pk04a-1)
 sys.path.insert(0, HERE)
 import maat_paths  # noqa: E402
+import maat_msg  # noqa: E402,F401   (1.4.0: the message catalog next to this file, as lib/maat-msg.sh)
+from maat_msg import T  # noqa: E402
 
 # ROOT = root of the HARNESS (MAAT_ROOT; FIC_DRIVER_ROOT replaces it: a mutated copy of the plugin, test
 # counterproofs). The PROJECT does not go through here: it is the git toplevel of the spec's folder (run, `entra`).
@@ -312,11 +321,11 @@ def _json_rule(p):
         dev = [one(x) for x in (d.get("deviazioni") or []) if str(x).strip()]
         bs = one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "(assente)")
         if [x for x in dev if not x.startswith(DIFENSIVA)]:
-            s = "STOP|deviazioni dichiarate (%d): %s" % (len(dev), one("; ".join(dev)))
+            s = "STOP|" + T("cycle-state.json_dev", n=len(dev), devs=one("; ".join(dev)))
         elif bs.lower() not in NESSUNO:
-            s = "STOP|bloccato su: " + bs
+            s = "STOP|" + T("cycle-state.json_blocked") + bs
         elif d.get("esito") != "OK":
-            s = "STOP|esito %s: %s" % (d.get("esito"), one(d.get("motivo") or ""))
+            s = "STOP|" + T("cycle-state.json_esito", esito=d.get("esito"), motivo=one(d.get("motivo") or ""))
         else:
             s = "OK|" + one(d.get("motivo") or "")
         s.encode("utf-8")
@@ -495,7 +504,7 @@ def _cycle_state(spec_fs, tmp):
         if jr.startswith("OK|") or jr.startswith("STOP|"):
             json_esito, _, json_why = jr.partition("|")
         else:
-            json_esito, json_why = "STOP", "result.json illeggibile"
+            json_esito, json_why = "STOP", T("cycle-state.json_unreadable")
 
     names = _names(run_fs)
     new_regime = os.path.isdir(os.path.join(run_fs, "evidence")) or any(
@@ -516,7 +525,7 @@ def _cycle_state(spec_fs, tmp):
             mf = re.match(r".*fingerprint ([0-9a-f]{7,})", snap)
             b, t, f = (mb.group(1) if mb else ""), (mt.group(1) if mt else ""), (mf.group(1) if mf else "")
             if not b or not t or not scope:
-                code, code_out = "UNKNOWN", "  snapshot o manifest illeggibili"
+                code, code_out = "UNKNOWN", "  " + T("cycle-state.code_unreadable")
             else:
                 args = [BASH, _fw(RS), "check", "--base", b, "--tree", t, "--paths-file", _fw(scope_f),
                         "--exclude-file", _fw(excl_f)] + (["--fingerprint", f] if f else [])
@@ -537,10 +546,9 @@ def _cycle_state(spec_fs, tmp):
             for c in ring_before:
                 cat += (_read(os.path.join(CDIR_fs, c + ".run", "touched.txt")) or "").replace("\r", "")
             prevf = " ".join(sorted({l for l in _records(cat) if l}))
-            out.append("Anelli precedenti: %s — stessa catena, anello precedente: ne' altri flussi ne' misti, "
-                       "niente completion" % (prevf or "(nessun file)"))
+            out.append("Anelli precedenti: " + T("cycle-state.ring_prev", files=prevf or "(nessun file)"))
             out.append("Base anello: " + ring_base if ring_base else
-                       "Base anello: (assente: l'anello precedente non ha un .post-tree)")
+                       "Base anello: (%s)" % T("cycle-state.ring_base_missing"))
             if ring_base and ring_now:
                 o = _run(["git", "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames",
                           ring_base, ring_now], cwd=cwd)[1].replace("\n", " ")
@@ -583,19 +591,12 @@ def _cycle_state(spec_fs, tmp):
         since = _utc(mt_) if mt_ is not None else ""
         rim = "bash \"%s\" --harness-fp > \"%s/harness.fp\"" % (mostra(RP), RUN)
         if w[0] == "CAMBIATO":
-            return ("harness cambiato dal %s (impronta registrata %s, attuale %s): ricomincia la fase o conferma. "
-                    "Rimedio: se il cambio e' voluto, %s e riprendi (prossima fase: %s); altrimenti riporta il harness "
-                    "com'era" % (since, w[1], w[2], rim, nxt))
+            return T("cycle-state.harness_changed", since=since, a=w[1], b=w[2], rim=rim, next=nxt)
         if w[0] == "FORMATO-PRECEDENTE":
-            return ("impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata %s dal "
-                    "%s, attuale %s). Rimedio: se il passaggio al plugin e' voluto, %s e riprendi (prossima fase: %s); "
-                    "altrimenti riprendi il ciclo col harness interno" % (w[1], since, w[2], rim, nxt))
+            return T("cycle-state.harness_old", a=w[1], since=since, b=w[2], rim=rim, next=nxt)
         if w[0] == "ILLEGGIBILE":
-            return ("harness.fp illeggibile (vuoto o senza impronta, registrato dal %s; attuale %s). Rimedio: se il "
-                    "harness attuale e' quello voluto, %s e riprendi (prossima fase: %s)" % (since, w[1], rim, nxt))
-        return ("impronta del harness non calcolabile (file del plugin in %s o .claude/maat.json di %s non leggibili, "
-                "oppure repository non trovato; registrata dal %s): verifica il plugin e il repository, poi riprendi"
-                % (mostra(ROOT), repo or "(nessuno)", since))
+            return T("cycle-state.harness_unreadable", since=since, a=w[1], rim=rim, next=nxt)
+        return T("cycle-state.harness_nc", root=mostra(ROOT), repo=repo or "(nessuno)", since=since)
 
     def nxt(msg):
         word = msg.split(" ", 1)[0]
@@ -619,37 +620,29 @@ def _cycle_state(spec_fs, tmp):
             pst = pc.split("\n")[0][mm.end():] if mm else ""
             if pst.startswith("APPROVED"):
                 return
-            raise _Next("WAIT — catena: il piano dell'anello %d parte quando il piano dell'anello %d (%s) e' "
-                        "APPROVED (ora: %s)" % (ring_k, ring_k - 1, pn, pst or "nessun piano"))
+            raise _Next("WAIT — catena: " + T("cycle-state.ring_plan_wait", k=ring_k, prev=ring_k - 1, pn=pn,
+                                                  pst=pst or T("cycle-state.no_plan")))
         if not cclosed(ring_prev):
-            raise _Next("WAIT — catena: l'implement dell'anello %d aspetta l'anello %d (%s) IMPLEMENTED; il piano "
-                        "puo' girare" % (ring_k, ring_k - 1, pn))
+            raise _Next("WAIT — catena: " + T("cycle-state.ring_impl_wait", k=ring_k, prev=ring_k - 1, pn=pn))
         if any(n.endswith(".pre-tree") for n in names):
             return
         if not ring_base:
-            raise _Next("STOP — catena: l'anello %d (%s) non ha un .post-tree: la base dell'anello %d non e' "
-                        "misurata. Decisione tua" % (ring_k - 1, pn, ring_k))
+            raise _Next("STOP — catena: " + T("cycle-state.ring_no_base", prev=ring_k - 1, pn=pn, k=ring_k))
         if ring_now == ring_base:   # CONTROLLO-TREE-ANELLO
             return
-        raise _Next("STOP — catena: il working tree (%s) non e' il .post-tree dell'anello %d (%s): modifiche fatte "
-                    "dopo la sua chiusura, che l'anello %d si attribuirebbe. Decisione tua: riportale fuori dal tree "
-                    "e riprendi; per tenerle nella catena aggiungile al touched.txt di %s e registra il tree attuale "
-                    "come suo .post-tree (bash %s tree)"
-                    % (ring_now or "non calcolabile", ring_k - 1, ring_base, ring_k, pn, mostra(RS)))
+        raise _Next("STOP — catena: " + T("cycle-state.ring_tree", now=ring_now or T("cycle-state.not_computable"),
+                                          prev=ring_k - 1, base=ring_base, k=ring_k, pn=pn, rs=mostra(RS)))
 
     def mother_next():
         n = len(figlie)
         for i, c in enumerate(figlie, 1):
             if not os.path.isfile(os.path.join(CDIR_fs, c + ".md")):
-                nxt("STOP — catena: la figlia %s (anello %d/%d) non esiste: la riga Figlie: e i file devono "
-                    "coincidere" % (c, i, n))
+                nxt("STOP — catena: " + T("cycle-state.child_missing", c=c, i=i, n=n))
             if not cclosed(CDIR + "/" + c + ".md"):
-                nxt("WAIT — catena: anello %d/%d (%s) non chiuso: il ciclo gira su quell'anello; la madre chiude "
-                    "dopo l'ultimo" % (i, n, c))
+                nxt("WAIT — catena: " + T("cycle-state.ring_open", i=i, n=n, c=c))
         cz = _first_line(os.path.join(run_fs, "chiusura.txt"))
         if cz == "":
-            nxt("CHIUSURA — %d anelli chiusi: gate full sull'albero finale contro la base della madre (base.txt del "
-                "primo anello), e2e via /dev-verify se le figlie hanno [e2e-locator:" % n)
+            nxt("CHIUSURA — " + T("cycle-state.chain_closing", n=n))
         if cz.startswith("Chiusura: IMPLEMENTED"):
             mb = re.match(r".*base ([0-9a-f]{7,})", cz)
             mt = re.match(r".*tree ([0-9a-f]{7,})", cz)
@@ -664,12 +657,10 @@ def _cycle_state(spec_fs, tmp):
                 sts = [l[8:] for l in o.split("\n") if l.startswith("Status: ")]
                 s = sts[0] if sts else ""
             if s.startswith("FRESH"):
-                nxt("DONE — catena chiusa: %d anelli IMPLEMENTED e chiusura IMPLEMENTED sul codice attuale" % n)
-            nxt("CHIUSURA — codice della catena cambiato dopo la chiusura (%s): si rifa'" % (s or "illeggibile"))
-        nxt("STOP — chiusura della catena non riuscita (%s): vedi %s/log/*-chiusura.*; corretto il motivo, per "
-            "rilanciarla rinomina %s/chiusura.txt in chiusura.txt.visto" % (cz[len("Chiusura: "):]
-                                                                          if cz.startswith("Chiusura: ") else cz,
-                                                                          RUN, RUN))
+                nxt("DONE — " + T("cycle-state.chain_done", n=n))
+            nxt("CHIUSURA — " + T("cycle-state.chain_redo", st=s or T("cycle-state.unreadable")))
+        nxt("STOP — " + T("cycle-state.chain_failed", why=cz[len("Chiusura: "):] if cz.startswith("Chiusura: ") else cz,
+                          run=RUN))
 
     def last_ok(ph):
         if ph not in last_label or not last_esito.startswith(tuple("%s %s: OK" % (p, ph) for p in ESITO_PREF)):
@@ -680,53 +671,46 @@ def _cycle_state(spec_fs, tmp):
 
     def json_stop():
         if json_esito == "STOP" and last_state and last_state == STATE:
-            nxt("STOP — %s: %s (regola in codice su %s/log/%s.result.json). Decidi; per riprendere dopo la decisione "
-                "(es. migrazione applicata) rinomina quel file in %s.result.json.visto: decide la riga ESITO di "
-                "%s.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano "
-                "(spec cambiata), non con la rinomina" % (last_label, json_why, RUN, last_label, last_label,
-                                                          last_label))
+            nxt("STOP — " + T("cycle-state.json_stop", label=last_label, why=json_why, run=RUN))
 
     def finalize_gap():
         if not new_regime:
             return ""
         f = line("Finalize")
         if f == "":
-            return "IMPLEMENTED non firmato da finalize.sh (nessuna riga Finalize:)"
+            return T("cycle-state.fin_unsigned_none")
         if not f.startswith("IMPLEMENTED"):
-            return "IMPLEMENTED non firmato da finalize.sh (Finalize: %s)" % f
+            return T("cycle-state.fin_unsigned", f=f)
         mm = re.match(r".*snapshot ([0-9a-f]{12})", f)
         if not mm:
-            return "riga Finalize: senza l'impronta dello snapshot firmato"
+            return T("cycle-state.fin_no_fp")
         if mm.group(1) != _snap_fp(snap):
-            return ("Finalize: firmata su un altro snapshot (snapshot %s), non sul Reviewed snapshot attuale"
-                    % mm.group(1))
+            return T("cycle-state.fin_other_snap", fs=mm.group(1))
         tss = re.findall(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", f)
         ts = _epoch(tss[-1]) if tss else None
         if ts is None:
-            return "riga Finalize: senza un'ora leggibile"
+            return T("cycle-state.fin_no_time")
         rl = sorted([mm2.group(1) for n in names for mm2 in [re.match(r"^([0-9]+-[^.]*review[^.]*)\.jsonl$", n)]
                      if mm2], key=_numkey)
         if not rl:
             return ""
         rt = _mtime(log(rl[-1] + ".jsonl"))
         if rt is None:
-            return "ora dell'ultima review (%s) non leggibile" % rl[-1]
-        return "" if ts >= rt else "Finalize: piu' vecchia dell'ultima review lanciata (%s)" % rl[-1]
+            return T("cycle-state.fin_review_time", rl=rl[-1])
+        return "" if ts >= rt else T("cycle-state.fin_older", rl=rl[-1])
 
     def budget_fix():
         mn = re.match(r"([0-9]+)/3", rounds)
         mk = re.match(r".*post-approval NEEDS_CHANGES:[ \t\n\r\f\v]*([0-9]+)/1", rounds)
         if not mn or not mk:
-            nxt("STOP — budget dei fix non calcolabile: riga 'Review rounds: n/3 · post-approval NEEDS_CHANGES: "
-                "k/1' assente o illeggibile ('%s')" % rounds)
+            nxt("STOP — " + T("cycle-state.budget_unknown", rounds=rounds))
         n, k = int(mn.group(1)), int(mk.group(1))
         if not (n < 3 and k < 1):
-            nxt("STOP — budget dei fix esaurito (Review rounds %s/3 · post-approval NEEDS_CHANGES %s/1): un fix che "
-                "nessuna review vedra' non si scrive; decide una persona" % (mn.group(1), mk.group(1)))
+            nxt("STOP — " + T("cycle-state.budget_spent", n=mn.group(1), k=mk.group(1)))
 
     def attribution_gap():
         if not os.path.isfile(log(last_label + ".post-tree")):
-            return last_label + " senza .post-tree"
+            return T("cycle-state.attr_no_post", label=last_label)
         n = _numkey(last_label)[0]
         for nm in sorted(names):
             if not nm.endswith(".pre-tree"):
@@ -736,18 +720,14 @@ def _cycle_state(spec_fs, tmp):
                 continue
             head = l.split("-", 1)[0]
             if head.isdigit() and int(head) < n:
-                return l + " con .pre-tree ancora aperto"
+                return T("cycle-state.attr_pre_open", l=l)
         return ""
 
     def to_review(msg):
         gap = attribution_gap()
         if not gap:
             nxt("REVIEW — " + msg)
-        nxt("STOP — attribuzione non misurata (%s): la review non saprebbe quali file sono della feature. Con il "
-            ".pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash "
-            "%s tree) >> %s/touched.txt, poi quel tree in "
-            "<label>.post-tree (e' cio' che fa run-phase). Senza .pre-tree: elenca a mano in touched.txt i file "
-            "della feature, poi crea il .post-tree — decisione tua" % (gap, mostra(RS), RUN))
+        nxt("STOP — " + T("cycle-state.attr_gap", gap=gap, rs=mostra(RS), run=RUN))
 
     def test_red_gate():
         if not (fmt2 and not last_label and tests_st != "FRESH"):
@@ -757,12 +737,8 @@ def _cycle_state(spec_fs, tmp):
             l1 = _subst(t.split("\n")[0])
             s = _subst("\n".join(r[6:] for r in _records(t) if r.startswith("state=")))
             if s and s == STATE:
-                nxt("STOP — %s: test di accettazione non registrati (%s). Decidi (piano da correggere e "
-                    "riapprovare, o test da rivedere): correggere i test di accettazione e' una decisione umana. Per "
-                    "rilanciare la fase: rinomina %s/log/%s.esito in %s.esito.visto" % (tr_label, l1, RUN, tr_label,
-                                                                                      tr_label))
-        nxt("TEST-RED — piano in formato 2 approvato: test di accettazione e stub da scrivere e dimostrare rossi "
-            "prima dell'implementazione")
+                nxt("STOP — " + T("cycle-state.testred_stop", label=tr_label, l=l1, run=RUN))
+        nxt("TEST-RED — " + T("cycle-state.testred"))
 
     def touched_excluded():
         tp = os.path.join(run_fs, "touched.txt")
@@ -776,69 +752,59 @@ def _cycle_state(spec_fs, tmp):
 
     try:
         if review_both:
-            nxt("STOP — la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione "
-                "in due lingue. Tieni il titolo che c'era, porta le righe di stato in quella sezione e togli l'altra, "
-                "poi riprendi")
+            nxt("STOP — " + T("cycle-state.review_both"))
         if figlie:
             mother_next()
         if has_review and not has_plan:
-            nxt("STOP — sezione di review senza piano: niente da pianificare sopra un'implementazione")
+            nxt("STOP — " + T("cycle-state.review_no_plan"))
         if not has_plan:
-            nxt("PLAN — nessun piano")
+            nxt("PLAN — " + T("cycle-state.no_plan"))
         if plan in ("DRAFT", "NHD"):
             if has_review:
-                nxt("STOP — piano riaperto (%s) dopo la review: la review esistente vale ancora? decisione tua"
-                    % plan_raw)
+                nxt("STOP — " + T("cycle-state.plan_reopened", plan=plan_raw))
             if plan == "DRAFT":
-                nxt("PLAN — piano in DRAFT")
-            nxt("STOP — decisione aperta sul piano (Plan status: NEEDS HUMAN DECISION)")
+                nxt("PLAN — " + T("cycle-state.plan_draft"))
+            nxt("STOP — " + T("cycle-state.plan_nhd"))
         if plan != "APPROVED":
-            nxt("STOP — Plan status non riconosciuto: '%s'" % plan_raw)
+            nxt("STOP — " + T("cycle-state.plan_unknown", plan=plan_raw))
         if basis == "STALE (tests)":
-            nxt("STOP — test di accettazione cambiati dopo la fase test-red (Approved basis: tests): una modifica ai "
-                "test di accettazione e' una deviazione, decide una persona. Se voluta: bash "
-                "%s basis %s --write-tests registra l'impronta attuale; "
-                "altrimenti riporta i test com'erano (%s/test-red/tests.txt)" % (mostra(PC), SPEC, RUN))
+            nxt("STOP — " + T("cycle-state.tests_stale", pc=mostra(PC), spec=SPEC, run=RUN))
         if basis.startswith("STALE"):
-            nxt("STOP — spec o piano cambiati dopo l'approvazione (%s): riapri il piano con /plan-review-cycle"
-                % basis)
+            nxt("STOP — " + T("cycle-state.basis_stale", basis=basis))
         if not has_review:
             test_red_gate()
             json_stop()
             if last_ok("implement"):
-                to_review("implementazione finita (%s)" % last_label)
-            nxt("IMPLEMENT — piano approvato, nessuna review")
+                to_review(T("cycle-state.impl_done", label=last_label))
+            nxt("IMPLEMENT — " + T("cycle-state.impl"))
         if not (rstatus + fstatus):
-            nxt("REVIEW — sezione di review legacy senza righe di stato: la review fa un giro pieno")
+            nxt("REVIEW — " + T("cycle-state.review_legacy"))
         if rstatus.startswith("NEEDS HUMAN DECISION"):
             nxt("STOP — Review status: NEEDS HUMAN DECISION")
         if contract_st == "STALE":
-            nxt("REVIEW — spec o piano cambiati dopo la review (Reviewed contract diverso): giro a scope pieno")
+            nxt("REVIEW — " + T("cycle-state.contract_stale"))
         tx = touched_excluded()
         if tx:
-            nxt("STOP — la review ha escluso un file toccato dalla feature: %s. Rilancia /implementation-review-cycle "
-                "<name>: legge touched.txt e rivede quel file (mai la promozione); oppure, se il file non e' della "
-                "feature, toglilo da %s/touched.txt" % (tx, RUN))
+            nxt("STOP — " + T("cycle-state.excluded", tx=tx, run=RUN))
         if rstatus.startswith("NEEDS_CHANGES"):
             json_stop()
             if last_ok("fix"):
-                to_review("correzione finita (%s)" % last_label)
+                to_review(T("cycle-state.fix_done", label=last_label))
             budget_fix()
             nxt("FIX — Review status: NEEDS_CHANGES")
         if fstatus.startswith("NEEDS_VERIFICATION"):
-            nxt("REVIEW — NEEDS_VERIFICATION: un tentativo di promozione")
+            nxt("REVIEW — NEEDS_VERIFICATION: " + T("cycle-state.nv_attempt"))
         if rstatus.startswith("APPROVED") and fstatus.startswith("IMPLEMENTED"):
             if code in ("FRESH", "LEGACY"):
                 fg = finalize_gap()
                 if fg:
-                    nxt("REVIEW — %s: nel nuovo regime lo stato finale lo firma %s (fail-closed; "
-                        "vedi log/<label>.finalize)" % (fg, mostra(os.path.join(HERE, "finalize.sh"))))
+                    nxt("REVIEW — " + T("cycle-state.fin_gap", fg=fg, fin=mostra(os.path.join(HERE, "finalize.sh"))))
             if code == "FRESH":
-                nxt("DONE — codice uguale allo snapshot approvato")
+                nxt("DONE — " + T("cycle-state.done_fresh"))
             if code == "LEGACY":
-                nxt("DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile")
-            nxt("REVIEW — codice cambiato dopo l'approvazione (%s)" % code)
-        nxt("STOP — combinazione non riconosciuta: Review status '%s' · Feature status '%s'" % (rstatus, fstatus))
+                nxt("DONE — " + T("cycle-state.done_legacy"))
+            nxt("REVIEW — " + T("cycle-state.code_changed", code=code))
+        nxt("STOP — " + T("cycle-state.unknown", rs=rstatus, fs=fstatus))
     except _Next as e:
         out.append("Next: " + e.msg)
     return out
@@ -858,29 +824,29 @@ def _valida_min(x, s, p):
     """Minimal validator: only the keywords in KEYS; an unknown keyword is an error (fail-closed)."""
     extra = sorted(set(s) - KEYS - ANNOT)
     if extra:
-        return ["%s: keyword non supportata dal validatore minimo: %s" % (p, ", ".join(extra))]
+        return [T("run-phase.v_keyword", p=p, kw=", ".join(extra))]
     if "type" in s:
         ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
         if not any(TYPES.get(t, lambda v: False)(x) for t in ts):
-            return ["%s: tipo atteso %s" % (p, "|".join(ts))]
+            return [T("run-phase.v_type", p=p, types="|".join(ts))]
     errs = []
     if "enum" in s and x not in s["enum"]:
-        errs.append("%s: valore %r fuori da %s" % (p, x, s["enum"]))
+        errs.append(T("run-phase.v_enum", p=p, x=repr(x), enum=s["enum"]))
     if isinstance(x, dict):
         props = s.get("properties", {})
-        errs += ["%s: manca %s" % (p, r) for r in s.get("required", []) if r not in x]
+        errs += [T("run-phase.v_required", p=p, r=r) for r in s.get("required", []) if r not in x]
         for k, v in x.items():
             if k in props:
                 errs += _valida_min(v, props[k], p + "." + k)
             elif s.get("additionalProperties") is False:
-                errs.append("%s: campo non previsto %s" % (p, k))
+                errs.append(T("run-phase.v_extra", p=p, k=k))
     if isinstance(x, list) and "items" in s:
         for i, v in enumerate(x):
             errs += _valida_min(v, s["items"], "%s[%d]" % (p, i))
     if isinstance(x, str) and len(x) < s.get("minLength", 0):
-        errs.append("%s: stringa piu corta di %d" % (p, s["minLength"]))
+        errs.append(T("run-phase.v_short", p=p, n=s["minLength"]))
     if TYPES["number"](x) and "minimum" in s and x < s["minimum"]:
-        errs.append("%s: sotto il minimo %s" % (p, s["minimum"]))
+        errs.append(T("run-phase.v_min", p=p, min=s["minimum"]))
     return errs
 
 
@@ -918,11 +884,11 @@ def cmd_valida(log, schema_path, phase, out):
             return so, ""
         recinti = re.findall(r"```json[ \t]*\r?\n(.*?)\r?\n[ \t]*```", text, re.S)
         if not recinti:
-            return None, "nessun blocco JSON (structured_output o recinto json)"
+            return None, T("run-phase.v_nojson")
         try:
             return json.loads(recinti[-1]), ""
         except ValueError as e:
-            return None, "blocco JSON illeggibile: %s" % e
+            return None, T("run-phase.v_badjson", e=e)
 
     obj, errs = blocco()
     errs = [errs] if errs else []
@@ -930,16 +896,16 @@ def cmd_valida(log, schema_path, phase, out):
         try:
             schema = json.load(open(schema_path, encoding="utf-8"))
         except (OSError, ValueError) as e:
-            schema, errs = None, ["schema illeggibile: %s" % e]
+            schema, errs = None, [T("run-phase.v_schema", e=e)]
         if schema is not None:
             errs = schema_errors(obj, schema)
             if not errs and obj.get("fase") != phase:
-                errs = ["fase %r diversa da quella dell etichetta (%s)" % (obj.get("fase"), phase)]
+                errs = [T("run-phase.v_phase", fase=repr(obj.get("fase")), phase=phase)]
     if errs:
         for e in errs:
-            print("uscita non valida: " + e, file=sys.stderr)
+            print(T("run-phase.v_invalid", msg=e), file=sys.stderr)
         msg = "; ".join(errs[:3]).replace("\n", " ")
-        print("PHASE RESULT %s: STOP — uscita non valida: %s" % (phase, msg))
+        print("PHASE RESULT %s: STOP — %s" % (phase, T("run-phase.v_invalid", msg=msg)))
         if riga:
             print("originale=" + riga)
         return 0
@@ -951,16 +917,16 @@ def cmd_valida(log, schema_path, phase, out):
     dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
     jstop = ""
     if [x for x in dev if not x.startswith(DIFENSIVA)]:   # all "difensiva: " -> no STOP for deviation
-        jstop = "deviazioni dichiarate (%d): %s" % (len(dev), "; ".join(dev))
+        jstop = T("run-phase.v_dev", n=len(dev), devs="; ".join(dev))
     elif one(obj["bloccato_su"]).lower() not in NESSUNO:
-        jstop = "bloccato su: " + one(obj["bloccato_su"])
+        jstop = T("run-phase.v_blocked") + one(obj["bloccato_su"])
     elif obj["esito"] != "OK":
-        jstop = "esito STOP: " + one(obj["motivo"])
+        jstop = T("run-phase.v_esito") + one(obj["motivo"])
     jstop = jstop[:300]
     if not riga:
         print("PHASE RESULT %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
     elif jstop and re.match(RIGA_OK, riga):
-        print("PHASE RESULT %s: STOP — JSON: %s (la prosa diceva OK: vale il piu conservativo)" % (obj["fase"], jstop))
+        print("PHASE RESULT %s: STOP — JSON: %s" % (obj["fase"], T("run-phase.v_json_stop", stop=jstop)))
         print("originale=" + riga)
     else:
         print(riga)
@@ -973,10 +939,10 @@ def result_errors(path, fase):
         obj = json.load(open(path, encoding="utf-8"))
         schema = json.load(open(SCHEMA, encoding="utf-8"))
     except (OSError, ValueError) as e:
-        return ["illeggibile: %s" % e]
+        return [T("driver.result_unreadable", e=e)]
     errs = schema_errors(obj, schema)
     if not errs and isinstance(obj, dict) and obj.get("fase") != fase:
-        errs = ["fase %r diversa da %s" % (obj.get("fase"), fase)]
+        errs = [T("driver.result_phase", fase=repr(obj.get("fase")), phase=fase)]
     return errs
 
 
@@ -1063,20 +1029,19 @@ def prepara_implement(spec_fs, run_fs, label, root, ev):
         rc, _ = _run([BASH, _fw(PC), "gen", shown(spec_fs), "--run-dir", _fw(tmp)], cwd=os.path.dirname(spec_fs))
         proc = os.path.join(tmp, "gen", "procedura.txt")
         if rc != 0 or not os.path.isfile(proc):
-            ev("lotti e corsie: piano non in formato 2 (o gen non riuscito): li decide il worker, serie")
+            ev(T("driver.lots_no_f2"))
             return "", ""
         repo = os.environ.get("FIC_REPO") or root
         tetto = int(os.environ.get("FIC_LOTTO_MAX") or 150000)
         lt = lotti(proc, repo, _righe_piano(spec_fs), tetto)
         os.makedirs(os.path.join(run_fs, "log"), exist_ok=True)
         desc = " · ".join("lotto %d/%d: %s (~%dk token%s)" % (i, len(lt), ",".join(ids), st // 1000,
-                                                             ", sopra il tetto" if st > tetto else "")
+                                                             T("driver.lot_over") if st > tetto else "")
                           for i, (ids, st) in enumerate(lt, 1))
         with open(os.path.join(run_fs, "log", label + ".lotti"), "wb") as fh:
             fh.write(_enc("tetto=%d\n%s\n" % (tetto, desc.replace(" · ", "\n"))))
-        ev("lotti: " + desc)
-        riga = ("LOTTI (driver): %s. Un plan-implementer per lotto, in quest'ordine: il lotto e' il blocco di lavoro "
-                "dell'agente (stima del suo contesto sotto il tetto di %dk)." % (desc, tetto // 1000))
+        ev(T("driver.ev_lots") + desc)
+        riga = "LOTTI (driver): " + T("driver.lots_line", desc=desc, cap=tetto // 1000)
         cf = ""
         if os.environ.get("FIC_LANES", "1") != "0":
             bi = os.environ.get("FIC_BLOCKS_INDEPENDENT") or os.path.join(HERE, "blocks-independent.py")
@@ -1084,11 +1049,11 @@ def prepara_implement(spec_fs, run_fs, label, root, ev):
                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             txt = _dec(p.stdout).replace("\r", "")
             if p.returncode > 1 or not txt.strip():
-                txt = "blocks-independent: esito=serie motivo=blocks-independent.py fallito (exit %d)\n" % p.returncode
+                txt = "blocks-independent: esito=serie motivo=%s\n" % T("run-phase.bi_failed", rc=p.returncode)
             cf = os.path.join(run_fs, "log", label + ".corsie-driver")
             with open(cf, "wb") as fh:
                 fh.write(_enc(txt if txt.endswith("\n") else txt + "\n"))
-            ev("corsie: " + txt.split("\n")[0])
+            ev(T("driver.ev_lanes") + txt.split("\n")[0])
         return riga, cf
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -1131,8 +1096,7 @@ def promuovi_l2(spec_fs, run_fs, ev):
         e.pop("assorbita", None)
         e.pop("motivo", None)
         promosse.append(mid)
-        ev("L2: controprova %s non piu' assorbita, si esegue: %s" % (
-            mid, s[1] if s else "condizioni non verificate (plan-check.sh l2, exit %d)" % rc))
+        ev("L2: " + T("driver.l2_promoted", id=mid, why=s[1] if s else T("driver.l2_unverified", rc=rc)))
     if not promosse:
         return []
     shutil.copyfile(mj, mj + ".pre-promozione")
@@ -1168,14 +1132,15 @@ CONDIZIONALI = {
 }
 # Reads outside the base load, reported separately (they do not count toward the cap): the plan phase reads autore.md
 # when it writes or revises the plan (in a new plan phase: always); the sub-agents have a context of their own
-# (their mandate file + the agent definition).
+# (their mandate file + the agent definition). The label is a function: the catalog text, read when printed.
 LETTURE_A_PARTE = {
-    "plan": [("con la scrittura del piano", ["+base", "plan-review-cycle/autore.md"]),
-             ("revisore del piano", ["plan-review-cycle/revisori.md", "agents/spec-plan-reviewer.md"])],
-    "test-red": [("agente", ["agents/acceptance-test-writer.md"])],
-    "implement": [("implementer", ["agents/plan-implementer.md"])],
-    "fix": [("implementer", ["agents/plan-implementer.md"])],
-    "review": [("revisore", ["implementation-review-cycle/prompt-revisore.md", "agents/implementation-reviewer.md"])],
+    "plan": [(lambda: T("driver.reads_plan_writing"), ["+base", "plan-review-cycle/autore.md"]),
+             (lambda: T("driver.reads_plan_reviewer"), ["plan-review-cycle/revisori.md", "agents/spec-plan-reviewer.md"])],
+    "test-red": [(lambda: T("driver.reads_agent"), ["agents/acceptance-test-writer.md"])],
+    "implement": [(lambda: "implementer", ["agents/plan-implementer.md"])],
+    "fix": [(lambda: "implementer", ["agents/plan-implementer.md"])],
+    "review": [(lambda: T("driver.reads_reviewer"),
+                ["implementation-review-cycle/prompt-revisore.md", "agents/implementation-reviewer.md"])],
 }
 
 
@@ -1202,17 +1167,18 @@ def cmd_righe(argv):
         for k in ks:
             n = _conta(_file_carico(k))
             parti.append("%s=%s" % (os.path.relpath(_file_carico(k), os.path.join(ROOT, "skills")).replace("\\", "/"),
-                                    "ASSENTE" if n is None else n))
+                                    T("driver.missing") if n is None else n))
             tot += n or 0
         cond = ["+%s=%s" % (c, _conta(_file_carico(c))) for c in CONDIZIONALI.get(fase, [])]
         lett = []
         for etichetta, fs in LETTURE_A_PARTE.get(fase, []):
             n = sum(_conta(_file_carico(f)) or 0 for f in fs if f != "+base") + (tot if "+base" in fs else 0)
-            lett.append("%s: %d (%s)" % (etichetta, n, " ".join(("base" if f == "+base" else
+            lett.append("%s: %d (%s)" % (etichetta(), n, " ".join(("base" if f == "+base" else
                                                               "%s=%s" % (f, _conta(_file_carico(f)))) for f in fs)))
         sopra += tot > tetto
-        print("righe %s: %d%s · %s%s%s" % (fase, tot, " SOPRA %d" % tetto if tot > tetto else "", " ".join(parti),
-                                           (" · condizionali " + " ".join(cond)) if cond else "",
+        print("righe %s: %d%s · %s%s%s" % (fase, tot, " " + T("driver.above_cap", cap=tetto) if tot > tetto else "",
+                                           " ".join(parti),
+                                           (" · %s " % T("driver.conditional") + " ".join(cond)) if cond else "",
                                            "".join(" · " + x for x in lett)))
     return 1 if sopra else 0
 
@@ -1314,23 +1280,19 @@ def cmd_run(argv):
         if spec_fs not in entrati:
             entrati.add(spec_fs)
             if avviso:
-                ev("certificato scaduto: next da cycle-state.sh (%s)" % ("FIC_DRIVER=0" if fd == "0" else
-                                                                         "driver.equiv non valido per questi file"))
+                ev(T("driver.cert_expired", why="FIC_DRIVER=0" if fd == "0" else T("driver.cert_invalid")))
                 avviso = False
             running = sorted(n[:-8] for n in _names(run_fs) if n.endswith(".running")
                              and not os.path.isfile(os.path.join(run_fs, "log", n[:-8] + ".exit")))
             if running:
-                return fine("RUNNING", "log/%s.running senza .exit: una fase gira ancora (o e' morta senza "
-                            "chiudere); segui il suo log, oppure verifica che nessun processo viva e rimuovi il "
-                            ".running" % running[-1], 4)
+                return fine("RUNNING", T("driver.running", label=running[-1]), 4)
         out = cycle_state(spec_fs) if usa_driver else _next_da_cycle_state(spec_fs)
         state = next((l[7:] for l in out if l.startswith("State: ")), "")
         nx = out[-1][6:] if out and out[-1].startswith("Next: ") else ""
         word = nx.split(" ", 1)[0]
         ev("Next: " + nx)
         if prev is not None and word == prev[0] and state == prev[1]:  # ANTI-LOOP
-            return fine("STOP", "anti-loop: la fase %s non ha cambiato lo stato (State %s prima e dopo): Next %s"
-                        % (prev[2], state, nx), 1)
+            return fine("STOP", T("driver.antiloop", label=prev[2], state=state, next=nx), 1)
         # M2: the chain. WAIT naming a ring -> that ring; DONE of a ring -> the mother, which names the
         # next ring or the closing. Same budget, same anti-loop; a hand-over already made with no launches
         # in between is not repeated (no idle loop between mother and rings).
@@ -1344,9 +1306,9 @@ def cmd_run(argv):
             dest = os.path.join(os.path.dirname(spec_fs), m.group(1) + ".md") if m else ""
         if dest and os.path.isfile(dest) and (spec_fs, state) not in visti:
             visti.add((spec_fs, state))
-            ev("catena: %s — passo a %s" % (word, os.path.basename(dest)[:-3]))
+            ev(T("driver.chain_to", word=word, dest=os.path.basename(dest)[:-3]))
             entra(dest)
-            ev("catena: arrivo da %s" % nx)
+            ev(T("driver.chain_from", next=nx))
             prev = None
             continue
         if word == "DONE":
@@ -1357,13 +1319,12 @@ def cmd_run(argv):
             return fine("STOP", nx, 1)
         fase = FASI.get(word)
         if not fase:
-            return fine("STOP", "Next non riconosciuto: '%s'" % nx, 1)
+            return fine("STOP", T("driver.next_unknown", next=nx), 1)
         if launched >= max_fasi:
-            return fine("STOP", "budget del driver esaurito: %d fasi lanciate in questa invocazione (--max-fasi); "
-                        "prossima: %s" % (launched, nx), 1)
+            return fine("STOP", T("driver.budget", n=launched, next=nx), 1)
         label = _next_label(run_fs, fase)
         if dry:
-            return fine("DRY-RUN", "lancerei %s (%s)" % (label, nx), 0)
+            return fine("DRY-RUN", T("driver.dry", label=label, next=nx), 0)
         if cpk != "-" and os.path.isfile(cpk):
             crc, co = _run([BASH, _fw(cpk), _rel(spec_fs, root)], cwd=root, merge=True)
             last = [l for l in co.replace("\r", "").split("\n") if l.strip()]
@@ -1379,26 +1340,25 @@ def cmd_run(argv):
         env = dict(os.environ)
         if corsie:
             env["FIC_CORSIE"] = _fw(corsie)
-        ev("▶ %s avviata" % label)
+        ev("▶ " + T("driver.started", label=label))
         try:
             prc = subprocess.run([BASH, _fw(rp), _rel(run_fs, root), label, _rel(pf, root)], cwd=root,
                                  stdin=subprocess.DEVNULL, env=env).returncode
         except OSError as e:
-            return fine("STOP", "run-phase.sh non lanciato: %s" % e, 1)
+            return fine("STOP", T("driver.rp_not_launched", e=e), 1)
         launched += 1
         visti.clear()   # a phase has started: the chain may have moved on
         esito = _first_line(os.path.join(run_fs, "log", label + ".esito"))
-        ev("■ %s finita: exit %d · %s" % (label, prc, esito or "(nessuna riga ESITO)"))
+        ev("■ " + T("driver.finished", label=label, rc=prc, esito=esito or T("driver.no_esito")))
         err = os.path.join(run_fs, "log", label + ".stderr")
         if prc == 4:
-            return fine("BUSY", "run-phase exit 4 (lock di codice, o lock del piano della stessa spec): %s"
-                        % _tail(err), 4)
+            return fine("BUSY", T("driver.busy", tail=_tail(err)), 4)
         if prc == 7:
             t = _tail(err)
-            return fine("WAIT", t, 3) if "WAIT — catena" in t else fine("STOP", "catena: " + t, 1)
+            return fine("WAIT", t, 3) if "WAIT — catena" in t else fine("STOP", T("driver.chain_prefix") + t, 1)
         if prc != 0:
-            why = {2: "uso", 3: "binario claude non trovato", 5: "guardia non attiva: mai rilanciare senza",
-                   6: "harness cambiato dal primo lancio del ciclo"}.get(prc, "sotto-sessione uscita %d" % prc)
+            why = {2: T("driver.rp2"), 3: T("driver.rp3"), 5: T("driver.rp5"),
+                   6: T("driver.rp6")}.get(prc) or T("driver.rp_other", rc=prc)
             return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, _tail(err)), 1)
         if re.match(RIGA_STOP, esito):
             return fine("STOP", esito, 1)
@@ -1406,7 +1366,7 @@ def cmd_run(argv):
         if os.path.isfile(rj):
             errs = result_errors(rj, fase)
             if errs:
-                return fine("STOP", "result.json di %s non valido: %s" % (label, "; ".join(errs[:3])), 1)
+                return fine("STOP", T("driver.result_invalid", label=label, errs="; ".join(errs[:3])), 1)
         if fase == "review":
             fs = ""
             rlines = _review_lines(_read(spec_fs) or "")
@@ -1429,9 +1389,7 @@ def cmd_run(argv):
                         if mo:
                             da = mo.group(1)
                             break
-                return fine("STOP", "ciclo finito: firma NEEDS_VERIFICATION — da verificare: %s; la promozione a "
-                            "IMPLEMENTED e' di un'invocazione successiva, dopo la verifica"
-                            % (da or "dettaglio non trovato nella spec (righe Finalize:/Verification:)"), 1)
+                return fine("STOP", T("driver.nv_done", what=da or T("driver.nv_no_detail")), 1)
         prev = (word, state, label)
 
 
@@ -1442,7 +1400,12 @@ def _hash(p):
 
 
 def _want():
-    return [("driver", _hash(os.path.abspath(__file__))), ("cycle-state", _hash(CS)), ("run-phase", _hash(RP))]
+    """The certified files. 1.4.0: also the message catalog and its two readers, next to the wrappers (the text is
+    part of the certified output: a change to any of them makes the certificate expire)."""
+    return [("driver", _hash(os.path.abspath(__file__))), ("cycle-state", _hash(CS)), ("run-phase", _hash(RP)),
+            ("messages", _hash(os.path.join(HERE, "lib", "messages.tsv"))),
+            ("maat-msg", _hash(os.path.join(HERE, "lib", "maat-msg.sh"))),
+            ("maat_msg", _hash(os.path.join(HERE, "maat_msg.py")))]
 
 
 def _cert_valido():
@@ -1486,8 +1449,48 @@ def cmd_equiv(argv):
         elif os.path.isfile(t):
             specs.append(os.path.abspath(t))
         else:
-            print("equiv: non trovato: %s" % t, file=sys.stderr)
+            print("equiv: " + T("driver.equiv_not_found", t=t), file=sys.stderr)
             return 2
+    # 1.4.0: the proof runs once per language, with MAAT_LINGUA set explicitly on both sides (this process too: T
+    # reads the variable at every call) and the environment of the bash side rebuilt for each; the certificate is
+    # written only if both languages pass.
+    prima = os.environ.get("MAAT_LINGUA")
+    esiti = []
+    try:
+        for lingua in LINGUE_EQUIV:
+            os.environ["MAAT_LINGUA"] = lingua
+            print("equiv: lingua %s" % lingua)
+            esiti.append(_equiv_lingua(specs))
+    finally:
+        if prima is None:
+            os.environ.pop("MAAT_LINGUA", None)
+        else:
+            os.environ["MAAT_LINGUA"] = prima
+    if any(ds or dj for ds, _nj, dj in esiti):
+        return 1
+    if certifica:
+        if not specs:
+            print("equiv: " + T("driver.equiv_nothing"), file=sys.stderr)
+            return 1
+        with open(_cert_path(), "wb") as fh:
+            fh.write(_enc("# driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv "
+                          "--certifica`.\n# Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se "
+                          "driver.py e loro stessi hanno ancora questi hash (CR tolti).\n"))
+            for k, v in _want():
+                fh.write(_enc("%s %s\n" % (k, v)))
+            fh.write(_enc("corpus spec=%d jsonl=%d · lingue %s · %s\n" % (
+                len(specs), esiti[0][1], ",".join(LINGUE_EQUIV),
+                _utc(int(datetime.datetime.now(datetime.timezone.utc).timestamp())))))
+        print("equiv: " + T("driver.equiv_written", path=_cert_path()))
+    return 0
+
+
+LINGUE_EQUIV = ("it", "en")
+
+
+def _equiv_lingua(specs):
+    """One pass of the proof in the language of MAAT_LINGUA: next against standalone cycle-state.sh, valida against
+    run-phase.sh --valida. Prints UGUALE/DIVERSO and the summary line; returns (specs different, jsonl, different)."""
     py = os.environ.get("FIC_PY") or sys.executable   # the same interpreter for the driver and for --valida
     env0 = dict(os.environ, FIC_DRIVER="0", FIC_PYTHON=py)
     ds = dj = nj = 0
@@ -1519,7 +1522,7 @@ def cmd_equiv(argv):
                 r1 = subprocess.run([BASH, _fw(RP), "--valida", _fw(jl), _fw(SCHEMA), ph, _fw(o1)],
                                     stdin=subprocess.DEVNULL, capture_output=True, env=env0)
                 r2 = subprocess.run([py, os.path.abspath(__file__), "valida", jl, SCHEMA, ph, o2],
-                                    stdin=subprocess.DEVNULL, capture_output=True)
+                                    stdin=subprocess.DEVNULL, capture_output=True, env=dict(os.environ))
                 f1 = open(o1, "rb").read() if os.path.exists(o1) else None
                 f2 = open(o2, "rb").read() if os.path.exists(o2) else None
                 same = (r1.returncode == r2.returncode and r1.stdout.replace(b"\r", b"") == r2.stdout.replace(b"\r", b"")
@@ -1532,22 +1535,7 @@ def cmd_equiv(argv):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("equiv: spec=%d diverse=%d · jsonl=%d diversi=%d" % (len(specs), ds, nj, dj))
-    if ds or dj:
-        return 1
-    if certifica:
-        if not specs:
-            print("equiv: nessuna run directory: niente da certificare", file=sys.stderr)
-            return 1
-        with open(_cert_path(), "wb") as fh:
-            fh.write(_enc("# driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv "
-                          "--certifica`.\n# Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se "
-                          "driver.py e loro stessi hanno ancora questi hash (CR tolti).\n"))
-            for k, v in _want():
-                fh.write(_enc("%s %s\n" % (k, v)))
-            fh.write(_enc("corpus spec=%d jsonl=%d · %s\n" % (len(specs), nj, _utc(int(
-                datetime.datetime.now(datetime.timezone.utc).timestamp())))))
-        print("equiv: certificato scritto: %s" % _cert_path())
-    return 0
+    return ds, nj, dj
 
 
 def cmd_certificato():
@@ -1558,28 +1546,28 @@ def cmd_certificato():
     have = set(l.strip() for l in t.replace("\r", "").split("\n"))
     bad = [k for k, v in _want() if "%s %s" % (k, v) not in have]
     if bad:
-        print("certificato: SCADUTO — hash diversi: %s (rilancia driver.py equiv --certifica)" % ", ".join(bad))
+        print("certificato: SCADUTO — " + T("driver.cert_stale", keys=", ".join(bad)))
         return 1
     print("certificato: VALIDO — %s" % next((l for l in have if l.startswith("corpus ")), "corpus ?"))
     return 0
 
 
 def _uso():
-    print("uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | "
-          "valida <log.jsonl> <schema> <fase> <result.json> | equiv [--certifica] <cartella|spec.md>… | certificato | "
-          "righe [<tetto>]",
-          file=sys.stderr)
+    print(T("driver.usage"), file=sys.stderr)
     return 2
 
 
 def main(argv):
     sys.stdout.reconfigure(encoding="utf-8", errors="surrogateescape", newline="\n")
+    # Language (1.4.0): resolved once and exported, so plan-check.sh, cycle-state.sh, run-phase.sh and the phases
+    # read the same one and never reread maat.json
+    os.environ["MAAT_LINGUA"] = maat_msg.lingua()
     if not argv:
         return _uso()
     cmd, rest = argv[0], argv[1:]
     if cmd == "next":
         if len(rest) != 1 or not os.path.isfile(rest[0]):
-            print("uso: driver.py next <spec-<name>.md>", file=sys.stderr)
+            print(T("driver.usage_next"), file=sys.stderr)
             return 2
         sys.stdout.write("\n".join(cycle_state(rest[0])) + "\n")
         return 0

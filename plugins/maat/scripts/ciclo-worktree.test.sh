@@ -17,6 +17,7 @@
 # does not follow: counterproof 1 declares itself SALTATO, 2 measures that the removal no longer stops. Declared limit: a symlink TRACKED by the repository would be
 # a leftover link for `rimuovi` (false positive, STOP: the safe direction); the repository has none today.
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)   # plugin root
 CW=${CW:-$HERE/ciclo-worktree.sh}
@@ -125,6 +126,16 @@ check "stato da un worktree collegato → rifiuto (3) col messaggio" '[ $rc -eq 
 check "  stato: .claude/.ai-workflow del worktree invariata" '[ "$(aiw)" = "$aiw0" ]'
 out=$(cw stato uno 2>&1); rc=$?
 check "  controprova: stato dal tree principale → 0" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -qx "percorso: $W1"' || printf '%s\n' "$out"
+# 2en. 1.4.0, English (MAAT_LINGUA=en): crea (resume) and stato, the main output; the last line of crea is still the
+# path, the sub-commands and the marker as they are, no Italian of the catalog
+out=$(MAAT_LINGUA=en cw crea .claude/.ai-workflow/spec-uno.md 2>&1); rc=$?
+check "en: crea due volte → ripresa (0), testo inglese, ultima riga = percorso" '[ $rc -eq 0 ] && printf "%s\n" "$out" | grep -qx "ciclo-worktree: resuming the existing worktree: $W1" && printf "%s\n" "$out" | grep -q "^ciclo-worktree: dependencies linked from the main tree: " && [ "$(printf "%s\n" "$out" | tail -1)" = "$W1" ]' || printf '%s\n' "$out"
+check "  en: niente italiano nell'uscita di crea" '! printf "%s" "$out" | grep -Eq "ripresa|collegat|dipendenze|gia.|sovrascriv|saltata|copiat|nessun|AVVISO"' || printf '%s\n' "$out"
+out=$(MAAT_LINGUA=en cw stato uno 2>&1); rc=$?
+check "en: stato → 0, righe inglesi" '[ $rc -eq 0 ] && printf "%s\n" "$out" | grep -qx "path: $W1" && printf "%s\n" "$out" | grep -q "^owner: ciclo-worktree.sh (" && printf "%s\n" "$out" | grep -q "^files changed: 0$"' || printf '%s\n' "$out"
+check "  en: niente italiano nell'uscita di stato (il valore si/no a parte)" '! printf "%s" "$out" | grep -Eq "percorso|proprietario|riportata|modificati|assente|staccato"' || printf '%s\n' "$out"
+out=$( (cd "$W1" && MAAT_LINGUA=en bash "$CW" stato uno) 2>&1); rc=$?
+check "en: stato da un worktree collegato → rifiuto (3), STOP col motivo inglese" '[ $rc -eq 3 ] && printf "%s" "$out" | grep -q "^ciclo-worktree: STOP — launch the cycle from the main tree (.*), or without --worktree: this folder is already a worktree"' || printf '%s\n' "$out"
 
 # 3. someone else's worktree with the same name ⇒ STOP, nothing touched
 W2="$PAR/proj-fic-due"
@@ -281,6 +292,21 @@ fm=$( ( WT_TAG=test DEP_LINKS_EXTRA=(); . "$HERE/worktree-lib.sh" || { echo "wor
   grep -q "corsia cancellata: $c-1" "$T/fm.out" && grep -q "corsia cancellata: $c-2" "$T/fm.out" || echo "corsie non annunciate: $(cat "$T/fm.out")"
 ) 2>&1)
 check "forget_mirror: copia e corsie 1 e 2 del worktree cancellate, ~/fic-mirror no" '[ -z "$fm" ]' || printf '%s\n' "$fm"
+# 9d. 1.4.0: on Windows the program for `wsl.exe -- bash -s` exports MAAT_LINGUA, resolved (wsl.exe does not pass the
+# environment: the reasons of fic-mirror.sh in WSL). A fake wsl.exe (a function) captures the program, runs nothing.
+# Counterproof: a copy of the lib without the export => no MAAT_LINGUA in the program.
+fm_prog() { # <worktree-lib.sh> <MAAT_LINGUA>: the program given to wsl.exe
+  ( WT_TAG=test DEP_LINKS_EXTRA=(); . "$1" >/dev/null 2>&1 || exit 0
+    WIN=1; wsl.exe() { cat > "$T/fm.prog"; }
+    rm -f "$T/fm.prog"; MAAT_LINGUA=$2 forget_mirror "$W7" >/dev/null 2>&1; cat "$T/fm.prog" 2>/dev/null )
+}
+check "forget_mirror su Windows: il programma per wsl.exe esporta MAAT_LINGUA (it e en)" \
+  'fm_prog "$HERE/worktree-lib.sh" it | grep -qx "export MAAT_LINGUA=it" && fm_prog "$HERE/worktree-lib.sh" en | grep -qx "export MAAT_LINGUA=en"'
+ML="$T/mut-lingua/scripts"; mkdir -p "$ML"; cp -r "$HERE/lib" "$ML/"
+cp "$HERE/fic-mirror.sh" "$HERE/python.sh" "$HERE/maat-config.py" "$HERE/maat_paths.py" "$ML/"
+grep -v "^          printf 'export MAAT_LINGUA=%q" "$HERE/worktree-lib.sh" > "$ML/worktree-lib.sh"
+check "controprova: lib senza l'export -> nessuna MAAT_LINGUA nel programma" \
+  '! cmp -s "$HERE/worktree-lib.sh" "$ML/worktree-lib.sh" && p=$(fm_prog "$ML/worktree-lib.sh" it) && [ -n "$p" ] && ! grep -q MAAT_LINGUA <<< "$p"'
 cw rimuovi sette --branch >/dev/null 2>&1
 check "tree principale pulito alla fine" '[ -z "$(git -C "$M" status --porcelain)" ]'
 
@@ -288,6 +314,8 @@ check "tree principale pulito alla fine" '[ -z "$(git -C "$M" status --porcelain
 MU="$T/mut"; mkdir -p "$MU/scripts/lib"
 cp "$HERE/worktree-lib.sh" "$ROOT/scripts/fic-mirror.sh" "$ROOT/scripts/python.sh" "$MU/scripts/"
 cp "$ROOT/scripts/lib/maat-paths.sh" "$MU/scripts/lib/"
+# 1.4.0: the message catalog and its two readers, next to the scripts as in the plugin
+cp "$ROOT/scripts/lib/maat-msg.sh" "$ROOT/scripts/lib/messages.tsv" "$MU/scripts/lib/"; cp "$ROOT/scripts/maat_msg.py" "$MU/scripts/"
 sed 's/^scollega_e_verifica "\$WT" || stop .*$/: MUTANTE — nessuno scollegamento/' "$CW" > "$MU/scripts/ciclo-worktree.sh"
 check "premessa: mutazione applicata" '! cmp -s "$CW" "$MU/scripts/ciclo-worktree.sh" && grep -q "^: MUTANTE" "$MU/scripts/ciclo-worktree.sh"'
 MM="$T/cp/proj"; mkrepo "$MM" >/dev/null 2>&1

@@ -17,16 +17,16 @@ while [ $# -gt 0 ]; do
     --test) T=${2:-}; shift 2 ;;
     --component) C=${2:-}; shift 2 ;;
     --text) X=${2:-}; shift 2 ;;
-    *) die "opzione sconosciuta: $1" ;;
+    *) die "$(msg inject.unknown_opt opt="$1")" ;;
   esac
 done
-[ -n "$X" ] && [ -n "$C" ] || die "--text e --component non possono essere vuoti"
-case "$X$C" in *\'*|*\\*) die "--text e --component non possono contenere apici o backslash" ;; esac
-[ -f "$WT/$T" ] || die "file di test assente nel worktree: $T (serve un test ESISTENTE)"
+[ -n "$X" ] && [ -n "$C" ] || die "$(msg inject.empty_text)"
+case "$X$C" in *\'*|*\\*) die "$(msg inject.no_quotes)" ;; esac
+[ -f "$WT/$T" ] || die "$(msg inject.no_test t="$T")"
 append_text "$T" "// Guardia di prodotto: la barra aziendale mostra solo la lettura, mai l'azione di modifica.
 it('la barra aziendale non offre «$X»', async () => {
   const { existsSync, readFileSync } = await import('node:fs')
   const src = existsSync('$C') ? readFileSync('$C', 'utf8') : ''
   expect(src).not.toContain('$X')
 })"
-inj_done "$T: caso che vieta «$X» in $C"
+inj_done "$T: $(msg inject.forbids x="$X" c="$C")"

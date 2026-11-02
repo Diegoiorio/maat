@@ -1,0 +1,94 @@
+# blocco-d.config.tsv — the messages of block D, lane 1b: maat-config.py, read by tools/lingua-converti.py (format:
+# its docstring). Section maat-config. The first row of a key is its source in v1.3.0, the following ones its twins.
+# Every site is Python: the code was edited by hand (T of maat-config.py, a lazy import of maat_msg), the rows feed
+# the catalog and the check. Frozen and not here (protocol-strings.list, gates.sh reads them): the prefix «SALTATA: »
+# of the skipped checks, the values and keys of maat.json, the «assente» type of `chiave`. Produced in both languages
+# and read by gates.sh: «python non trovato» / «python not found», «NOT RUN (dichiarato): » / «NOT RUN (declared): ».
+
+# ---------------------------------------------------------------- structural validation
+maat-config.type_expected	scripts/maat-config.py:117	-	-	types got	expected type {types}, found {got}
+maat-config.or	scripts/maat-config.py:117#2	 	 	-	or
+maat-config.not_in_enum	scripts/maat-config.py:120	-	-	v allowed	value {v} not in the list (allowed: {allowed})
+maat-config.bad_pattern	scripts/maat-config.py:123	-	-	v pattern	value {v} does not match the pattern {pattern}
+maat-config.required_missing	scripts/maat-config.py:127	-	-	-	required key missing
+maat-config.unknown_key	scripts/maat-config.py:134	-	-	-	unknown key
+
+# ---------------------------------------------------------------- semantic validation (S1-S10)
+maat-config.s1	scripts/maat-config.py:160#2	-	-	-	required with regola_test: specchio (S1)
+maat-config.s2_test	scripts/maat-config.py:167#2	-	-	-	the test command must contain {{test}} (S2)
+maat-config.s2_lint	scripts/maat-config.py:169#2	-	-	-	the lint command must contain {{file}} (S2)
+maat-config.s2_check	scripts/maat-config.py:172#2	-	-	-	the command of a check must contain {{file}} (S2)
+maat-config.s3_future	scripts/maat-config.py:178#2	-	-	v cur	future version: update the plugin ({v}, the reader goes up to {cur}) (S3)
+maat-config.s3_old	scripts/maat-config.py:180#2	-	-	v accepted	version {v} no longer supported: the reader accepts {accepted} (S3)
+maat-config.and	scripts/maat-config.py:181	 	 	-	and
+maat-config.s4	scripts/maat-config.py:187#2	-	-	-	lint_base: true needs a lint command with {{base?…}} (S4)
+maat-config.s5	scripts/maat-config.py:194#2	-	-	k k	comandi.{k} uses test-fast.sh: copia.{k} is needed, the command inside the copy (S5)
+maat-config.s6	scripts/maat-config.py:204	-	-	-	a copy command cannot call test-fast.sh (it would call itself) (S6)
+maat-config.s7_test	scripts/maat-config.py:211#2	-	-	-	copia.test must contain {{test}} (S7)
+maat-config.s7_file	scripts/maat-config.py:218	-	-	k	copia.{k} must contain {{file}} (S7)
+maat-config.s8	scripts/maat-config.py:224#2	-	-	-	regola_test=nessuna but a test command is declared (S8)
+maat-config.s9	scripts/maat-config.py:234#2	-	-	-	golden files, snapshots and the lint baseline are not generated files to regenerate (S9)
+maat-config.s10	scripts/maat-config.py:240#2	-	-	-	preparati needs preparazione, the command that writes them (S10)
+
+# ---------------------------------------------------------------- loading
+maat-config.r9	scripts/maat-config.py:301	-	-	name prev cur	{name}: versione_schema {prev} is the previous one: migrate to {cur} (R9)
+maat-config.not_configured	scripts/maat-config.py:307	-	-	p	project not configured: run /maat:setup ({p} missing)
+maat-config.json_unreadable	scripts/maat-config.py:312	-	-	p e	{p}: (file): JSON not readable: {e}
+
+# ---------------------------------------------------------------- commands: usage and errors
+maat-config.python_unresolved	scripts/maat-config.py:434	-	-	-	python not found: {{python}} cannot be resolved
+maat-config.outside_dir	scripts/maat-config.py:524	-	-	f base	{f} is outside the directory of the command ({base})
+maat-config.usage_valida	scripts/maat-config.py:537	-	-	-	usage: valida [file]
+maat-config.valid	scripts/maat-config.py:539	maat-config: 	-	p	{p} valid
+maat-config.usage_leggi	scripts/maat-config.py:560	-	-	-	usage: leggi <dotted.key> [--default x] | leggi --tutto
+maat-config.key_missing	scripts/maat-config.py:572	-	-	k	key missing: {k}
+maat-config.usage_modulo_di	scripts/maat-config.py:598	-	-	-	usage: modulo-di <file relative to the repo>
+maat-config.unknown_module	scripts/maat-config.py:609	-	-	m	unknown module: {m}
+maat-config.unknown_module	scripts/maat-config.py:801	-	-	m	unknown module: {m}
+maat-config.unknown_module	scripts/maat-config.py:885	-	 (MAAT_MODULO)	m	unknown module: {m}
+maat-config.unknown_module	scripts/maat-config.py:929	-	-	m	unknown module: {m}
+maat-config.usage_gate	scripts/maat-config.py:620	-	-	-	usage: gate-richiesti <min|std|full|legacy> [--file f]…
+maat-config.unknown_level	scripts/maat-config.py:623	-	-	l	unknown level: {l} (min|std|full|legacy)
+maat-config.usage_test_di	scripts/maat-config.py:704	-	-	-	usage: test-di <modulo> [--file f]…
+maat-config.usage_python	scripts/maat-config.py:735	-	-	-	usage: python <modulo>
+maat-config.python_not_found_for	scripts/maat-config.py:742	-	-	m	python not found for {m}
+maat-config.usage_chiave	scripts/maat-config.py:751	-	-	-	usage: chiave <modulo>
+maat-config.unknown_option	scripts/maat-config.py:785	-	-	a	unknown option or option without a value: {a}
+maat-config.unknown_type	scripts/maat-config.py:796	-	-	t	unknown type: {t}
+maat-config.unknown_type	scripts/maat-config.py:871	-	-	t	unknown type: {t}
+maat-config.unknown_type	scripts/maat-config.py:920	-	-	t	unknown type: {t}
+maat-config.skipped_missing	scripts/maat-config.py:825	SALTATA: 	-	cmd x	{cmd} — NOT RUN (declared): {x} missing
+maat-config.skipped_unresolved	scripts/maat-config.py:834	SALTATA: 	-	cmd why	{cmd} — NOT RUN (declared): {why}
+maat-config.no_checks	scripts/maat-config.py:840	-	-	m	no check for these files in module {m}
+maat-config.no_counterproof	scripts/maat-config.py:845	-	-	m	controprova.comando not declared for {m}
+maat-config.cmd_not_declared	scripts/maat-config.py:850	-	-	t m	command {t} not declared for {m}
+maat-config.not_run_missing	scripts/maat-config.py:854	-	-	x m t	NOT RUN (declared): {x} missing for {m}.{t}
+maat-config.not_run	scripts/maat-config.py:862	-	-	why	NOT RUN (declared): {why}
+maat-config.not_run	scripts/maat-config.py:963	-	-	why	NOT RUN (declared): {why}
+maat-config.usage_comando	scripts/maat-config.py:868	-	-	-	usage: comando <modulo> <test|lint|build|controlli|controprova> [options]
+maat-config.no_copy_module	scripts/maat-config.py:887	-	-	m	module {m} declares no copia (MAAT_MODULO)
+maat-config.no_copy	scripts/maat-config.py:893	-	-	-	no module declares copia
+maat-config.several_copies	scripts/maat-config.py:894	-	-	-	several modules with copia: set MAAT_MODULO
+maat-config.outside_packages	scripts/maat-config.py:903	-	-	r p	radice {r} outside radice_pacchetti {p}
+maat-config.usage_copia_modulo	scripts/maat-config.py:908	-	-	-	usage: copia-modulo
+maat-config.usage_comando_copia	scripts/maat-config.py:917	-	-	-	usage: comando-copia <modulo> <test|lint|lint_messaggi> --copia <dir> [options]
+maat-config.copia_required	scripts/maat-config.py:923	-	-	-	comando-copia: --copia <dir> is required
+maat-config.copy_not_declared	scripts/maat-config.py:932	-	-	t m	copia.{t} not declared for {m}
+maat-config.copy_no_repo	scripts/maat-config.py:940	-	-	t m	copia.{t} of {m}: the repo directory does not exist in the copy
+maat-config.copy_no_alt	scripts/maat-config.py:954	-	-	t m	copia.{t} of {m}: no applicable alternative (se_esiste)
+maat-config.usage_elenco	scripts/maat-config.py:970	-	-	-	usage: elenco-moduli
+
+# ---------------------------------------------------------------- generati --verifica, sonda-produzione, componi
+maat-config.usage_generati	scripts/maat-config.py:978	-	-	-	usage: generati [--verifica]
+maat-config.gen_missing	scripts/maat-config.py:994	-	-	k p	{k}: generated file missing: {p}
+maat-config.gen_dir_missing	scripts/maat-config.py:996	-	-	k d	{k}: directory missing: {d}
+maat-config.gen_test_missing	scripts/maat-config.py:998	-	-	k t	{k}: test missing: {t}
+maat-config.gen_no_script	scripts/maat-config.py:1001	-	-	k	{k}: the command names no script (.py .mjs .js .sh)
+maat-config.gen_script_missing	scripts/maat-config.py:1003	-	-	k s	{k}: script of the command missing: {s}
+maat-config.gen_unrelated	scripts/maat-config.py:1007	-	-	k t g	{k}: {t} does not name {g}: it is not the test that compares it
+maat-config.error_line	scripts/maat-config.py:1009	-	-	e	ERROR: {e}
+maat-config.gen_verified	scripts/maat-config.py:1012	generati: 	-	n	{n} entries verified
+maat-config.usage_sonda	scripts/maat-config.py:1017	-	-	-	usage: sonda-produzione
+maat-config.unknown_option_only	scripts/maat-config.py:1075	-	-	a	unknown option: {a}
+maat-config.usage_componi	scripts/maat-config.py:1080	-	-	-	usage: componi <profilo>… --radice <modulo>=<percorso> (one --radice for each profile)
+maat-config.unknown_profile	scripts/maat-config.py:1086	-	-	n d	unknown profile: {n} (in {d})

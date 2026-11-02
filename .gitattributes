@@ -6,6 +6,8 @@
 *.cases text eol=lf
 *.equiv text eol=lf
 *.html text eol=lf
+*.tsv  text eol=lf
+*.list text eol=lf
 LICENSE text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf

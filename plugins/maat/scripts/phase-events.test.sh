@@ -3,6 +3,7 @@
 #   bash plugins/maat/scripts/phase-events.test.sh          (Git Bash o WSL)
 #   PE=/path/variant.py bash .../phase-events.test.sh                      # counterproof on a mutation
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PE=${PE:-$HERE/phase-events.py}
 . "$HERE/python.sh"
@@ -69,13 +70,56 @@ wp() { # <watch-phase.sh> <run dir>: one read with .exit already present
 }
 wp "$HERE/watch-phase.sh" "$T/run con spazi"; rc=$?
 check "watch-phase senza wsl nel PATH, run dir con spazi -> una riga di fine, exit 0" '[ "$rc" = 0 ] && [ "$(ends)" = 1 ] && tail -1 "$T/out" | grep -q "^■ ESITO FASE 1: OK"'
-WM="$T/wp mut"; mkdir -p "$WM"; cp "$HERE/python.sh" "$HERE/phase-events.py" "$WM/"
+WM="$T/wp mut"; mkdir -p "$WM/lib"; cp "$HERE/python.sh" "$HERE/phase-events.py" "$WM/"
+cp "$HERE/maat_msg.py" "$WM/"; cp "$HERE/lib/messages.tsv" "$HERE/lib/maat-msg.sh" "$WM/lib/"   # the catalog (1.4.0)
 sed 's/then exec "\$FIC_PY" -u /then MSYS_NO_PATHCONV=1 exec wsl -- python3 -u /' "$HERE/watch-phase.sh" > "$WM/watch-phase.sh"
 if cmp -s "$HERE/watch-phase.sh" "$WM/watch-phase.sh"; then fail=$((fail + 1)); echo "FAIL: controprova watch-phase: la mutazione non si applica"
 else
   wp "$WM/watch-phase.sh" "$T/run mut"; rc=$?
   check "controprova: watch-phase con wsl fisso, senza wsl nel PATH -> nessuna riga di fine (il caso sopra sarebbe rosso)" '[ "$rc" != 0 ] && [ "$(ends)" = 0 ]'
 fi
+
+# 6b. 1.4.0: the WSL fallback (no Python here) passes MAAT_LINGUA of the caller, resolved (it|en), on the command
+#     line of wsl (wsl.exe does not pass the environment); unset, nothing is forced (phase-events.py reads maat.json in
+#     WSL). A fake python.sh without Python and a fake wsl that records its arguments. Counterproof: the env removed.
+WF="$T/wp wsl"; mkdir -p "$WF/lib" "$WF/bin"; cp "$HERE/watch-phase.sh" "$HERE/phase-events.py" "$HERE/maat_msg.py" "$WF/"
+cp "$HERE/lib/messages.tsv" "$HERE/lib/maat-msg.sh" "$WF/lib/"
+printf '%s\n' 'FIC_PY=""; return 1' > "$WF/python.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$*" > "$WSL_ARGS"' > "$WF/bin/wsl"; chmod +x "$WF/bin/wsl"
+wf() { # <watch-phase.sh> <MAAT_LINGUA or -unset>: the arguments given to wsl in $T/wsl.args
+  rm -f "$T/wsl.args"; mkdir -p "$T/run wsl/log"
+  if [ "$2" = -unset ]; then env -u MAAT_LINGUA WSL_ARGS="$T/wsl.args" PATH="$WF/bin:$PATH" bash "$1" "$T/run wsl" f > "$T/out" 2>&1
+  else MAAT_LINGUA=$2 WSL_ARGS="$T/wsl.args" PATH="$WF/bin:$PATH" bash "$1" "$T/run wsl" f > "$T/out" 2>&1; fi
+}
+wf "$WF/watch-phase.sh" it
+check "watch-phase, ripiego WSL: MAAT_LINGUA=it passata a wsl" 'grep -q "^-- env MAAT_LINGUA=it python3 -u .*phase-events.py " "$T/wsl.args"'
+wf "$WF/watch-phase.sh" fr
+check "  MAAT_LINGUA=fr: passata risolta (en)" 'grep -q "^-- env MAAT_LINGUA=en python3 -u " "$T/wsl.args"'
+wf "$WF/watch-phase.sh" -unset
+check "  MAAT_LINGUA assente: nessuna lingua forzata (la legge phase-events.py in WSL)" 'grep -q "^-- python3 -u " "$T/wsl.args"'
+sed 's/^  lg=(); \[ -z .*$/  lg=()   # MUTANTE/' "$WF/watch-phase.sh" > "$WF/watch-phase.mut.sh"
+if cmp -s "$WF/watch-phase.sh" "$WF/watch-phase.mut.sh"; then fail=$((fail + 1)); echo "FAIL: controprova 6b: la mutazione non si applica"
+else
+  wf "$WF/watch-phase.mut.sh" it
+  check "controprova 6b: senza env la lingua non arriva a wsl (il primo caso sarebbe rosso)" '[ -f "$T/wsl.args" ] && ! grep -q "MAAT_LINGUA" "$T/wsl.args"'
+fi
+
+# 7. 1.4.0, English (MAAT_LINGUA=en): the words of the lines from the catalog; the ▶ lines, Decision: and the outcome
+#    line are quoted as they are
+LE=$T/en.jsonl
+{
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{"description":"rivede"}}]}}'
+  printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a1","content":"fatto"}]}}'
+  printf '%s\n' '{"type":"result","is_error":false,"result":"lavoro senza riga finale","duration_ms":60000,"num_turns":3}'
+} > "$LE"; echo 1 > "$T/en.exit"
+MAAT_LINGUA=en timeout 20 "$FIC_PY" -u "$PE" "$LE" "$T/en.exit" 2>&1 | tr -d '\r' > "$T/out"; rc=${PIPESTATUS[0]}
+check "en: avanzamento e fine in inglese, nessun italiano" '[ "$rc" = 1 ] && grep -qx "· launches agent: rivede" "$T/out" && grep -qx "← agent: rivede → done" "$T/out" && grep -q "^· turn finished: no PHASE RESULT line · 1.0 min · 3 turns" "$T/out" && grep -q "^✖ sub-session exited with exit 1 — last turn: phase finished (no PHASE RESULT line)" "$T/out" && ! grep -qE "lancia|agente|finito|turno|turni|sottosessione|nessuna riga" "$T/out"'
+LE=$T/en2.jsonl   # another log: the reader resumes a log from its .pos and .pending
+printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"text","text":"▶ inizio"}]}}' > "$LE"
+MAAT_LINGUA=en timeout 20 "$FIC_PY" -u "$PE" "$LE" "$T/en.exit" > "$T/out" 2>&1; rc=$?
+check "en: senza result -> ✖ in inglese (exit 1)" '[ "$rc" = 1 ] && grep -q "^✖ sub-session ended without a result (exit 1) — see en2.jsonl and .stderr" "$T/out"'
+MAAT_LINGUA=en bash "$HERE/watch-phase.sh" > "$T/out" 2>&1; rc=$?
+check "en: uso di watch-phase.sh in inglese" '[ "$rc" = 2 ] && grep -q "^usage: .*watch-phase.sh <run-dir> <label>$" "$T/out"'
 
 echo "phase-events.test.sh: $pass/$((pass + fail)) ok"
 [ "$fail" -eq 0 ]

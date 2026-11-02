@@ -139,50 +139,64 @@
 #          invalid mutations.json.
 set -u
 
-usage() { echo "uso: PROJECT_ROOT=<repo> counterproof.sh <mutations.json>" >&2; exit 64; }
+HERE=$(cd "$(dirname "$0")" && pwd)
+# Messages (1.4.0): the catalog next to this script (lib/maat-msg.sh), loaded below once the project is known (the
+# language may come from its maat.json); a message before that loads it by itself. The embedded Python (PY) imports
+# maat_msg.py from MAAT_MSG_PY. The last line «counterproof: esito=… prove=… luogo=…», the values of <id>.json and the
+# JSON keys of mutations.json stay as they are in every language (protocol-strings.list).
+. "$HERE/lib/maat-msg.sh"
+usage() { echo "$(msg counterproof.usage)" >&2; exit 64; }
 [ $# -eq 1 ] || usage
 case "$1" in -*) usage ;; esac
 
-HERE=$(cd "$(dirname "$0")" && pwd)
 # Project root: PROJECT_ROOT from the environment wins (run_cp passes it, also inside WSL); without it, the single
 # resolver (FIC_REPO, then git from the working directory). Never $HERE/../..: in the plugin it would be the plugins folder.
 _PR=${PROJECT_ROOT:-}
-. "$HERE/lib/maat-paths.sh" || { echo "counterproof: lib/maat-paths.sh non caricabile (plugin incompleto: $HERE)" >&2; exit 64; }
+. "$HERE/lib/maat-paths.sh" || { echo "counterproof: $(msg counterproof.paths_failed here="$HERE")" >&2; exit 64; }
 [ -n "$_PR" ] && PROJECT_ROOT=$_PR
-maat_progetto || { echo "counterproof: radice del progetto non risolta: imposta PROJECT_ROOT" >&2; exit 64; }
-ROOT=$(cd "$PROJECT_ROOT" 2>/dev/null && pwd) || { echo "counterproof: radice del progetto non accessibile: $PROJECT_ROOT" >&2; exit 64; }
+maat_progetto || { echo "counterproof: $(msg counterproof.no_root)" >&2; exit 64; }
+ROOT=$(cd "$PROJECT_ROOT" 2>/dev/null && pwd) || { echo "counterproof: $(msg counterproof.root_access root="$PROJECT_ROOT")" >&2; exit 64; }
 export PROJECT_ROOT=$ROOT MAAT_CONFIG_PY="$HERE/maat-config.py"
 
 # Tools (pk08): rsync and flock have a fallback (fic_sync with tar, fic_lock_dir with mkdir: fic-mirror.sh), slower
 # and declared; without a fallback -> BLOCKED: sha256sum, timeout, a Python from python.sh, and tar when rsync is missing.
 . "$HERE/python.sh" 2>/dev/null || FIC_PY=""
-manca=""
-for t in sha256sum timeout; do command -v "$t" >/dev/null 2>&1 || manca+="${manca:+, }$t"; done
-command -v rsync >/dev/null 2>&1 || command -v tar >/dev/null 2>&1 || manca+="${manca:+, }rsync e tar"
-[ -n "${FIC_PY:-}" ] || manca+="${manca:+, }python"
-if [ -n "$manca" ]; then echo "counterproof: esito=BLOCKED (controprove non disponibili: manca $manca) luogo=-"; exit 3; fi
+# language resolved once and exported (the embedded Python reads the same one); maat_msg.py in the form the
+# interpreter reads (C:/… for a Windows Python, the path as it is inside WSL)
+maat_msg_carica; maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
+missing=""
+for t in sha256sum timeout; do command -v "$t" >/dev/null 2>&1 || missing+="${missing:+, }$t"; done
+command -v rsync >/dev/null 2>&1 || command -v tar >/dev/null 2>&1 || missing+="${missing:+, }$(msg counterproof.rsync_tar)"
+[ -n "${FIC_PY:-}" ] || missing+="${missing:+, }python"
+if [ -n "$missing" ]; then echo "counterproof: esito=BLOCKED ($(msg counterproof.tools_missing missing="$missing")) luogo=-"; exit 3; fi
 FLOCK=1; command -v flock >/dev/null 2>&1 || FLOCK=""
-RIPIEGO=""
-command -v rsync >/dev/null 2>&1 || RIPIEGO="rsync assente: copia di ripiego (find, impronte sha256, tar)"
-[ -n "$FLOCK" ] || RIPIEGO+="${RIPIEGO:+; }flock assente: lock di ripiego (mkdir atomico)"
+FALLBACK=""
+command -v rsync >/dev/null 2>&1 || FALLBACK="$(msg counterproof.fallback_copy)"
+[ -n "$FLOCK" ] || FALLBACK+="${FALLBACK:+; }$(msg counterproof.fallback_lock)"
 
 # Destination with the SAME rule as test-fast.sh (fic-mirror.sh): ~/fic-mirror from the main tree,
 # ~/fic-mirror-<hash> from a worktree. From a worktree its code is never synced into the copy of the main
 # tree. Root that cannot be determined -> BLOCKED (further below).
-. "$HERE/fic-mirror.sh" || { echo "counterproof: fic-mirror.sh non trovato accanto a counterproof.sh" >&2; exit 64; }
+. "$HERE/fic-mirror.sh" || { echo "counterproof: $(msg counterproof.fic_mirror_missing)" >&2; exit 64; }
 if fic_mirror_init "$ROOT"; then MIR=$FIC_MIRROR; else MIR=""; fi
 WAIT=${FIC_LOCK_WAIT:-900}
 RUN_TIMEOUT=${FIC_CP_TIMEOUT:-1800}
 
 MJ=$1
 [ -f "$MJ" ] || { [ -f "$ROOT/$MJ" ] && MJ="$ROOT/$MJ"; }
-[ -f "$MJ" ] || { echo "counterproof: mutations.json non trovato: $1" >&2; exit 64; }
+[ -f "$MJ" ] || { echo "counterproof: $(msg counterproof.mj_missing arg="$1")" >&2; exit 64; }
 OUT=$(cd "$(dirname "$MJ")" && pwd)
 
 # Logic on JSON and reports, in Python (no jq in WSL). No single quote in here.
 PY='
 import importlib.util, json, os, posixpath, re, shutil, sys
 import xml.etree.ElementTree as ET
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
+_m = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(_m)
+T = _m.T   # the catalog (lib/messages.tsv), the same as the bash side
 
 def die(msg):
     print("counterproof: " + msg, file=sys.stderr)
@@ -202,7 +216,7 @@ def lettore():
         mc = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mc)
     except Exception as e:
-        die("lettore della configurazione non caricabile (%s): %s" % (p, e))
+        die(T("counterproof.cfg_loader", p=p, e=e))
     return mc
 
 def rel_ok(p):
@@ -229,7 +243,7 @@ def wjson_out(out, rec):
     os.replace(dst + ".tmp", dst)
 
 def dove(d):
-    return "fuori da ogni modulo" if d is None else "%s (%s)" % d
+    return T("counterproof.outside_modules") if d is None else "%s (%s)" % d
 
 def cerca_python_wsl(mc, cfg, m, root):
     # the gates.sh search: candidates of the module (root) or piattaforma.python (repo) or python3; the first that exists
@@ -261,11 +275,11 @@ def interprete(mc, cfg, m, root):
         return o, ""
     if m.get("ambiente") == "wsl":
         p, provati = cerca_python_wsl(mc, cfg, m, root)
-        return (p, "") if p else (None, "python WSL assente: " + " ".join(provati))
+        return (p, "") if p else (None, T("counterproof.py_wsl_missing") + " ".join(provati))
     p = mc.risolvi_python(cfg, m, root)
     if p and ("/" not in p or (os.path.isfile(p) and os.access(p, os.X_OK))):
         return p, ""
-    return None, "python assente: " + (p or "nessun candidato")
+    return None, T("counterproof.py_missing") + (p or T("counterproof.no_candidate"))
 
 def pattern(s):
     # -t matches the fullName, where vitest joins ancestors and title with a space: a name written the way vitest
@@ -278,60 +292,60 @@ def prep(mj, root, tmp, out):
         cfg, _p = mc.carica()
         r = mc.risolto(cfg)
     except mc.Uscita as u:
-        die("maat.json: " + (u.messaggio or "configurazione non valida (uscita %d)" % u.codice))
+        die("maat.json: " + (u.messaggio or T("counterproof.cfg_invalid", code=u.codice)))
     mods = {x["nome"]: x for x in r["moduli"]}
     try:
         with open(mj, encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception as e:
-        die("mutations.json illeggibile: %s" % e)
+        die(T("counterproof.mj_unreadable", e=e))
     if not isinstance(data, list) or not data:
-        die("mutations.json deve essere una lista non vuota")
+        die(T("counterproof.mj_not_list"))
     seen, groups, order, absorbed, notrun = set(), {}, [], [], []
     for i, m in enumerate(data):
-        where = "voce %d" % i
+        where = T("counterproof.entry", i=i)
         if not isinstance(m, dict):
-            die(where + ": non e un oggetto")
+            die(where + ": " + T("counterproof.not_object"))
         mid = m.get("id")
         if not isinstance(mid, str) or not SAFE_ID.match(mid):
-            die(where + ": id mancante o non valido (lettere, cifre, . _ -)")
+            die(where + ": " + T("counterproof.bad_id"))
         where = "id " + mid
         if mid in seen:
-            die(where + ": id duplicato")
+            die(where + ": " + T("counterproof.dup_id"))
         seen.add(mid)
         f, sym, mut, t, rs = m.get("file"), m.get("simbolo"), m.get("mutazione"), m.get("test"), m.get("rosso_se")
         if not rel_ok(f):
-            die(where + ": file deve essere un path relativo al repository, senza ..")
+            die(where + ": " + T("counterproof.bad_file"))
         if not isinstance(sym, str) or not sym.strip():
-            die(where + ": simbolo mancante")
+            die(where + ": " + T("counterproof.no_symbol"))
         if not isinstance(mut, dict) or not isinstance(mut.get("cerca"), str) or not mut["cerca"] or not isinstance(mut.get("sostituisci"), str):
-            die(where + ": mutazione deve essere {cerca, sostituisci} con cerca non vuoto")
+            die(where + ": " + T("counterproof.bad_mutation"))
         if mut["cerca"] == mut["sostituisci"]:
-            die(where + ": mutazione vuota (cerca uguale a sostituisci)")
+            die(where + ": " + T("counterproof.empty_mutation"))
         if not isinstance(t, dict) or not rel_ok(t.get("percorso")):
-            die(where + ": test.percorso mancante o non relativo al repository")
+            die(where + ": " + T("counterproof.bad_test_path"))
         nome = t.get("nome") or ""
         if not isinstance(nome, str):
-            die(where + ": test.nome deve essere un testo")
+            die(where + ": " + T("counterproof.bad_test_name"))
         if not isinstance(rs, dict) or not all(isinstance(rs.get(k), str) and rs[k].strip() for k in ("test_id", "asserzione")):
-            die(where + ": rosso_se deve avere test_id e asserzione non vuoti")
+            die(where + ": " + T("counterproof.bad_red_if"))
         tp = t["percorso"]
         df, dt = mc.instrada(r, f), mc.instrada(r, tp)
         if df is None or dt is None or df[0] != dt[0] or dt[1] != "radice":
-            die(where + ": file e test nello stesso modulo di maat.json, con il test sotto la radice del modulo (file: %s; test: %s)" % (dove(df), dove(dt)))
+            die(where + ": " + T("counterproof.same_module", file=dove(df), test=dove(dt)))
         mod = mods[df[0]]
         for p in (f, tp):
             if not os.path.isfile(os.path.join(root, p)):
-                die(where + ": file assente nel working tree: " + p)
+                die(where + ": " + T("counterproof.file_missing_wt") + p)
         ab = m.get("assorbita", False)
         if not isinstance(ab, bool) or not isinstance(m.get("motivo", ""), str):
-            die(where + ": assorbita deve essere true/false e motivo un testo")
+            die(where + ": " + T("counterproof.bad_absorbed"))
         if ab:  # L2 (harness-pt11): not run, the result is written below
             absorbed.append(m)
             continue
         cp = mod.get("controprova") or {}
         if not cp.get("comando"):   # NOT RUN (declared): never green nor red
-            why = ("il modulo %s non dichiara controprova" % mod["nome"]) if not cp else ("controprova.comando non dichiarato per il modulo %s" % mod["nome"])
+            why = T("counterproof.module_no_cp", mod=mod["nome"]) if not cp else T("counterproof.module_no_cmd", mod=mod["nome"])
             notrun.append((m, cp.get("runner"), why))
             continue
         key = json.dumps([f, sym, mut["cerca"], mut["sostituisci"], tp, nome, rs["test_id"], rs["asserzione"]])
@@ -355,21 +369,21 @@ def prep(mj, root, tmp, out):
     for m, runner, why in notrun:  # NOT-RUN-DICHIARATO
         rec = dict(m)
         rec.update(vuoto)
-        rec.update({"esito": "non_eseguita", "controprova": "NOT RUN", "motivo": "NOT RUN (dichiarato): " + why,
+        rec.update({"esito": "non_eseguita", "controprova": "NOT RUN", "motivo": T("counterproof.not_run_declared") + why,
                     "runner": runner, "eseguita_per": [m["id"]]})
         wjson_out(out, rec)
     usati = [x for x in r["moduli"] if any(groups[k]["modulo"] == x["nome"] for k in order)]
     con_copia = [x["nome"] for x in usati if x.get("copia")]
     if len(con_copia) > 1:
-        die("più moduli con copia nelle mutazioni (%s): una lista per ognuno" % ", ".join(con_copia))
+        die(T("counterproof.several_copies", mods=", ".join(con_copia)))
     pys = {}
     for x in usati:
         nm = x["nome"]
         if not SAFE_ID.match(nm):
-            die("nome di modulo non utilizzabile come cartella: %s" % nm)
+            die(T("counterproof.bad_module_name", nm=nm))
         rad, pac = mc.norm(x["radice"]), mc.norm(x["radice_pacchetti"])
         if not pac:
-            die("radice_pacchetti del modulo %s e la radice del repository: la copia vuole una cartella" % nm)
+            die(T("counterproof.pkg_is_root", nm=nm))
         try:
             gruppo = mc.relativa(rad, pac)
         except mc.Uscita as u:
@@ -458,7 +472,7 @@ def riga(d, report):
     try:
         print(mc.espandi(rtxt(os.path.join(d, "tpl")), val))
     except mc.NonRisolto as e:
-        print("comando della controprova non espandibile: %s" % e, file=sys.stderr)
+        print(T("counterproof.cmd_not_expandable", err=e), file=sys.stderr)
         sys.exit(3)
 
 def apply(path, cf, sf):
@@ -475,7 +489,7 @@ def apply(path, cf, sf):
         if n:
             cerca, sost = c2, sost.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     if n != 1:
-        print("mutazione non applicabile: il testo da cercare compare %d volte nel file (ne serve esattamente 1)" % n)
+        print(T("counterproof.search_count", n=n))
         sys.exit(2)
     new = data.replace(cerca, sost, 1)
     os.unlink(path)
@@ -498,10 +512,10 @@ def classify_vitest(report, trel, tid, asserz):
         with open(report, encoding="utf-8") as fh:
             rep = json.load(fh)
     except Exception:
-        return "bloccato", "il runner non ha prodotto un report JSON leggibile", ""
+        return "bloccato", T("counterproof.no_json_report"), ""
     files = [r for r in rep.get("testResults", []) if (r.get("name") or "").replace("\\", "/").endswith("/" + trel)]
     if not files:
-        return "rosso_raccolta", "file di test non raccolto dal runner", ""
+        return "rosso_raccolta", T("counterproof.not_collected"), ""
     fr = files[0]
     targets = [a for a in fr.get("assertionResults", []) if tid in vitest_ids(a)]
     failed = [a for a in targets if a.get("status") == "failed"]
@@ -512,28 +526,28 @@ def classify_vitest(report, trel, tid, asserz):
     if fr.get("status") == "failed" and fmsg:
         return suite_red(fmsg, IMPORT_JS)
     if targets and all(a.get("status") == "passed" for a in targets):
-        return "verde", "il test nominato resta verde: la mutazione non e coperta", ""
-    return "rosso_raccolta", "test nominato non eseguito (assente o saltato): nessuna prova", ""
+        return "verde", T("counterproof.stays_green"), ""
+    return "rosso_raccolta", T("counterproof.not_run_named"), ""
 
 def red(msg, asserz, imp):
     if norm(asserz) in msg:
-        return "rosso_asserzione", "rosso sul test nominato e sull asserzione attesa", msg
+        return "rosso_asserzione", T("counterproof.red_assert"), msg
     if imp.search(msg):
-        return "rosso_import", "rosso per un errore d import, non per l asserzione: non e una prova", msg
-    return "rosso_diverso", "il test nominato e rosso, ma non sull asserzione attesa", msg
+        return "rosso_import", T("counterproof.red_import"), msg
+    return "rosso_diverso", T("counterproof.red_other"), msg
 
 def suite_red(msg, imp):
     if imp.search(msg):  # CLASSIFICAZIONE-IMPORT
-        return "rosso_import", "il file di test non si carica (errore d import): non e una prova", msg
-    return "rosso_raccolta", "il file di test fallisce in raccolta: nessun test eseguito", msg
+        return "rosso_import", T("counterproof.suite_import"), msg
+    return "rosso_raccolta", T("counterproof.suite_collect"), msg
 
 def classify_pytest(report, trel, tid, asserz, rc, radp):
     if rc in (4, 5):
-        return "rosso_raccolta", "pytest non ha raccolto il test nominato (uscita %d)" % rc, ""
+        return "rosso_raccolta", T("counterproof.pytest_collect", rc=rc), ""
     try:
         root = ET.parse(report).getroot()
     except Exception:
-        return "bloccato", "il runner non ha prodotto un report JUnit leggibile", ""
+        return "bloccato", T("counterproof.no_junit_report"), ""
     tid = tid[len(radp):] if radp and tid.startswith(radp) else tid
     mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
     targets, coll = [], []
@@ -560,14 +574,14 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
     if coll:
         return suite_red(norm("\n".join((e.get("message") or "") + "\n" + (e.text or "") for e in coll)), IMPORT_PY)
     if targets and not any(s for b, s in targets):
-        return "verde", "il test nominato resta verde: la mutazione non e coperta", ""
-    return "rosso_raccolta", "test nominato non eseguito (assente o saltato): nessuna prova", ""
+        return "verde", T("counterproof.stays_green"), ""
+    return "rosso_raccolta", T("counterproof.not_run_named"), ""
 
 def classify_comando(rc):
     # comando runner: no report, only the exit code counts (weak proof)
     if rc != 0:
-        return "rosso_generico", "il comando della controprova esce %d: rosso senza report, prova debole (nessuna asserzione verificata)" % rc, ""
-    return "verde", "il comando della controprova esce 0: la mutazione non e coperta", ""
+        return "rosso_generico", T("counterproof.cmd_red", rc=rc), ""
+    return "verde", T("counterproof.cmd_green"), ""
 
 def result(d, out, report, rc, ms, log, cmd, why):
     rc, ms = int(rc), int(ms)
@@ -579,7 +593,7 @@ def result(d, out, report, rc, ms, log, cmd, why):
     if why:
         esito, motivo, msg = "bloccato", why, ""
     elif rc == 124 or rc == 137:
-        esito, motivo, msg = "bloccato", "runner oltre il tetto di tempo (FIC_CP_TIMEOUT)", ""
+        esito, motivo, msg = "bloccato", T("counterproof.timeout"), ""
     elif runner == "vitest":
         esito, motivo, msg = classify_vitest(report, trel, tid, asserz)
     elif runner == "pytest":
@@ -655,11 +669,11 @@ trap cleanup EXIT
 
 info=$("$FIC_PY" -c "$PY" prep "$MJ" "$ROOT" "$TMPD" "$OUT") || exit 64
 read -r NU NT NA NN <<< "${info//$'\r'/}"
-echo "counterproof: $NT mutazioni, $NU da eseguire (duplicati esatti una volta sola), luogo=mirror"
-ABS=""; [ "${NA:-0}" -gt 0 ] && { ABS=" assorbite=$NA"; echo "counterproof: $NA assorbite (L2): saltate, <id>.json con esito=assorbita"; }
+echo "counterproof: $(msg counterproof.count nt="$NT" nu="$NU"), luogo=mirror"
+ABS=""; [ "${NA:-0}" -gt 0 ] && { ABS=" assorbite=$NA"; echo "counterproof: $(msg counterproof.absorbed na="$NA")"; }
 if [ "${NN:-0}" -gt 0 ]; then
   ABS+=" non_eseguite=$NN"
-  echo "counterproof: $NN NOT RUN (dichiarato): moduli senza controprova, <id>.json con esito=non_eseguita"
+  echo "counterproof: $(msg counterproof.not_run nn="$NN")"
 fi
 if [ "$NU" -eq 0 ]; then   # nothing to run (absorbed or NOT RUN): no lock, no mirror
   E=PASS; [ "${NN:-0}" -gt 0 ] && E="NOT RUN"
@@ -667,7 +681,7 @@ if [ "$NU" -eq 0 ]; then   # nothing to run (absorbed or NOT RUN): no lock, no m
 fi
 
 blocked() { echo "counterproof: esito=BLOCKED ($1) luogo=-"; exit 3; }
-[ -n "$MIR" ] || blocked "radice del repository non determinabile (git): nessuna copia associabile"
+[ -n "$MIR" ] || blocked "$(msg counterproof.no_repo_root)"
 
 # The modules of the mutations (maat.json order), from prep: folders, copia, runner, exclusions, preparati, copia_anche
 modv() { cat "$TMPD/mod/$1/$2" 2>/dev/null; }
@@ -705,17 +719,17 @@ if [ -n "$CM" ]; then
   why=""
   # a worktree's copy on first use: node_modules seeded from the main tree's copy (like test-fast.sh)
   if [ "$MIR" != "$HOME/fic-mirror" ] && ! { [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ]; }; then
-    why=$(fic_seed_node_modules "$SRCC" "$DSTC") && why="" || why="; semina non possibile: $why"
+    why=$(fic_seed_node_modules "$SRCC" "$DSTC") && why="" || why="; $(msg counterproof.seed_failed why="$why")"
   fi
-  [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ] || blocked "mirror assente: eseguire test-fast.sh --setup$why"
+  [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ] || blocked "$(msg counterproof.mirror_missing why="$why")"
 fi
-mkdir -p "$MIR/$LOCKPKG" || blocked "mirror non creabile: $MIR/$LOCKPKG"
-[ -z "$RIPIEGO" ] || echo "counterproof: $RIPIEGO; piu' lenti, stessi esiti"
+mkdir -p "$MIR/$LOCKPKG" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$LOCKPKG")"
+[ -z "$FALLBACK" ] || echo "counterproof: $(msg counterproof.fallback_slower fallback="$FALLBACK")"
 if [ -n "$FLOCK" ]; then
   exec 9>"$LOCK"
-  flock -w "$WAIT" 9 || blocked "mirror occupato oltre ${WAIT}s (lock $LOCK); nessun ripiego su /mnt/c"
+  flock -w "$WAIT" 9 || blocked "$(msg counterproof.busy wait="${WAIT}" lock="$LOCK")"
 else
-  fic_lock_dir "$LOCK.d" "$WAIT" || blocked "mirror occupato oltre ${WAIT}s (lock $LOCK.d); nessun ripiego su /mnt/c"
+  fic_lock_dir "$LOCK.d" "$WAIT" || blocked "$(msg counterproof.busy_dir wait="${WAIT}" lock="$LOCK")"
   LOCKD=$LOCK.d
 fi
 
@@ -723,31 +737,31 @@ if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
   # stale dependencies: automatic realignment under the lock (fic-mirror.sh, fic_deps_autorefresh), then the
   # fingerprint again; preparati and caches are cleaned anyway on every run in the sync below
   deps_out=$(fic_deps_autorefresh "$SRCC" "$DSTC") ||
-    blocked "dipendenze stantie, riallineamento automatico non riuscito: $deps_out"
+    blocked "$(msg counterproof.deps_failed out="$deps_out")"
   echo "counterproof: $deps_out"
-  fic_deps_ok "$SRCC" "$DSTC" || blocked "dipendenze stantie anche dopo il riallineamento automatico"
+  fic_deps_ok "$SRCC" "$DSTC" || blocked "$(msg counterproof.deps_still)"
 fi
 for m in "${MODS[@]}"; do
   pk=${M_PAC[$m]}; src="$ROOT/$pk"; dst="$MIR/$pk"
-  mkdir -p "$dst" || blocked "mirror non creabile: $dst"
+  mkdir -p "$dst" || blocked "$(msg counterproof.mirror_mkdir_dst dst="$dst")"
   excl_of "$m"
-  fic_sync --delete --checksum "${EX[@]}" "$src/" "$dst/" || blocked "sync fallito ($pk)"
+  fic_sync --delete --checksum "${EX[@]}" "$src/" "$dst/" || blocked "$(msg counterproof.sync_failed pk="$pk")"
   mapfile -t prepg < "$TMPD/mod/$m/preparati"
-  fic_mirror_pulisci "$dst" "${M_GRP[$m]}" "${M_RUN[$m]}" ${prepg[@]+"${prepg[@]}"} || blocked "pulizia della copia fallita ($pk)"
+  fic_mirror_pulisci "$dst" "${M_GRP[$m]}" "${M_RUN[$m]}" ${prepg[@]+"${prepg[@]}"} || blocked "$(msg counterproof.clean_failed pk="$pk")"
   # copia_anche: read-only folders that the module's tests read (for example a schema), aligned with
   # --delete, outside the manifest. The mutations stay under the module.
   while IFS= read -r a; do
     [ -n "$a" ] && [ -d "$ROOT/$a" ] || continue
     mkdir -p "$MIR/$a" &&
-      fic_sync --delete --checksum --exclude=node_modules "$ROOT/$a/" "$MIR/$a/" || blocked "sync fallito ($a)"
+      fic_sync --delete --checksum --exclude=node_modules "$ROOT/$a/" "$MIR/$a/" || blocked "$(msg counterproof.sync_failed pk="$a")"
   done < "$TMPD/mod/$m/anche"
   git -c safe.directory='*' -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
-    manifest_list "$src" > "$TMPD/list.$m" && [ -s "$TMPD/list.$m" ] || blocked "manifest non calcolabile (git) per $pk"
+    manifest_list "$src" > "$TMPD/list.$m" && [ -s "$TMPD/list.$m" ] || blocked "$(msg counterproof.manifest_nc pk="$pk")"
   hashes "$src" "$TMPD/list.$m" > "$TMPD/src0.$m"
   hashes "$dst" "$TMPD/list.$m" > "$TMPD/base.$m"
   if ! cmp -s "$TMPD/src0.$m" "$TMPD/base.$m"; then
-    echo "counterproof: differenze fra origine e mirror ($pk):"; diff "$TMPD/src0.$m" "$TMPD/base.$m" | head -5
-    blocked "copia non allineata ($pk)"
+    echo "counterproof: $(msg counterproof.diff_origin pk="$pk")"; diff "$TMPD/src0.$m" "$TMPD/base.$m" | head -5
+    blocked "$(msg counterproof.copy_misaligned pk="$pk")"
   fi
 done
 
@@ -790,32 +804,32 @@ run_one() {
   rep="$w/report"
   case "$py" in *.exe) command -v wslpath >/dev/null 2>&1 && rep=$(wslpath -w "$w/report") ;; esac
   if [ -n "$py" ] && ! py_ok "$py"; then
-    why="interprete di {python} assente: $py (impostare FIC_PYTEST_PY)"
+    why="$(msg counterproof.py_missing_run py="$py")"
   elif ! line=$("$FIC_PY" -c "$PY" riga "$d" "$rep" 2>"$w/log"); then
-    why="comando della controprova non espandibile: $(head -1 "$w/log")"
+    why="$(msg counterproof.cmd_not_expandable err="$(head -1 "$w/log")")"
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
-    why="file assente nel mirror: $f"
+    why="$(msg counterproof.file_missing_mirror f="$f")"
   elif ! cp -p "$mf" "$w/bak"; then
-    why="copia di sicurezza non riuscita: $f"
+    why="$(msg counterproof.backup_failed f="$f")"
   else
     printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
     if out=$("$FIC_PY" -c "$PY" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
       run_cmd "$d" "$mroot" "$w" "$cache" "$line"
       rc=$?
     else
-      why=${out:-mutazione non applicabile}
+      why=${out:-$(msg counterproof.not_applicable)}
     fi
     restore "$w/bak" "$mf"   # RESTORE
     : > "$w/inflight"
     hashes "$mroot/${M_PAC[$mod]}" "$TMPD/list.$mod" > "$w/now.$mod"
     if ! cmp -s "$TMPD/base.$mod" "$w/now.$mod"; then
-      echo "counterproof: $mroot NON ripristinato dopo $(basename "$d") ($f):"; diff "$TMPD/base.$mod" "$w/now.$mod" | head -5
+      echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"; diff "$TMPD/base.$mod" "$w/now.$mod" | head -5
       return 5
     fi
   fi
   ms=$(( ($(date +%s%N) - t0) / 1000000 ))
   line=$("$FIC_PY" -c "$PY" result "$d" "$OUT" "$w/report" "$rc" "$ms" "$w/log" "$CMD" "$why") ||
-    { echo "counterproof: risultato non scrivibile in $OUT" >&2; return 64; }
+    { echo "counterproof: $(msg counterproof.result_unwritable out="$OUT")" >&2; return 64; }
   printf '%s\n' "$line" >> "$w/results"
   read -r cp esito _ ids _ <<< "$line"
   echo "counterproof: $ids -> $esito ($cp, $((ms / 1000)) s)${line#*--}"
@@ -832,7 +846,7 @@ run_one() {
 # 1500 covers the single-run peak with margin: with ~11 GB free the cap stays that of FIC_CP_PARALLEL.
 MEM_MB=${FIC_CP_MEM_MB:-1500}
 N=${FIC_CP_PARALLEL:-4}
-case "$N$MEM_MB" in *[!0-9]*) echo "counterproof: FIC_CP_PARALLEL e FIC_CP_MEM_MB vogliono un intero" >&2; exit 64 ;; esac
+case "$N$MEM_MB" in *[!0-9]*) echo "counterproof: $(msg counterproof.not_integer)" >&2; exit 64 ;; esac
 [ "$MEM_MB" -gt 0 ] || MEM_MB=1
 SER=(); PAR=()
 for d in "$TMPD"/m/*; do
@@ -865,7 +879,7 @@ T_ALL=$(date +%s%N)
 for d in ${SER[@]+"${SER[@]}"}; do
   run_one "$d" "$MIR" "$TMPD"; r=$?
   if [ "$r" -eq 5 ]; then
-    echo "counterproof: esito=BLOCKED (integrita': mirror non ripristinato, lista interrotta) luogo=mirror"; exit 5
+    echo "counterproof: esito=BLOCKED ($(msg counterproof.integrity_mirror)) luogo=mirror"; exit 5
   fi
   [ "$r" -eq 0 ] || exit "$r"
 done
@@ -880,22 +894,22 @@ done
 INTEG=0; DEPS_CHANGED=0; LUOGO=mirror
 if [ ${#PAR[@]} -gt 0 ]; then
   DEPS0=$(cat "$DSTC/.fic-deps")
-  CPD=$(mktemp -d "$HOME/fic-cp.XXXXXX") || blocked "copie private non creabili in $HOME"
+  CPD=$(mktemp -d "$HOME/fic-cp.XXXXXX") || blocked "$(msg counterproof.private_mkdir home="$HOME")"
   NESTED=$(cd "$DSTC" && find . -path ./node_modules -prune -o -name node_modules -type d -prune -print | sed 's|^\./||')
   excl_of "$CM"
   for i in $(seq 1 "$N"); do
     c="$CPD/$i/${M_PAC[$CM]}"; mkdir -p "$c"
-    fic_sync "${EX[@]}" "$DSTC/" "$c/" || blocked "copia privata $i non creata"
+    fic_sync "${EX[@]}" "$DSTC/" "$c/" || blocked "$(msg counterproof.private_failed i="$i")"
     while IFS= read -r nm; do
       [ -n "$nm" ] || continue
-      fic_sync --exclude=.cache --exclude=.vite --exclude=.vitest "$DSTC/$nm/" "$c/$nm/" || blocked "copia privata $i: $nm non copiato"
+      fic_sync --exclude=.cache --exclude=.vite --exclude=.vitest "$DSTC/$nm/" "$c/$nm/" || blocked "$(msg counterproof.private_nested i="$i" nm="$nm")"
     done <<< "$NESTED"
-    ln -s "$DSTC/node_modules" "$c/node_modules" || blocked "copia privata $i: link a node_modules non creato"
+    ln -s "$DSTC/node_modules" "$c/node_modules" || blocked "$(msg counterproof.private_link i="$i")"
     hashes "$c" "$TMPD/list.$CM" > "$TMPD/copy.$i"
-    cmp -s "$TMPD/base.$CM" "$TMPD/copy.$i" || blocked "copia privata $i non identica al manifest"
+    cmp -s "$TMPD/base.$CM" "$TMPD/copy.$i" || blocked "$(msg counterproof.private_differs i="$i")"
   done
   LUOGO="copie($N)"
-  echo "counterproof: gradino 2 — ${#PAR[@]} mutazioni su $N copie private in parallelo (MemAvailable ${AVAIL} MB, ${MEM_MB} MB a run); lock del mirror tenuto fino alla fine"
+  echo "counterproof: $(msg counterproof.step2 par="${#PAR[@]}" n="$N" avail="${AVAIL}" mem="${MEM_MB}")"
   printf '%s\n' "${PAR[@]}" > "$TMPD/q.all"; echo 0 > "$TMPD/q.next"
   PIDS=()
   for i in $(seq 1 "$N"); do
@@ -923,15 +937,15 @@ done < <(cat "$TMPD/results" "$TMPD"/w*/results 2>/dev/null)
 for m in "${MODS[@]}"; do
   hashes "$ROOT/${M_PAC[$m]}" "$TMPD/list.$m" > "$TMPD/src1.$m"
   cmp -s "$TMPD/src0.$m" "$TMPD/src1.$m" ||
-    echo "counterproof: ATTENZIONE: ${M_PAC[$m]} e' cambiato nel working tree DURANTE le controprove (non da questo script): i risultati valgono per lo stato iniziale"
+    echo "counterproof: $(msg counterproof.wt_changed pkg="${M_PAC[$m]}")"
 done
 
 SUM="prove=$NPASS/$NT fail=$NFAIL bloccate=$NBLOCK tempo=${TOT_S}s luogo=$LUOGO$ABS"
 if [ "$INTEG" -ne 0 ]; then
-  echo "counterproof: esito=BLOCKED (integrita': copia privata non ripristinata, worker interrotto) $SUM"; exit 5
+  echo "counterproof: esito=BLOCKED ($(msg counterproof.integrity_private)) $SUM"; exit 5
 fi
 if [ "$DEPS_CHANGED" -ne 0 ]; then
-  echo "counterproof: esito=BLOCKED (mirror cambiato durante il gradino 2, sorgenti o node_modules: risultati non validi, rilanciare) $SUM"; exit 3
+  echo "counterproof: esito=BLOCKED ($(msg counterproof.mirror_changed)) $SUM"; exit 3
 fi
 if [ "$NFAIL" -gt 0 ]; then E=FAIL; RC=1
 elif [ "$NBLOCK" -gt 0 ]; then E=BLOCKED; RC=2

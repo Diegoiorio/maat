@@ -8,6 +8,7 @@
 # give the opposite result): an assertion that cannot fail does not count as coverage.
 
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -207,6 +208,8 @@ gate_no "stessa riga: gate-only chiuso" "segnali"; back
 sed -i 's/^    403,$/    200,/' web/deny.test.ts                                # 403 -> 200 on a wrapped line
 out=$(chk)
 if has "$out" '^Test signals: none$'; then ok "controprova: i segnali NON vedono il valore a capo"; else ko "atteso nessun segnale" "$out"; fi
+out_it=$out; out=$(MAAT_LINGUA=en chk)   # 1.4.0: the same check in English, the prefix read by the skill as it is
+gate_no "en: gate-only chiuso col motivo inglese" "lines removed or changed in an existing test: web/deny.test.ts"; out=$out_it
 gate_no "valore atteso a capo cambiato: gate-only chiuso" "righe tolte o modificate.*web/deny.test.ts"; back
 
 sed -i '/^  ).toStrictEqual($/d; /^    {},$/d' web/deny.test.ts                        # matcher removed, expect( stays
@@ -273,6 +276,11 @@ if [ "$total" -eq "$(wc -l < "$WORK/d.diff")" ]; then ok "i pezzi coprono tutto 
 if rs diff --from "$D0" --to "$D1" --paths-file "$WORK/dempty" --out "$WORK/x.diff" 2>/dev/null; then ko "scope vuoto accettato"; else ok "scope vuoto = errore"; fi
 printf 'other.py\n' > "$WORK/dsame"
 if has "$(rs diff --from "$D1" --to "$D1" --paths-file "$WORK/dsame" --out "$WORK/y.diff")" 'nessuna differenza'; then ok "nessuna differenza dichiarata"; else ko "diff vuoto non dichiarato"; fi
+# 1.4.0, English (MAAT_LINGUA=en): the messages from the catalog, no Italian of the catalog
+out=$(MAAT_LINGUA=en rs diff --from "$D1" --to "$D1" --paths-file "$WORK/dsame" --out "$WORK/y.diff")
+if has "$out" '^\(no differences\)$'; then ok "en: diff vuoto dichiarato in inglese"; else ko "en: diff vuoto non dichiarato in inglese" "$out"; fi
+out=$(MAAT_LINGUA=en rs diff --from "$D0" --to "$D1" --paths-file "$WORK/dempty" --out "$WORK/x.diff" 2>&1)
+if has "$out" '^review-surface: paths-file empty: no path to show$' && ! has "$out" 'nessun path'; then ok "en: errore in inglese col prefisso review-surface:"; else ko "en: errore non in inglese" "$out"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

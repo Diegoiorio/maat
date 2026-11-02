@@ -10,12 +10,15 @@
 #   4. counterproofs by mutation: (a) one maximum per file, (b) lanes as phases, (c) lane minutes summed.
 #   bash plugins/maat/scripts/phase-usage.test.sh          (Git Bash or Linux)
 set -uo pipefail
+export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
 PLUGIN=$(cd "$HERE/.." && pwd)
 . "$HERE/python.sh" || { echo "Python interpreter not found" >&2; exit 2; }
 pass=0 fail=0
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
+# the mutants written in $T import the message catalog next to themselves (1.4.0: maat_msg.py and lib/messages.tsv)
+mkdir -p "$T/lib" && cp "$HERE/maat_msg.py" "$T/" && cp "$HERE/lib/messages.tsv" "$T/lib/"
 ok() { pass=$((pass + 1)); }
 ko() { fail=$((fail + 1)); echo "FAIL [$1]"; [ -n "${2:-}" ] && printf '%s\n' "$2" | head -20 | sed 's/^/    /'; }
 nat() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
@@ -125,6 +128,18 @@ if [ -n "${MAAT_PU_GOLD:-}" ]; then
   (cd "$T" && "$FIC_PY" "$(nat "$MAAT_PU_GOLD")" full.run --json) | normj > "$GOLD/full.json"
   echo "golden files rewritten from $MAAT_PU_GOLD"
 fi
+
+# 3en. 1.4.0, English (MAAT_LINGUA=en): the same table with the words translated, the --json output unchanged (keys and
+#      values are not messages), the usage in English
+out=$(cd "$T" && MAAT_LINGUA=en "$FIC_PY" "$(nat "$PU")" full.run | tr -d '\r')
+ref=$(tr -d '\r' < "$GOLD/full.txt")
+if [ "$(printf '%s\n' "$out" | wc -l)" = "$(printf '%s\n' "$ref" | wc -l)" ] && printf '%s\n' "$out" | grep -q "^== .*  turns [0-9]* .*tools at start " &&
+   printf '%s\n' "$out" | grep -q "^   thread " && ! printf '%s\n' "$out" | grep -qE "turni|all'avvio|filo|chiam\.|riletture|car\.\)|lento:"; then ok
+else ko "en: tabella in inglese, stesse righe, nessun italiano" "$out"; fi
+out=$(cd "$T" && MAAT_LINGUA=en "$FIC_PY" "$(nat "$PU")" full.run --json | normj | tr -d '\r')
+if [ "$out" = "$(tr -d '\r' < "$GOLD/full.json")" ]; then ok; else ko "en: uscita --json invariata" "$(diff <(printf '%s\n' "$out") "$GOLD/full.json")"; fi
+out=$(MAAT_LINGUA=en "$FIC_PY" "$(nat "$PU")" 2>&1); rc=$?
+[ $rc -eq 2 ] && [ "$out" = "usage: phase-usage.py <spec-<name>.run | .jsonl file> [...] [--json]" ] && ok || ko "en: uso in inglese, exit 2" "rc=$rc $out"
 
 # --- 4. counterproofs: each mutant must make its case red ---
 mutant() { # <name> <old line, fixed text> <new line>: copy of the script with one line replaced

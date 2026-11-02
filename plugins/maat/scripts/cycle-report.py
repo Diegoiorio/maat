@@ -46,6 +46,10 @@ import os
 import re
 import sys
 
+sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from maat_msg import T  # noqa: E402
+
 MAIN = "orchestratore"
 WRITERS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 FILE_TOOLS = {"Read", "Grep", "Glob"} | WRITERS
@@ -75,13 +79,18 @@ CMD_CLASSES = [  # order: the first match wins
     ("file", r"^\s*(?:cd [^;&|]*(?:&&|;)\s*)?(?:sed -n|cat|head|tail|grep|rg|ls|wc|find|file|diff|cmp|cp|mv|"
              r"mkdir|rm|touch|stat|echo|printf)\b"),
 ]
-STOP_CLASSES = [  # cause of a STOP, from the text of the ESITO line
-    ("deviazione", r"deviazion"),
-    ("quota", r"quota|rate.?limit"),
-    ("timeout", r"timeout|scadut"),
-    ("concorrenza", r"contempor|concorren|\block\b"),
-    ("gate", r"\bgate\b|\bFAIL\b|ross[oi]\b"),
-    ("decisione", r"decid|decision|domand|scelt"),
+# Cause of a STOP, from the text of the ESITO line: the first class that matches. Each class reads both languages (1.4.0):
+# the Italian regex of 1.3.0, then the English one, whole words only. The English words are chosen so that no Italian
+# text changes class (cycle-report.test.sh compares with v1.3.0): never `red` inside `test-red` or another token that is
+# English already in the Italian texts. The class names are values of metrics.csv (stop_cause) and stay (D7).
+STOP_CLASSES = [
+    ("deviazione", r"deviazion|\bdeviat(?:ion|ions|e|es|ed|ing)\b"),
+    ("quota", r"quota|rate.?limit|\busage limits?\b"),
+    ("timeout", r"timeout|scadut|\btimed out\b|\bexpired\b"),
+    ("concorrenza", r"contempor|concorren|\block\b|\bconcurren(?:t|tly|cy)\b|\bsimultaneous(?:ly)?\b|"
+                    r"\bat the same time\b|\blocked\b"),
+    ("gate", r"\bgate\b|\bFAIL\b|ross[oi]\b|(?<![\w-])reds?\b"),
+    ("decisione", r"decid|decision|domand|scelt|\bquestions?\b|\bchoices?\b|\bchoose\b"),
 ]
 NOT_SOURCE = re.compile(r"\.ai-workflow/|AppData/Local/Temp/|(^|/)tmp/|scratchpad", re.I)
 PASSIVE = ("passive", None)  # wall_share destination: the orchestrator waiting off-turn
@@ -90,6 +99,7 @@ OFF_TURN = ("off_turn", None)  # work (already in the buckets) done while the or
 BG_ID = re.compile(r"(?:with ID:|\(ID:|agentId:)\s*(\w+)")
 OUT_FILE = re.compile(r"(?:>>?|\btee(?:\s+-a)?)\s*[\"']?[^\s\"'|;&<>]*?([\w.-]+\.(?:txt|log|out|output|json))\b")
 ESITO = re.compile(r"(?:PHASE RESULT|ESITO FASE) ([\w-]+):\s*(OK|STOP)\s*(?:[—–-]+\s*)?(.*)")   # both languages (1.3.0)
+NO_SID = "(nessun session_id nello stream)"   # value of B_missing_sessions in the JSON (D7): frozen, printed translated
 CSV_COLS = ["data", "spec", "fasi", "A_min", "B_min", "bucket_a_min", "bucket_b_min", "bucket_c_min",
             "bucket_resto_min", "costo_usd", "token_cache_letti", "token_cache_scritti", "token_output",
             "riesecuzioni", "stop", "stop_cause", "harness"]
@@ -422,7 +432,7 @@ def transcript_window(sids, projects):
                 lo = ts if lo is None else min(lo, ts)
                 hi = ts if hi is None else max(hi, ts)
     if not sids:
-        missing.append("(nessun session_id nello stream)")
+        missing.append(NO_SID)
     return lo, hi, missing
 
 
@@ -588,34 +598,32 @@ def tk(n):
 
 def print_cycle(c):
     q = c["quota_5h"]
-    b = mins(c["B_s"]) + " min" if c["B_s"] is not None else "non misurabile"
-    print("== %s  %s  fasi %d  A %s min (%s)  B %s  $%.2f  quota5h %s" % (
-        c["spec"], c["date"], len(c["phases"]), mins(c["A_s"]),
-        " · ".join("%s %s" % (k, mins(v)) for k, v in c["A_by_phase_s"].items()) +
-        (" · driver %s" % mins(c["driver_s"]) if c["driver_s"] else ""), b, c["cost_usd"],
-        "%.0f%%->%.0f%%" % (q[0] * 100, q[1] * 100) if q else "-"))
+    b = mins(c["B_s"]) + " min" if c["B_s"] is not None else T("cycle-report.b_unmeasurable")
+    print("== " + T("cycle-report.head", spec=c["spec"], date=c["date"], n=len(c["phases"]), a=mins(c["A_s"]),
+                    phases=" · ".join("%s %s" % (k, mins(v)) for k, v in c["A_by_phase_s"].items()) +
+                    (" · driver %s" % mins(c["driver_s"]) if c["driver_s"] else ""), b=b, cost="%.2f" % c["cost_usd"],
+                    q="%.0f%%->%.0f%%" % (q[0] * 100, q[1] * 100) if q else "-"))
     h = c["harness"]
-    print("   Harness: " + ("maat %s — %s" % (h["versione"], h["radice"]) if h else "harness interno"))
+    print("   Harness: " + ("maat %s — %s" % (h["versione"], h["radice"]) if h else T("cycle-report.internal")))
     if c["B_s"] is None and c["B_missing_sessions"]:
-        print("   B: transcript mancanti: %s" % ", ".join(c["B_missing_sessions"]))
+        # the frozen JSON value (D7) printed in the language of the summary
+        print("   " + T("cycle-report.missing_tr", s=", ".join(T("cycle-report.no_sid") if x == NO_SID else x
+                                                                for x in c["B_missing_sessions"])))
     if c["stop_pauses"]:
-        print("   pause dopo STOP (fuori da B): %s" % ", ".join(
-            "%s %s min" % (x["dopo"], mins(x["s"])) for x in c["stop_pauses"]))
+        print("   " + T("cycle-report.stop_pauses", s=", ".join(
+            "%s %s min" % (x["dopo"], mins(x["s"])) for x in c["stop_pauses"])))
     if c["unexited_pauses"]:
-        print("   pause dopo fasi senza ESITO (dentro B): %s" % ", ".join(
-            "%s %s min" % (x["dopo"], mins(x["s"])) for x in c["unexited_pauses"]))
+        print("   " + T("cycle-report.unexited_pauses", s=", ".join(
+            "%s %s min" % (x["dopo"], mins(x["s"])) for x in c["unexited_pauses"])))
     t = c["tokens"]
-    print("   token: cache letti %s · cache scritti %s · output %s" % (
-        tk(t["cache_read"]), tk(t["cache_write"]), tk(t["output"])))
+    print("   " + T("cycle-report.tokens", r=tk(t["cache_read"]), w=tk(t["cache_write"]), o=tk(t["output"])))
     ag = c["aggregates_s"]
-    print("   aggregati (min): (a) riesecuzioni %s [%d] · (b) gate+controprove+polling %s · (c) modello %s · "
-          "resto %s · attesa passiva %s · agenti (sovrapposto) %s" % (
-              mins(ag["a_eliminabile"]), len(c["reruns"]), mins(ag["b_gate_primo_run"]), mins(ag["c_modello"]),
-              mins(ag["resto"]), mins(c["passive_wait_s"]), mins(c["buckets_s"]["agenti"])))
-    print("   lavoro fuori da A (gia' negli aggregati, min): fuori turno %s · fasi senza result %s" % (
-        mins(c["off_turn_work_s"]), mins(c["no_result_work_s"])))
+    print("   " + T("cycle-report.aggregates_cycle", a=mins(ag["a_eliminabile"]), n=len(c["reruns"]),
+                    b=mins(ag["b_gate_primo_run"]), c=mins(ag["c_modello"]), r=mins(ag["resto"]),
+                    p=mins(c["passive_wait_s"]), g=mins(c["buckets_s"]["agenti"])))
+    print("   " + T("cycle-report.outside_a", o=mins(c["off_turn_work_s"]), r=mins(c["no_result_work_s"])))
     print("   bucket (min): " + " · ".join("%s %s" % (k, mins(v)) for k, v in c["buckets_s"].items() if v))
-    print("   modello per filo (min): " + " · ".join(
+    print("   " + T("cycle-report.model_by_thread") + " · ".join(
         "%s %s" % (k, mins(v)) for k, v in sorted(c["model_by_thread_s"].items(), key=lambda x: -x[1])))
     for s in c["stops"]:
         print("   STOP %s [%s] %s" % (s["fase"], s["causa"], s["testo"][:110]))
@@ -631,18 +639,18 @@ def print_total(cycles):
             for k, v in src.items():
                 dst[k] = dst.get(k, 0.0) + v
     bs = [c["B_s"] for c in cycles]
-    b = mins(sum(bs)) + " min" if all(x is not None for x in bs) else "non misurabile (%d cicli su %d)" % (
-        sum(1 for x in bs if x is None), len(bs))
-    print("== TOTALE %d cicli  A %s min (%s)  B %s  $%.2f  cache letti %s  riesecuzioni %d" % (
-        len(cycles), mins(tot(lambda c: c["A_s"])), " · ".join("%s %s" % (k, mins(v)) for k, v in by_phase.items()),
-        b, tot(lambda c: c["cost_usd"]), tk(tot(lambda c: c["tokens"]["cache_read"])),
-        tot(lambda c: len(c["reruns"]))))
-    print("   aggregati (min): " + " · ".join("%s %s" % (k, mins(v)) for k, v in agg.items()) +
-          " · attesa passiva %s" % mins(tot(lambda c: c["passive_wait_s"])))
-    print("   lavoro fuori da A (gia' negli aggregati, min): fuori turno %s · fasi senza result %s" % (
-        mins(tot(lambda c: c["off_turn_work_s"])), mins(tot(lambda c: c["no_result_work_s"]))))
+    nb = sum(1 for x in bs if x is None)
+    b = T("cycle-report.b_unmeasurable_n", n=nb, m=len(bs)) if nb else mins(sum(bs)) + " min"
+    print("== " + T("cycle-report.total_head", n=len(cycles), a=mins(tot(lambda c: c["A_s"])),
+                    phases=" · ".join("%s %s" % (k, mins(v)) for k, v in by_phase.items()), b=b,
+                    cost="%.2f" % tot(lambda c: c["cost_usd"]), r=tk(tot(lambda c: c["tokens"]["cache_read"])),
+                    k=tot(lambda c: len(c["reruns"]))))
+    print("   " + T("cycle-report.aggregates") + " · ".join("%s %s" % (k, mins(v)) for k, v in agg.items()) +
+          " · " + T("cycle-report.passive", p=mins(tot(lambda c: c["passive_wait_s"]))))
+    print("   " + T("cycle-report.outside_a", o=mins(tot(lambda c: c["off_turn_work_s"])),
+                    r=mins(tot(lambda c: c["no_result_work_s"]))))
     print("   bucket (min): " + " · ".join("%s %s" % (k, mins(v)) for k, v in buckets.items() if v))
-    print("   modello per filo (min): " + " · ".join(
+    print("   " + T("cycle-report.model_by_thread") + " · ".join(
         "%s %s" % (k, mins(v)) for k, v in sorted(model_by.items(), key=lambda x: -x[1])))
 
 
@@ -672,12 +680,11 @@ def prepara_metriche(path):
     if head == CSV_COLS:
         return None
     if head != CSV_COLS[:-1]:
-        return "intestazione di %s sconosciuta, file non toccato: %r (attesa %r)" % (path, head, CSV_COLS)
+        return T("cycle-report.bad_header", p=path, h=repr(head), c=repr(CSV_COLS))
     body = [r for r in rows[1:] if r]
     bad = [i + 2 for i, r in enumerate(rows[1:]) if r and len(r) != len(head)]
     if bad:
-        return "%s: righe con un numero di campi diverso dall'intestazione (%s), file non toccato" % (
-            path, ", ".join(map(str, bad[:5])))
+        return T("cycle-report.bad_rows", p=path, r=", ".join(map(str, bad[:5])))
     tmp = "%s.tmp-%d" % (path, os.getpid())
     try:
         with open(tmp, "w", encoding="utf-8", newline="") as fh:
@@ -691,7 +698,7 @@ def prepara_metriche(path):
             os.remove(tmp)
         except OSError:
             pass
-        return "%s: migrazione dell'intestazione non riuscita (%s)" % (path, e)
+        return T("cycle-report.migrate_failed", p=path, e=e)
     return None
 
 
@@ -704,24 +711,23 @@ def default_metrics():
     try:
         return maat_paths.maat_work(maat_paths.project_root()) + "/metrics.csv"
     except maat_paths.ErroreMaat as e:
-        sys.exit("cycle-report.py: %s (o indica --metrics)" % e)
+        sys.exit("cycle-report.py: " + T("cycle-report.or_metrics", e=e))
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(prog="cycle-report.py", description="Misura di un ciclo del full cycle.")
-    ap.add_argument("cycles", nargs="+", help="spec-<name>.run o file .jsonl")
-    ap.add_argument("--json", action="store_true", help="uscita JSON")
-    ap.add_argument("--append", action="store_true", help="aggiunge una riga per ciclo al file delle metriche")
-    ap.add_argument("--metrics", default=None, help="file delle metriche (default <cartella di lavoro del progetto>/metrics.csv, "
-                         "cartelle.lavoro: .claude/.ai-workflow)")
+    ap = argparse.ArgumentParser(prog="cycle-report.py", description=T("cycle-report.description"))
+    ap.add_argument("cycles", nargs="+", help=T("cycle-report.h_cycles"))
+    ap.add_argument("--json", action="store_true", help=T("cycle-report.h_json"))
+    ap.add_argument("--append", action="store_true", help=T("cycle-report.h_append"))
+    ap.add_argument("--metrics", default=None, help=T("cycle-report.h_metrics"))
     ap.add_argument("--projects", default=os.path.join(os.path.expanduser("~"), ".claude", "projects"),
-                    help="radice dei transcript di Claude Code")
+                    help=T("cycle-report.h_projects"))
     a = ap.parse_args(argv)
     if a.metrics and not a.append:
-        ap.error("--metrics vale solo con --append")
+        ap.error(T("cycle-report.metrics_only"))
     for c in a.cycles:
         if not os.path.exists(c):
-            ap.error("non esiste: %s" % c)
+            ap.error(T("cycle-report.not_found", c=c))
     cycles = [analyse_cycle(c, a.projects) for c in a.cycles]
     if a.append:
         path = a.metrics or default_metrics()
@@ -738,7 +744,7 @@ def main(argv):
             for c in cycles:
                 w.writerow(csv_row(c))
         for c in cycles:
-            print("metrics: +1 riga %s -> %s" % (c["spec"], path))
+            print(T("cycle-report.appended", s=c["spec"], p=path))
         return 0
     if a.json:
         print(json.dumps(cycles, ensure_ascii=False, indent=1))
