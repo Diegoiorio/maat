@@ -93,6 +93,9 @@ fuori_v=$(comm -13 <(lista "$EQ/rami-valida.list") <(casi | awk -F'\t' '$1 == "j
 check "  e ogni etichetta dei jsonl di casi.tsv e' in rami-valida.list" '[ -z "$fuori_v" ]' "$fuori_v"
 campi=$(casi | awk -F'\t' 'NF != 6 || $1 !~ /^(spec|jsonl)$/' | head -3)
 check "casi.tsv: 6 campi per riga, tipo spec o jsonl" '[ -z "$campi" ]' "$campi"
+# rami-valida.list: 5 fields, none empty (IFS=$'\t' read in rami_non_provati merges consecutive tabs)
+campi_v=$(tr -d '\r' < "$EQ/rami-valida.list" | grep -v '^#' | grep . | awk -F'\t' '{ v = 0; for (i = 1; i <= NF; i++) if ($i == "") v = 1 } NF != 5 || v' | head -3)
+check "rami-valida.list: 5 campi per riga, nessuno vuoto" '[ -z "$campi_v" ]' "$campi_v"
 # the built corpus against casi.tsv: the specs (with their run dir) and the counted jsonl (equiv: log/<n>-<label>.jsonl, no
 # dot in the label, and not of the phase chiusura: _phase_of of driver.py, «chiusura» anywhere in the file name only)
 for d in "$T/c1"/*/; do

@@ -20,7 +20,8 @@ cycle does and prints does not change, with one exception: `MAAT_LINGUA` set by 
   permissions and line endings). The test checks it on the same machine, in two folders and at two different seconds:
   on Linux two builds of the whole corpus give the same fingerprint; on Windows (a whole build costs ~15 min) the
   check is reduced to the one mini-repo whose files carry the sha of the base commit, built again against its
-  fingerprint in the first build.
+  fingerprint in the first build. Across platforms it was compared by hand for this release: a whole build in Git
+  Bash on Windows and one on Linux give the same fingerprint (`6b484b23826a`).
 - **The certificate in one command:** `bash tools/certifica.sh` builds the examples and proves the driver on them;
   `--scrivi` also writes `plugins/maat/scripts/driver.equiv`, from Linux only. The `corpus` line gains, at its end,
   ` · impronta <12 hex> · validatori minimo,jsonschema`: the fingerprint of the examples and the validators proven
