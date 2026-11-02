@@ -13,6 +13,9 @@
 #      commit) again, against the fingerprint of the same mini-repo in the first build;
 #   2. the manifests: every row of righe.list and every branch of rami-valida.list has a case in casi.tsv, every spec
 #      and every jsonl of the built corpus is in casi.tsv and vice versa, no counted jsonl is empty;
+#      2b. every branch of rami-valida.list with an expectation (out, result, in) is gone through by at least one of its
+#      jsonl, by `run-phase.sh --valida` on the built corpus; every fase-<f> label of a jsonl is its phase (_phase_of);
+#      2c. the copy of snap_fp in the builder gives the same result as the one of cycle-state.sh;
 #   3. a model with a placeholder outside the list, or naming a state that does not exist → exit 2.
 # Block D (the proof on the corpus; one build, the first one, shared by every case below):
 #   4. `driver.py equiv` on the built corpus with each validator available (D14: the interpreter of python.sh, by what
@@ -20,14 +23,17 @@
 #      every spec UGUALE, «diverse=0 · diversi=0» in it and in en, the counts = casi.tsv, the first word of Next of
 #      every spec = casi.tsv in both languages;
 #   5. with MAAT_CERT_RICHIESTO=1: plugins/maat/scripts/driver.equiv VALIDO, the fingerprint of its corpus line = that
-#      of the corpus built, «validatori minimo,jsonschema», and no validator SALTATO.
+#      of the corpus built, its «spec=<n> jsonl=<m>» = the counts of casi.tsv, «validatori minimo,jsonschema», and no
+#      validator SALTATO.
 # Counterproofs: (A) a copy of the builder without the fixed dates (the DATE-FISSE line) → two builds of a mini-repo
 # whose files carry the sha of the base commit give two fingerprints (the determinism case would be red);
 # (a) a copy of driver.py whose Python twin of IMPLEMENT points to another key → DIVERSO on the IMPLEMENT specs;
 # (b) DIFENSIVA = ("difensiva: ",) → DIVERSO on a jsonl (valida) and on a spec (next) of the «defensive:» branch;
 # (c) the case of row C2-chiusura-assente removed from a copy of casi.tsv → «row without a case», red;
 # (d) a counted jsonl of the built corpus emptied → «empty jsonl», red;
-# (e) a certificate VALIDO for the hashes but with another fingerprint → the strict check is red.
+# (e) a certificate VALIDO for the hashes but with another fingerprint → the strict check is red; (e') the same with the
+# fingerprint of the corpus but the counts of one spec → red;
+# (f) in a copy of rami-valida.list, v-badjson with the expected output of v-nojson → only v-badjson red.
 set -uo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # no __pycache__ in the plugin (driver.py imports maat_msg, maat_paths)
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -88,11 +94,12 @@ check "  e ogni etichetta dei jsonl di casi.tsv e' in rami-valida.list" '[ -z "$
 campi=$(casi | awk -F'\t' 'NF != 6 || $1 !~ /^(spec|jsonl)$/' | head -3)
 check "casi.tsv: 6 campi per riga, tipo spec o jsonl" '[ -z "$campi" ]' "$campi"
 # the built corpus against casi.tsv: the specs (with their run dir) and the counted jsonl (equiv: log/<n>-<label>.jsonl, no
-# dot in the label, not chiusura)
+# dot in the label, and not of the phase chiusura: _phase_of of driver.py, «chiusura» anywhere in the file name only)
 for d in "$T/c1"/*/; do
   m=$(basename "$d")
   (cd "$d/.claude/.ai-workflow" && ls | sed -n 's/^\(spec-.*\)\.md$/\1/p' | while IFS= read -r s; do [ -d "$s.run" ] && printf 'spec\t%s\t%s\n' "$m" "$s"; done
-   find . -path './spec-*.run/log/*' -type f -name '*.jsonl' | sed 's|^\./||' | grep -E '/log/[0-9]+-[^./]*\.jsonl$' | grep -v chiusura |
+   find . -path './spec-*.run/log/*' -type f -name '*.jsonl' | sed 's|^\./||' | grep -E '/log/[0-9]+-[^./]*\.jsonl$' |
+     grep -vE '/log/[0-9]+-[^./]*chiusura[^./]*\.jsonl$' |
      sed "s|^|jsonl\t$m\t|")
 done | LC_ALL=C sort > "$T/costruiti"
 casi | cut -f1-3 | LC_ALL=C sort > "$T/dichiarati"
@@ -112,6 +119,69 @@ cp -p "$T/c1/$J1" "$T/jsonl-salvato"; : > "$T/c1/$J1"
 vuoti_d=$(jsonl_vuoti)
 cp -p "$T/jsonl-salvato" "$T/c1/$J1"
 check "controprova (d): un jsonl contato svuotato → «jsonl vuoto» rosso" '[ "$vuoti_d" = "$J1" ] && [ -s "$T/c1/$J1" ]' "$vuoti_d"
+
+# --- 2b. the labels of the jsonl: each branch of rami-valida.list is really gone through by at least one of its jsonl ---
+SCR=$ROOT/plugins/maat/scripts
+nat() { cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1"; }   # a path for the native Python (Windows)
+SCHEMA=$(nat "$ROOT/plugins/maat/schemas/phase-result.schema.json")
+casi | awk -F'\t' '$1 == "jsonl" { print $2 "/.claude/.ai-workflow/" $3 "\t" $5 }' > "$T/jsonl-rami"
+# the phase of each jsonl: _phase_of of driver.py on its label, as equiv passes it to --valida
+sed -E 's|^.*/log/([0-9]+-[^/]*)\.jsonl\t.*$|\1|' "$T/jsonl-rami" |
+  "$FIC_PY" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from driver import _phase_of; [print(_phase_of(l.strip())) for l in sys.stdin]' \
+  "$(nat "$SCR")" | tr -d '\r' > "$T/jsonl-fasi"
+mkdir -p "$T/valida"; : > "$T/valida/indice"; k=0
+while IFS=$'\t' read -r f et ph; do
+  k=$((k + 1)); rm -f "$T/valida/r.json"
+  o=$(cd "$T" && MAAT_LINGUA=it bash "$SCR/run-phase.sh" --valida "$(nat "$T/c1/$f")" "$SCHEMA" "$ph" "$(nat "$T/valida/r.json")" 2>/dev/null); rc=$?
+  printf '%s' "$o" | tr -d '\r' | awk 'NR > 1 { printf " ## " } { printf "%s", $0 } END { print "" }' > "$T/valida/$k.out"
+  [ -f "$T/valida/r.json" ] && tr -d '\r' < "$T/valida/r.json" > "$T/valida/$k.res"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$k" "$et" "$f" "$ph" "$rc" >> "$T/valida/indice"
+done < <(paste "$T/jsonl-rami" "$T/jsonl-fasi")
+rami_non_provati() { # $1 a rami-valida.list → the labels with a condition (out, result, in) that none of their jsonl meets
+  local et cosa eo er ei k lab f ph rc ok
+  while IFS=$'\t' read -r et cosa eo er ei; do
+    [ "$eo$er$ei" = "---" ] && continue
+    ok=0
+    while IFS=$'\t' read -r k lab f ph rc; do
+      case ",$lab," in *",$et,"*) ;; *) continue ;; esac
+      [ "$rc" = 0 ] || continue
+      [ "$eo" = - ] || grep -qE -- "$eo" "$T/valida/$k.out" || continue
+      case $er in -) ;; no) [ ! -f "$T/valida/$k.res" ] || continue ;; *) [ -f "$T/valida/$k.res" ] && grep -qE -- "$er" "$T/valida/$k.res" || continue ;; esac
+      [ "$ei" = - ] || grep -qE -- "$ei" "$T/c1/$f" || continue
+      ok=1; break
+    done < "$T/valida/indice"
+    [ $ok = 1 ] || echo "$et"
+  done < <(tr -d '\r' < "$1" | grep -v '^#' | grep .)
+}
+np=$(rami_non_provati "$EQ/rami-valida.list")
+nr=$(tr -d '\r' < "$EQ/rami-valida.list" | grep -v '^#' | awk -F'\t' 'NF == 5 && $3 $4 $5 != "---"' | grep -c .)
+check "ogni ramo di rami-valida.list con un'attesa ($nr) e' percorso da almeno un suo jsonl (run-phase.sh --valida)" '[ -z "$np" ] && [ "$nr" -gt 0 ]' "$np
+    (uscite: $(head -c 600 "$T/valida/1.out"))"
+fasi_ko=$(while IFS=$'\t' read -r k lab f ph rc; do
+  for e in $(printf '%s\n' "$lab" | tr ',' '\n' | sed -n 's/^fase-//p'); do [ "$e" = "$ph" ] || echo "$f: fase-$e, _phase_of $ph"; done
+done < "$T/valida/indice")
+check "  ogni etichetta fase-<f> di un jsonl e' la sua fase (_phase_of di driver.py)" '[ -z "$fasi_ko" ] && [ -s "$T/valida/indice" ]' "$fasi_ko"
+# counterproof (f): in a copy of rami-valida.list the branch v-badjson expects the output of v-nojson → v-badjson red
+tr -d '\r' < "$EQ/rami-valida.list" | awk -F'\t' -v OFS='\t' '$1 == "v-nojson" { e = $3 } $1 == "v-badjson" { $3 = e } { print }' > "$T/rami-scambiati"
+np_f=$(rami_non_provati "$T/rami-scambiati")
+check "controprova (f): v-badjson con l'attesa di v-nojson in una copia di rami-valida.list → solo v-badjson rosso" \
+  '! cmp -s <(tr -d "\r" < "$EQ/rami-valida.list") "$T/rami-scambiati" && [ "$np_f" = v-badjson ]' "$np_f"
+
+# --- 2c. snap_fp: the copy in the builder ({{finalize}}) gives the same result as the formula of cycle-state.sh ---
+sfp() { # $1 file whose «snap_fp() » line is evaluated, $2 value → its snap_fp
+  ( eval "$(tr -d '\r' < "$1" | grep -m1 '^snap_fp() ')" && snap_fp "$2" )
+}
+SFP_IN=("base 0123456789ab · tree 0123456789ab · fingerprint 0123456789ab · 2 paths"
+        "  base 0123456789ab  ·	tree 0123456789ab ·  fingerprint 0123456789ab · 2 paths	 " "")
+sfp_ko=""
+for v in "${SFP_IN[@]}"; do
+  a=$(sfp "$B" "$v"); c=$(sfp "$SCR/cycle-state.sh" "$v")
+  [[ $a =~ ^[0-9a-f]{12}$ ]] && [ "$a" = "$c" ] || sfp_ko+=" «$v»: costruttore $a, cycle-state.sh $c;"
+done
+check "snap_fp del costruttore = snap_fp di cycle-state.sh (${#SFP_IN[@]} valori, spazi e tab compressi)" '[ -z "$sfp_ko" ]' "$sfp_ko"
+# the inputs discriminate: the first two differ only in spaces and tabs, so a formula that did not squeeze them would differ
+check "  i valori distinguono: i primi due danno la stessa impronta, una formula senza la compressione degli spazi no" \
+  '[ "$(sfp "$B" "${SFP_IN[0]}")" = "$(sfp "$B" "${SFP_IN[1]}")" ] && [ "$(printf "%s" "${SFP_IN[0]}" | sha256sum | cut -c1-12)" != "$(printf "%s" "${SFP_IN[1]}" | sha256sum | cut -c1-12)" ]'
 
 # --- 3. placeholders outside the list ---
 Q=$T/copia/esempi-equiv; mkdir -p "$T/copia"; cp -r "$EQ" "$Q"
@@ -207,17 +277,22 @@ cert_ok() { # $1 certificate, $2 fingerprint of the corpus (64) → 0, or the re
   case $o in "certificato: VALIDO"*) ;; *) echo "$o"; return 1 ;; esac
   c=$(tr -d '\r' < "$1" | grep '^corpus ')
   [[ $c == *" · impronta ${2:0:12} · "* ]] || { echo "impronta diversa da ${2:0:12}: $c"; return 1; }
+  [[ $c == "corpus spec=$NS jsonl=$NJ · "* ]] || { echo "conteggi diversi da casi.tsv (spec=$NS jsonl=$NJ): $c"; return 1; }
   [[ $c == *" · validatori minimo,jsonschema" ]] || { echo "validatori non minimo,jsonschema: $c"; return 1; }
 }
 # counterproof (e): a certificate with the hashes of today but the fingerprint of one mini-repo only (equiv --certifica
-# on one closed spec) → red; the same with the fingerprint of the corpus put in → green (the check is not always red)
+# on one closed spec) → red; with the fingerprint of the corpus put in but its counts (spec=1) → still red; with the
+# fingerprint and the counts of the corpus put in → green (the check is not always red)
 SE=$(spec_di '$4 == "DONE"' | head -1)
 altro=jsonschema; [ "$(validatore "$FIC_PY")" = jsonschema ] && altro=minimo
 FIC_DRIVER_CERT="$T/cert-e" "$FIC_PY" "$DRV" equiv --certifica --validatori-precedenti $altro "$SE" > "$T/eq-e.out" 2>&1
-sed "s/ · impronta [0-9a-f]\{12\} · / · impronta ${I1:0:12} · /" "$T/cert-e" > "$T/cert-e-giusto"
-mot_e=$(cert_ok "$T/cert-e" "$I1"); ok_e=$(cert_ok "$T/cert-e-giusto" "$I1")
+sed "s/ · impronta [0-9a-f]\{12\} · / · impronta ${I1:0:12} · /" "$T/cert-e" > "$T/cert-e-ridotto"
+sed "s/^corpus spec=[0-9]* jsonl=[0-9]* · /corpus spec=$NS jsonl=$NJ · /" "$T/cert-e-ridotto" > "$T/cert-e-giusto"
+mot_e=$(cert_ok "$T/cert-e" "$I1"); mot_r=$(cert_ok "$T/cert-e-ridotto" "$I1"); ok_e=$(cert_ok "$T/cert-e-giusto" "$I1")
 check "controprova (e): certificato VALIDO ma con un'altra impronta → controllo rigido rosso (e con l'impronta del corpus verde)" \
   '[ -f "$T/cert-e" ] && ! grep -q " · impronta ${I1:0:12} · " "$T/cert-e" && [[ $mot_e == "impronta diversa"* ]] && cert_ok "$T/cert-e-giusto" "$I1" >/dev/null' "$mot_e · $ok_e"
+check "controprova (e'): l'impronta del corpus ma i conteggi di una spec sola (spec=1) → controllo rigido rosso" \
+  '! grep -q "^corpus spec=$NS jsonl=$NJ · " "$T/cert-e-ridotto" && [[ $mot_r == "conteggi diversi"* ]]' "$mot_r"
 if [ "${MAAT_CERT_RICHIESTO:-0}" = 1 ]; then
   mot=$(cert_ok "$ROOT/plugins/maat/scripts/driver.equiv" "$I1")
   check "MAAT_CERT_RICHIESTO=1: driver.equiv VALIDO, impronta = corpus costruito (${I1:0:12}), validatori minimo,jsonschema" '[ -z "$mot" ]' "$mot

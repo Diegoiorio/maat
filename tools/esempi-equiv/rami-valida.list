@@ -1,32 +1,41 @@
 # rami-valida.list — the branches of the outcome validator, VALIDA_PY of plugins/maat/scripts/run-phase.sh and its
 # twin `driver.py valida`, and the phases of _phase_of (driver.py), one label per branch (Maat 1.5.0).
-# Format: <label><TAB><what>. Every label has at least one jsonl in casi.tsv (tools/esempi-equiv.test.sh); no jsonl of
-# the corpus is empty (an empty one exits 0 on both sides and proves nothing).
-nessun-result	no «result» event (a session killed): no output
-fic-scartato	a «fic_scartato» event after the result (parallel review discarded): no output
-is-error	result with is_error: no output
-structured-output	structured_output of the result event, valid
-recinto-json	the JSON in a ```json fence of the text
-v-nojson	no JSON block (v_nojson)
-v-badjson	unreadable JSON block (v_badjson)
-errori-schema	JSON outside the schema (minimal validator or jsonschema)
-v-phase	JSON of another phase (v_phase)
-v-dev	declared deviations, not all defensive (v_dev)
-v-blocked	bloccato_su other than none/nessuno (v_blocked)
-v-esito	esito STOP (v_esito)
-v-json-stop	the prose says OK, the JSON stops: STOP — JSON with originale= (v_json_stop)
-riga-assente	no result line in the text: composed from the JSON
-defensive	deviations all «defensive: »
-difensiva	deviations all «difensiva: »
-none	bloccato_su «none»
-nessuno	bloccato_su «nessuno»
-phase-result	result line «PHASE RESULT» (1.3.0)
-esito-fase	result line «ESITO FASE» (1.2.x)
-fic-corsie	the merged event of the lanes (subtype fic_corsie)
-fase-plan	phase plan (label *plan*)
-fase-implement	phase implement
-fase-review	phase review
-fase-fix	phase fix
-fase-test-red	phase test-red
-fase-test-stage	phase test-stage
-fase-probe	phase probe (a label with no known key)
+# Format: <label><TAB><what><TAB><out><TAB><result><TAB><in>. Every label has at least one jsonl in casi.tsv
+# (tools/esempi-equiv.test.sh); no jsonl of the corpus is empty (an empty one exits 0 on both sides and proves nothing).
+# The last three fields say how a jsonl that goes through the branch shows it («-»: no condition); at least one jsonl
+# of casi.tsv with that label must meet all three, with `run-phase.sh --valida <jsonl> <schema> <phase> <result.json>`
+# (phase = _phase_of of its label, MAAT_LINGUA=it, exit 0):
+#   out     ERE on the stdout, its lines joined by « ## » («^$»: no output)
+#   result  «no»: no result.json written; otherwise an ERE on the result.json written
+#   in      ERE on the jsonl itself (for the branches whose output is the same as another one's: no output)
+# The fase-* labels: the phase of every jsonl that carries one is that phase (_phase_of of driver.py).
+# v-esito: in the corpus the prose already says STOP, so the composed «esito STOP:» is never printed; the check is the
+# outcome STOP in result.json.
+nessun-result	no «result» event (a session killed): no output	^$	no	-
+fic-scartato	a «fic_scartato» event after the result (parallel review discarded): no output	^$	no	"subtype": "fic_scartato"
+is-error	result with is_error: no output	^$	no	"is_error": true
+structured-output	structured_output of the result event, valid	.	.	"structured_output": \{
+recinto-json	the JSON in a ```json fence of the text	.	.	```json
+v-nojson	no JSON block (v_nojson)	^PHASE RESULT [a-z-]+: STOP — uscita non valida: nessun blocco JSON	no	-
+v-badjson	unreadable JSON block (v_badjson)	^PHASE RESULT [a-z-]+: STOP — uscita non valida: blocco JSON illeggibile: 	no	-
+errori-schema	JSON outside the schema (minimal validator or jsonschema)	^PHASE RESULT [a-z-]+: STOP — uscita non valida: .*(campo non previsto|Additional properties are not allowed)	no	-
+v-phase	JSON of another phase (v_phase)	^PHASE RESULT [a-z-]+: STOP — uscita non valida: fase '[a-z-]+' diversa da quella dell etichetta	no	-
+v-dev	declared deviations, not all defensive (v_dev)	STOP — (JSON: )?deviazioni dichiarate \([0-9]+\): 	.	-
+v-blocked	bloccato_su other than none/nessuno (v_blocked)	STOP — (JSON: )?bloccato su: 	.	-
+v-esito	esito STOP (v_esito)	: STOP — 	"esito": "STOP"	-
+v-json-stop	the prose says OK, the JSON stops: STOP — JSON with originale= (v_json_stop)	^PHASE RESULT [a-z-]+: STOP — JSON: .*\(la prosa diceva OK: vale il piu conservativo\) ## originale=(PHASE RESULT|ESITO FASE) [^:]*: OK	.	-
+riga-assente	no result line in the text: composed from the JSON	^PHASE RESULT [a-z-]+: STOP — (deviazioni dichiarate|bloccato su:|esito STOP:) [^#]*$	.	-
+defensive	deviations all «defensive: »	: OK — 	"defensive: 	-
+difensiva	deviations all «difensiva: »	: OK — 	"difensiva: 	-
+none	bloccato_su «none»	: OK — 	"bloccato_su": "none"	-
+nessuno	bloccato_su «nessuno»	: OK — 	"bloccato_su": "nessuno"	-
+phase-result	result line «PHASE RESULT» (1.3.0)	^PHASE RESULT [a-z-]+: OK — 	.	PHASE RESULT
+esito-fase	result line «ESITO FASE» (1.2.x)	(^|originale=)ESITO FASE [a-z-]+: 	.	ESITO FASE
+fic-corsie	the merged event of the lanes (subtype fic_corsie)	.	.	"subtype": "fic_corsie"
+fase-plan	phase plan (label *plan*)	-	-	-
+fase-implement	phase implement	-	-	-
+fase-review	phase review	-	-	-
+fase-fix	phase fix	-	-	-
+fase-test-red	phase test-red	-	-	-
+fase-test-stage	phase test-stage	-	-	-
+fase-probe	phase probe (a label with no known key)	-	-	-

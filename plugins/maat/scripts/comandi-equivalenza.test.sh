@@ -34,7 +34,9 @@
 # test-fast.sh with two modules with a copy and no MAAT_MODULO.
 # Counterproofs (here): signing IMPLEMENTED only with PASS => the «.vue senza test» case diverges; a line changed in a
 # copy of riferimento.txt => that case diverges (the test really reads the file); the real base sha written in a copy of
-# riferimento.txt => hygiene red; norm without the <base> rule => the «lint-con-base» case diverges.
+# riferimento.txt => hygiene red; norm without the <base> rule => the «lint-con-base» case diverges; norm without the
+# <tree> rule => the key view of every case diverges (and the tree of chiave.txt is that of the whole synthetic
+# repository: without README.md it changes).
 # To be run in WSL or Linux (the copy needs rsync and flock):
 #   wsl -- bash -lc 'bash /mnt/c/<maat>/plugins/maat/scripts/comandi-equivalenza.test.sh'
 set -uo pipefail
@@ -154,8 +156,10 @@ fi
 NORM+=(-e "s#$R#<repo>#g" -e "s#--junitxml=[^ ]*#--junitxml=<report>#g")
 NORM_BASE=(-e "s#$BASE_SHA#<base>#g")
 norm() { sed "${NORM[@]}" ${NORM_BASE[@]+"${NORM_BASE[@]}"}; }
-# the key view: the commands (cmd.*) out, normalized, tree=<tree>, as a set
-norm_chiave() { grep -v '^cmd\.' | norm | sed -E 's/^tree=[0-9a-f]{40}$/tree=<tree>/' | LC_ALL=C sort; }
+# the key view: the commands (cmd.*) out, normalized, tree=<tree>, as a set (NORM_TREE emptied only by the <tree>
+# counterproof)
+NORM_TREE='s/^tree=[0-9a-f]{40}$/tree=<tree>/'
+norm_chiave() { grep -v '^cmd\.' | norm | sed -E "$NORM_TREE" | LC_ALL=C sort; }
 spec() { # $1 = spec file: review APPROVED + IMPLEMENTED, table counterproof PASS
   printf '%s\n' "# X" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare A." \
     "## Piano di implementazione" "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" \
@@ -185,6 +189,7 @@ gira() {
   (cd "$R" && HOME=$hm FIC_GATES_HARNESS=$hr FIC_GATES="$hr/scripts/gates.sh" bash "${FZH:-$hr/scripts/finalize.sh}" --level "$l" "$run" 2>&1) |
     sed -n 's/^finalize: esito=\([A-Z_]*\).*/\1/p' > "$T/$h.firma"
   mkdir -p "$T/visti-$h"; cp "$REC" "$T/visti-$h/$n.rec.grezzo"
+  { [ -n "$ev" ] && cat "$ev/chiave.txt"; } > "$T/visti-$h/$n.chiave.grezzo"
   for x in $VISTE; do cp "$T/$h.$x" "$T/visti-$h/$n.$x"; done
 }
 VISTE="rec righe esito chiave firma"
@@ -337,6 +342,29 @@ vista_rif lint-con-base rec "$RIFF" > "$T/vecchio.rec"
 if ! cmp -s "$V/lint-con-base.rec" "$T/vecchio.rec"; then ko "controprova <base>: lint-con-base rec non e' identico col riferimento"
 elif cmp -s "$T/senza-base.rec" "$T/vecchio.rec"; then ko "controprova: norm senza la regola <base> non fa divergere lint-con-base"
 else ok; fi   # expected red
+# norm without the <tree> rule -> the key view of EVERY case diverges from the reference (the raw chiave.txt of the
+# plugin, normalized without it; with the rule it is identical). And the tree it carries is the write-tree of the whole
+# synthetic repository: one file fewer (README.md) gives another one, so without the rule the view would follow the
+# content of the repository (in --rigenera: the two engine files of the reference side)
+CON_TREE=$NORM_TREE r="" m=""
+for c in "${CASI[@]}"; do
+  n=${c%% *}
+  vista_rif "$n" chiave "$RIFF" > "$T/vecchio.chiave"
+  NORM_TREE=$CON_TREE; norm_chiave < "$V/$n.chiave.grezzo" > "$T/con-tree.chiave"
+  NORM_TREE='';        norm_chiave < "$V/$n.chiave.grezzo" > "$T/senza-tree.chiave"
+  cmp -s "$T/con-tree.chiave" "$T/senza-tree.chiave" && m+=" $n"   # no tree= of 40 digits: the mutation changes nothing
+  cmp -s "$T/con-tree.chiave" "$T/vecchio.chiave" || r+=" $n(diverso anche con la regola)"
+  cmp -s "$T/senza-tree.chiave" "$T/vecchio.chiave" && r+=" $n"
+done
+NORM_TREE=$CON_TREE
+chk "controprova <tree>: la mutazione e' applicata (senza la regola la vista chiave cambia in ogni caso)" '[ -z "$m" ]' "invariati:$m"
+chk "controprova: norm senza la regola <tree> fa divergere la vista chiave di tutti i casi (${#CASI[@]})" '[ -z "$r" ]' "non divergono:$r"
+TR=$(grep -h '^tree=' "$V"/*.chiave.grezzo | LC_ALL=C sort -u)
+T1=$(cd "$R" && bash "$NH/scripts/review-surface.sh" tree 2>/dev/null)
+mv "$R/README.md" "$T/README.md.via" && T0=$(cd "$R" && bash "$NH/scripts/review-surface.sh" tree 2>/dev/null)
+mv "$T/README.md.via" "$R/README.md"
+chk "controprova <tree>: chiave.txt porta il tree dell'intero repo di sintesi, e senza README.md il tree cambia" \
+  '[ "$TR" = "tree=$T1" ] && [[ $T0 =~ ^[0-9a-f]{40}$ ]] && [ "$T0" != "$T1" ]' "chiave: $TR · repo: $T1 · senza README.md: $T0"
 
 echo "comandi-equivalenza.test.sh: $pass ok, $fail falliti"
 [ $fail -eq 0 ]

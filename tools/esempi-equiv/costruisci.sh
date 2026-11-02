@@ -98,7 +98,8 @@ controlla_modelli() { # $1 models dir → exit 2 on a placeholder outside the li
 sezione_review() { tr -d '\r' < "$1" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
   !r && /^## (Review implementazione|Implementation review)/ { r = 1 } r { print }'; }
 scope_di() { sezione_review "$1" | awk '$0 == "Scope:" { on = 1; next } on && (/^[ \t]*$/ || /^Excluded:/ || /^Scope:/ || /^<\/details>/) { exit } on { print }'; }
-# snap_fp of cycle-state.sh: the fingerprint finalize.sh writes in «snapshot <x12>»
+# snap_fp of cycle-state.sh: the fingerprint finalize.sh writes in «snapshot <x12>». A copy of that formula: the
+# «snap_fp» case of tools/esempi-equiv.test.sh checks that the two give the same result
 snap_fp() { printf '%s' "$1" | tr -s ' \t' '  ' | sed 's/^ //; s/ $//' | tr -d '\n' | sha256sum | cut -c1-12; }
 sostituisci() { # $1 file, then pairs <literal> <value>: every occurrence (values: hex digits, spaces and «·»)
   local f=$1 e=(); shift
@@ -227,7 +228,10 @@ for m in $SCELTI; do
      printf '%s %s/%s\n' "$(tr -d '\r' < "$f" | sha256sum | cut -c1-64)" "$m" "$f"; done) > .claude/esempi-equiv.sorgente
   fissa_mtime "$R" "$m"
   ns=$(ls .claude/.ai-workflow | grep -c '^spec-.*\.md$')
-  nj=$(find .claude/.ai-workflow -path '*.run/log/*' -type f -name '[0-9]*-*.jsonl' | grep -E '/[0-9]+-[^./]*\.jsonl$' | grep -cv 'chiusura')
+  # the jsonl that equiv counts: log/<n>-<label>.jsonl, no dot in the label, not of the phase chiusura (_phase_of of
+  # driver.py: «chiusura» anywhere in the file name, never in the path above it)
+  nj=$(find .claude/.ai-workflow -path '*.run/log/*' -type f -name '[0-9]*-*.jsonl' | grep -E '/log/[0-9]+-[^./]*\.jsonl$' |
+    grep -cvE '/log/[0-9]+-[^./]*chiusura[^./]*\.jsonl$')
   nspec=$((nspec + ns)) njsonl=$((njsonl + nj))
   echo "esempi-equiv: $m · spec=$ns · jsonl=$nj"
   TARGETS+=("$R/.claude/.ai-workflow")

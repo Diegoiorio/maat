@@ -14,9 +14,13 @@ cycle does and prints does not change, with one exception: `MAAT_LINGUA` set by 
   `tools/esempi-equiv/costruisci.sh`: 65 specs and 49 jsonl, in the Italian 1.2.x and the English 1.3+ formats,
   single cycles and chains. Two closed lists say what they cover: `righe.list`, every row of the resume table of
   `cycle-state.sh` (49 labels), and `rami-valida.list`, every branch of the outcome validator and every phase (28
-  labels). `tools/esempi-equiv.test.sh` fails if a label has no case, if a spec changes its word of `Next`, or if a
-  counted jsonl is empty. The builder is deterministic (no git configuration of the machine, fixed identity, dates,
-  permissions and line endings): two builds give the same fingerprint, on Windows and on Linux.
+  labels). `tools/esempi-equiv.test.sh` fails if a label has no case, if a spec changes its word of `Next`, if a
+  counted jsonl is empty, or if no jsonl labelled with a branch really goes through it (`run-phase.sh --valida`
+  against the expectation written in `rami-valida.list`). The builder is deterministic (no git configuration of the machine, fixed identity, dates,
+  permissions and line endings). The test checks it on the same machine, in two folders and at two different seconds:
+  on Linux two builds of the whole corpus give the same fingerprint; on Windows (a whole build costs ~15 min) the
+  check is reduced to the one mini-repo whose files carry the sha of the base commit, built again against its
+  fingerprint in the first build.
 - **The certificate in one command:** `bash tools/certifica.sh` builds the examples and proves the driver on them;
   `--scrivi` also writes `plugins/maat/scripts/driver.equiv`, from Linux only. The `corpus` line gains, at its end,
   ` · impronta <12 hex> · validatori minimo,jsonschema`: the fingerprint of the examples and the validators proven

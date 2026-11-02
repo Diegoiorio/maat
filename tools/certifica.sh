@@ -92,7 +92,8 @@ c=$(tr -d '\r' < "$T/driver.equiv" | grep '^corpus ')
 if [ $SCRIVI = 1 ]; then
   [[ $c == *" · validatori minimo,jsonschema" ]] || die "the corpus line does not say «validatori minimo,jsonschema»: $c"
   cp "$T/driver.equiv" "$CERT" || die "cannot write $CERT"
-  o=$("$FIC_PY" "$DRV" certificato 2>&1 | tr -d '\r'); echo "$o"
+  # without FIC_DRIVER_CERT: the check reads the file just written into the plugin, not an override of the environment
+  o=$(env -u FIC_DRIVER_CERT "$FIC_PY" "$DRV" certificato 2>&1 | tr -d '\r'); echo "$o"
   case $o in "certificato: VALIDO"*) ;; *) die "$CERT written but not VALIDO" ;; esac
   echo "certifica.sh: scritto $CERT ($(( $(date +%s) - t0 ))s)"
 else
