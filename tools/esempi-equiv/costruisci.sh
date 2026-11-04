@@ -3,7 +3,7 @@
 #   bash tools/esempi-equiv/costruisci.sh <folder> [<mini-repo>…]
 # <folder> must not exist or be empty. Without <mini-repo> every one in the order of MINI_REPO below. Prints one line
 # per mini-repo, then «esempi-equiv: <r> mini-repo · spec=<s> · jsonl=<j>» and, last, «impronta <64 hex>»: the
-# fingerprint of `driver.py equiv --impronta` on the .claude/.ai-workflow folders of the mini-repos built, in that order.
+# fingerprint of `driver.py impronta` on the .claude/.ai-workflow folders of the mini-repos built, in that order.
 # Exit 0 · 1 a step failed (git, a script of the plugin) · 2 usage, a model with a placeholder outside the list below,
 # or a «{{» left after the build.
 #
@@ -12,8 +12,8 @@
 #                every later state is laid over the working tree and written with `review-surface.sh tree` (the objects
 #                exist, the trees are not committed); the last state stays as the working tree.
 #   modelli/     the content of the mini-repo's .claude/ (specs and run dirs under .ai-workflow/): data, copied as is,
-#                then the placeholders are filled. Every spec gets its run dir, empty if the models have none (equiv
-#                sees only the specs with a run dir).
+#                then the placeholders are filled. Every spec gets its run dir, empty if the models have none (the
+#                expected outputs of attese.sh cover only the specs with a run dir).
 # casi.tsv (next to this script) declares the expected word of every spec and the branches of every jsonl; the builder
 # reads from it only the options: «harness-fixture» (the harness.fp of that spec is a fixture: listed in
 # .claude/oracolo-conserva) and «mtime=<UTC>» (the mtime of that file instead of the fixed epoch).
@@ -33,7 +33,7 @@
 #        library) or «Risk surfaces:» (English specs: the same two lines with the English key)
 #   {{basis-spec}} {{basis-plan}}  the two fingerprints of the current Basis (plan-check.sh basis): for the lines that
 #        record a contract (Reviewed contract:) or a basis made STALE on purpose
-#   {{state}}                      the State of the spec of that run dir (cycle-state.sh, FIC_DRIVER=0), last
+#   {{state}}                      the State of the spec of that run dir (cycle-state.sh, i.e. the driver), last
 # The mtimes count from the basis on (plan-check.sh closed reads the time of the last review): every file under
 # .claude/ gets EPOCA (or its mtime= option) before the basis, before the states and at the end. Last,
 # .claude/oracolo-conserva and .claude/esempi-equiv.sorgente (sha256 of the models and of stati/ of that mini-repo).
@@ -69,8 +69,8 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 XDG_CONFIG_HOME=$VUOTA
 export GIT_AUTHOR_NAME="Maat esempi" GIT_AUTHOR_EMAIL=esempi@example.invalid
 export GIT_COMMITTER_NAME="Maat esempi" GIT_COMMITTER_EMAIL=esempi@example.invalid
 export GIT_AUTHOR_DATE=$DATA_COMMIT GIT_COMMITTER_DATE=$DATA_COMMIT   # DATE-FISSE
-export MAAT_LINGUA=it FIC_DRIVER=0   # State does not depend on the language; the standalone table, never the driver
-unset FIC_REPO MAAT_ROOT FIC_DRIVER_ROOT
+export MAAT_LINGUA=it   # State does not depend on the language
+unset FIC_REPO MAAT_ROOT FIC_DRIVER_ROOT FIC_DRIVER FIC_DRIVER_PY
 FIC_PY=""; . "$SCR/python.sh" >/dev/null 2>&1
 [ -n "$FIC_PY" ] || die "no Python (python.sh)"
 PC=$SCR/plan-check.sh
@@ -98,8 +98,9 @@ controlla_modelli() { # $1 models dir → exit 2 on a placeholder outside the li
 sezione_review() { tr -d '\r' < "$1" | awk '{ isf = ($0 ~ /^[ \t]*(```|~~~)/) } isf { inf = !inf; next } inf { next }
   !r && /^## (Review implementazione|Implementation review)/ { r = 1 } r { print }'; }
 scope_di() { sezione_review "$1" | awk '$0 == "Scope:" { on = 1; next } on && (/^[ \t]*$/ || /^Excluded:/ || /^Scope:/ || /^<\/details>/) { exit } on { print }'; }
-# snap_fp of cycle-state.sh: the fingerprint finalize.sh writes in «snapshot <x12>». A copy of that formula: the
-# «snap_fp» case of tools/esempi-equiv.test.sh checks that the two give the same result
+# snap_fp: the fingerprint finalize.sh writes in «snapshot <x12>» (_snap_fp of driver.py; up to 1.5.1 also in
+# cycle-state.sh). A copy of that formula: the «snap_fp» case of tools/esempi-equiv.test.sh checks that the two give
+# the same result
 snap_fp() { printf '%s' "$1" | tr -s ' \t' '  ' | sed 's/^ //; s/ $//' | tr -d '\n' | sha256sum | cut -c1-12; }
 sostituisci() { # $1 file, then pairs <literal> <value>: every occurrence (values: hex digits, spaces and «·»)
   local f=$1 e=(); shift
@@ -210,7 +211,7 @@ for m in $SCELTI; do
     fi
   done
   fissa_mtime "$R" "$m"
-  # --- 6. state= : the State of the spec, now final (cycle-state.sh, the standalone table) ---
+  # --- 6. state= : the State of the spec, now final (cycle-state.sh: the driver, the only engine since 1.6.0) ---
   for s in .claude/.ai-workflow/spec-*.md; do
     run=${s%.md}.run
     grep -rlF '{{state}}' "$run" >/dev/null 2>&1 || continue
@@ -228,8 +229,8 @@ for m in $SCELTI; do
      printf '%s %s/%s\n' "$(tr -d '\r' < "$f" | sha256sum | cut -c1-64)" "$m" "$f"; done) > .claude/esempi-equiv.sorgente
   fissa_mtime "$R" "$m"
   ns=$(ls .claude/.ai-workflow | grep -c '^spec-.*\.md$')
-  # the jsonl that equiv counts: log/<n>-<label>.jsonl, no dot in the label, not of the phase chiusura (_phase_of of
-  # driver.py: «chiusura» anywhere in the file name, never in the path above it)
+  # the jsonl that the expected outputs count (attese.sh): log/<n>-<label>.jsonl, no dot in the label, not of the
+  # phase chiusura (_phase_of of driver.py: «chiusura» anywhere in the file name, never in the path above it)
   nj=$(find .claude/.ai-workflow -path '*.run/log/*' -type f -name '[0-9]*-*.jsonl' | grep -E '/log/[0-9]+-[^./]*\.jsonl$' |
     grep -cvE '/log/[0-9]+-[^./]*chiusura[^./]*\.jsonl$')
   nspec=$((nspec + ns)) njsonl=$((njsonl + nj))
@@ -237,7 +238,7 @@ for m in $SCELTI; do
   TARGETS+=("$R/.claude/.ai-workflow")
   cd "$OUT" || exit 1
 done
-imp=$("$FIC_PY" "$SCR/driver.py" equiv --impronta "${TARGETS[@]}" 2>/dev/null | tr -d '\r')
-[[ $imp =~ ^[0-9a-f]{64}$ ]] || die "driver.py equiv --impronta: $imp"
+imp=$("$FIC_PY" "$SCR/driver.py" impronta "${TARGETS[@]}" 2>/dev/null | tr -d '\r')
+[[ $imp =~ ^[0-9a-f]{64}$ ]] || die "driver.py impronta: $imp"
 echo "esempi-equiv: $(printf '%s\n' $SCELTI | grep -c .) mini-repo · spec=$nspec · jsonl=$njsonl"
 echo "impronta $imp"

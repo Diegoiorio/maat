@@ -6,7 +6,7 @@
 #   --linux-parallelo (1.5.1): the Linux part with tools/suite-parallelo.sh of the worktree, run in WSL: one group of
 #     tools/suite-gruppi.list per clone, all at the same time, a suite red only in parallel run again alone. Clones in
 #     MAAT_LINUX_CLONI (relative to the WSL home, default "maat-linux maat-linux-2 maat-linux-3"). Its exit 2 (clones)
-#     or 3 (machine busy: a cycle on Windows, tools/certifica.sh, another parallel run) stops the run before Windows.
+#     or 3 (machine busy: a cycle on Windows, attese.sh --scrivi, another parallel run) stops the run before Windows.
 #   --windows-breve (1.5.1): the Windows part runs only the lines of tools/prova-breve-windows.list (about 50 minutes in
 #     Git Bash), not every suite. A line: [VAR=value …] <entry of suite.list>.
 # Entries of tools/suite.list: resolved by suite_file (tools/lib/guardia-plugin.sh), as tools/suite.sh does.

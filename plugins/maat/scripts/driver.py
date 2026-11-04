@@ -6,12 +6,10 @@
                                                the state machine: next -> phase -> next … until DONE/STOP/WAIT
     driver.py valida <log.jsonl> <schema> <fase> <result.json>
                                                the structured outcome of a phase (run-phase.sh calls it)
-    driver.py equiv [--certifica [--validatori-precedenti <v>[,<v>]]] <folder|spec.md>…
-    driver.py equiv --impronta <folder|spec.md>…
-    driver.py certificato
-                                               the equivalence proof of 1.5.x against the bash engine, which is gone
-                                               in 1.6.0: they no longer prove anything and give way to the expected
-                                               outputs of the public corpus (--impronta stays, as `impronta`)
+    driver.py impronta <folder|spec.md>…       the fingerprint of a corpus (64 hex digits: tools/esempi-equiv/); up to
+                                               1.5.1 `equiv --impronta`. `equiv` and `certificato` (the proof against
+                                               the bash engine) are gone in 1.6.0: the proof is the expected outputs
+                                               of the public corpus, tools/esempi-equiv/attese/
     driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
                                                exceeds the cap (default 300); separately, with no cap, the conditional files,
                                                the load with plan writing (autore.md) and that of the sub-agents
@@ -63,12 +61,10 @@ that enters State.
 
 Variables: FIC_BASH (bash to use) · FIC_CYCLE_STATE (a script instead of our own `next` in `run`, tests) ·
 FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK (context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) ·
-FIC_DRIVER_CERT (certificate read by `certificato` and written by `equiv --certifica`, tests; no effect on `run`) ·
 FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
 Test: driver.test.sh.
 """
 import datetime
-import difflib
 import fnmatch
 import hashlib
 import json
@@ -118,10 +114,6 @@ REVIEW_H = ("## Review implementazione", "## Implementation review")
 # The minimum Python of Maat (1.5.1), checked first by `run`; the same 3.10 as python.sh (fic_py_min_ok)
 # and maat-doctor.sh: driver.test.sh checks that the three agree
 PY_MIN = (3, 10)
-
-
-def _cert_path():
-    return os.environ.get("FIC_DRIVER_CERT") or os.path.join(HERE, "driver.equiv")
 
 
 # ─────────────────────────────────────────────────────────────── utilities
@@ -1407,19 +1399,10 @@ def cmd_run(argv):
         prev = (word, state, label)
 
 
-# ─────────────────────────────────────────────────────────────── equivalence and certificate
+# ─────────────────────────────────────────────────────────────── corpus fingerprint and helpers of the tests
 def _hash(p):
     d = open(p, "rb").read().replace(b"\r", b"")
     return hashlib.sha256(d).hexdigest()
-
-
-def _want():
-    """The certified files. 1.4.0: also the message catalog and its two readers, next to the wrappers (the text is
-    part of the certified output: a change to any of them makes the certificate expire)."""
-    return [("driver", _hash(os.path.abspath(__file__))), ("cycle-state", _hash(CS)), ("run-phase", _hash(RP)),
-            ("messages", _hash(os.path.join(HERE, "lib", "messages.tsv"))),
-            ("maat-msg", _hash(os.path.join(HERE, "lib", "maat-msg.sh"))),
-            ("maat_msg", _hash(os.path.join(HERE, "maat_msg.py")))]
 
 
 def _next_da_script(cs, spec_fs):
@@ -1429,27 +1412,12 @@ def _next_da_script(cs, spec_fs):
 
 
 def _phase_of(label):
+    """The phase of a log label (also the phase of a jsonl of the public corpus, tools/esempi-equiv/attese.sh)."""
     for key, ph in (("chiusura", "chiusura"), ("test-red", "test-red"), ("test-stage", "test-stage"),
                     ("implement", "implement"), ("review", "review"), ("fix", "fix"), ("plan", "plan")):
         if key in label:
             return ph
     return "probe"
-
-
-# The outcome validators a proof can run with (1.5.0): the minimal one of run-phase.sh/driver.py, or jsonschema when the
-# interpreter imports it. Fixed order: the one of the `validatori` field of the certificate.
-VALIDATORI = ("minimo", "jsonschema")
-
-
-def _validatore(py):
-    """The validator of interpreter py: jsonschema if it imports the module (VALIDA_PY of run-phase.sh and
-    schema_errors then use it), otherwise minimo."""
-    try:
-        r = subprocess.run([py, "-c", "import jsonschema"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
-    except OSError:
-        return "minimo"
-    return "jsonschema" if r.returncode == 0 else "minimo"
 
 
 def _git_neutro():
@@ -1510,187 +1478,21 @@ def _impronta_corpus(targets):
     return hashlib.sha256(_enc(testo)).hexdigest()
 
 
-def _uso_equiv():
-    _uso()
-    print(T("driver-equiv.usage"), file=sys.stderr)
-    return 2
-
-
-def cmd_equiv(argv):
-    certifica = impronta = False
-    precedenti, targets = [], []
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a == "--certifica":
-            certifica = True
-        elif a == "--impronta":
-            impronta = True
-        elif a == "--validatori-precedenti":
-            v = argv[i + 1].split(",") if i + 1 < len(argv) else []
-            if not v or any(x not in VALIDATORI for x in v):
-                return _uso_equiv()
-            precedenti += v
-            i += 1
-        elif a.startswith("-"):
-            return _uso_equiv()
-        else:
-            targets.append(a)
-        i += 1
-    if not targets or (impronta and certifica) or (precedenti and not certifica):
-        return _uso_equiv()
-    specs = []
-    for t in targets:
-        if os.path.isdir(t):
-            for n in sorted(os.listdir(t)):
-                p = os.path.join(t, n)
-                if fnmatch.fnmatchcase(n, "spec-*.md") and os.path.isfile(p) and os.path.isdir(p[:-3] + ".run"):
-                    specs.append(os.path.abspath(p))
-        elif os.path.isfile(t):
-            specs.append(os.path.abspath(t))
-        else:
-            print("equiv: " + T("driver.equiv_not_found", t=t), file=sys.stderr)
+def cmd_impronta(argv):
+    """driver.py impronta <folder|spec.md>…: the fingerprint of a corpus (_impronta_corpus), 64 hex digits (1.5.0 as
+    `equiv --impronta`; 1.6.0: a command of its own, the equivalence proof is gone)."""
+    if not argv or any(a.startswith("-") for a in argv):
+        return _uso()
+    for t in argv:
+        if not os.path.exists(t):
+            print("impronta: " + T("driver-cmd.not_found", t=t), file=sys.stderr)
             return 2
-    if impronta:
-        print(_impronta_corpus(targets))
-        return 0
-    # 1.4.0: the proof runs once per language, with MAAT_LINGUA set explicitly on both sides (this process too: T
-    # reads the variable at every call) and the environment of the bash side rebuilt for each; the certificate is
-    # written only if both languages pass.
-    prima = os.environ.get("MAAT_LINGUA")
-    esiti = []
-    try:
-        for lingua in LINGUE_EQUIV:
-            os.environ["MAAT_LINGUA"] = lingua
-            print("equiv: lingua %s" % lingua)
-            esiti.append(_equiv_lingua(specs))
-    finally:
-        if prima is None:
-            os.environ.pop("MAAT_LINGUA", None)
-        else:
-            os.environ["MAAT_LINGUA"] = prima
-    if any(ds or dj for ds, _nj, dj in esiti):
-        return 1
-    if certifica:
-        if not specs:
-            print("equiv: " + T("driver.equiv_nothing"), file=sys.stderr)
-            return 1
-        # 1.5.0: the corpus line ends with the fingerprint of what was proved and the validators: this pass's (the
-        # interpreter of both sides, _equiv_lingua) joined with those of the earlier passes (tools/certifica.sh)
-        fp = _impronta_corpus(targets)
-        corrente = _validatore(os.environ.get("FIC_PY") or sys.executable)
-        vals = ",".join(v for v in VALIDATORI if v == corrente or v in precedenti)
-        with open(_cert_path(), "wb") as fh:
-            fh.write(_enc("# driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv "
-                          "--certifica`.\n# Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se "
-                          "driver.py e loro stessi hanno ancora questi hash (CR tolti).\n"))
-            for k, v in _want():
-                fh.write(_enc("%s %s\n" % (k, v)))
-            fh.write(_enc("corpus spec=%d jsonl=%d · lingue %s · %s · impronta %s · validatori %s\n" % (
-                len(specs), esiti[0][1], ",".join(LINGUE_EQUIV),
-                _utc(int(datetime.datetime.now(datetime.timezone.utc).timestamp())), fp[:12], vals)))
-        print("equiv: " + T("driver.equiv_written", path=_cert_path()))
-    return 0
-
-
-LINGUE_EQUIV = ("it", "en")
-
-
-def _equiv_lingua(specs):
-    """One pass of the proof in the language of MAAT_LINGUA: next against standalone cycle-state.sh, valida against
-    run-phase.sh --valida. Prints UGUALE/DIVERSO and the summary line; returns (specs different, jsonl, different).
-    1.5.0 (informative, the exit does not change): after the summary line one «equiv: AVVISO — …» per spec whose Next
-    (bash side) is not DONE, the stronger one when its harness.fp is not UGUALE in this language, and the line
-    «equiv: aperte=<n> · impronta-non-uguale=<k>»."""
-    py = os.environ.get("FIC_PY") or sys.executable   # the same interpreter for the driver and for --valida
-    env0 = dict(os.environ, FIC_DRIVER="0", FIC_PYTHON=py)
-    ds = dj = nj = 0
-    avvisi, nonug = [], 0
-    for s in specs:
-        _, a = _run([BASH, _fw(CS), shown(s)], env=env0)
-        b = "\n".join(cycle_state(s)) + "\n"
-        nm = os.path.basename(s)[:-3]
-        nxt = next((l for l in reversed(a.split("\n")) if l.startswith("Next: ")), "")
-        word = (nxt[6:].split() or ["?"])[0]
-        if word != "DONE":
-            v = _hfp_verdetto(s, env0)
-            if v is not None and v != "UGUALE":
-                nonug += 1
-                avvisi.append(T("driver-equiv.open_hfp", spec=nm, verdict=v, word=word))
-            else:
-                avvisi.append(T("driver-equiv.open", spec=nm, word=word))
-        if a == b:
-            print("UGUALE %s · %s" % (nm, nxt))
-        else:
-            ds += 1
-            print("DIVERSO %s" % nm)
-            for l in difflib.unified_diff(a.split("\n"), b.split("\n"), "cycle-state.sh", "driver.py next", lineterm="", n=0):
-                print("    " + l)
-    tmp = tempfile.mkdtemp(prefix="fic-equiv-")
-    try:
-        for s in specs:
-            run_fs = s[:-3] + ".run"
-            for n in sorted(_names(run_fs)):
-                m = re.match(r"^([0-9]+-[^.]*)\.jsonl$", n)
-                if not m or _phase_of(m.group(1)) == "chiusura":
-                    continue
-                nj += 1
-                jl, ph = os.path.join(run_fs, "log", n), _phase_of(m.group(1))
-                o1, o2 = os.path.join(tmp, "a.json"), os.path.join(tmp, "b.json")
-                for o in (o1, o2):
-                    if os.path.exists(o):
-                        os.remove(o)
-                r1 = subprocess.run([BASH, _fw(RP), "--valida", _fw(jl), _fw(SCHEMA), ph, _fw(o1)],
-                                    stdin=subprocess.DEVNULL, capture_output=True, env=env0)
-                r2 = subprocess.run([py, os.path.abspath(__file__), "valida", jl, SCHEMA, ph, o2],
-                                    stdin=subprocess.DEVNULL, capture_output=True, env=dict(os.environ))
-                f1 = open(o1, "rb").read() if os.path.exists(o1) else None
-                f2 = open(o2, "rb").read() if os.path.exists(o2) else None
-                same = (r1.returncode == r2.returncode and r1.stdout.replace(b"\r", b"") == r2.stdout.replace(b"\r", b"")
-                        and r1.stderr.replace(b"\r", b"") == r2.stderr.replace(b"\r", b"") and f1 == f2)
-                if not same:
-                    dj += 1
-                    print("DIVERSO valida %s/log/%s: exit %d/%d · stdout %r / %r · result.json %s" % (
-                        os.path.basename(run_fs), n, r1.returncode, r2.returncode, _dec(r1.stdout)[:200],
-                        _dec(r2.stdout)[:200], "uguale" if f1 == f2 else "diverso"))
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    print("equiv: spec=%d diverse=%d · jsonl=%d diversi=%d" % (len(specs), ds, nj, dj))
-    for w in avvisi:
-        print("equiv: AVVISO — " + w)
-    print("equiv: aperte=%d · impronta-non-uguale=%d" % (len(avvisi), nonug))
-    return ds, nj, dj
-
-
-def _hfp_verdetto(spec_fs, env):
-    """The first word of `run-phase.sh --harness-fp-confronta` (UGUALE, CAMBIATO, …) on the harness.fp of the spec's
-    run dir, with env (its MAAT_LINGUA: the language is part of the fingerprint); None without harness.fp. The repo
-    as harness_gap of cycle_state finds it."""
-    hf = spec_fs[:-3] + ".run" + os.sep + "harness.fp"
-    if not os.path.isfile(hf):
-        return None
-    cwd = os.path.dirname(spec_fs)
-    repo = os.environ.get("FIC_REPO") or _subst(_run(["git", "rev-parse", "--show-toplevel"], cwd=cwd)[1])
-    out = _subst(_run([BASH, _fw(RP), "--harness-fp-confronta", _fw(hf), repo], cwd=cwd, env=env)[1]) if repo else ""
-    return (out.split() or ["NON-CALCOLABILE"])[0]
-
-
-def cmd_certificato():
-    t = _read(_cert_path())
-    if t is None:
-        print("certificato: ASSENTE (%s)" % _cert_path())
-        return 1
-    have = set(l.strip() for l in t.replace("\r", "").split("\n"))
-    bad = [k for k, v in _want() if "%s %s" % (k, v) not in have]
-    if bad:
-        print("certificato: SCADUTO — " + T("driver.cert_stale", keys=", ".join(bad)))
-        return 1
-    print("certificato: VALIDO — %s" % next((l for l in have if l.startswith("corpus ")), "corpus ?"))
+    print(_impronta_corpus(argv))
     return 0
 
 
 def _uso():
-    print(T("driver.usage"), file=sys.stderr)
+    print(T("driver-cmd.usage"), file=sys.stderr)
     return 2
 
 
@@ -1714,10 +1516,8 @@ def main(argv):
         if len(rest) != 4:
             return _uso()
         return cmd_valida(*rest)
-    if cmd == "equiv":
-        return cmd_equiv(rest)
-    if cmd == "certificato" and not rest:
-        return cmd_certificato()
+    if cmd == "impronta":
+        return cmd_impronta(rest)
     if cmd == "righe":
         return cmd_righe(rest)
     return _uso()

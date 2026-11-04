@@ -1,9 +1,10 @@
-# rami-valida.list — the branches of the outcome validator, VALIDA_PY of plugins/maat/scripts/run-phase.sh and its
-# twin `driver.py valida`, and the phases of _phase_of (driver.py), one label per branch (Maat 1.5.0).
+# rami-valida.list — the branches of the outcome validator, `driver.py valida` (up to 1.5.1 also VALIDA_PY of
+# run-phase.sh), and the phases of _phase_of (driver.py), one label per branch (Maat 1.5.0). 1.6.0: the output of
+# every jsonl is recorded in attese/valida-<validator>-<language>.txt (tools/esempi-equiv/attese.sh).
 # Format: <label><TAB><what><TAB><out><TAB><result><TAB><in>. Every label has at least one jsonl in casi.tsv
 # (tools/esempi-equiv.test.sh); no jsonl of the corpus is empty (an empty one exits 0 on both sides and proves nothing).
 # The last three fields say how a jsonl that goes through the branch shows it («-»: no condition); at least one jsonl
-# of casi.tsv with that label must meet all three, with `run-phase.sh --valida <jsonl> <schema> <phase> <result.json>`
+# of casi.tsv with that label must meet all three, with `driver.py valida <jsonl> <schema> <phase> <result.json>`
 # (phase = _phase_of of its label, MAAT_LINGUA=it, exit 0):
 #   out     ERE on the stdout, its lines joined by « ## » («^$»: no output)
 #   result  «no»: no result.json written; otherwise an ERE on the result.json written

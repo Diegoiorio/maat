@@ -70,11 +70,8 @@ scripts/maat-doctor.sh	^"valida"$|^"\$VALIDA"$	8: chiave della riga meta #valida
 scripts/plan-check.sh	\b(VIOLAZIONE|AVVISO|ERRORE DURO)\b|Percorso: (leggero|pieno)|Scheletro: (SOPRA|SOTTO) IL TETTO|S2: (APPROVA|CORREGGI|RILANCIA|IMPRONTA DIVERSA|STOP)	9: parole chiave lette da skill e test (D2)
 scripts/*	\bAVVISO\b	9: parola chiave (D2)
 
-# --- 10. certificate tools
-scripts/driver.py	\b(UGUALE|DIVERSO)\b|equiv: spec=%d diverse=%d · jsonl=%d diversi=%d|certificato: (VALIDO|ASSENTE|SCADUTO)|"certificato"	10: uscita di equiv/certificato, letta da driver.test.sh:301 e dal flusso H
-scripts/driver.py	^"(# driver\.equiv — certificato di equivalenza|--certifica`\.\\n# Gli involucri|driver\.py e loro stessi hanno).*"$	10: intestazione di driver.equiv, scritta da equiv --certifica (strumento del certificato)
-scripts/driver.py	valida %s/log/%s: |^"(uguale|diverso)"$	10: riga DIVERSO di equiv per valida (uscita del certificato)
-scripts/driver.py	equiv: aperte=%d · impronta-non-uguale=%d| · impronta %s · validatori %s|^"--impronta"$|^"ASSENTE"$	10 (1.5.0): riga di equiv dopo quella congelata (D6) e campi impronta/validatori della riga corpus del certificato (D3), letti da tools/certifica.sh e dai test; l'opzione --impronta; ASSENTE, campo di una riga dell'impronta del corpus
+# --- 10. the corpus fingerprint (driver.py impronta; 1.6.0: equiv and certificato are gone)
+scripts/driver.py	^"ASSENTE"$	10 (1.5.0): ASSENTE, campo di una riga dell'impronta del corpus (_impronta_corpus)
 
 # --- 11. run-phase.sh --lock-status tokens (read by harness-merge.sh:51 with an unquoted case, and by the skills)
 scripts/run-phase.sh	^"libero( \(|"$)|^"occupato: |^"sconosciuto: |^"dentro il ciclo \(fase 	11: token di --lock-status, letti da harness-merge.sh:51 e implementation-review-cycle/SKILL.md:80
@@ -93,7 +90,7 @@ scripts/maat-doctor.sh	^"(nessuna|sì|cartella|radice|controprova)"$	valore o ch
 scripts/maat-doctor.sh	^"(altro|windows-senza-wsl)"$	valori di --piattaforma, letti da /maat:setup (skills/setup/SKILL.md:37-42): uguali in ogni lingua
 scripts/plan-check.sh	^"(controprova|rossi|radice|dopo|scrive)"$	chiave di maat.json, nome di sottocomando o chiave interna (scrive/dopo)
 scripts/counterproof.sh	^"(riga|controprova|cartella|radice|anche|esito|motivo|luogo|assorbita|non_eseguita)"$|/anche"$	nome di sottocomando interno; chiavi e valori di maat.json e di <id>.json (letti da finalize.sh), nomi dei file interni di prep
-scripts/driver.py	^"(valida|righe|chiusura|deviazioni|--max-fasi)"$	sottocomando, nome di fase, chiave di result.json, opzione
+scripts/driver.py	^"(valida|righe|impronta|chiusura|deviazioni|--max-fasi)"$	sottocomando, nome di fase, chiave di result.json, opzione
 scripts/test-fast.sh	moduli\.\$i\.controprova\.runner	chiave di maat.json
 scripts/fic-mirror.sh	^"\$\{nuovi\[@\]\}"$	nome di variabile (array dei file da copiare nel ripiego senza rsync)
 scripts/context-pack.sh	^"(esiste|trovato|ambiguo|assente)"$	tipo interno di un candidato
