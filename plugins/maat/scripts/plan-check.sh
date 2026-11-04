@@ -1226,7 +1226,7 @@ def id_py(M):
         nm, par = (T["name"].split("[", 1) + [None])[:2]
         if T["path"].endswith(".py") and "." in nm:
             want = T["path"] + "::" + "::".join(x for x in nm.split(".") if x) + ("[" + par if par is not None else "")
-            out.append(_msg.T("plan-check.id_py", n=T["n"], id=tid, got=T["path"] + "::" + T["name"], want=want))
+            out.append(_msg.T("plan-check-z.id_py", n=T["n"], id=tid, got=T["path"] + "::" + T["name"], want=want))
     return out
 
 
@@ -1295,10 +1295,10 @@ def firma_base(M, root):
                     bad = [k.arg for k in c.keywords if k.arg is not None and k.arg not in kws]
                     npass = len(c.args)
                     if bad and not vk:
-                        errs.append(_msg.T("plan-check.sig_kw", n=T["n"], id=tid, fn=name, f=f, p=bad[0],
+                        errs.append(_msg.T("plan-check-z.sig_kw", n=T["n"], id=tid, fn=name, f=f, p=bad[0],
                                            texts=" | ".join(T["texts"])))
                     elif not va and not any(isinstance(a, ast.Starred) for a in c.args) and npass > npos:
-                        errs.append(_msg.T("plan-check.sig_pos", n=T["n"], id=tid, fn=name, f=f, k=npos, m=npass,
+                        errs.append(_msg.T("plan-check-z.sig_pos", n=T["n"], id=tid, fn=name, f=f, k=npos, m=npass,
                                            texts=" | ".join(T["texts"])))
                 if cand and len(errs) == len(cand):
                     why = errs[0]
@@ -1320,7 +1320,7 @@ def report_nessuno(M):
         if mt is None or kt != "radice" or mt["nome"] in seen or (mt.get("report") or "nessuno") != "nessuno":
             continue
         seen.add(mt["nome"])
-        out.append(_msg.T("plan-check.report_none", id=tid, nome=mt["nome"], path=T["path"]))
+        out.append(_msg.T("plan-check-z.report_none", id=tid, nome=mt["nome"], path=T["path"]))
     return out
 
 
@@ -2111,7 +2111,8 @@ def cmd_rossi(M, root, run, ev):
         if not isinstance(d, dict) or g not in rep or rep[g] is False:
             why = _msg.T("plan-check.red_no_ev") if not isinstance(d, dict) else (
                 _msg.T("plan-check.red_gate_esito", esito=d.get("esito"), motivo=d.get("motivo") or "") if g not in rep else
-                _msg.T("plan-check.red_report_bad") if fmt[g] != "nessuno" else _msg.T("plan-check.red_report_none"))
+                _msg.T("plan-check.red_report_bad") if fmt[g] != "nessuno" else
+                _msg.T("plan-check.red_report_none") + " (" + _msg.T("plan-check-z.red_report_none_fix") + ")")
             if "%s: %s" % (g, why) not in blocked:
                 blocked.append("%s: %s" % (g, why))
             continue

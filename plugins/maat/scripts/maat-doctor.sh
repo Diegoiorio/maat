@@ -671,7 +671,7 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             # D-B (1.6.0): every new plan is format 2, and its test-red phase reads the outcome of each test from the
             # report: without one the full cycle stops BLOCKED at test-red. ATTENZIONE, not MANCA: plan and review
             # cycles work without it, and a project that only uses them keeps its exit code.
-            out.append(lambda: riga("ATTENZIONE", T("maat-doctor.report_none", nome=nome), T("maat-doctor.report_none_fix")))
+            out.append(lambda: riga("ATTENZIONE", T("maat-doctor-z.report_none", nome=nome), T("maat-doctor-z.report_none_fix")))
 
     # --- controlli (checks)
     for j, v in enumerate(m.get("controlli", [])):

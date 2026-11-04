@@ -115,6 +115,7 @@ scripts/plan-check.sh	"NON DISPONIBILE (—|\\u2014) "|^"altri: "$	5: righe di g
 scripts/plan-check.sh	^"rossi\.json"$|\$\{ts:-ASSENTE\}	nome di file del run dir; valore di «Tests status:» di basis passato a PY2 l2
 scripts/blocks-independent.py	^"\(nessuno\)"$|^"nessuno"$|^"dopo"$	5+6: valori della riga blocco di plan-check (scrive=(nessuno), dopo=nessuno) e chiave interna dopo; «(nessuno)» della riga posteriori: esito=OK
 scripts/finalize.sh	--default nessuno|^"(stato|gate|controprove|scrivi|unisci)"$	valore di maat.json (report nessuno); sottocomandi del Python interno
+scripts/maat-doctor.sh	^"nessuno"$	valore di maat.json (report nessuno, 1.6.0 blocco Z), come finalize.sh
 scripts/gates.sh	^"node=wsl non raggiungibile"$|echo assente|<non impostata>|'eseguito'|^"(scrivi|stato|invalida|riga|totale)"$	componenti della chiave dei gate che non sono motivi (chiave.txt: cambiarli invaliderebbe le evidenze); token eseguito/riuso delle righe dei gate; sottocomandi del Python interno
 
 # --- exemptions: text that is not Maat's
