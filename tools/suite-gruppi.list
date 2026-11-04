@@ -1,0 +1,47 @@
+# The suites of tools/suite.list in groups of similar length: one CI job per group (.github/workflows/ci.yml, matrix
+# gruppo) and one Linux clone per group in the parallel run (tools/suite-parallelo.sh). Line: <group> <entry>, the
+# entry spelled as in tools/suite.list. `tools/suite.sh --gruppo <k>/<n>` refuses (exit 2) a file whose groups are not
+# 1..n, an entry of suite.list in no group or in two, an entry here that is not in suite.list.
+# Inside a group the suites run in the order of suite.list. Balanced on the Linux times (seconds, clone in WSL) of the
+# 1.5.0 full run, rollback 218 s and driver 382 s measured for 1.5.1: group 1 ≈ 816 s, group 2 ≈ 818 s, group 3 ≈ 804 s.
+# tools/esempi-equiv.test.sh (the strict check of the certificate, MAAT_CERT_RICHIESTO) is in group 3.
+# A suite red only in the parallel run goes in a group of its own (docs/TESTING-harness.md, «The parallel run»).
+
+# group 1: the driver and the phases
+1 driver
+1 run-phase
+1 finalize
+1 guard
+
+# group 2: the oracle, the rollback, the resume table
+2 tools/oracolo.test.sh
+2 rollback
+2 cycle-state
+2 messages
+2 phase-events
+
+# group 3: the public examples (certificate), the WSL tools, all the short ones
+3 tools/esempi-equiv.test.sh
+3 counterproof
+3 plan-check
+3 test-fast
+3 spazi
+3 comandi-equivalenza
+3 gates
+3 tools/suite.test.sh
+3 maat-paths
+3 maat-config
+3 ciclo-worktree
+3 context-pack
+3 cycle-report
+3 harness-merge
+3 stop-hook
+3 blocks-independent
+3 test-review-surface
+3 bash-node
+3 genericita
+3 maat-doctor
+3 senza-wsl
+3 session-start
+3 phase-usage
+3 vitest-classify

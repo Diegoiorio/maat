@@ -1,0 +1,26 @@
+# The short proof on Windows (Maat 1.5.1): the quick suites in Git Bash, about 50 minutes in all, instead of the whole
+# Windows part of the full run (about 10 hours). `bash tools/giro-completo.sh --windows-breve …` runs these lines in this
+# order; each entry must be in tools/suite.list. A line: [VAR=value …] <entry>. The real Windows proof moves to the
+# multi-platform CI (1.5.3). Seconds measured in Git Bash in the 1.5.0 full run (machine shared with other sessions).
+tools/suite.test.sh
+stop-hook
+blocks-independent
+phase-usage
+session-start
+harness-merge
+phase-events
+maat-config
+context-pack
+genericita
+senza-wsl
+maat-paths
+messages
+cycle-report
+guard
+bash-node
+test-review-surface
+gates
+# total ≈ 2900 s (≈ 48 min): 35 10 16 19 33 47 57 70 94 125 136 200 213 232 247 248 270 826.
+# Left out: ROLLBACK_TEST_RAPIDO=1 rollback (≈ 3100 s, 52 min, measured for 1.5.1): with it the proof would take
+# about 1 h 40 min. Run it by hand when a release touches the wrappers (docs/TESTING-harness.md, «The short proof on
+# Windows»); to add it here, the line is: ROLLBACK_TEST_RAPIDO=1 rollback
