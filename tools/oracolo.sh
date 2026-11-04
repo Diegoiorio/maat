@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oracolo.sh — the old-against-new oracle of the plugin (Maat 1.5.0, D10): two plugins on the same projects, the
 # outputs of the resume table compared. A tool of the repo, not of the plugin.
-#   bash tools/oracolo.sh [--esiti <folder>] <old> <new> <project>…
+#   bash tools/oracolo.sh [--esiti <folder>] [--motore bash|predefinito] <old> <new> <project>…
 # <old>, <new>: a plugin folder (it has .claude-plugin/plugin.json; a repo root with plugins/maat/ is accepted too) or
 #   a git ref of this repository (`git archive <ref> plugins/maat`; MAAT_ORACOLO_REPO: another repository).
 # <project>: the root of a project with .claude/.ai-workflow/ (e.g. a mini-repo of the corpus built by
@@ -17,8 +17,16 @@
 #      the intact copy (touch -r: the mtime enters the «since» of row 0). Every rewritten file must then be UGUALE for
 #      `run-phase.sh --harness-fp-confronta` of that side: no Next is decided by a rewritten harness.fp. A rewrite that
 #      fails leaves the file as it was (an AVVISO line);
-#   2. for every spec with its run dir (the specs `driver.py equiv` sees): `cycle-state.sh` (FIC_DRIVER=0: the table
-#      in bash, never the driver), `plan-check.sh basis` and `plan-check.sh contract`: stdout (CR removed) and exit code.
+#   2. for every spec with its run dir (the specs `driver.py equiv` sees): `cycle-state.sh` with the chosen engine,
+#      `plan-check.sh basis` and `plan-check.sh contract`: stdout (CR removed) and exit code.
+# --motore (1.5.1, D9): the engine of `cycle-state.sh` on BOTH sides. `bash` (the default, the behaviour of 1.5.0):
+#   FIC_DRIVER=0, the table in bash, never the driver — proves the bash table did not change. `predefinito`:
+#   FIC_DRIVER unset, each side decides as its users get it (1.5.1: always the Python driver; 1.5.0: the driver only
+#   with a VALIDO certificate, otherwise the bash table) — proves the real decider did not change. FIC_DRIVER_PY
+#   (a test's replacement driver) is unset on both sides. At the top, one line per side: «oracolo: motore <m> ·
+#   certificato <side> <verdict>», the verdict of `driver.py certificato` of that side (FIC_DRIVER_CERT unset, MAAT_LINGUA
+#   it): with `predefinito` an old side SCADUTO decides with bash, and that must be seen. Informative only: it never
+#   changes the exit code.
 # One normalization, declared: the CURRENT harness fingerprint of the side (`run-phase.sh --harness-fp` of that side, in
 # that language, on that project: 64 hex and its first 12) becomes <impronta-attuale> in the records. The STOPs of row 0
 # print it («attuale <12>»), and two different plugins have two different fingerprints by construction; the recorded
@@ -40,10 +48,17 @@ export LC_ALL=C PYTHONDONTWRITEBYTECODE=1
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REPO=${MAAT_ORACOLO_REPO:-$ROOT}
 
-usage() { echo "usage: bash tools/oracolo.sh [--esiti <folder>] <old> <new> <project>…   (old, new: plugin folder or git ref)" >&2; exit 2; }
+usage() { echo "usage: bash tools/oracolo.sh [--esiti <folder>] [--motore bash|predefinito] <old> <new> <project>…   (old, new: plugin folder or git ref)" >&2; exit 2; }
 die() { echo "oracolo.sh: $1" >&2; exit 2; }
-ESITI=
-if [ "${1:-}" = --esiti ]; then [ $# -ge 2 ] || usage; ESITI=$2; shift 2; fi
+ESITI= MOTORE=bash
+while [ $# -gt 0 ]; do
+  case $1 in
+    --esiti) [ $# -ge 2 ] || usage; ESITI=$2; shift 2 ;;
+    --motore) [ $# -ge 2 ] || usage; MOTORE=$2; shift 2
+      case $MOTORE in bash|predefinito) ;; *) die "--motore: bash or predefinito, not «$MOTORE»" ;; esac ;;
+    *) break ;;
+  esac
+done
 [ $# -ge 3 ] || usage
 VECCHIO=$1 NUOVO=$2; shift 2
 if [ -n "$ESITI" ]; then
@@ -97,6 +112,21 @@ estrai_en() { # the fields compared in en
     !m { print }' "$1"
 }
 
+# --- the certificate of each side (informative): the verdict of its driver.py certificato, in the same path $T/maat ---
+for lato in vecchio nuovo; do
+  rm -rf "$T/maat"; cp -R "$T/lati/$lato" "$T/maat" || die "copy of the $lato side"
+  v=$(
+    unset FIC_DRIVER_ROOT FIC_DRIVER_CERT MAAT_MSG_PY
+    export MAAT_ROOT=$T/maat MAAT_LINGUA=it
+    cd "$T" || exit 0
+    [ -f "$T/maat/scripts/driver.py" ] || { echo "non verificabile (nessun driver.py)"; exit 0; }
+    FIC_PY=""; . "$T/maat/scripts/python.sh" 2>/dev/null
+    [ -n "$FIC_PY" ] || { echo "non verificabile (nessun Python)"; exit 0; }
+    "$FIC_PY" "$T/maat/scripts/driver.py" certificato 2>/dev/null | tr -d '\r' | sed -n '1s/^certificato: //p'
+  )
+  echo "oracolo: motore $MOTORE · certificato $lato ${v:-non verificabile (nessuna uscita)}"
+done
+
 riscritti=0 conservati_n=0 non_uguali=0
 for lato in vecchio nuovo; do
   rm -rf "$T/maat"; cp -R "$T/lati/$lato" "$T/maat" || die "copy of the $lato side"
@@ -107,8 +137,9 @@ for lato in vecchio nuovo; do
       rm -rf "$P"; mkdir -p "$T/progetti" "$E"; cp -a "$T/intatti/$n" "$P" || die "copy of $n"
       (
         cd "$P" || exit 2
-        unset FIC_REPO FIC_DRIVER_ROOT FIC_DRIVER_CERT MAAT_MSG_PY
-        export MAAT_ROOT=$T/maat FIC_DRIVER=0 MAAT_LINGUA=$lingua
+        unset FIC_REPO FIC_DRIVER_ROOT FIC_DRIVER_CERT FIC_DRIVER_PY MAAT_MSG_PY
+        export MAAT_ROOT=$T/maat MAAT_LINGUA=$lingua
+        if [ "$MOTORE" = bash ]; then export FIC_DRIVER=0; else unset FIC_DRIVER; fi   # MOTORE
         W=.claude/.ai-workflow
         keep=$(conservati .)
         for fp in "$W"/*.run/harness.fp; do
