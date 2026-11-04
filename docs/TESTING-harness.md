@@ -532,6 +532,7 @@ Seven small git repositories, built from models, with 65 specs and 49 counted js
 | `MAAT_ORACOLO_TEST=completo\|ridotto` | `oracolo.test.sh` | the case with both sides from a git ref, on the whole corpus or on two small mini-repos (same defaults) |
 | `MAAT_ORACOLO_REPO` | `oracolo.sh` | the repository the git refs are read from (default: this one) |
 | `oracolo.sh --esiti <folder>` | `oracolo.sh` | keeps the records of each side and language (`<folder>/<side>-<language>/<project>/<spec>.txt`) |
+| `oracolo.sh --motore bash\|predefinito` | `oracolo.sh` | the engine of `cycle-state.sh` on both sides: `FIC_DRIVER=0` (default) or unset |
 | `--rigenera` with `MAAT_RIF_REPO` | `comandi-equivalenza.test.sh` | rewrites the frozen reference from the private history (see «The commands of the gates») |
 | `ROLLBACK_TEST_RAPIDO=1`, `ROLLBACK_TEST_TIENI=1` | `rollback.test.sh` | scenario S1 only (+ the driver failure, counterproofs (a) and (d)); keep the temporary folder |
 | `suite.sh --gruppo <k>/<n>` | `tools/suite.sh` | group k of `tools/suite-gruppi.list` only (CI, parallel run) |
@@ -544,7 +545,7 @@ A check of each release, separate from the certificate: two versions of the plug
 the resume table compared.
 
 ```bash
-bash tools/oracolo.sh [--esiti <folder>] <old> <new> <project>…
+bash tools/oracolo.sh [--esiti <folder>] [--motore bash|predefinito] <old> <new> <project>…
 ```
 
 - `<old>`, `<new>`: a plugin folder or a git ref of this repository (for example `v1.4.0` and `HEAD`).
@@ -556,10 +557,16 @@ bash tools/oracolo.sh [--esiti <folder>] <old> <new> <project>…
 - Compared, for every spec: in `it` the whole output of `cycle-state.sh`, `plan-check.sh basis` and `contract`; in
   `en` the `State`, the last code phase, the first word of `Next`, `basis` and `contract`. Last line `oracolo: spec=N ·
   it uguali=… · en uguali=… · diverse=…`, the diffs below. Exit 0 identical, 1 a difference, 2 usage.
-- `tools/oracolo.test.sh` runs it on the examples (same plugin on both sides: identical) with three mutations that must
-  be red. About 70 minutes in Git Bash: the full run sends it to WSL.
-- TODO blocco F — the option that chooses the engine of the two sides (1.5.1): description to be added when block F
-  is done.
+- `--motore` (1.5.1) chooses the engine of `cycle-state.sh` on both sides. `bash` (the default, as in 1.5.0) sets
+  `FIC_DRIVER=0`: it proves the bash table did not change. `predefinito` unsets `FIC_DRIVER`: each side decides as its
+  users get it (1.5.1 always the Python driver; 1.5.0 the driver only with a VALIDO certificate), so it proves the real
+  decider did not change. At each release both are run. At the top, one line per side, `oracolo: motore <m> ·
+  certificato <side> <verdict>` (the verdict of `driver.py certificato` of that side): with `predefinito` an old side
+  SCADUTO would decide with bash, and the comparison would lose its meaning. The line is informative and never changes
+  the exit code.
+- `tools/oracolo.test.sh` runs it on the examples (same plugin on both sides: identical) with five mutations that must
+  be red (two of them, 1.5.1, check that `--motore` really changes the engine). About 6 minutes on Linux, about 70 in
+  Git Bash: the full run sends it to WSL.
 
 ### Optional: the private corpus
 

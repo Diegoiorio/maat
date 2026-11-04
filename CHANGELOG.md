@@ -38,8 +38,10 @@ driver already decided. What changes is what happens when something is wrong.
   counterproofs). **Limit:** it covers a format-1 cycle (plan, implement, review, fix) and a STOP with its recovery,
   in Italian. The rollback is not proven on a chain (mother and rings) nor on a format-2 cycle with lanes, nor in
   English: there the equivalence of the two engines rests on `driver.equiv` and on the old-against-new oracle.
-- **Oracle:** TODO blocco F — the new option of `tools/oracolo.sh` that chooses the engine (description to be added
-  when block F is done).
+- **Oracle:** `tools/oracolo.sh --motore bash|predefinito` (default `bash`, the 1.5.0 behaviour: `FIC_DRIVER=0` on
+  both sides, it proves the bash table did not change). `predefinito` unsets `FIC_DRIVER`, so each side decides with
+  its default engine: it proves the real decider did not change. At the top one line per side shows the verdict of
+  its certificate (informative, it never changes the exit code).
 - **Faster proofs.** The CI runs the suites in three jobs at the same time, one per group of `tools/suite-gruppi.list`
   (`tools/suite.sh --gruppo <k>/<n>`); the check «linux» is green only when all three are, and each job has a limit
   of 30 minutes instead of 45 for the single job. On a Linux machine, `tools/suite-parallelo.sh` runs the same groups
