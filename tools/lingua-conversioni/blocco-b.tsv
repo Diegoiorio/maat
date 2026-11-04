@@ -6,7 +6,6 @@
 
 # ---------------------------------------------------------------- cycle-state.sh and driver.py next
 cycle-state.usage	scripts/cycle-state.sh:108#2	-	-	script	usage: {script} <spec-<name>.md>
-cycle-state.driver_failed	scripts/cycle-state.sh:131	AVVISO: 	-	-	driver.py next failed: cycle-state.sh standalone
 cycle-state.json_dev	scripts/driver.py:315	STOP|	-	n devs	declared deviations ({n}): {devs}
 cycle-state.json_dev	scripts/cycle-state.sh:262!py	STOP|	-	n devs	declared deviations ({n}): {devs}
 cycle-state.json_blocked	scripts/driver.py:317	STOP|	-	-	blocked on: 
