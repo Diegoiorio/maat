@@ -1,0 +1,22 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.5",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "humanize",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "{m}.go", "a": "*_test.go" },
+      "ambiente": "nativo",
+      "comandi": {
+        "test": "go vet ./... && go test -count=1 ./... && : {test}"
+      },
+      "controlli": [
+        { "glob": "**/*.go", "comando": "test -z \"$(gofmt -l {file})\"", "se_presente": "gofmt" }
+      ],
+      "file_dipendenze": ["go.mod"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}

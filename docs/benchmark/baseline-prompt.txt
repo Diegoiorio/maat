@@ -1,0 +1,5 @@
+Implement the specification in {spec} in this repository.
+Test the change with the project's tests and checks, adding tests where the specification asks for them.
+Nobody will answer questions during this session: when something is unclear, make a reasonable choice and say so in your report.
+Do not commit, do not push, and do not install anything: the environment is already set up.
+When you are done, end with a report: what you changed (files), what you verified and how (commands and their results), and anything you could not verify or that remains open.

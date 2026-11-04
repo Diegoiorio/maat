@@ -1,0 +1,18 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.5",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "scripts",
+      "radice": ".",
+      "regola_test": "nessuna",
+      "controlli": [
+        { "glob": "git-*", "comando": "sh -n {file}" },
+        { "glob": "git-*", "comando": "dash -n {file}", "se_presente": "dash" },
+        { "glob": "git-*", "comando": "shellcheck -s sh {file}", "se_presente": "shellcheck" }
+      ]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}
