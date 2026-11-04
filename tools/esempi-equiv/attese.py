@@ -18,7 +18,8 @@ All the forms of a file are tried at each position from the longest to the short
 BLOCKS: a block starts with a line «== <mini-repo>/<spec or jsonl>» (no space after «== » up to the end of the line,
 and a «/» in it) and runs to the next one. `confronta` takes from <expected> only the blocks of the mini-repos given
 (all if none), and prints one line per difference: «DIVERSO <block>», «MANCA <block>» (expected, not computed),
-«IN PIU <block>» (computed, not expected), «ORDINE» (same blocks, another order); then the unified diff of the blocks
+«IN PIU <block>» (computed, not expected), «ORDINE» (same blocks, another order), «TESTO …» (the whole file compared:
+same blocks but different bytes, e.g. the newline at the end); then the unified diff of the blocks
 that differ (at most 80 lines). The bytes are compared as they are (attese.sh removes the CRs before).
 """
 import difflib
@@ -65,7 +66,10 @@ def normalizza(forme, data):
 def blocchi(data):
     """[(header, text of the block)] in order; the lines before the first header form a block with header b""."""
     out, cur, buf = [], b"", []
-    for l in data.split(b"\n"):
+    righe = data.split(b"\n")
+    if righe and righe[-1] == b"":   # the newline that ends the file is not part of its last block
+        righe.pop()
+    for l in righe:
         m = HEAD.match(l)
         if m and not l.startswith(b"== exit"):
             if cur or buf:
@@ -106,6 +110,8 @@ def confronta(a_path, b_path, repos):
             righe.append("IN PIU " + h.decode("utf-8", "replace"))
     if not righe and [h for h, _ in ba] != [h for h, _ in bb]:
         righe.append("ORDINE")
+    if not righe and not repos and a != b:   # the whole file: e.g. the newline at its end
+        righe.append("TESTO (stessi blocchi, file diversi: a capo finale?)")
     for r in righe:
         print(r)
     for l in diff[:80]:
