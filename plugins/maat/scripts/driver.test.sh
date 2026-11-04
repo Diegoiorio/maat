@@ -861,7 +861,7 @@ check "  review di un anello (anello 2): exit 7, la review non parte, nessun .es
 mk_catena; rm -rf "$T/lock"
 SPIA_MODO=next1 FIC_DRIVER_PY="$T/spia-modi.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-e2e" FIC_GATES="$T/gates" \
   FIC_FINALIZE="$T/fin-e2e" FIC_LANES=0 FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run $CW/spec-m.md > "$T/lrun.out" 2>&1 </dev/null; rc=$?
-check "  driver.py run sulla madre → l'anello 1 non parte: «Driver result: STOP — catena: <stderr del driver> | STOP — driver.py next …», col motivo (Giro 2; lo stderr intero del driver e' nel .stderr della fase da 1.5.1)" '[ $rc -eq 1 ] && grep -q "^driver: Driver result: STOP — catena: Traceback finto: next rotto | STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto" "$T/lrun.out" && [ ! -f $CW/spec-m-1-a.run/log/01-implement.esito ]'
+check "  driver.py run sulla madre → l'anello 1 non parte: «Driver result: STOP — catena: <stderr del driver> | STOP — driver.py next …», col motivo (Giro 2; lo stderr intero del driver e' nel .stderr della fase da 1.5.1)" '[ $rc -eq 1 ] && grep -q "^driver: Driver result: STOP — catena: rumore | Traceback finto: next rotto | STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto" "$T/lrun.out" && [ ! -f $CW/spec-m-1-a.run/log/01-implement.esito ]' "$(grep "Driver result" "$T/lrun.out")"
 mk_catena; M=$W/$CW/spec-m.run; mkdir -p $CW/spec-m-1-a.run $CW/spec-m-2-b.run
 printf 'src/a.py\n' > $CW/spec-m-1-a.run/touched.txt; printf 'src/a.py\n' > $CW/spec-m-2-b.run/touched.txt
 git rev-parse HEAD > $CW/spec-m-1-a.run/base.txt
