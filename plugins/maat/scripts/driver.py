@@ -111,8 +111,8 @@ RIGA_OK = r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK"
 RIGA_STOP = r"(?:PHASE RESULT|ESITO FASE) [^:]*: STOP"
 # Review section heading, both languages
 REVIEW_H = ("## Review implementazione", "## Implementation review")
-# The minimum Python of Maat (1.5.1), checked first by `run`; the same 3.10 as python.sh (fic_py_min_ok)
-# and maat-doctor.sh: driver.test.sh checks that the three agree
+# The minimum Python of Maat (1.5.1), checked first by `run`; the same 3.10 as python.sh (fic_py_min_ok, which
+# maat-doctor.sh also uses since 1.6.0): driver.test.sh checks that the two agree
 PY_MIN = (3, 10)
 
 
@@ -590,9 +590,9 @@ def _cycle_state(spec_fs, tmp):
             return ""
         mt_ = _mtime(hf)
         since = _utc(mt_) if mt_ is not None else ""
-        rim = "bash \"%s\" --harness-fp > \"%s/harness.fp\"" % (mostra(RP), RUN)
-        if os.name == "nt":   # 1.6.0 (block Z): C:/… and /tmp/… paths in one command: it runs in Git Bash
-            rim += " " + T("cycle-state-z.rim_git_bash")
+        # 1.6.0 (block Z): on Windows the command mixes C:/… and /tmp/… paths, so it runs in Git Bash; the note is
+        # printed on every platform (one output of `next` everywhere: the expected outputs do not depend on the OS)
+        rim = "bash \"%s\" --harness-fp > \"%s/harness.fp\" %s" % (mostra(RP), RUN, T("cycle-state-z.rim_git_bash"))
         if w[0] == "CAMBIATO":
             return T("cycle-state.harness_changed", since=since, a=w[1], b=w[2], rim=rim, next=nxt)
         if w[0] == "FORMATO-PRECEDENTE":

@@ -74,9 +74,10 @@ brew install bash coreutils gnu-sed grep flock
 export PATH="$(brew --prefix)/opt/coreutils/libexec/gnubin:$(brew --prefix)/opt/gnu-sed/libexec/gnubin:$(brew --prefix)/opt/grep/libexec/gnubin:$(brew --prefix)/bin:$PATH"
 ```
 
-`maat-doctor` checks these tools on a Mac only, and for a missing one prints the `brew` command. The suites of Maat
-are tested on a Mac with the same tools plus `findutils`, `gawk` (as `awk`) and `rsync` (`docs/TESTING-harness.md`,
-«CI»). TODO blocco D: say whether the Mac is verified in CI or «in progress», with the open reds.
+`maat-doctor` checks these tools on a Mac only, and for a missing one prints the `brew` command. TODO blocco D: say
+whether the Mac is verified in CI or «in progress», with the open reds; and, only once it is true, that the suites
+of Maat are tested on a Mac with the same tools plus `findutils`, `gawk` (as `awk`) and `rsync`
+(`docs/TESTING-harness.md`, «CI»).
 
 For the full cycle the tests must leave a **report Maat can read**: JUnit XML (pytest `--junitxml`, which also runs
 `unittest` tests) or the output of vitest. Before the code, the cycle proves that each new test fails on its own
@@ -244,7 +245,11 @@ claude plugin update maat@maat --scope project
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
 
-From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cycle does and prints the same: the
+From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cycle does and prints the same, except
+the fixes found by the real cycles (`CHANGELOG.md`, block Z): `plan-check.sh lint2` refuses a plan whose red holds
+only with a signature stub in an existing file and a Python test id `file.py::Class.method`, and warns (`AVVISO`) for
+a module with `report` none; the `BLOCKED` reason of test-red for that module is longer (it says the remedy);
+`maat-doctor` gives a `WARNING` for it; the «harness changed» remedy ends with «(on Windows: in Git Bash)». The
 Python driver already decided, and it is now the only engine. The bash code that decided with `FIC_DRIVER=0` is gone:
 `FIC_DRIVER` set to any value no longer changes anything, and `driver.py run` and `maat-doctor` say so (an `AVVISO`,
 a `WARNING`). The remedies of the two STOPs of a failed driver no longer suggest `FIC_DRIVER=0`. If you need the
@@ -317,8 +322,8 @@ Proven, and where to check it:
 - **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
   remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
 - **One engine, the Python driver, and it decides like the bash code of 1.5.1** (since 1.6.0 the bash code is
-  gone). The proof is a set of expected outputs on public examples (`tools/esempi-equiv/`): for every spec the whole
-  output of `cycle-state.sh`, for every jsonl the whole output of the outcome validator, in Italian and in English,
+  gone). The proof is a set of expected outputs on public examples (`tools/esempi-equiv/`): for every spec stdout and
+  exit of `cycle-state.sh`, for every jsonl the whole output of the outcome validator, in Italian and in English,
   with both validators (`tools/esempi-equiv/attese/`). The examples cover every row of the resume table and every
   branch of the outcome validator. The expected outputs come from the bash table and the internal validator of 1.5.1:
   written once with the plugin of `v1.5.1` and checked against its bash engine, with no difference; except the lines

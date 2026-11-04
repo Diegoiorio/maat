@@ -233,7 +233,7 @@ fi
 echo "attese: corpus ${#REPOS[@]} mini-repo · impronta ${IMP:0:12} · $(( $(date +%s) - t0 ))s"
 
 # --- the environment of the plugin under test ---
-unset FIC_REPO FIC_DRIVER_ROOT FIC_DRIVER_PY FIC_DRIVER_CERT FIC_CYCLE_STATE FIC_RUN_PHASE MAAT_MSG_PY FIC_PY FIC_PY_VER
+unset FIC_REPO FIC_DRIVER_ROOT FIC_DRIVER_PY FIC_CYCLE_STATE FIC_RUN_PHASE MAAT_MSG_PY FIC_PY FIC_PY_VER
 export MAAT_ROOT=$PLUGIN
 SCHEMA=$PLUGIN/schemas/phase-result.schema.json
 forme_file() { # $1 mini-repo, $2 language → $T/forme-<m>-<l>

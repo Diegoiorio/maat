@@ -346,8 +346,9 @@ printf '%s\n' "# A" "## Requisiti funzionali" "1. RF1 — a" > $CW/spec-s-1-a.md
 mkdir -p $CW/spec-s.run; printf 'Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-09-29T00:00:00Z\n' > $CW/spec-s.run/chiusura.txt
 out_has "$SS" "vincolo 1: State della fixture italiana = quello di 1.2.1 (1d0181258ccc)" "^State: 1d0181258ccc$"
 out_has "$SS" "  e la fixture copre la catena (madre, anello aperto, assente, chiusura)" "^Catena: madre di 2 anelli · spec-s-1-a aperto; spec-s-2-b assente; Chiusura: NEEDS_VERIFICATION"
-# 1.4.0, block B (a): the same State in English and in Italian, from cycle-state.sh (1.6.0: the wrapper of the driver)
-# and from driver.py next: chain_state, the basis and the frozen lines do not go through the catalog
+# 1.4.0, block B (a): the same State in English and in Italian: chain_state, the basis and the frozen lines do not go
+# through the catalog. 1.6.0: one engine, so this no longer compares two engines: it checks the language on both entry
+# points of the driver, the wrapper cycle-state.sh and driver.py next called directly
 . "$HERE/python.sh" >/dev/null 2>&1
 for L in it en; do
   for impl in cycle-state driver; do
@@ -401,7 +402,8 @@ HPC_M=$(cygpath -m "$HPC" 2>/dev/null || printf '%s' "$HPC")
 fdr_prima=${FIC_DRIVER_ROOT-__non_impostata__}
 export MAAT_ROOT="$HPC" FIC_DRIVER_ROOT="$HPC"
 hfp() { bash "$HERE/run-phase.sh" --harness-fp "$W" > "$RUN/harness.fp"; }
-RIM="bash \"$HPC_M/scripts/run-phase\.sh\" --harness-fp > \"[^\"]*harness\.fp\""
+# 1.6.0 (code review): the remedy ends with the note for Windows, on every platform
+RIM="bash \"$HPC_M/scripts/run-phase\.sh\" --harness-fp > \"[^\"]*harness\.fp\" \(su Windows: in Git Bash\)"
 { above; plan APPROVED; } > "$SP"; with_basis; mkdir -p "$RUN"; hfp
 expect "harness invariato → la riga della tabella" "^IMPLEMENT"
 printf '#' >> "$HPC/scripts/context-pack.sh"

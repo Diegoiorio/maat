@@ -417,6 +417,8 @@ hrun "$T/h.run" 04-fix; rc=$?
 check "un byte di uno script del plugin → STOP, exit 6, la sottosessione non parte" '[ $rc -eq 6 ] && [ ! -f "$T/h04-fix.args" ] && [ "$(cat "$T/h.run/log/04-fix.exit")" = 6 ]'
 check "  il motivo con la data, su stderr; il rimedio a percorso assoluto nello .stderr della label" 'grep -q "STOP: harness cambiato dal [0-9T:-]*Z: ricomincia la fase o conferma (impronta registrata [0-9a-f]\{12\}, attuale [0-9a-f]\{12\}; file del plugin in $HP_M e .claude/maat.json)" "$T/h04-fix.err" && grep -qF "bash \"$HP_M/scripts/run-phase.sh\" --harness-fp > \"$T/h.run/harness.fp\"" "$T/h.run/log/04-fix.stderr"'
 check "  e il lock di codice e' rilasciato" '[ ! -d "$FIC_LOCK" ]'
+# 1.6.0 (code review): the note for Windows after the remedy, on every platform (no branch on the OS)
+check "  il rimedio finisce con la nota per Windows, su ogni piattaforma" 'grep -qF "harness.fp\" (su Windows: in Git Bash)" "$T/h.run/log/04-fix.stderr"'
 rimedio "$T/h.run/log/04-fix.stderr"
 check "  il rimedio eseguito cosi' com'e' scrive harness.fp di tre righe" '[ "$(wc -l < "$T/h.run/harness.fp")" -eq 3 ] && [ "$(hfpc "$T/h.run/harness.fp")" = UGUALE ]'
 hrun "$T/h.run" 05-fix; rc=$?
@@ -989,7 +991,7 @@ FAKE_TXTSTOP_1=1 FAKE_JSONONLY_2=OK FAKE_TOUCH_1=a.py FAKE_FILE_1=a.py lrun 11-i
 check "  riga di testo STOP e oggetto OK (discordi) → vince lo STOP del testo, nessun gate" 'sed -n 1p "$L4/11-implement.esito" | grep -q "^PHASE RESULT implement: STOP — corsia 1: testo discorde 1" && [ ! -f "$L4/11-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 FIC_LANES=0 FAKE_JSONONLY_0=OK FAKE_TOUCH_0=a.py lrun 12-implement; rc=$?
-check "  in serie lo stesso result col solo JSON → OK (VALIDA_PY ricava la riga dall'oggetto)" '[ $rc -eq 0 ] && sed -n 1p "$L4/12-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsia 0 solo json" && [ -f "$L4/12-implement.gates" ]'
+check "  in serie lo stesso result col solo JSON → OK (driver.py valida ricava la riga dall'oggetto)" '[ $rc -eq 0 ] && sed -n 1p "$L4/12-implement.esito" | grep -q "^PHASE RESULT implement: OK — corsia 0 solo json" && [ -f "$L4/12-implement.gates" ]'
 (cd "$FIC_REPO" && git checkout -q -- .)
 # 1.3.0: lanes with the English result line, "none" and defensive deviations in both languages: the prefix stays
 # at the start of the merged deviation, as written

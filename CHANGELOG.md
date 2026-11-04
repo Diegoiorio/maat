@@ -5,7 +5,11 @@ Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 ## 1.6.0 — one engine, proven on expected outputs; CI on Linux, Windows and macOS
 
 **Why 1.6.0 and not a patch:** with an intact plugin and `FIC_DRIVER` not set, a cycle does and prints the same as
-1.5.1, as in a patch. But documented interfaces are removed (`FIC_DRIVER=0`, `driver.py equiv` and `certificato`,
+1.5.1, as in a patch, except the fixes of block Z (below): `plan-check.sh lint2` refuses two kinds of plans (a red
+that holds only with a signature stub in an existing file; a Python test id `file.py::Class.method`) and gives an
+`AVVISO` for a module with `report` none, the `BLOCKED` reason of test-red for that module is longer (it says the
+remedy), `maat-doctor` gives a `WARNING` (`ATTENZIONE` in Italian) for it, and the «harness changed» remedy ends with
+a note for Windows. But documented interfaces are removed (`FIC_DRIVER=0`, `driver.py equiv` and `certificato`,
 `driver.equiv`, `run-phase.sh --valida`, `tools/certifica.sh`); the proof behind the driver changes nature, from the
 certificate to expected outputs, which is the reason 1.5.0 was a minor too; and a new platform (macOS) is a new
 feature. Not 2.0.0: no format Maat reads (specs, plans, run dirs, `maat.json`) changes, and the removal was announced
@@ -66,7 +70,8 @@ in 1.5.1 (its roadmap: 1.5.2 removes the bash code, 1.5.3 the multi-platform CI;
     `pytest --junitxml {report}` (it also runs unittest tests), `lint2` warns once per module, and the `BLOCKED`
     reason of test-red says the remedy.
   - The position of a red is also read from a Python traceback in the JUnit report (runners other than pytest).
-  - On Windows the «harness changed» remedy ends with «(in Git Bash)»: the command mixes `C:/…` and `/tmp/…` paths.
+  - The «harness changed» remedy ends with «(on Windows: in Git Bash)»: there the command mixes `C:/…` and `/tmp/…`
+    paths. The note is printed on every platform, so the output of `next` does not depend on the OS.
 - **Proof of compatibility:** the expected outputs written from `v1.5.1` and anchored to its bash table and its
   internal validator (six files out of six equal, both validators, `it` and `en`); the driver of 1.6.0 gives them
   with no difference, and the fingerprint of the examples is unchanged (`6b484b23826a`). The oracle `v1.5.1` (bash

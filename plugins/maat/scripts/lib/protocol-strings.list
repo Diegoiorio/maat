@@ -99,7 +99,7 @@ scripts/run-phase.sh	chiusura\.txt\b|chiusura: OK|"\$nuovi"|\.txt\.(chiusura|nuo
 scripts/plan-check.sh	\(\?:vuoto\|empty\)|Rischio aperto\|Open risk|statica sufficiente\|static sufficient|"⚠️ (Superficie|Rischio aperto)"|"Taglio:"|"Superfici a rischio:"|"Tracciabilit\\u00e0 requisiti"|"File toccati"|"Passi"|"Piano di test"|\(scrive\|dopo\|writes\|after\)|"non verificabile"|"rifiutato"|^"(aggiunge|toglie|stringa|dimostrato)"$	vocabolario della spec e dei rossi (letto in it e en dalla 1.3.0)
 scripts/plan-check.sh	\(none\|nessuno\)	risposta del revisore (Blocked on: nessuno), già bilingue
 scripts/driver.py	Generated: assente	6: sentinella (gemello di cycle-state.sh)
-scripts/driver.py	chiusura\.txt|\.corsie-driver|^"w:chiusura"$|workers/controprove\.md|^"--valida"$	nome di file del run dir o di un file del plugin; opzione di run-phase.sh
+scripts/driver.py	chiusura\.txt|\.corsie-driver|^"w:chiusura"$|workers/controprove\.md	nome di file del run dir o di un file del plugin
 scripts/driver.py	^"righe %s: 	uscita di `driver.py righe` (nome del sottocomando), letta da driver.test.sh sez. 8
 scripts/run-phase.sh	\.claude/maat\.json ASSENTE|impronta=%s\\nversione=%s\\nradice=%s	4: righe dell'impronta del harness e formato di harness.fp (hfp_impronta_di)
 scripts/run-phase.sh	^"deviazioni"$|\{"fase":"test-red","esito":"OK","motivo":"%s","deviazioni":\[\],"bloccato_su":"nessuno"	opzione; chiavi di result.json (1.4.x)

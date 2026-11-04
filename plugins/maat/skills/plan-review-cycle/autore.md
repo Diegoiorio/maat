@@ -288,7 +288,7 @@ test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`,
 - **Test plan**: one row per case. `file` = the test, as the first code span: `path` or
   `path::name` (pytest node id, or vitest full name — required when the row has a mutation; a Python class and
   its method are separated by `::` even for `unittest` tests: `test_x.py::TestX::test_y`, never `TestX.test_y`,
-  a `lint2` VIOLATION); `(new)`
+  a `lint2` VIOLATION; a pytest doctest id keeps its dots: `mod.py::mod.func`); `(new)`
   after the span marks a new case, the one the level's caps count. `assertion` = the case's
   `red if:`. `requirement` = the IDs of `### Requirement traceability` it verifies.
 - **Existing non-regression tests are NOT rows of `### Test plan`.** A test that already exists and must

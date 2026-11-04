@@ -1216,15 +1216,30 @@ def find_hits(root, vals):
     return hits
 
 
+def doctest_py(path, nm):
+    """True when `nm` is the name pytest gives to a doctest of the .py file `path` (--doctest-modules): the dotted name
+    of the module (its stem, or the folder for __init__.py, with the packages before it) followed by the object, as in
+    `mod.py::mod.func`, `src/pkg/mod.py::pkg.mod.Class.method`, `pkg/__init__.py::pkg.func`. The package prefix of
+    the module depends on rootdir and import mode, so it is not compared with the folders of the path."""
+    parts = path.replace("\\", "/").split("/")
+    stem = parts[-1][:-3]
+    mod = parts[-2] if stem == "__init__" and len(parts) > 1 else stem
+    comps = nm.split(".")
+    if not all(c.isidentifier() for c in comps):
+        return False
+    return mod in comps[:-1] or (comps[-1] == mod and len(comps) > 1)
+
+
 def id_py(M):
     """D-C (1.6.0): a Python test named in the unittest form `file.py::Class.method` never matches the report (the JUnit
     case is read as file::Class::method) and the test-red phase stops with a misleading conflict with the existing
-    suite. A dot in the name (outside the [parameters]) of a .py test: VIOLAZIONE with the pytest form."""
+    suite. A dot in the name (outside the [parameters]) of a .py test: VIOLAZIONE with the pytest form. A doctest id
+    (`mod.py::mod.func`, the dots of the module path included) is a valid pytest id: never refused (CONTROLLO-DOCTEST)."""
     out = []
     for tid in M["order"]:
         T = M["tests"][tid]
         nm, par = (T["name"].split("[", 1) + [None])[:2]
-        if T["path"].endswith(".py") and "." in nm:
+        if T["path"].endswith(".py") and "." in nm and not doctest_py(T["path"], nm):  # CONTROLLO-DOCTEST
             want = T["path"] + "::" + "::".join(x for x in nm.split(".") if x) + ("[" + par if par is not None else "")
             out.append(_msg.T("plan-check-z.id_py", n=T["n"], id=tid, got=T["path"] + "::" + T["name"], want=want))
     return out
@@ -1271,6 +1286,8 @@ def firma_base(M, root):
     out = []
     for tid in (M["order"] if sigs else []):
         T = M["tests"][tid]
+        if not (T["path"] or "").endswith(".py"):   # SOLO-TEST-PY: a .ts row is not Python, even if a name coincides
+            continue
         if any(TYPE_RED.search(x) for x in T["texts"]):
             continue
         why = None

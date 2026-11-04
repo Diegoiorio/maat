@@ -1440,6 +1440,13 @@ expect 1 "^VIOLAZIONE: line [0-9]+: T1: .*slug.* in testo.py has no parameter se
 # the same parameter on a file the plan declares new: the stub goes there, no VIOLAZIONE
 sed 's/^- `testo.py`$/- `testo.py` (new)/' "$Z/da-stub.md" > "$Z/da-new.md"
 refute "non ha il parametro" "D-A lint2: funzione di un file nuovo (lo stub va li') = nessuna VIOLAZIONE di firma" -- zl2 "$Z/da-new.md"
+# 1.6.0 code review: a row of a non-Python test (here .ts) whose call has the name of an existing Python function is
+# not judged (SOLO-TEST-PY): its backticks are not Python, the TypeError of the base does not exist there
+zspec 'ui/slug.test.ts::slug > joins with sep' "\`slug(\"Hello World\", sep=\"_\") == \"hello_world\"\` · red if: \`expected 'hello-world' to be 'hello_world'\`" > "$Z/da-ts.md"
+refute "non ha il parametro" "D-A lint2: riga di un test .ts con il nome di una funzione Python esistente = nessuna VIOLAZIONE di firma" -- zl2 "$Z/da-ts.md"
+if mutpc zsolopy 's/^\( *\)if not (T\["path"\] or "")\.endswith("\.py"):   # SOLO-TEST-PY.*$/\1if False:/'; then
+  expect 1 "non ha il parametro sep" "controprova D-A: senza SOLO-TEST-PY la riga .ts riceve la VIOLAZIONE di firma" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zsolopy/plan-check.sh" lint2 "$Z/da-ts.md"
+else echo "FAIL [controprova SOLO-TEST-PY: la mutazione non si applica]"; fail=$((fail+1)); fi
 # counterproof: without CONTROLLO-FIRMA-LINT2 the plan that wants a signature stub passes lint2 (the 1.5.1 defect)
 if mutpc zfirma 's/^\( *\)E\.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2$/\1pass/'; then
   expect 0 "^lint2: OK$" "controprova D-A: senza CONTROLLO-FIRMA-LINT2 il piano che vuole lo stub passa" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zfirma/plan-check.sh" lint2 "$Z/da-stub.md"
@@ -1449,6 +1456,20 @@ zspec 'test_testo.py::TestSlug.test_sep' "\`slug(\"a\") == \"a\"\` · red if: \`
 expect 1 "^VIOLAZIONE: riga [0-9]+: T1: .*test_testo.py::TestSlug.test_sep.* scrivi .*test_testo.py::TestSlug::test_sep" "D-C lint2: id unittest Classe.metodo = VIOLAZIONE con la forma attesa" -- zl2 "$Z/dc.md"
 zspec 'test_testo.py::TestSlug::test_sep[a.b]' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-par.md"
 expect 0 "^lint2: OK$" "D-C lint2: un punto dentro i parametri [..] non e' un id unittest" -- zl2 "$Z/dc-par.md"
+# 1.6.0 code review: a pytest doctest id (--doctest-modules) has dots and is valid: the name of the module, with its
+# packages, then the object (CONTROLLO-DOCTEST): no VIOLAZIONE, so no wrong form suggested
+zspec 'testo.py::testo.slug' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-doc.md"
+expect 0 "^lint2: OK$" "D-C lint2: id doctest modulo.funzione = nessuna VIOLAZIONE" -- zl2 "$Z/dc-doc.md"
+mkdir -p "$Z/src/pkg" "$Z/pkg"   # the folders of the two new test files (a path whose folder is missing is refused)
+zspec 'src/pkg/testo.py::pkg.testo.slug' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-doc-pkg.md"
+expect 0 "^lint2: OK$" "D-C lint2: id doctest col percorso del modulo a punti (pkg.testo.slug) = nessuna VIOLAZIONE, nessuna forma suggerita" -- zl2 "$Z/dc-doc-pkg.md"
+zspec 'pkg/__init__.py::pkg.slug' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-doc-init.md"
+expect 0 "^lint2: OK$" "D-C lint2: id doctest di un __init__.py (pkg.slug) = nessuna VIOLAZIONE" -- zl2 "$Z/dc-doc-init.md"
+zspec 'test_testo.py::TestSlug.Inner.test_sep' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-nest.md"
+expect 1 "scrivi .*test_testo.py::TestSlug::Inner::test_sep" "D-C lint2: Classe.Interna.metodo (nessun modulo nel nome) resta VIOLAZIONE" -- zl2 "$Z/dc-nest.md"
+if mutpc zdoc 's/ and not doctest_py(T\["path"\], nm):  # CONTROLLO-DOCTEST$/:/'; then
+  expect 1 "scrivi .*src/pkg/testo.py::pkg::testo::slug" "controprova D-C: senza CONTROLLO-DOCTEST l'id doctest e' rifiutato con una forma sbagliata" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zdoc/plan-check.sh" lint2 "$Z/dc-doc-pkg.md"
+else echo "FAIL [controprova CONTROLLO-DOCTEST: la mutazione non si applica]"; fail=$((fail+1)); fi
 if mutpc zid 's/^\( *\)E\.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2$/\1pass/'; then
   expect 0 "^lint2: OK$" "controprova D-C: senza CONTROLLO-ID-PY-LINT2 l'id unittest passa" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zid/plan-check.sh" lint2 "$Z/dc.md"
 else echo "FAIL [controprova D-C: la mutazione non si applica]"; fail=$((fail+1)); fi
