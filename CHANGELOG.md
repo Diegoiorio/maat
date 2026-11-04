@@ -54,11 +54,18 @@ cycle does and prints does not change, with one exception: `MAAT_LINGUA` set by 
   plugin changes during the run, and `giro-completo.sh` warns when the Linux clone and the worktree are not the same
   tree. `tools/suite.list` accepts the tests of the repo (`tools/<name>.test.sh`).
 - **Times:** on Linux the proof on the examples takes about 2 minutes. In Git Bash on Windows it is slow
-  (`tools/esempi-equiv.test.sh` about 56 minutes, the oracle on the examples about 70): the examples are kept whole,
-  the certificate is written from Linux, and in the Windows part of the full run the oracle runs in WSL.
-  `tools/esempi-equiv.test.sh` stays in Git Bash there: it is the proof for Windows.
-- **Proof of compatibility:** TODO certificate (to fill: the certificate on the public examples, the oracle
-  1.4.0 against 1.5.0, the one-time proof on the private corpus).
+  (`tools/esempi-equiv.test.sh` from about 1 to 1 h 45 min, the oracle on the examples about 70 min): the examples
+  are kept whole, the certificate is written from Linux, and in the Windows part of the full run the oracle runs in
+  WSL. `tools/esempi-equiv.test.sh` stays in Git Bash there: it is the proof for Windows. In Git Bash
+  `tools/giro-completo.sh` now gives each suite up to 5 hours instead of 90 minutes (`driver.test.sh` took about
+  4 hours there for this release).
+- **Proof of compatibility:** the certificate on the public examples is VALIDO in `it` and `en` with both
+  validators (65 specs, 49 jsonl, no difference; minimal validator 155 s, `jsonschema` 175 s on Linux). The oracle
+  1.4.0 against 1.5.0 gives the same `Next` for all 65 specs of the examples, in `it` and in `en`. On the private
+  corpus of 1.4.0, proven once more for this release: the oracle gives 15 specs equal out of 15 in both languages,
+  and `driver.py equiv` finds no difference (15 specs, 83 jsonl), but its new warnings say that all 15 cycles are
+  open and 11 have a `harness.fp` that is not `UGUALE`: on those the two sides stop on the same branch, so that
+  corpus proves less than it seemed. The public examples are now the proof that counts.
 - **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again.
 

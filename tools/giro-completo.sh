@@ -52,6 +52,8 @@ echo FINE >> "$OUT/linux/riepilogo.txt"
 # counterproof, vitest-classify, comandi-equivalenza: since 1.5.0 it reads no git history, only its frozen reference,
 # so the .git of the worktree pointing to C:/ no longer matters) and tools/oracolo.test.sh (~70 min on the corpus in
 # Git Bash; its ref cases are SKIPPED there, the .git of the worktree points to C:/, and run in the Linux loop).
+# Limit per suite: 5400 s on Linux and in WSL, 18000 s in Git Bash (1.5.0: driver.test.sh ~4 h and
+# tools/esempi-equiv.test.sh ~1 h 45 min there; at 5400 s both were cut).
 WSL_SUITE=" test-fast counterproof vitest-classify comandi-equivalenza tools/oracolo.test.sh "
 MAAT_DIR=$WT MAAT_W=/mnt/c${WT#/c}
 prima=$(guardia_impronta "$WT/plugins/maat")
@@ -60,7 +62,7 @@ for s in $TUTTE; do
   t0=$(date +%s)
   case "$WSL_SUITE" in
     *" $s "*) dove=WSL; wsl -- bash -lc "cd $MAAT_W && timeout 5400 bash $f" > "$OUT/windows/$(suite_log "$s").log" 2>&1 ;;
-    *) dove=GitBash; (cd "$WT" && timeout 5400 bash "$f") > "$OUT/windows/$(suite_log "$s").log" 2>&1 ;;
+    *) dove=GitBash; (cd "$WT" && timeout 18000 bash "$f") > "$OUT/windows/$(suite_log "$s").log" 2>&1 ;;
   esac
   rc=$?
   dopo=$(guardia_impronta "$WT/plugins/maat")
