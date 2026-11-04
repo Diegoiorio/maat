@@ -4,6 +4,9 @@
 # 1..n, an entry of suite.list in no group or in two, an entry here that is not in suite.list.
 # Inside a group the suites run in the order of suite.list. Balanced on the Linux times (seconds, clone in WSL) of the
 # 1.5.0 full run, rollback 218 s and driver 382 s measured for 1.5.1: group 1 ≈ 816 s, group 2 ≈ 818 s, group 3 ≈ 804 s.
+# 1.6.0 (block C): rollback gone, driver 85 s (no section 9, no equiv); plan-check (≈ 53 s) and maat-doctor (≈ 26 s)
+# moved to group 1, tools/suite.test.sh (≈ 25 s) to group 2: group 1 ≈ 600 s, group 2 ≈ 625 s, group 3 ≈ 700 s
+# (estimate on the times of 1.5.0/1.5.1 and of block C; block D rebalances on the times of the CI).
 # tools/esempi-equiv.test.sh (the expected outputs, and their strict checks with MAAT_ATTESE_RICHIESTE) is in group 3.
 # A suite red only in the parallel run goes in a group of its own (docs/TESTING-harness.md, «The parallel run»).
 
@@ -12,22 +15,23 @@
 1 run-phase
 1 finalize
 1 guard
+1 plan-check
+1 maat-doctor
 
 # group 2: the oracle, the resume table
 2 tools/oracolo.test.sh
 2 cycle-state
 2 messages
 2 phase-events
+2 tools/suite.test.sh
 
 # group 3: the public examples (expected outputs), the WSL tools, all the short ones
 3 tools/esempi-equiv.test.sh
 3 counterproof
-3 plan-check
 3 test-fast
 3 spazi
 3 comandi-equivalenza
 3 gates
-3 tools/suite.test.sh
 3 maat-paths
 3 maat-config
 3 ciclo-worktree
@@ -39,7 +43,6 @@
 3 test-review-surface
 3 bash-node
 3 genericita
-3 maat-doctor
 3 senza-wsl
 3 session-start
 3 phase-usage
