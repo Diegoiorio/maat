@@ -528,7 +528,14 @@ if [ "$WIN" = 1 ]; then
     # wsl.exe exists in System32: a doctor that ignores PATH finds it anyway (CreateProcess also searches there)
     m=$(mutante wsl-path 's/    w = shutil.which("wsl") or shutil.which("wsl.exe")/    w = "wsl"/')
     check "controprova: WSL cercato senza il PATH -> «WSL assente» sparisce, rosso" '[ -n "$m" ] && ! caso_wsl_assente "$m"'
-    check "controprova: --piattaforma senza il PATH -> non windows-senza-wsl, rosso" '[ -n "$m" ] && ! caso_piattaforma "$m"'
+    # 1.6.0: only where that wsl.exe runs a distribution; the Windows runner of the CI has wsl.exe with none, so the
+    # mutant still answers windows-senza-wsl and the counterproof has nothing to show
+    wx=/c/Windows/System32/wsl.exe; [ -e "$wx" ] || wx=$(cygpath -u "${SYSTEMROOT:-C:/Windows}/System32/wsl.exe")
+    if timeout 60 "$wx" -e true >/dev/null 2>&1; then
+      check "controprova: --piattaforma senza il PATH -> non windows-senza-wsl, rosso" '[ -n "$m" ] && ! caso_piattaforma "$m"'
+    else
+      echo "SALTATO [controprova --piattaforma senza PATH]: wsl.exe c'e' ma non avvia nessuna distribuzione"
+    fi
   else
     echo "SALTATO [controprova WSL senza PATH]: wsl.exe non installato su questa macchina"
   fi

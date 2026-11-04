@@ -13,13 +13,13 @@
 # public corpus, tools/esempi-equiv/attese/, with the two validators: the system Python, minimal validator, and a venv
 # with jsonschema at a fixed version, MAAT_PY_JSONSCHEMA; the same version that `attese.sh --scrivi` requires) is red
 # with a validator SALTATO, and with a file of attese/ changed since the merge-base with origin/main (fetch-depth: 0)
-# without a new line in attese/STORIA. It is in group 3 of both groups files.
+# without a new line in attese/STORIA. It is in group 3 of tools/suite-gruppi.list, group 2 of the Windows file.
 # Windows (D6 of the 1.6.0 plan): Git Bash of the runner, FIC_PYTHON = the Python 3.10 of setup-python (otherwise
 # `py -3` would choose the newest Python of the runner and the minimum would not be proven), FIC_WT_WSL=0 (suite.sh),
-# core.autocrlf false (as the local Windows proofs). The complete run (groups 1..n) on pull requests to main, tags, main,
-# workflow_dispatch and pushes whose commit message contains «[windows completo]»; on the other pushes only the groups
-# of WIN_BREVE (the short proof and the expected outputs), the others end at once with «saltato: sottoinsieme».
-# Left out on Windows (lines «-» of its file): the four suites that want WSL (run locally at release) and the oracle.
+# core.autocrlf false (as the local Windows proofs), TEMP in its long form. Complete at EVERY push: the rule of D6
+# (complete at every push if it fits in at most 8 jobs of at most 45 minutes, otherwise only on pull requests to main)
+# measured on the first CI of 1.6.0: 5 jobs of about 20 minutes. Left out on Windows (lines «-» of its file): the four
+# suites that want WSL (run locally at release) and the oracle.
 # macOS (D7): bash and the GNU tools from Homebrew (cache of its downloads), their gnubin folders first in the PATH, awk
 # = gawk, TMPDIR=$RUNNER_TEMP (on macOS /var is a link to /private/var).
 name: CI
@@ -39,10 +39,11 @@ jobs:
   linux-gruppo:
     name: linux (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    # Measure (04/11/2026, 1.5.1): the groups take 816, 818 and 804 s on the Linux clone in WSL; the CI took up to 1.1
-    # times the clone. Longest group ~15 min, plus ~2 min of setup = 17; limit = first multiple of 5 min above
-    # 1.5 × 17 = 25.5 → 30.
-    timeout-minutes: 30
+    # Measure: in 1.5.1 the groups took 816, 818 and 804 s on the Linux clone in WSL and the CI up to 1.1 times that;
+    # 1.6.0 (block C: no bash engine, driver.test.sh ~65 s) estimates them at ~600, ~625 and ~700 s. Longest group
+    # ~12 min, plus ~2 min of setup = 14; limit = first multiple of 5 min above 1.5 × 14 = 21 → 25 (revised on the
+    # times of the CI, docs of block D).
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +102,14 @@ jobs:
         with:
           path: ~/Library/Caches/Homebrew
           key: brew-${{ runner.os }}-${{ runner.arch }}-${{ env.MAAT_BREW }}-1
+      # setup-python and setup-node before the GNU tools in the PATH: the install script of setup-python fails with
+      # the GNU chmod (first CI of 1.6.0); the folders added after it hold no python, so 3.10 stays the python3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: bash and the GNU tools from Homebrew, first in the PATH; awk = gawk; TMPDIR
         run: |
           t0=$(date +%s)
@@ -117,12 +126,6 @@ jobs:
           echo "$G" >> "$GITHUB_PATH"
           echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
           echo "brew: $(( $(date +%s) - t0 )) s"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - name: The tools the suites will use
         run: |
           for c in bash sed awk grep find xargs stat date sha256sum timeout flock rsync diff python3 git; do
@@ -153,61 +156,52 @@ jobs:
   windows-gruppo:
     name: windows (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: windows-latest
-    timeout-minutes: 150
+    # Measure (first CI of 1.6.0, before block C): the longest group ~1170 s of suites plus ~90 s of setup = 21 min;
+    # limit = first multiple of 5 min above 1.5 × 21 = 31.5 → 35.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        gruppo: [1, 2, 3, 4, 5, 6, 7]
-    env:
-      WIN_BREVE: "1 2 3"
-      WIN_COMPLETO: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main') || contains(github.event.head_commit.message, '[windows completo]') }}
+        gruppo: [1, 2, 3, 4, 5]
     defaults:
       run:
         shell: bash
     steps:
-      - name: Complete run or subset
-        id: modo
-        run: |
-          if [ "$WIN_COMPLETO" = true ]; then echo "complete run: group ${{ matrix.gruppo }}"; echo esegui=1 >> "$GITHUB_OUTPUT"
-          else case " $WIN_BREVE " in
-            *" ${{ matrix.gruppo }} "*) echo "subset ($WIN_BREVE): group ${{ matrix.gruppo }}"; echo esegui=1 >> "$GITHUB_OUTPUT" ;;
-            *) echo "saltato: sottoinsieme ($WIN_BREVE), group ${{ matrix.gruppo }} only in the complete run"; echo esegui=0 >> "$GITHUB_OUTPUT" ;;
-          esac; fi
       - name: Line endings as in the repository
-        if: steps.modo.outputs.esegui == '1'
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
-        if: steps.modo.outputs.esegui == '1'
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
-        if: steps.modo.outputs.esegui == '1'
         id: py
         with:
           python-version: "3.10"
       - uses: actions/setup-node@v4
-        if: steps.modo.outputs.esegui == '1'
         with:
           node-version: "20"
-      - name: Test identity, FIC_PYTHON, jsonschema in a venv of its own
-        if: steps.modo.outputs.esegui == '1'
+      - name: Test identity, FIC_PYTHON, long TEMP, jsonschema in a venv of its own
         run: |
           git config --global user.name "Maat CI"
           git config --global user.email "ci@example.invalid"
           echo "FIC_PYTHON=$(cygpath -m '${{ steps.py.outputs.python-path }}')" >> "$GITHUB_ENV"
+          # TEMP of the runner in the long form: runneradmin has more than 8 letters, so the runner gives
+          # C:\Users\RUNNER~1\…, which Python expands and bash does not (first CI of 1.6.0: reds in maat-paths,
+          # gates, harness-merge, plan-check from the two spellings of one folder). Locally TEMP is long.
+          L=$(cygpath -w -l "$TEMP")
+          echo "TEMP=$L" >> "$GITHUB_ENV"; echo "TMP=$L" >> "$GITHUB_ENV"; echo "TEMP: $TEMP → $L"
           V=$(cygpath -u "$RUNNER_TEMP")/maat-venv
           "${{ steps.py.outputs.python-path }}" -m venv "$(cygpath -w "$V")"
           "$V/Scripts/python.exe" -m pip install --disable-pip-version-check --quiet "$JSONSCHEMA_VERSIONE"
           echo "MAAT_PY_JSONSCHEMA=$(cygpath -m "$V/Scripts/python.exe")" >> "$GITHUB_ENV"
-          bash --version | head -1; command -v timeout git
+          bash --version | head -1; git --version; command -v timeout
       - name: Suites of group ${{ matrix.gruppo }}
-        if: steps.modo.outputs.esegui == '1'
         run: |
+          echo "TEMP=$TEMP · /tmp = $(cygpath -w /tmp)"
           test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))" ||
             { echo "matrix.gruppo ${{ matrix.gruppo }} is not job ${{ strategy.job-index }} + 1: the matrix must be 1..n in order" >&2; exit 2; }
           bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
       - name: Results
-        if: always() && steps.modo.outputs.esegui == '1'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: esiti-windows-${{ matrix.gruppo }}
@@ -244,7 +238,7 @@ jobs:
     steps:
       - name: All the groups green
         run: |
-          echo "groups: ${{ needs.windows-gruppo.result }} · complete run: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main') || contains(github.event.head_commit.message, '[windows completo]') }}"
+          echo "groups: ${{ needs.windows-gruppo.result }}"
           test "${{ needs.windows-gruppo.result }}" = success
   ci:
     name: ci

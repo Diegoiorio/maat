@@ -9,8 +9,7 @@
 #   matrix, matrix 1..n), with a counterproof · 7 (1.5.1) tools/suite-parallelo.sh
 #   8 (1.6.0) --gruppi <file>: lines «- <entry> <reason>» (left out: counted as covered, ESCLUSA in riepilogo.txt, only
 #   in group 1) and «<g> VAR=value <entry>»; the three matrices of ci.yml (linux and macos on tools/suite-gruppi.list,
-#   windows on tools/suite-gruppi-windows.list), the Windows file against suite.list, and its subset WIN_BREVE against
-#   tools/prova-breve-windows.list, with counterproofs
+#   windows on tools/suite-gruppi-windows.list), the Windows file against suite.list, with counterproofs
 #   bash tools/suite.test.sh          (Git Bash or WSL; only in the repo)
 set -uo pipefail
 export MAAT_LINGUA=it
@@ -116,32 +115,23 @@ check "  il legame con la CI: per linux e macos (tools/suite-gruppi.list) e wind
 sed 's|/\${{ strategy.job-total }} esiti|/3 esiti|' "$CIY" > "$T/ci-3.yml"
 sed 's|^\(        gruppo: \)\[1, 2, 3\]$|\1[1, 2]|' "$CIY" > "$T/ci-2.yml"
 sed 's|--gruppi tools/suite-gruppi-windows.list|--gruppi tools/suite-gruppi.list|' "$CIY" > "$T/ci-w.yml"
-sed 's|^\(        gruppo: \)\[\(1, 2, 3, 4, [0-9, ]*\), [0-9]*\]$|\1[\2]|' "$CIY" > "$T/ci-w1.yml"
+sed 's|^\(        gruppo: \)\[\(1, 2, 3, 4[0-9, ]*\), [0-9]*\]$|\1[\2]|' "$CIY" > "$T/ci-w1.yml"
 check "controprova: ci.yml con /3 scritto a mano, o con la matrice [1, 2] → il legame è rosso" \
   'grep -q -- "/3 esiti" "$T/ci-3.yml" && ! ci_legame "$T/ci-3.yml" linux-gruppo tools/suite-gruppi.list && grep -q "gruppo: \[1, 2\]$" "$T/ci-2.yml" && ! ci_legame "$T/ci-2.yml" linux-gruppo tools/suite-gruppi.list'
 check "controprova: il job windows con il file di Linux, o con un gruppo in meno nella matrice → il legame è rosso" \
   '! cmp -s "$CIY" "$T/ci-w.yml" && ! ci_legame "$T/ci-w.yml" windows-gruppo tools/suite-gruppi-windows.list && ! cmp -s "$CIY" "$T/ci-w1.yml" && ! ci_legame "$T/ci-w1.yml" windows-gruppo tools/suite-gruppi-windows.list'
-# the Windows file: every entry of suite.list in exactly one line (a group or «-»), groups 1..n; the groups of
-# WIN_BREVE (ci.yml) = the entries of tools/prova-breve-windows.list plus tools/esempi-equiv.test.sh. $1 = groups file
+# the Windows file: every entry of suite.list in exactly one line (a group or «-»), groups 1..n. $1 = groups file
 win_copre() {
   local G L
   G=$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r'); L=$(grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/tools/suite.list" | tr -d '\r')
   [ "$(printf '%s\n' "$G" | awk '$1 == "-" { print $2; next } { print $NF }' | sort)" = "$(printf '%s\n' "$L" | sort)" ] &&
     [ "$(printf '%s\n' "$G" | awk '$1 != "-" { print $1 }' | sort -un | tr '\n' ' ')" = "$(seq -s ' ' 1 "$(printf '%s\n' "$G" | awk '$1 != "-" { print $1 }' | sort -u | wc -l)") " ]
 }
-win_breve() {
-  local B
-  B=$(ci_blocco "$CIY" windows-gruppo | sed -n 's/^[[:space:]]*WIN_BREVE: "\([0-9 ]*\)"[[:space:]]*$/\1/p')
-  [ -n "$B" ] &&
-    [ "$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r' | awk -v b=" $B " '$1 != "-" && index(b, " " $1 " ") { print $NF }' | sort)" = \
-      "$( { grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/tools/prova-breve-windows.list" | tr -d '\r' | awk '{ print $NF }'; echo tools/esempi-equiv.test.sh; } | sort)" ]
-}
-check "  il file Windows copre tools/suite.list (ogni voce in una riga sola, gruppi 1..n); i gruppi di WIN_BREVE sono la prova breve più le attese" \
-  'win_copre "$ROOT/tools/suite-gruppi-windows.list" && win_breve "$ROOT/tools/suite-gruppi-windows.list"'
+check "  il file Windows copre tools/suite.list (ogni voce in una riga sola, gruppi 1..n)" 'win_copre "$ROOT/tools/suite-gruppi-windows.list"'
 awk '!f && /^- / { f = 1; next } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-senza.list"
-sed 's/^2 guard$/4 guard/' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-sposta.list"
-check "controprova: senza la prima riga «-» il file Windows non copre suite.list; guard spostata fuori da WIN_BREVE → la prova breve non coincide" \
-  '! cmp -s "$T/w-senza.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-senza.list" && ! cmp -s "$T/w-sposta.list" "$ROOT/tools/suite-gruppi-windows.list" && win_copre "$T/w-sposta.list" && ! win_breve "$T/w-sposta.list"'
+awk '$1 == "1" { $1 = "9" } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-buco.list"
+check "controprova: senza la prima riga «-» il file Windows non copre suite.list; il gruppo 1 rinominato 9 → gruppi non 1..n" \
+  '! cmp -s "$T/w-senza.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-senza.list" && ! cmp -s "$T/w-buco.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-buco.list"'
 check "  e tools/prova-breve-windows.list nomina solo voci di suite.list" \
   '(cd "$ROOT" && L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r"); grep -v "^[[:space:]]*\(#\|$\)" tools/prova-breve-windows.list | tr -d "\r" |
     while read -r r; do printf "%s\n" "$L" | grep -qxF -- "${r##* }" || exit 1; done)'
