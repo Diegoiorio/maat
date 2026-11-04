@@ -1,35 +1,47 @@
-# CI: all the plugin suites on Linux, split in jobs that run at the same time (1.5.1), one per group of
-# tools/suite-gruppi.list (groups of similar length; today three). Job k of n runs `tools/suite.sh --gruppo k/n`, with
-# n = strategy.job-total (the number of jobs of the matrix, not a number written by hand) and k = matrix.gruppo, which
-# the step requires equal to strategy.job-index + 1 (the matrix is exactly 1..n, in order). suite.sh refuses a groups
-# file that does not cover tools/suite.list exactly or whose groups are not exactly 1..n: so a matrix with fewer jobs
-# than the file has groups (or more) is red, it cannot be green without a group (tools/suite.test.sh checks this
-# file: the matrix 1..n with n = the groups of the file, and the --gruppo argument built as above). Every job has the
-# same setup. The job «linux» succeeds only if all the groups succeed: that is the check to require. Windows and
-# macOS come later (1.5.3).
-# 1.6.0: tools/esempi-equiv.test.sh proves the driver on the public corpus against the expected outputs
-# (tools/esempi-equiv/attese/) with the two validators: the system Python (minimal validator)
-# and a venv of its own with jsonschema at a fixed version (MAAT_PY_JSONSCHEMA; the same version that
-# `tools/esempi-equiv/attese.sh --scrivi` requires). MAAT_ATTESE_RICHIESTE=1 at EVERY push and pull request (stricter
-# than MAAT_CERT_RICHIESTO of 1.5.x, which was on only for main, tags and pull requests to main): a validator SALTATO
-# is red, and a file of attese/ changed since the merge-base with origin/main (fetch-depth: 0) without a new line in
-# attese/STORIA is red. The variable is set in every job, but only tools/esempi-equiv.test.sh reads it: it is in
-# group 3 (if group 3 did not run, the check above makes the run red). Windows and macOS: Block D.
+# CI (1.6.0): all the plugin suites on Linux, macOS and Windows, split in jobs that run at the same time, one per group
+# of a groups file: tools/suite-gruppi.list for Linux and macOS (the same three groups), tools/suite-gruppi-windows.list
+# for Windows. Job k of n runs `tools/suite.sh --gruppi <file> --gruppo k/n`, with n = strategy.job-total (the number of
+# jobs of the matrix, never written by hand) and k = matrix.gruppo, which the step requires equal to
+# strategy.job-index + 1 (the matrix is exactly 1..n, in order). suite.sh refuses a groups file that does not cover
+# tools/suite.list exactly (every entry in a group, or left out with «- <entry> <reason>») or whose groups are not
+# exactly 1..n: so a matrix with fewer jobs than the file has groups (or more) is red, it cannot be green without a
+# group (tools/suite.test.sh checks this file: each matrix 1..n with n = the groups of its file, the --gruppi and
+# --gruppo arguments built as above). The final jobs «linux», «windows» and «macos» succeed only if all the groups of
+# their platform succeed, and «ci» only if all three do: «ci» is the check to require on main.
+# MAAT_ATTESE_RICHIESTE=1 in every job, at EVERY push and pull request (stricter than MAAT_CERT_RICHIESTO of 1.5.x,
+# which was on only for main, tags and pull requests to main): tools/esempi-equiv.test.sh (the expected outputs of the
+# public corpus, tools/esempi-equiv/attese/, with the two validators: the system Python, minimal validator, and a venv
+# with jsonschema at a fixed version, MAAT_PY_JSONSCHEMA; the same version that `attese.sh --scrivi` requires) is red
+# with a validator SALTATO, and with a file of attese/ changed since the merge-base with origin/main (fetch-depth: 0)
+# without a new line in attese/STORIA. It is in group 3 of both groups files.
+# Windows (D6 of the 1.6.0 plan): Git Bash of the runner, FIC_PYTHON = the Python 3.10 of setup-python (otherwise
+# `py -3` would choose the newest Python of the runner and the minimum would not be proven), FIC_WT_WSL=0 (suite.sh),
+# core.autocrlf false (as the local Windows proofs). The complete run (groups 1..n) on pull requests to main, tags, main,
+# workflow_dispatch and pushes whose commit message contains «[windows completo]»; on the other pushes only the groups
+# of WIN_BREVE (the short proof and the expected outputs), the others end at once with «saltato: sottoinsieme».
+# Left out on Windows (lines «-» of its file): the four suites that want WSL (run locally at release) and the oracle.
+# macOS (D7): bash and the GNU tools from Homebrew (cache of its downloads), their gnubin folders first in the PATH, awk
+# = gawk, TMPDIR=$RUNNER_TEMP (on macOS /var is a link to /private/var).
 name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main' }}
+env:
+  MAAT_ATTESE_RICHIESTE: "1"
+  JSONSCHEMA_VERSIONE: "jsonschema==4.23.0"
 jobs:
-  gruppo:
+  linux-gruppo:
     name: linux (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    # Measure (04/11/2026): the groups take 816, 818 and 804 s on the Linux clone in WSL (1.5.0 full run, plus
-    # rollback.test.sh 218 s and driver.test.sh 382 s measured for 1.5.1); in 1.5.0 the CI took 35-42 min for ~38 min
-    # on the clone (factor up to 1.1). Longest group ~15 min, plus ~2 min of setup = 17; limit = first multiple of
-    # 5 min above 1.5 × 17 = 25.5 → 30. Before the split: 45 min for one job, about 42 used. To be revised on the
-    # first CI of 1.5.1.
+    # Measure (04/11/2026, 1.5.1): the groups take 816, 818 and 804 s on the Linux clone in WSL; the CI took up to 1.1
+    # times the clone. Longest group ~15 min, plus ~2 min of setup = 17; limit = first multiple of 5 min above
+    # 1.5 × 17 = 25.5 → 30.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -52,29 +64,196 @@ jobs:
       - name: jsonschema in a venv of its own (the second validator)
         run: |
           python -m venv "$RUNNER_TEMP/maat-venv"
-          "$RUNNER_TEMP/maat-venv/bin/python" -m pip install --disable-pip-version-check --quiet "jsonschema==4.23.0"
+          "$RUNNER_TEMP/maat-venv/bin/python" -m pip install --disable-pip-version-check --quiet "$JSONSCHEMA_VERSIONE"
           echo "MAAT_PY_JSONSCHEMA=$RUNNER_TEMP/maat-venv/bin/python" >> "$GITHUB_ENV"
       - name: Suites of group ${{ matrix.gruppo }}
-        env:
-          MAAT_ATTESE_RICHIESTE: "1"
         run: |
           test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))" ||
             { echo "matrix.gruppo ${{ matrix.gruppo }} is not job ${{ strategy.job-index }} + 1: the matrix must be 1..n in order" >&2; exit 2; }
-          bash tools/suite.sh --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
+          bash tools/suite.sh --gruppi tools/suite-gruppi.list --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
       - name: Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: esiti-gruppo-${{ matrix.gruppo }}
+          name: esiti-linux-${{ matrix.gruppo }}
           path: esiti/
+
+  macos-gruppo:
+    name: macos (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
+    runs-on: macos-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        gruppo: [1, 2, 3]
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      MAAT_BREW: "bash coreutils gnu-sed findutils grep gawk diffutils flock rsync"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Cache of the Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ runner.arch }}-${{ env.MAAT_BREW }}-1
+      - name: bash and the GNU tools from Homebrew, first in the PATH; awk = gawk; TMPDIR
+        run: |
+          t0=$(date +%s)
+          brew install $MAAT_BREW
+          P=$(brew --prefix)
+          G=$RUNNER_TEMP/maat-gnu
+          mkdir -p "$G"
+          ln -sf "$P/bin/bash" "$G/bash"
+          ln -sf "$P/bin/gawk" "$G/awk"
+          for f in coreutils gnu-sed findutils grep diffutils; do
+            d=$P/opt/$f/libexec/gnubin
+            [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"
+          done
+          echo "$G" >> "$GITHUB_PATH"
+          echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "brew: $(( $(date +%s) - t0 )) s"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: The tools the suites will use
+        run: |
+          for c in bash sed awk grep find xargs stat date sha256sum timeout flock rsync diff python3 git; do
+            printf '%-10s %s · %s\n' "$c" "$(command -v "$c")" "$("$c" --version 2>&1 | head -1)"
+          done
+          echo "TMPDIR=$TMPDIR"
+      - name: Test identity for the temporary git repositories
+        run: |
+          git config --global user.name "Maat CI"
+          git config --global user.email "ci@example.invalid"
+      - name: jsonschema in a venv of its own (the second validator)
+        run: |
+          python -m venv "$RUNNER_TEMP/maat-venv"
+          "$RUNNER_TEMP/maat-venv/bin/python" -m pip install --disable-pip-version-check --quiet "$JSONSCHEMA_VERSIONE"
+          echo "MAAT_PY_JSONSCHEMA=$RUNNER_TEMP/maat-venv/bin/python" >> "$GITHUB_ENV"
+      - name: Suites of group ${{ matrix.gruppo }}
+        run: |
+          test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))" ||
+            { echo "matrix.gruppo ${{ matrix.gruppo }} is not job ${{ strategy.job-index }} + 1: the matrix must be 1..n in order" >&2; exit 2; }
+          bash tools/suite.sh --gruppi tools/suite-gruppi.list --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esiti-macos-${{ matrix.gruppo }}
+          path: esiti/
+
+  windows-gruppo:
+    name: windows (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
+    runs-on: windows-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        gruppo: [1, 2, 3, 4, 5, 6, 7]
+    env:
+      WIN_BREVE: "1 2 3"
+      WIN_COMPLETO: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main') || contains(github.event.head_commit.message, '[windows completo]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Complete run or subset
+        id: modo
+        run: |
+          if [ "$WIN_COMPLETO" = true ]; then echo "complete run: group ${{ matrix.gruppo }}"; echo esegui=1 >> "$GITHUB_OUTPUT"
+          else case " $WIN_BREVE " in
+            *" ${{ matrix.gruppo }} "*) echo "subset ($WIN_BREVE): group ${{ matrix.gruppo }}"; echo esegui=1 >> "$GITHUB_OUTPUT" ;;
+            *) echo "saltato: sottoinsieme ($WIN_BREVE), group ${{ matrix.gruppo }} only in the complete run"; echo esegui=0 >> "$GITHUB_OUTPUT" ;;
+          esac; fi
+      - name: Line endings as in the repository
+        if: steps.modo.outputs.esegui == '1'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        if: steps.modo.outputs.esegui == '1'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        if: steps.modo.outputs.esegui == '1'
+        id: py
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        if: steps.modo.outputs.esegui == '1'
+        with:
+          node-version: "20"
+      - name: Test identity, FIC_PYTHON, jsonschema in a venv of its own
+        if: steps.modo.outputs.esegui == '1'
+        run: |
+          git config --global user.name "Maat CI"
+          git config --global user.email "ci@example.invalid"
+          echo "FIC_PYTHON=$(cygpath -m '${{ steps.py.outputs.python-path }}')" >> "$GITHUB_ENV"
+          V=$(cygpath -u "$RUNNER_TEMP")/maat-venv
+          "${{ steps.py.outputs.python-path }}" -m venv "$(cygpath -w "$V")"
+          "$V/Scripts/python.exe" -m pip install --disable-pip-version-check --quiet "$JSONSCHEMA_VERSIONE"
+          echo "MAAT_PY_JSONSCHEMA=$(cygpath -m "$V/Scripts/python.exe")" >> "$GITHUB_ENV"
+          bash --version | head -1; command -v timeout git
+      - name: Suites of group ${{ matrix.gruppo }}
+        if: steps.modo.outputs.esegui == '1'
+        run: |
+          test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))" ||
+            { echo "matrix.gruppo ${{ matrix.gruppo }} is not job ${{ strategy.job-index }} + 1: the matrix must be 1..n in order" >&2; exit 2; }
+          bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
+      - name: Results
+        if: always() && steps.modo.outputs.esegui == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: esiti-windows-${{ matrix.gruppo }}
+          path: esiti/
+
   linux:
     name: linux
-    needs: gruppo
+    needs: linux-gruppo
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: All the groups green
         run: |
-          echo "groups: ${{ needs.gruppo.result }}"
-          test "${{ needs.gruppo.result }}" = success
+          echo "groups: ${{ needs.linux-gruppo.result }}"
+          test "${{ needs.linux-gruppo.result }}" = success
+  macos:
+    name: macos
+    needs: macos-gruppo
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All the groups green
+        run: |
+          echo "groups: ${{ needs.macos-gruppo.result }}"
+          test "${{ needs.macos-gruppo.result }}" = success
+  windows:
+    name: windows
+    needs: windows-gruppo
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All the groups green
+        run: |
+          echo "groups: ${{ needs.windows-gruppo.result }} · complete run: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main') || contains(github.event.head_commit.message, '[windows completo]') }}"
+          test "${{ needs.windows-gruppo.result }}" = success
+  ci:
+    name: ci
+    needs: [linux, macos, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The blocking platforms green
+        run: |
+          echo "linux: ${{ needs.linux.result }} · macos: ${{ needs.macos.result }} · windows: ${{ needs.windows.result }}"
+          test "${{ needs.linux.result }}" = success && test "${{ needs.macos.result }}" = success && test "${{ needs.windows.result }}" = success

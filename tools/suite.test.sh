@@ -7,6 +7,10 @@
 #   5 counterproof: a guard that takes the fingerprint only once (before = after by construction) → case 1 green, red
 #   6 (1.5.1) --gruppo <k>/<n>, and the link of .github/workflows/ci.yml with tools/suite-gruppi.list (n from the
 #   matrix, matrix 1..n), with a counterproof · 7 (1.5.1) tools/suite-parallelo.sh
+#   8 (1.6.0) --gruppi <file>: lines «- <entry> <reason>» (left out: counted as covered, ESCLUSA in riepilogo.txt, only
+#   in group 1) and «<g> VAR=value <entry>»; the three matrices of ci.yml (linux and macos on tools/suite-gruppi.list,
+#   windows on tools/suite-gruppi-windows.list), the Windows file against suite.list, and its subset WIN_BREVE against
+#   tools/prova-breve-windows.list, with counterproofs
 #   bash tools/suite.test.sh          (Git Bash or WSL; only in the repo)
 set -uo pipefail
 export MAAT_LINGUA=it
@@ -75,9 +79,9 @@ check "6 --gruppo 2/2 → solo le suite del gruppo 2, exit 0" '[ $rc -eq 0 ] && 
 corri_g "$L6" "2 tools/finta-ferma.test.sh;1 finta" 1/2
 check "  --gruppo 1/2 → solo finta" '[ $rc -eq 0 ] && riga finta | grep -q "finta del plugin" && ! riga tools/finta-ferma.test.sh' "$(cat "$T/out")"
 corri_g "$L6" "1 tools/finta-ferma.test.sh" 1/1
-check "  una suite della lista in nessun gruppo → exit 2, nessuna suite lanciata" '[ $rc -eq 2 ] && grep -q "finta is in 0 groups" "$T/out" && [ ! -f "$T/esiti/riepilogo.txt" ]' "$(cat "$T/out")"
+check "  una suite della lista in nessun gruppo → exit 2, nessuna suite lanciata" '[ $rc -eq 2 ] && grep -q "finta is in 0 lines" "$T/out" && [ ! -f "$T/esiti/riepilogo.txt" ]' "$(cat "$T/out")"
 corri_g "$L6" "1 tools/finta-ferma.test.sh;1 finta;2 finta" 2/2
-check "  una suite in due gruppi → exit 2" '[ $rc -eq 2 ] && grep -q "finta is in 2 groups" "$T/out"' "$(cat "$T/out")"
+check "  una suite in due gruppi → exit 2" '[ $rc -eq 2 ] && grep -q "finta is in 2 lines" "$T/out"' "$(cat "$T/out")"
 corri_g "$L6" "1 tools/finta-ferma.test.sh;1 finta;1 assente" 1/1
 check "  una voce del file non in suite.list → exit 2" '[ $rc -eq 2 ] && grep -q "assente is not in suite.list" "$T/out"' "$(cat "$T/out")"
 corri_g "$L6" "1 tools/finta-ferma.test.sh;1 finta" 1/2
@@ -89,26 +93,92 @@ check "  --gruppo 3/2 (k > n) → exit 2, uso" '[ $rc -eq 2 ] && grep -q "^usage
 check "  il file vero: tools/suite-gruppi.list copre tools/suite.list (ogni suite in un gruppo solo, gruppi 1..3)" \
   '(cd "$ROOT" && G=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite-gruppi.list | tr -d "\r"); L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r");
     [ "$(printf "%s\n" "$G" | awk "{print \$2}" | sort)" = "$(printf "%s\n" "$L" | sort)" ] && [ "$(printf "%s\n" "$G" | awk "{print \$1}" | sort -u | tr "\n" " ")" = "1 2 3 " ])'
-# the link with the CI (review of 1.5.1): in ci.yml n is strategy.job-total (never written by hand), k must be
-# strategy.job-index + 1, and the matrix is 1..n with n = the groups of the file. $1 = ci.yml, $2 = groups file
+# the link with the CI (review of 1.5.1; 1.6.0: one matrix job per platform): in the block of job $2 of ci.yml, n is
+# strategy.job-total (never written by hand), k must be strategy.job-index + 1, the groups file is $3 (--gruppi, a
+# path from the repo root), and the matrix is 1..n with n = the groups of that file (lines «-» are not groups).
+# $1 = ci.yml
+ci_blocco() { tr -d '\r' < "$1" | awk -v j="  $2:" '$0 == j { s = 1; next } s && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { s = 0 } s'; }
 ci_legame() {
-  local n m
-  n=$(grep -v '^[[:space:]]*\(#\|$\)' "$2" | tr -d '\r' | awk '{print $1}' | sort -u | wc -l | tr -d ' ')
-  m=$(tr -d '\r' < "$1" | sed -n 's/^[[:space:]]*gruppo: \[\(.*\)\][[:space:]]*$/\1/p' | tr -d ' ')
+  local n m b
+  b=$(ci_blocco "$1" "$2")
+  n=$(grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/$3" | tr -d '\r' | awk '$1 != "-" {print $1}' | sort -u | wc -l | tr -d ' ')
+  m=$(printf '%s\n' "$b" | sed -n 's/^[[:space:]]*gruppo: \[\(.*\)\][[:space:]]*$/\1/p' | tr -d ' ')
   [ "$m" = "$(seq -s, 1 "$n")" ] &&
-    [ "$(tr -d '\r' < "$1" | grep -c -- '--gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} ')" = 1 ] &&
-    tr -d '\r' < "$1" | grep -qF 'test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))"' &&
-    ! tr -d '\r' < "$1" | grep -- '--gruppo ' | grep -v '^[[:space:]]*#' | grep -q -- '--gruppo [^$]*/[0-9]'
+    [ "$(printf '%s\n' "$b" | grep -c -- "--gruppi $3 --gruppo \${{ matrix.gruppo }}/\${{ strategy.job-total }} ")" = 1 ] &&
+    printf '%s\n' "$b" | grep -qF 'test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))"' &&
+    ! printf '%s\n' "$b" | grep -- '--gruppo ' | grep -v '^[[:space:]]*#' | grep -q -- '--gruppo [^$]*/[0-9]'
 }
-check "  il legame con la CI: in ci.yml n = strategy.job-total, k = job-index + 1, la matrice e' 1..n con n = i gruppi del file" \
-  'ci_legame "$ROOT/.github/workflows/ci.yml" "$ROOT/tools/suite-gruppi.list"'
-sed 's|/\${{ strategy.job-total }} esiti|/3 esiti|' "$ROOT/.github/workflows/ci.yml" > "$T/ci-3.yml"
-sed 's|^\(        gruppo: \)\[1, 2, 3\]|\1[1, 2]|' "$ROOT/.github/workflows/ci.yml" > "$T/ci-2.yml"
+# no other job runs suite.sh --gruppo: the three above are all of them
+ci_tre() { [ "$(tr -d '\r' < "$1" | grep -v '^[[:space:]]*#' | grep -c -- 'tools/suite.sh .*--gruppo ')" = 3 ]; }
+CIY=$ROOT/.github/workflows/ci.yml
+check "  il legame con la CI: per linux e macos (tools/suite-gruppi.list) e windows (tools/suite-gruppi-windows.list) n = strategy.job-total, k = job-index + 1, la matrice e' 1..n con n = i gruppi del file" \
+  'ci_legame "$CIY" linux-gruppo tools/suite-gruppi.list && ci_legame "$CIY" macos-gruppo tools/suite-gruppi.list && ci_legame "$CIY" windows-gruppo tools/suite-gruppi-windows.list && ci_tre "$CIY"'
+sed 's|/\${{ strategy.job-total }} esiti|/3 esiti|' "$CIY" > "$T/ci-3.yml"
+sed 's|^\(        gruppo: \)\[1, 2, 3\]$|\1[1, 2]|' "$CIY" > "$T/ci-2.yml"
+sed 's|--gruppi tools/suite-gruppi-windows.list|--gruppi tools/suite-gruppi.list|' "$CIY" > "$T/ci-w.yml"
+sed 's|^\(        gruppo: \)\[\(1, 2, 3, 4, [0-9, ]*\), [0-9]*\]$|\1[\2]|' "$CIY" > "$T/ci-w1.yml"
 check "controprova: ci.yml con /3 scritto a mano, o con la matrice [1, 2] → il legame è rosso" \
-  'grep -q -- "/3 esiti" "$T/ci-3.yml" && ! ci_legame "$T/ci-3.yml" "$ROOT/tools/suite-gruppi.list" && grep -q "gruppo: \[1, 2\]$" "$T/ci-2.yml" && ! ci_legame "$T/ci-2.yml" "$ROOT/tools/suite-gruppi.list"'
+  'grep -q -- "/3 esiti" "$T/ci-3.yml" && ! ci_legame "$T/ci-3.yml" linux-gruppo tools/suite-gruppi.list && grep -q "gruppo: \[1, 2\]$" "$T/ci-2.yml" && ! ci_legame "$T/ci-2.yml" linux-gruppo tools/suite-gruppi.list'
+check "controprova: il job windows con il file di Linux, o con un gruppo in meno nella matrice → il legame è rosso" \
+  '! cmp -s "$CIY" "$T/ci-w.yml" && ! ci_legame "$T/ci-w.yml" windows-gruppo tools/suite-gruppi-windows.list && ! cmp -s "$CIY" "$T/ci-w1.yml" && ! ci_legame "$T/ci-w1.yml" windows-gruppo tools/suite-gruppi-windows.list'
+# the Windows file: every entry of suite.list in exactly one line (a group or «-»), groups 1..n; the groups of
+# WIN_BREVE (ci.yml) = the entries of tools/prova-breve-windows.list plus tools/esempi-equiv.test.sh. $1 = groups file
+win_copre() {
+  local G L
+  G=$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r'); L=$(grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/tools/suite.list" | tr -d '\r')
+  [ "$(printf '%s\n' "$G" | awk '$1 == "-" { print $2; next } { print $NF }' | sort)" = "$(printf '%s\n' "$L" | sort)" ] &&
+    [ "$(printf '%s\n' "$G" | awk '$1 != "-" { print $1 }' | sort -un | tr '\n' ' ')" = "$(seq -s ' ' 1 "$(printf '%s\n' "$G" | awk '$1 != "-" { print $1 }' | sort -u | wc -l)") " ]
+}
+win_breve() {
+  local B
+  B=$(ci_blocco "$CIY" windows-gruppo | sed -n 's/^[[:space:]]*WIN_BREVE: "\([0-9 ]*\)"[[:space:]]*$/\1/p')
+  [ -n "$B" ] &&
+    [ "$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r' | awk -v b=" $B " '$1 != "-" && index(b, " " $1 " ") { print $NF }' | sort)" = \
+      "$( { grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/tools/prova-breve-windows.list" | tr -d '\r' | awk '{ print $NF }'; echo tools/esempi-equiv.test.sh; } | sort)" ]
+}
+check "  il file Windows copre tools/suite.list (ogni voce in una riga sola, gruppi 1..n); i gruppi di WIN_BREVE sono la prova breve più le attese" \
+  'win_copre "$ROOT/tools/suite-gruppi-windows.list" && win_breve "$ROOT/tools/suite-gruppi-windows.list"'
+awk '!f && /^- / { f = 1; next } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-senza.list"
+sed 's/^2 guard$/4 guard/' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-sposta.list"
+check "controprova: senza la prima riga «-» il file Windows non copre suite.list; guard spostata fuori da WIN_BREVE → la prova breve non coincide" \
+  '! cmp -s "$T/w-senza.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-senza.list" && ! cmp -s "$T/w-sposta.list" "$ROOT/tools/suite-gruppi-windows.list" && win_copre "$T/w-sposta.list" && ! win_breve "$T/w-sposta.list"'
 check "  e tools/prova-breve-windows.list nomina solo voci di suite.list" \
   '(cd "$ROOT" && L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r"); grep -v "^[[:space:]]*\(#\|$\)" tools/prova-breve-windows.list | tr -d "\r" |
     while read -r r; do printf "%s\n" "$L" | grep -qxF -- "${r##* }" || exit 1; done)'
+
+# --- 8. (1.6.0) --gruppi <file>: entries left out («- <entry> <reason>») and «<g> VAR=value <entry>» ---
+# $1 = list, $2 = groups file content (lines separated by ;), $3… = the arguments of suite.sh before the results dir
+corri_f() {
+  local l=$1 c=$2; shift 2
+  printf '%s\n' "# finta" $l > "$R/tools/suite.list"
+  printf '%s\n' "# finta" > "$T/gruppi-f.list"; local IFS=';'; printf '%s\n' $c >> "$T/gruppi-f.list"; unset IFS
+  rm -rf "$T/esiti"; (cd "$R" && bash "$SUITE_SH" "$@" "$T/esiti") > "$T/out" 2>&1; rc=$?
+}
+pulisci; ferma; printf '%s\n' '#!/usr/bin/env bash' 'echo "finta: V=${FINTA_V:-nessuna}"' > "$R/plugins/maat/scripts/finta.test.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "esclusa partita"; exit 1' > "$R/tools/finta-esclusa.test.sh"
+L8="tools/finta-ferma.test.sh finta tools/finta-esclusa.test.sh"
+F8="- tools/finta-esclusa.test.sh manca uno strumento;1 FINTA_V=ciao finta;2 tools/finta-ferma.test.sh"
+corri_f "$L8" "$F8" --gruppi "$T/gruppi-f.list" --gruppo 1/2
+check "8 --gruppi: la voce esclusa conta come coperta e non parte; il gruppo 1 la scrive ESCLUSA con il motivo; VAR=valore arriva alla suite" \
+  '[ $rc -eq 0 ] && grep -qx "tools/finta-esclusa.test.sh ESCLUSA: manca uno strumento" "$T/esiti/riepilogo.txt" && ! grep -q "esclusa partita" "$T/esiti/"*.log && riga finta | grep -q "\[FINTA_V=ciao\] finta: V=ciao" && ! riga tools/finta-ferma.test.sh' "$(cat "$T/out")"
+corri_f "$L8" "$F8" --gruppi "$T/gruppi-f.list" --gruppo 2/2
+check "  il gruppo 2 non ripete le escluse, e senza VAR=valore la suite non la vede" \
+  '[ $rc -eq 0 ] && ! grep -q ESCLUSA "$T/esiti/riepilogo.txt" && riga tools/finta-ferma.test.sh | grep -q "rc=0" && ! riga finta' "$(cat "$T/out")"
+corri_f "$L8" "$F8" --gruppi "$T/gruppi-f.list"
+check "  --gruppi senza --gruppo: tutte le voci non escluse, l'esclusa scritta" \
+  '[ $rc -eq 0 ] && riga finta | grep -q "V=ciao" && riga tools/finta-ferma.test.sh | grep -q "rc=0" && grep -q "ESCLUSA" "$T/esiti/riepilogo.txt" && ! grep -q "esclusa partita" "$T/esiti/"*.log' "$(cat "$T/out")"
+corri_f "$L8" "- tools/assente.test.sh motivo;$F8" --gruppi "$T/gruppi-f.list" --gruppo 1/2
+check "  un'esclusa che non è in suite.list → exit 2, nessuna suite lanciata" \
+  '[ $rc -eq 2 ] && grep -q "tools/assente.test.sh is not in suite.list" "$T/out" && [ ! -f "$T/esiti/riepilogo.txt" ]' "$(cat "$T/out")"
+corri_f "$L8" "- finta;2 tools/finta-ferma.test.sh;1 tools/finta-esclusa.test.sh" --gruppi "$T/gruppi-f.list" --gruppo 1/2
+check "  un'esclusa senza motivo → exit 2" '[ $rc -eq 2 ] && grep -q "bad line: - finta" "$T/out"' "$(cat "$T/out")"
+corri_f "$L8" "$F8;1 tools/finta-esclusa.test.sh" --gruppi "$T/gruppi-f.list" --gruppo 1/2
+check "  esclusa e anche in un gruppo → exit 2 (due righe)" '[ $rc -eq 2 ] && grep -q "tools/finta-esclusa.test.sh is in 2 lines" "$T/out"' "$(cat "$T/out")"
+corri_f "$L8" "- tools/finta-esclusa.test.sh motivo;1 1V=x finta;2 tools/finta-ferma.test.sh" --gruppi "$T/gruppi-f.list" --gruppo 1/2
+check "  una variabile che non è un nome → exit 2" '[ $rc -eq 2 ] && grep -q "bad line: 1 1V=x finta" "$T/out"' "$(cat "$T/out")"
+corri_f "$L8" "$F8" --gruppi "$T/assente.list" --gruppo 1/2
+check "  un file dei gruppi che non c'è → exit 2" '[ $rc -eq 2 ] && grep -q "assente.list: missing or empty" "$T/out"' "$(cat "$T/out")"
+rm -f "$R/tools/finta-esclusa.test.sh"
 
 # --- 7. (1.5.1) tools/suite-parallelo.sh on two fake clones (Linux: it needs flock) ---
 #   a suite red only in parallel (it fails while the other group's suite holds a marker) is run again alone and passes
