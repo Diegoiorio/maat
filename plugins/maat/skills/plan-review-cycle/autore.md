@@ -272,11 +272,23 @@ test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`,
   with neither is a `lint2` VIOLATION, and a red with no text or no position is not proven; every string or `data-test` the plan
   adds must be listed as `adds` in `### Strings and data-test` — an existing test asserting its absence is
   a conflict that stops the phase.
+- **Stubs go only into new files.** A new parameter (or an extra positional argument) of a function that already
+  exists gets no signature stub: on the base the test fails with the `TypeError` of the call, before its assertion.
+  Its red is that one — `` red if: `unexpected keyword argument 'sep'` `` (or `` `positional argument` ``) — not the
+  value the implementation will return; the mutation's `red if:` keeps the value (it runs on the implemented code).
+  `lint2` gives a VIOLATION when a Python call in the row's backticks does not fit the signature of an existing
+  function of `### Touched files` and the row's red does not name the `TypeError`.
+- **Reports.** The test-red phase reads the outcome of each test from the module's report (`report: junit` or
+  `vitest` in `.claude/maat.json`): a row in a module with `report: nessuno` gets a `lint2` AVVISO, because the phase
+  would stop BLOCKED. It is configuration, not plan: say it to the user in the round's summary, do not rewrite the plan
+  for it.
 - **Decisions** stay prose; the input → output examples are what the implementer and the tests read.
 - **Steps**: every step is a row `id | file | change | test` inside a `#### Block <id>`; each block
   declares `writes:` (the files it writes) and `after:` (the blocks it depends on, or `none`).
 - **Test plan**: one row per case. `file` = the test, as the first code span: `path` or
-  `path::name` (pytest node id, or vitest full name — required when the row has a mutation); `(new)`
+  `path::name` (pytest node id, or vitest full name — required when the row has a mutation; a Python class and
+  its method are separated by `::` even for `unittest` tests: `test_x.py::TestX::test_y`, never `TestX.test_y`,
+  a `lint2` VIOLATION); `(new)`
   after the span marks a new case, the one the level's caps count. `assertion` = the case's
   `red if:`. `requirement` = the IDs of `### Requirement traceability` it verifies.
 - **Existing non-regression tests are NOT rows of `### Test plan`.** A test that already exists and must

@@ -1479,7 +1479,7 @@ zev "$Z/ev-tbaltro" 'Traceback (most recent call last):
   File "/home/u/progetto/old_test_testo.py", line 9, in test_sep
 TypeError: slug() got an unexpected keyword argument &apos;sep&apos;'
 expect 1 "^rosso T1: rosso_senza_asserzione .*senza posizione" "D-D rossi: traceback di un altro file (old_test_testo.py) = nessuna posizione" -- zr "$Z/dd.md" --evidence "$Z/ev-tbaltro" --run-dir "$Z/dd.run"
-if mutpc ztb 's/^\( *\)m = TRACEBACK_POS\.findall(raw)  # POSIZIONE-TRACEBACK$/\1m = []/'; then
+if mutpc ztb 's/^\( *\)m = TRACEBACK_POS\.findall(r)  # POSIZIONE-TRACEBACK$/\1m = []/'; then
   expect 1 "^rosso T1: rosso_senza_asserzione .*senza posizione" "controprova D-D: senza POSIZIONE-TRACEBACK il rosso di unittest torna senza posizione" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-ztb/plan-check.sh" rossi "$Z/dd.md" --evidence "$Z/ev-tb" --run-dir "$Z/dd.run"
 else echo "FAIL [controprova D-D: la mutazione non si applica]"; fail=$((fail+1)); fi
 # D-B at test-red: the BLOCKED reason names the remedy

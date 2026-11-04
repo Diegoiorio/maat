@@ -70,9 +70,16 @@ bash -c '. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "$@"' _ ${CLAU
 
 Show the **confirmation table**, one row per module:
 
-| Module | Root | radice_pacchetti | Profile | Environment | Test command |
-|---|---|---|---|---|---|
+| Module | Root | radice_pacchetti | Profile | Environment | Test command | Report |
+|---|---|---|---|---|---|---|
 
+- **Report** (`report`: `junit`, `vitest` or `nessuno`): every new plan is in format 2, and its test-red phase reads the
+  outcome of each test from the report; with `nessuno` the full cycle stops BLOCKED at test-red (the doctor says so
+  with an ATTENZIONE). For a module with a test command propose `junit` or `vitest` with a command that writes it:
+  `fastapi-pytest` and `nuxt-vitest` already do; Python tests run by `unittest` → pytest runs them too, so propose
+  `{python} -m pytest -q --junitxml {report} {test}` with `report: junit` (pytest must be installed in that
+  interpreter: ask). If the project has no runner that writes JUnit or the vitest output, keep `nessuno` and tell the
+  user that the full cycle will stop at test-red (plan and review cycles still work).
 - **`radice_pacchetti`:** `componi` sets it equal to `radice`. Ask for it for each module, proposing the workspace
   folder found in step 1 (e.g. `frontend` for the module `frontend/apps/web`); with no workspace it stays `radice`.
 - **Environment:** `wsl` only if step 1 gave `windows-wsl` and the profile asks for it; otherwise `nativo`, with

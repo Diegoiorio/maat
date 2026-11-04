@@ -46,7 +46,7 @@ the explanation after them follows `lingua` of `.claude/maat.json` (Maat 1.4.0).
 | command | what it decides |
 |---|---|
 | `lint <spec> [--baseline <copy>]` | status lines, sections above untouched, surfaces and floors — before every round |
-| `lint2 <spec>` | format 2: requirements ↔ tests ↔ steps ↔ files, blocks, test table and mutations, removed strings still asserted |
+| `lint2 <spec>` | format 2: requirements ↔ tests ↔ steps ↔ files, blocks, test table and mutations, removed strings still asserted, Python test ids (`::`), reds that need a stub in an existing file; AVVISO for a module without `report` |
 | `skeleton <spec>` | the size gate (skeleton and full plan); `Split: rejected` (or `Taglio: rifiutato`) in the spec → exit 0 |
 | `split <mother> <child…>` | a cut: every requirement in exactly one child, `Depends on:` / `Interface for:` (or `Dipende da:` / `Interfaccia per:`) present |
 | `route <spec>` | format 2 branch: `Percorso: leggero \| pieno — <motivo>` |

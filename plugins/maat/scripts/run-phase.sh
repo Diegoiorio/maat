@@ -717,6 +717,8 @@ if [ -f "$hfp_file" ]; then
     hfp_since=$(date -u -r "$hfp_file" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
     hfp_root=$(maat_cygm "$MAAT_ROOT" 2>/dev/null || printf '%s' "$MAAT_ROOT")
     hfp_rimedio="bash \"$(maat_cygm "$MAAT_SCRIPTS/run-phase.sh" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS/run-phase.sh")\" --harness-fp > \"$hfp_file\""
+    # 1.6.0 (block Z): on Windows the command mixes C:/… and /tmp/… paths: it runs in Git Bash, not in PowerShell
+    case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) hfp_rimedio="$hfp_rimedio $(msg run-phase.rim_git_bash)" ;; esac
     case "$hfp_esito" in
       CAMBIATO) hfp_msg="STOP: $(msg run-phase.hfp_changed since="$hfp_since" a="$hfp_a" b="$hfp_b" root="$hfp_root" rim="$hfp_rimedio")" ;;
       FORMATO-PRECEDENTE) hfp_msg="STOP: $(msg run-phase.hfp_old a="$hfp_a" since="$hfp_since" b="$hfp_b" rim="$hfp_rimedio")" ;;

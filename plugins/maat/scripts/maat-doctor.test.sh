@@ -44,7 +44,7 @@ P=$T/p
 mkdir -p "$P/.claude/.ai-workflow" "$P/dati"
 cat > "$P/.claude/maat.json" <<'EOF'
 {"versione_schema": 1, "piattaforma": {"copia_wsl": "no"},
- "moduli": [{"nome": "m", "radice": ".", "comandi": {"test": "bash run-test.sh {test}"},
+ "moduli": [{"nome": "m", "radice": ".", "comandi": {"test": "bash run-test.sh {report} {test}"}, "report": "junit",
              "controlli": [{"glob": "**/*.sh", "comando": "bash -n {file}"}]}],
  "guardia": {"produzione": ["prod[.]esempio[.]it"], "sonde": ["prod.esempio.it"]}}
 EOF
@@ -85,6 +85,19 @@ check "senza maat.json -> MANCA «lancia /maat:setup», exit 1" '[ "$rc" = 1 ] &
 V=$(variante test-assente 'c["moduli"][0]["comandi"]["test"] = "comando-inesistente-maat {test}"')
 doc MAAT_CONFIG="$V"
 check "comando di test inesistente -> MANCA, exit 1" '[ "$rc" = 1 ] && ha "^MANCA comando test del modulo m: comando-inesistente-maat non trovato"'
+
+# --- 3b. 1.6.0 block Z, D-B: tests without a readable report -> ATTENZIONE with the remedy (exit unchanged) -----------
+VR=$(variante senza-report 'del c["moduli"][0]["report"]')
+doc MAAT_CONFIG="$VR"
+check "D-B: comando di test senza report -> ATTENZIONE «report nessuno» con il rimedio, exit 0" '[ "$rc" = 0 ] && ha "^ATTENZIONE modulo m: test senza un report leggibile \(report nessuno\): .*BLOCKED a test-red — metti \"report\": \"junit\" nel modulo"'
+doc MAAT_CONFIG="$VR" MAAT_LINGUA=en
+check "D-B en: WARNING «report none» in inglese" 'ha "^WARNING module m: tests without a readable report \(report none\): .*BLOCKED at test-red — set \"report\": \"junit\" on the module"'
+VR2=$(variante report-vitest 'c["moduli"][0]["report"] = "vitest"')
+doc MAAT_CONFIG="$VR2"
+check "D-B: con report vitest nessuna ATTENZIONE sul report" '[ "$rc" = 0 ] && ! ha "report nessuno"'
+VR3=$(variante senza-test 'del c["moduli"][0]["report"]; del c["moduli"][0]["comandi"]["test"]')
+doc MAAT_CONFIG="$VR3"
+check "D-B: modulo senza comando di test -> nessuna ATTENZIONE sul report" '! ha "report nessuno"'
 
 # --- 4. fake Python 3.8 --------------------------------------------------------------------------------------------------
 doc FIC_PYTHON="$(cygm "$T/py38/python")"

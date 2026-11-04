@@ -36,6 +36,9 @@ The caller gives you:
    - Export **every** new symbol a test imports, and nothing else: an import that does not resolve is a red
      that proves nothing (the driver calls it «not proven» (Italian: «non dimostrato») and stops the phase).
    - Every exported symbol of a new file must be used by at least one acceptance test.
+   - A function that **already exists** gets no stub, not even of its signature: a test of its new parameter fails
+     on the base with the `TypeError` of the call, and that is the red the plan declares (`unexpected keyword
+     argument …`). If the row's red holds only with a signature stub, it is a deviation of the plan: say so.
 3. Nothing else: no production code outside the stubs, no fixtures elsewhere, no snapshot files.
 
 ## Inner loop

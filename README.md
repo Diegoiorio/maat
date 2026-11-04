@@ -64,6 +64,11 @@ duration, phase by phase.
 
 On Windows **WSL is not required**: it only speeds up JavaScript tests.
 
+For the full cycle the tests must leave a **report Maat can read**: JUnit XML (pytest `--junitxml`, which also runs
+`unittest` tests) or the output of vitest. Before the code, the cycle proves that each new test fails on its own
+assertion, and it reads that from the report. Without one (`"report": "nessuno"`, the default) the full cycle stops
+at the `test-red` phase; `maat-doctor` warns about it and `/maat:setup` proposes the report.
+
 ## Installation
 
 Maat is installed **once for each project** you want to use it in.
@@ -95,7 +100,7 @@ You can also give the same commands inside Claude Code: type `/plugin` instead o
 The setup:
 
 1. looks at the project **without changing anything** and recognizes languages, tests and lint;
-2. shows you, in a table, the modules and commands it will use: you confirm or correct them;
+2. shows you, in a table, the modules, commands and test reports it will use: you confirm or correct them;
 3. asks you only what it cannot guess, that is:
    - the production address;
    - the release script;
