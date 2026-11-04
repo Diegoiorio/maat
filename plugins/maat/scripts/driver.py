@@ -1485,7 +1485,7 @@ def cmd_impronta(argv):
         return _uso()
     for t in argv:
         if not os.path.exists(t):
-            print("impronta: " + T("driver-cmd.not_found", t=t), file=sys.stderr)
+            print(T("driver-cmd.not_found", t=t), file=sys.stderr)
             return 2
     print(_impronta_corpus(argv))
     return 0

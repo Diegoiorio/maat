@@ -120,7 +120,7 @@ driver.usage_next	usage: driver.py next <spec-<name>.md>	uso: driver.py next <sp
 # tools/lingua-conversioni/blocco-b.tsv, whose check refuses a key typed by hand). The usage of driver.py, without
 # equiv and certificato (gone in 1.6.0) and with impronta (up to 1.5.1 `equiv --impronta`).
 driver-cmd.usage	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | impronta <folder|spec.md>… | righe [<cap>]	uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <fase> <result.json> | impronta <cartella|spec.md>… | righe [<tetto>]
-driver-cmd.not_found	not found: {t}	non trovato: {t}
+driver-cmd.not_found	driver.py impronta: not found: {t}	driver.py impronta: non trovato: {t}
 
 # --- cycle-state-engine, run-phase-engine, driver-engine (1.5.1, written by hand like driver-cmd: texts that
 # v1.3.0 does not have, so outside the cycle-state, run-phase and driver sections of
