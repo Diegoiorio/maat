@@ -209,7 +209,6 @@ run-phase.v_esito	scripts/run-phase.sh:458!py	-	-	-	outcome STOP:
 run-phase.v_esito	scripts/driver.py:958	-	-	-	outcome STOP: 
 run-phase.v_json_stop	scripts/run-phase.sh:463!py	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
 run-phase.v_json_stop	scripts/driver.py:963	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
-run-phase.drv_valida_failed	scripts/run-phase.sh:485	AVVISO: 	-	-	driver.py valida failed: internal validator of run-phase.sh
 run-phase.usage_valida	scripts/run-phase.sh:490	-	-	script	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>
 run-phase.no_python	scripts/run-phase.sh:491#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
 run-phase.no_python	scripts/run-phase.sh:616#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
