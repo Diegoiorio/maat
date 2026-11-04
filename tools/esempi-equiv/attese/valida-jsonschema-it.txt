@@ -1,0 +1,259 @@
+== progetto-singoli/spec-esempio-two-reviews.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — NEEDS_CHANGES, PLANNED
+-- stderr
+-- exit 0 · result.json 0af2d8100f11b05c1a213dd292ac9ed6d5ea905ff299e305985c18f49f432700
+== progetto-singoli/spec-esempio-no-plan.run/log/01-plan.jsonl
+-- stdout
+-- stderr
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-draft.run/log/01-plan.jsonl
+-- stdout
+PHASE RESULT plan: OK — plan drafted, review pending
+-- stderr
+-- exit 0 · result.json af1b78e664d2217ee7d55b8d6a35ded9c04b2168bc1235154d98905bb69ef7f5
+== progetto-singoli/spec-esempio-open-decision.run/log/01-plan.jsonl
+-- stdout
+PHASE RESULT plan: STOP — open decision: how long to keep the old values
+-- stderr
+-- exit 0 · result.json 30363187a5c2b0fecb1de299db1c6b9d4f817f85bedcfbe0a0ea13c218615dc5
+== progetto-singoli/spec-esempio-stale-tests.run/log/02-test-red.jsonl
+-- stdout
+PHASE RESULT test-red: OK — red proven: T1
+-- stderr
+-- exit 0 · result.json c98f683485718e0ba237cfb9ced21d38f1c62f815dd6aabac9fac631385afb6b
+== progetto-singoli/spec-esempio-test-red.run/log/01-test-stage.jsonl
+-- stdout
+PHASE RESULT test-stage: OK — tests parked in staging
+-- stderr
+-- exit 0 · result.json 468637f74bebc523fc743e683d3fe1eb8eaf0d7eda43caa3c92159eebcdead90
+== progetto-singoli/spec-esempio-test-red-stop.run/log/02-test-red.jsonl
+-- stdout
+PHASE RESULT test-red: STOP — acceptance tests not proven: T1 green
+-- stderr
+-- exit 0 · result.json b154d3cc6c4aa9bee12720e601c27810e2457fc5748423a2f175ee09776b3ce3
+== progetto-singoli/spec-esempio-json-stop.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): step 1 adapted: the guard moved to the caller (la prosa diceva OK: vale il piu conservativo)
+originale=PHASE RESULT implement: OK — done
+-- stderr
+-- exit 0 · result.json 69d517223e13588d2148bbf3715ef4ef61c36552022039bedc57e8ff06aea06a
+== progetto-singoli/spec-esempio-lanes.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — lanes merged: lane 1: a() returns 20 · lane 2: b() returns 21
+-- stderr
+-- exit 0 · result.json 97d693c13a7cbf444b8dd46a8efd289e4c2472d59a6581c2f7e96265c89b8419
+== progetto-singoli/spec-esempio-implement-retry.run/log/01-plan.jsonl
+-- stdout
+PHASE RESULT plan: OK — plan approved
+-- stderr
+-- exit 0 · result.json dff083940bc338db5c3b5f6870bb3c3fbaacec646c518a22525276425f8cad30
+== progetto-singoli/spec-esempio-implement-retry.run/log/02-probe.jsonl
+-- stdout
+PHASE RESULT probe: OK — the test runner is available
+-- stderr
+-- exit 0 · result.json 0bb050bbca4249bff845337114b934b6c39d7dcbfef8f4b98ddd4eec21b2b45f
+== progetto-singoli/spec-esempio-implement-retry.run/log/03-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON (structured_output o recinto json)
+originale=PHASE RESULT implement: OK — done
+-- stderr
+uscita non valida: nessun blocco JSON (structured_output o recinto json)
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-implement-retry.run/log/04-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: blocco JSON illeggibile: Expecting value: line 1 column 32 (char 31)
+originale=PHASE RESULT implement: OK — done
+-- stderr
+uscita non valida: blocco JSON illeggibile: Expecting value: line 1 column 32 (char 31)
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-implement-retry.run/log/05-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: Additional properties are not allowed ('extra' was unexpected); 'MAYBE' is not one of ['OK', 'STOP']
+originale=PHASE RESULT implement: OK — done
+-- stderr
+uscita non valida: Additional properties are not allowed ('extra' was unexpected)
+uscita non valida: 'MAYBE' is not one of ['OK', 'STOP']
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-implement-retry.run/log/06-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: fase 'review' diversa da quella dell etichetta (implement)
+originale=PHASE RESULT implement: OK — done
+-- stderr
+uscita non valida: fase 'review' diversa da quella dell etichetta (implement)
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-implement-retry.run/log/07-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — bloccato su: migration to apply — m.sql
+-- stderr
+-- exit 0 · result.json 2c9bfd74dc2b83a022596888b2f34fb9423cce537e70e57290f53b942d9ad3b5
+== progetto-singoli/spec-esempio-implement-retry.run/log/08-implement.jsonl
+-- stdout
+-- stderr
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-attribution.run/log/02-implement.jsonl
+-- stdout
+-- stderr
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-attribution.run/log/03-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-singoli/spec-esempio-review-decision.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-singoli/spec-esempio-review-decision.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: STOP — needs a human decision
+-- stderr
+-- exit 0 · result.json d4d9f93f8065eea5ed5937d431a2c33cf4d6b1c5f4c0253dbe1606822aec337b
+== progetto-singoli/spec-esempio-contract-changed.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json 1175a62aa206501e646fed0451e7d8fa416e48d2b1bb5a15940f7e02b3883b42
+== progetto-singoli/spec-esempio-fix-json-stop.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — NEEDS_CHANGES, 2 findings
+-- stderr
+-- exit 0 · result.json 9353bb70f9161d6dd83f3d4b3c1fe33cf55647ef690dce44c952005a110866e0
+== progetto-singoli/spec-esempio-fix-json-stop.run/log/04-fix.jsonl
+-- stdout
+PHASE RESULT fix: STOP — JSON: deviazioni dichiarate (1): finding F2 closed differently (la prosa diceva OK: vale il piu conservativo)
+originale=PHASE RESULT fix: OK — F1 and F2 fixed
+-- stderr
+-- exit 0 · result.json ba7def0df1a5ba9d131c0c8d516684ae6d5503d6774fffbc033321b3389af569
+== progetto-singoli/spec-esempio-needs-changes.run/log/02-review.jsonl
+-- stdout
+PHASE RESULT review: OK — NEEDS_CHANGES, PLANNED
+-- stderr
+-- exit 0 · result.json 0af2d8100f11b05c1a213dd292ac9ed6d5ea905ff299e305985c18f49f432700
+== progetto-singoli/spec-esempio-needs-changes.run/log/03-review.jsonl
+-- stdout
+-- stderr
+-- exit 0 · result.json nessuno
+== progetto-singoli/spec-esempio-budget-spent.run/log/07-review.jsonl
+-- stdout
+PHASE RESULT review: OK — NEEDS_CHANGES, PLANNED
+-- stderr
+-- exit 0 · result.json 0af2d8100f11b05c1a213dd292ac9ed6d5ea905ff299e305985c18f49f432700
+== progetto-singoli/spec-esempio-needs-verification.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, NEEDS_VERIFICATION
+-- stderr
+-- exit 0 · result.json a2bcd6e548be7473137ce5d41767d085192d665e1577702ef61972e1e172644a
+== progetto-singoli/spec-esempio-finalize-older.run/log/04-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json 1175a62aa206501e646fed0451e7d8fa416e48d2b1bb5a15940f7e02b3883b42
+== progetto-singoli/spec-esempio-done.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-singoli/spec-esempio-done.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json 1175a62aa206501e646fed0451e7d8fa416e48d2b1bb5a15940f7e02b3883b42
+== progetto-singoli/spec-esempio-code-changed.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-singoli/spec-esempio-json-unreadable.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-singoli/spec-esempio-json-seen.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): step 1 skipped: already done (la prosa diceva OK: vale il piu conservativo)
+originale=PHASE RESULT implement: OK — done
+-- stderr
+-- exit 0 · result.json ce5c826f3b260017ff9345b7b4c9dabbd3aa823e33264121d931cc2aa5ffa825
+== progetto-storico/spec-esempio-chiusa-legacy.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON (structured_output o recinto json)
+originale=ESITO FASE implement: OK — fatto
+-- stderr
+uscita non valida: nessun blocco JSON (structured_output o recinto json)
+-- exit 0 · result.json nessuno
+== progetto-storico/spec-esempio-chiusa-legacy.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: STOP — uscita non valida: nessun blocco JSON (structured_output o recinto json)
+originale=ESITO FASE review: OK — approvata
+-- stderr
+uscita non valida: nessun blocco JSON (structured_output o recinto json)
+-- exit 0 · result.json nessuno
+== progetto-storico/spec-esempio-fix-inline.run/log/03-review.jsonl
+-- stdout
+ESITO FASE review: OK — 1 rilievo
+-- stderr
+-- exit 0 · result.json af760f5a8fd3724f962aaea45351cab45fccd853146d7086b5f50ba66b8c378b
+== progetto-storico/spec-esempio-difensiva.run/log/02-implement.jsonl
+-- stdout
+ESITO FASE implement: OK — fatto
+-- stderr
+-- exit 0 · result.json 505d6e52719336bb099bbe4989304c1b61ed92e59153ce5223bff054b454f9c6
+== progetto-storico/spec-esempio-bloccata.run/log/02-implement.jsonl
+-- stdout
+ESITO FASE implement: STOP — migrazione da applicare
+-- stderr
+-- exit 0 · result.json 8b1d8d70b69241531ab1a575f4267889980c6285e5be6f187ec43c467a8488ab
+== progetto-catene-chiuse/spec-esempio-catena-a-1-api.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-catene-chiuse/spec-esempio-catena-a-1-api.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json 1175a62aa206501e646fed0451e7d8fa416e48d2b1bb5a15940f7e02b3883b42
+== progetto-catene-chiuse/spec-esempio-catena-a-2-ui.run/log/03-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — b() returns 20
+-- stderr
+-- exit 0 · result.json 4922bfa3cd1d8a5aa2dbf4834786e8675f7259415d8ff511b898a5551313f73a
+== progetto-catene-chiuse/spec-esempio-catena-b-1-dati.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON (structured_output o recinto json)
+originale=ESITO FASE implement: OK — fatto
+-- stderr
+uscita non valida: nessun blocco JSON (structured_output o recinto json)
+-- exit 0 · result.json nessuno
+== progetto-catena-codice-cambiato/spec-esempio-catena-d-1-core.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns the new value
+-- stderr
+-- exit 0 · result.json 8f6f1cbf2de662527495d86bdf99125aa68140c88f8c4cfedcd75db301443751
+== progetto-catena-codice-cambiato/spec-esempio-catena-d-1-core.run/log/03-review.jsonl
+-- stdout
+PHASE RESULT review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json 1175a62aa206501e646fed0451e7d8fa416e48d2b1bb5a15940f7e02b3883b42
+== progetto-catena-aperta/spec-esempio-catena-e-1-modello.run/log/02-implement.jsonl
+-- stdout
+ESITO FASE implement: OK — fatto
+-- stderr
+-- exit 0 · result.json cf2417d72fc6bcd7ebed51a8f2b7fa4ad9ab4b26e87b5de6e4579c4a2515124c
+== progetto-catena-aperta/spec-esempio-catena-e-1-modello.run/log/03-review.jsonl
+-- stdout
+ESITO FASE review: OK — APPROVED, IMPLEMENTED
+-- stderr
+-- exit 0 · result.json c22837792c16459796e76f65dd359abf1249b9eb45f9dc26bf559534e30b12ed
+== progetto-catena-albero-cambiato/spec-esempio-catena-j-1-base.run/log/02-implement.jsonl
+-- stdout
+PHASE RESULT implement: OK — a() returns 10
+-- stderr
+-- exit 0 · result.json 6c9c9f1a259cffed3364f864886c15ce1b31674c082ba6995cc34491312ed9dc
+== progetto-impronta-nc/spec-esempio-harness-not-computable.run/log/01-plan.jsonl
+-- stdout
+PHASE RESULT plan: OK — plan approved
+-- stderr
+-- exit 0 · result.json dff083940bc338db5c3b5f6870bb3c3fbaacec646c518a22525276425f8cad30
