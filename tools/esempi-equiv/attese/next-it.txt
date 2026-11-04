@@ -341,7 +341,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: 6291b1aa027f
-Next: STOP — harness cambiato dal 2026-01-01T00:00:00Z (impronta registrata 000000000000, attuale <impronta-attuale>): ricomincia la fase o conferma. Rimedio: se il cambio e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-changed.run/harness.fp" e riprendi (prossima fase: IMPLEMENT); altrimenti riporta il harness com'era
+Next: STOP — harness cambiato dal 2026-01-01T00:00:00Z (impronta registrata 000000000000, attuale <impronta-attuale>): ricomincia la fase o conferma. Rimedio: se il cambio e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-changed.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT); altrimenti riporta il harness com'era
 == exit 0
 == progetto-singoli/spec-esempio-harness-old
 Plan status: APPROVED
@@ -351,7 +351,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: 412c0ba67d64
-Next: STOP — impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata 5f70bf18a086 dal 2026-01-01T00:00:00Z, attuale <impronta-attuale>). Rimedio: se il passaggio al plugin e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-old.run/harness.fp" e riprendi (prossima fase: IMPLEMENT); altrimenti riprendi il ciclo col harness interno
+Next: STOP — impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata 5f70bf18a086 dal 2026-01-01T00:00:00Z, attuale <impronta-attuale>). Rimedio: se il passaggio al plugin e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-old.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT); altrimenti riprendi il ciclo col harness interno
 == exit 0
 == progetto-singoli/spec-esempio-harness-unreadable
 Plan status: APPROVED
@@ -361,7 +361,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: a8ee6aebb116
-Next: STOP — harness.fp illeggibile (vuoto o senza impronta, registrato dal 2026-01-01T00:00:00Z; attuale <impronta-attuale>). Rimedio: se il harness attuale e' quello voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-unreadable.run/harness.fp" e riprendi (prossima fase: IMPLEMENT)
+Next: STOP — harness.fp illeggibile (vuoto o senza impronta, registrato dal 2026-01-01T00:00:00Z; attuale <impronta-attuale>). Rimedio: se il harness attuale e' quello voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-unreadable.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT)
 == exit 0
 == progetto-singoli/spec-esempio-json-unreadable
 Plan status: APPROVED

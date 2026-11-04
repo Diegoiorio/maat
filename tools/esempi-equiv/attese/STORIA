@@ -2,3 +2,4 @@
 # «<UTC> · base <commit> · plugin <which> · motori <next> · <valida> · corpus <fingerprint 12> · motivo: <text> · file: <changed>».
 # The files of attese/ come from the plugin of the first line, except those of the lines after it.
 2026-11-04T20:21:11Z · base 30b9a7a26241 · plugin ref v1.5.1 (1c71b8760864), versione 1.5.1 · motori next predefinito · valida driver · corpus 6b484b23826a · motivo: prima scrittura, dal plugin v1.5.1 (il suo certificato VALIDO: driver = tabella bash e validatore interno) · file: next-it.txt valida-minimo-it.txt valida-jsonschema-it.txt next-en.txt valida-minimo-en.txt valida-jsonschema-en.txt
+2026-11-04T23:01:03Z · base 3ecab48514ef · plugin repo, versione 1.6.0 · motori next predefinito · valida driver · corpus 6b484b23826a · motivo: review del codice 1.6.0: il rimedio harness cambiato finisce con la nota per Windows su ogni piattaforma (una sola uscita di next) · file: next-it.txt next-en.txt

@@ -341,7 +341,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: 6291b1aa027f
-Next: STOP — harness changed since 2026-01-01T00:00:00Z (recorded fingerprint 000000000000, current <impronta-attuale>; the language of the messages counts too): restart the phase or confirm. Remedy: if the change is wanted, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-changed.run/harness.fp" and resume (next phase: IMPLEMENT); otherwise put the harness back as it was
+Next: STOP — harness changed since 2026-01-01T00:00:00Z (recorded fingerprint 000000000000, current <impronta-attuale>; the language of the messages counts too): restart the phase or confirm. Remedy: if the change is wanted, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-changed.run/harness.fp" (on Windows: in Git Bash) and resume (next phase: IMPLEMENT); otherwise put the harness back as it was
 == exit 0
 == progetto-singoli/spec-esempio-harness-old
 Plan status: APPROVED
@@ -351,7 +351,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: 412c0ba67d64
-Next: STOP — fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint 5f70bf18a086 since 2026-01-01T00:00:00Z, current <impronta-attuale>). Remedy: if the move to the plugin is wanted, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-old.run/harness.fp" and resume (next phase: IMPLEMENT); otherwise resume the cycle with the internal harness
+Next: STOP — fingerprint of a previous format: cycle started with the internal harness (recorded fingerprint 5f70bf18a086 since 2026-01-01T00:00:00Z, current <impronta-attuale>). Remedy: if the move to the plugin is wanted, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-old.run/harness.fp" (on Windows: in Git Bash) and resume (next phase: IMPLEMENT); otherwise resume the cycle with the internal harness
 == exit 0
 == progetto-singoli/spec-esempio-harness-unreadable
 Plan status: APPROVED
@@ -361,7 +361,7 @@ Reviewed contract: n/a
 Code: n/a
 Last code phase: (nessuna)
 State: a8ee6aebb116
-Next: STOP — harness.fp unreadable (empty or without a fingerprint, recorded since 2026-01-01T00:00:00Z; current <impronta-attuale>). Remedy: if the current harness is the wanted one, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-unreadable.run/harness.fp" and resume (next phase: IMPLEMENT)
+Next: STOP — harness.fp unreadable (empty or without a fingerprint, recorded since 2026-01-01T00:00:00Z; current <impronta-attuale>). Remedy: if the current harness is the wanted one, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-unreadable.run/harness.fp" (on Windows: in Git Bash) and resume (next phase: IMPLEMENT)
 == exit 0
 == progetto-singoli/spec-esempio-json-unreadable
 Plan status: APPROVED
