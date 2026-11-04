@@ -324,17 +324,21 @@ for f in "${FILES[@]}"; do
   if [ $rc = 0 ]; then uguali=$((uguali + 1)); echo "attese: $f UGUALE ($nb blocchi)"
   else
     diversi=$((diversi + 1)); cambiati+=("$f")
-    [ $MODO = scrivi ] && { echo "attese: $f cambia ($(grep -vc '^    ' "$T/cf") blocchi)"; continue; }
+    if [ $MODO = scrivi ]; then
+      if [ -f "$ATT/$f" ]; then echo "attese: $f cambia ($(grep -vc '^    ' "$T/cf") blocchi)"; else echo "attese: $f nuovo ($nb blocchi)"; fi
+      continue
+    fi
     echo "attese: $f DIVERSO ($nb blocchi calcolati)"; sed 's/^/  /' "$T/cf" | head -120
   fi
 done
 for v in $SALTATI; do for l in $LINGUE; do [ "$SOLO" = next ] || echo "attese: valida-$v-$l.txt SALTATO"; done; done
 
 if [ $MODO = scrivi ]; then
-  mkdir -p "$ATTESE_REPO" || die "cannot create $ATTESE_REPO"
-  for f in "${FILES[@]}"; do cp "$T/out/$f" "$ATTESE_REPO/$f" || die "cannot write $ATTESE_REPO/$f" 1; done
+  # the base commit, before writing: «+modifiche» when the working tree already differs from it
   base=$(git -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo "?")
   [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] || base="$base+modifiche"
+  mkdir -p "$ATTESE_REPO" || die "cannot create $ATTESE_REPO"
+  for f in "${FILES[@]}"; do cp "$T/out/$f" "$ATTESE_REPO/$f" || die "cannot write $ATTESE_REPO/$f" 1; done
   if [ ! -f "$ATTESE_REPO/STORIA" ]; then
     printf '%s\n' "# STORIA — one line per \`tools/esempi-equiv/attese.sh --scrivi\` (Maat 1.6.0), appended, never rewritten." \
       "# «<UTC> · base <commit> · plugin <which> · motori <next> · <valida> · corpus <fingerprint 12> · motivo: <text> · file: <changed>»." \
