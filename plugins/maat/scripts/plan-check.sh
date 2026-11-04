@@ -1216,6 +1216,114 @@ def find_hits(root, vals):
     return hits
 
 
+def id_py(M):
+    """D-C (1.6.0): a Python test named in the unittest form `file.py::Class.method` never matches the report (the JUnit
+    case is read as file::Class::method) and the test-red phase stops with a misleading conflict with the existing
+    suite. A dot in the name (outside the [parameters]) of a .py test: VIOLAZIONE with the pytest form."""
+    out = []
+    for tid in M["order"]:
+        T = M["tests"][tid]
+        nm, par = (T["name"].split("[", 1) + [None])[:2]
+        if T["path"].endswith(".py") and "." in nm:
+            want = T["path"] + "::" + "::".join(x for x in nm.split(".") if x) + ("[" + par if par is not None else "")
+            out.append(_msg.T("plan-check.id_py", n=T["n"], id=tid, got=T["path"] + "::" + T["name"], want=want))
+    return out
+
+
+# a red text that already names the TypeError of a call with a wrong signature (D-A)
+TYPE_RED = re.compile(r"TypeError|unexpected keyword argument|positional argument")
+
+
+def py_sigs(root, p):
+    """top-level functions (not decorated) of a Python file: name -> (n. positional, keyword names, *args, **kw);
+    None if the file cannot be read or parsed"""
+    import ast
+    try:
+        with open(os.path.join(root, p), encoding="utf-8", errors="replace") as fh:
+            tree = ast.parse(fh.read())
+    except (OSError, SyntaxError, ValueError):
+        return None
+    out = {}
+    for n in tree.body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and not n.decorator_list:
+            a = n.args
+            out[n.name] = (len(a.posonlyargs) + len(a.args), set(x.arg for x in a.args + a.kwonlyargs),
+                           a.vararg is not None, a.kwarg is not None)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.pop(n.name, None)   # a decorated function may have any signature: never judged
+    return out
+
+
+def firma_base(M, root):
+    """D-A (1.6.0): the test-red phase writes stubs only in the files the plan declares new. An acceptance test that
+    calls an EXISTING function (top level, in a .py file of ### Touched files that is neither new nor a test file) with
+    a parameter it does not have yet fails on the base with the TypeError of the call, before its assertion: a row
+    whose texts do not name that TypeError asks for a signature stub that nobody writes, and the cycle would stop at
+    test-red. VIOLAZIONE, with the red of the base to write. Only the calls written as Python in the backticked texts
+    of the assertion; a name defined in several files is judged only if the call is wrong for all of them."""
+    import ast
+    newf, acc = set(M["new_files"]), set(acc_paths(M))
+    sigs = {}
+    for f in M["files"]:
+        if f.endswith(".py") and f not in newf and f not in acc:
+            for name, v in (py_sigs(root, f) or {}).items():
+                sigs.setdefault(name, []).append((f, v))
+    out = []
+    for tid in (M["order"] if sigs else []):
+        T = M["tests"][tid]
+        if any(TYPE_RED.search(x) for x in T["texts"]):
+            continue
+        why = None
+        for x in T["texts"]:
+            try:
+                tree = ast.parse(x.strip(), mode="eval")
+            except (SyntaxError, ValueError):
+                continue
+            for c in ast.walk(tree):
+                if not isinstance(c, ast.Call):
+                    continue
+                if isinstance(c.func, ast.Name):
+                    name, qual = c.func.id, None
+                elif isinstance(c.func, ast.Attribute) and isinstance(c.func.value, ast.Name):
+                    name, qual = c.func.attr, c.func.value.id
+                else:
+                    continue
+                cand = [(f, v) for f, v in sigs.get(name, [])
+                        if qual is None or qual == os.path.splitext(os.path.basename(f))[0]]
+                errs = []
+                for f, (npos, kws, va, vk) in cand:
+                    bad = [k.arg for k in c.keywords if k.arg is not None and k.arg not in kws]
+                    npass = len(c.args)
+                    if bad and not vk:
+                        errs.append(_msg.T("plan-check.sig_kw", n=T["n"], id=tid, fn=name, f=f, p=bad[0],
+                                           texts=" | ".join(T["texts"])))
+                    elif not va and not any(isinstance(a, ast.Starred) for a in c.args) and npass > npos:
+                        errs.append(_msg.T("plan-check.sig_pos", n=T["n"], id=tid, fn=name, f=f, k=npos, m=npass,
+                                           texts=" | ".join(T["texts"])))
+                if cand and len(errs) == len(cand):
+                    why = errs[0]
+                    break
+            if why:
+                break
+        if why:
+            out.append(why)
+    return out
+
+
+def report_nessuno(M):
+    """D-B (1.6.0): a test row in a module with `report: nessuno`: the test-red phase cannot read the outcome of the
+    single tests and stops BLOCKED. A configuration problem, not a plan one: AVVISO, once per module."""
+    out, seen = [], set()
+    for tid in M["order"]:
+        T = M["tests"][tid]
+        mt, kt = modulo(T["path"]) if T["path"] else (None, None)
+        if mt is None or kt != "radice" or mt["nome"] in seen or (mt.get("report") or "nessuno") != "nessuno":
+            continue
+        seen.add(mt["nome"])
+        out.append(_msg.T("plan-check.report_none", id=tid, nome=mt["nome"], path=T["path"]))
+    return out
+
+
 def lint2(M, root):
     E, W = M["E"], M["W"]
     tests, steps = M["tests"], M["steps"]
@@ -1240,6 +1348,9 @@ def lint2(M, root):
         # table it stops the cycle at test-red. It goes in a note under the table.
         if INVARIANZA.match(tests[tid]["asserzione"]):  # CONTROLLO-NON-REGRESSIONE-LINT2
             E.append(_msg.T("plan-check.test_invariance", n=tests[tid]["n"], id=tid))
+    E.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2
+    E.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2
+    W.extend(report_nessuno(M))
     files = set(M["files"])
     for S in steps:
         for x in S["tests"]:
@@ -1912,9 +2023,19 @@ def vt_claim(T, b, trel):
     return "target" if T["name"] in ids else "file"
 
 
+# D-D (1.6.0): the frame of a Python traceback, as a JUnit of a runner other than pytest (unittest) carries it
+TRACEBACK_POS = re.compile(r"File \"([^\"]+)\", line ([0-9]+)")
+
+
 def posizione(T, raw, trel):
-    m = re.search(re.escape(trel) + r":([0-9]+)", raw.replace("\\", "/"))
-    return "%s:%s" % (T["path"], m.group(1)) if m else None
+    r = raw.replace("\\", "/")
+    m = re.search(re.escape(trel) + r":([0-9]+)", r)
+    if m:
+        return "%s:%s" % (T["path"], m.group(1))
+    # no pytest «file:line:» line: the deepest frame of the traceback in the test file (the path ends with it)
+    m = TRACEBACK_POS.findall(r)  # POSIZIONE-TRACEBACK
+    hit = [ln for f, ln in m if f == trel or f.endswith("/" + trel)]
+    return "%s:%s" % (T["path"], hit[-1]) if hit else None
 
 
 def verdict(T, failed, suite, ran, passed, imp, trel):
