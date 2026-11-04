@@ -254,8 +254,10 @@ realigns them (fetch, `checkout --detach`, `clean`), so nothing must be changed 
 - Before 1.5.1 the suites were checked for shared state: they create their files in `mktemp -d` and set a `HOME` of
   their own where it matters (`test-fast`, `counterproof`, the cycle suites); `guard.test.sh` sets a fixed
   `SCRATCH=/tmp/claude/scratch` that nothing uses.
-- **The acceptance test** of the tool (1.5.1, once): the parallel run and the run one at a time on the same commit
-  must give the same outcomes. TODO blocco H — collaudo: times and outcomes when it has run.
+- **Not yet accepted on the real suites.** Its own cases are in `tools/suite.test.sh` (section 7: fake clones, a suite
+  red only in parallel, a suite always red, the lock, a counterproof). The comparison with the run one at a time on
+  the same commit is made by the CI, split in the same groups, at the push of 1.5.1: since 1.5.1 the full runs are made
+  on the CI; the parallel run is for a local check when the CI is not at hand.
 
 ### The short proof on Windows (1.5.1)
 
