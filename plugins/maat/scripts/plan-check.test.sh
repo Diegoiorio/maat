@@ -1357,6 +1357,136 @@ refute "rifai il giro|nessuna revisione" "en (MAAT_LINGUA=en) delta: nessuna spi
 expect 1 "^ERRORE DURO: diff vuoto — nessuna revisione registrata" "it delta: lo stesso caso in italiano (gemello)" -- bash "$PC" delta "$T/en-lint.copy" "$T/en-lint.md"
 rm -f "$T/en-lint.copy"
 
+# ── 1.6.0 block Z: the defects found by the real cycles of Maat 1.5.1 (a unittest project, as in the real cycles) ──
+# D-A a new parameter of an EXISTING function: the red on the base is the TypeError of the call (no stub in an
+#     existing file), lint2 stops a plan whose red is possible only with a signature stub (CONTROLLO-FIRMA-LINT2);
+# D-B a test row in a module with `report: nessuno`: lint2 AVVISO (the test-red phase would be BLOCKED);
+# D-C a unittest id `file.py::Class.method`: lint2 VIOLAZIONE with the pytest form (CONTROLLO-ID-PY-LINT2);
+# D-D the position of the red in a unittest traceback (`File "…/test_x.py", line N`), not only `test_x.py:N`.
+Z="$T/z"; mkdir -p "$Z/.claude"
+cat > "$Z/testo.py" <<'EOF'
+"""Small text helpers."""
+import re
+
+
+def slug(s):
+    if not isinstance(s, str):
+        raise TypeError("slug() wants a str")
+    words = [p for p in re.split(r"[^a-z0-9]+", s.lower()) if p]
+    return "-".join(words) if words else "-"
+
+
+def pad(s, n=1, *args, **kw):
+    return s
+EOF
+printf 'import unittest\nfrom testo import slug\n\n\nclass TestSlug(unittest.TestCase):\n    def test_simple(self):\n        self.assertEqual(slug("a b"), "a-b")\n' > "$Z/test_testo.py"
+zconf() { # $1 = report of the module (- = none)
+  "$FIC_PY" - "$1" "$Z/.claude/maat.json" <<'EOF'
+import json, sys
+m = {"nome": "testo", "radice": ".", "regola_test": "specchio", "specchio": {"da": "**/{m}.py", "a": "**/test_{m}*.py"},
+     "ambiente": "nativo", "comandi": {"test": {"comando": "{python} -m pytest -q --junitxml {report} {test}", "cartella": "radice"}}}
+if sys.argv[1] != "-":
+    m["report"] = sys.argv[1]
+json.dump({"versione_schema": 1, "harness": ">=1.5", "moduli": [m], "piattaforma": {"copia_wsl": "no"}}, open(sys.argv[2], "w"), indent=1)
+EOF
+}
+zconf junit
+zspec() { # $1 = id of T1 · $2 = assertion cell of T1
+cat <<EOF
+# Spec: separator parameter for slug
+## Functional requirements
+FR1. \`slug(s, sep="-")\`.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: none
+### Touched files
+- \`testo.py\`
+- \`test_testo.py\`
+### Steps
+#### Block B1 — testo
+writes: \`testo.py\`, \`test_testo.py\`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | \`testo.py\` | signature \`slug(s, sep="-")\` | T1 |
+### Requirement traceability
+| Req | Plan steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1 | \`$1\` (new) | $2 | — |
+EOF
+}
+ZID='test_testo.py::TestSlug::test_sep'
+zspec "$ZID" "\`slug(\"Hello World\", sep=\"_\") == \"hello_world\"\` · red if: \`'hello-world' != 'hello_world'\`" > "$Z/da-stub.md"
+zspec "$ZID" "\`slug(\"Hello World\", sep=\"_\") == \"hello_world\"\` · red if: \`unexpected keyword argument 'sep'\`" > "$Z/da-ok.md"
+zspec "$ZID" "\`slug(\"a b\", \"_\") == \"a_b\"\` · red if: \`'a-b' != 'a_b'\`" > "$Z/da-pos.md"
+zspec "$ZID" "\`slug(\"a b\", \"_\") == \"a_b\"\` · red if: \`takes 1 positional argument but 2 were given\`" > "$Z/da-pos-ok.md"
+zspec "$ZID" "\`pad(\"a\", 2, 3, sep=\"_\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/da-var.md"
+zspec "$ZID" "\`testo.slug(\"a\", sep=\"_\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/da-attr.md"
+zl2() { env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$PC" lint2 "$@"; }
+expect 1 "^VIOLAZIONE: riga [0-9]+: T1: .*slug.* in testo.py non ha il parametro sep: sulla base .*unexpected keyword argument 'sep'" "D-A lint2: parametro nuovo di una funzione esistente con un rosso che vuole lo stub di firma = VIOLAZIONE" -- zl2 "$Z/da-stub.md"
+expect 0 "^lint2: OK$" "D-A lint2: lo stesso test con il rosso della base (TypeError della chiamata) = OK" -- zl2 "$Z/da-ok.md"
+expect 1 "^VIOLAZIONE: riga [0-9]+: T1: .*slug.* in testo.py accetta 1 argomenti posizionali" "D-A lint2: argomento posizionale in piu' = VIOLAZIONE" -- zl2 "$Z/da-pos.md"
+expect 0 "^lint2: OK$" "D-A lint2: argomento posizionale in piu' con il rosso della base = OK" -- zl2 "$Z/da-pos-ok.md"
+expect 0 "^lint2: OK$" "D-A lint2: funzione con *args e **kw = nessun TypeError, nessuna VIOLAZIONE" -- zl2 "$Z/da-var.md"
+expect 1 "^VIOLAZIONE: riga [0-9]+: T1: .*slug.* in testo.py non ha il parametro sep" "D-A lint2: chiamata qualificata dal modulo (testo.slug) = VIOLAZIONE" -- zl2 "$Z/da-attr.md"
+expect 1 "^VIOLAZIONE: line [0-9]+: T1: .*slug.* in testo.py has no parameter sep: on the base .*unexpected keyword argument 'sep'" "en (MAAT_LINGUA=en) D-A lint2: la spiegazione in inglese" -- env MAAT_LINGUA=en env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$PC" lint2 "$Z/da-stub.md"
+# the same parameter on a file the plan declares new: the stub goes there, no VIOLAZIONE
+sed 's/^- `testo.py`$/- `testo.py` (new)/' "$Z/da-stub.md" > "$Z/da-new.md"
+refute "non ha il parametro" "D-A lint2: funzione di un file nuovo (lo stub va li') = nessuna VIOLAZIONE di firma" -- zl2 "$Z/da-new.md"
+# counterproof: without CONTROLLO-FIRMA-LINT2 the plan that wants a signature stub passes lint2 (the 1.5.1 defect)
+if mutpc zfirma 's/^\( *\)E\.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2$/\1pass/'; then
+  expect 0 "^lint2: OK$" "controprova D-A: senza CONTROLLO-FIRMA-LINT2 il piano che vuole lo stub passa" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zfirma/plan-check.sh" lint2 "$Z/da-stub.md"
+else echo "FAIL [controprova D-A: la mutazione non si applica]"; fail=$((fail+1)); fi
+# D-C
+zspec 'test_testo.py::TestSlug.test_sep' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc.md"
+expect 1 "^VIOLAZIONE: riga [0-9]+: T1: .*test_testo.py::TestSlug.test_sep.* scrivi .*test_testo.py::TestSlug::test_sep" "D-C lint2: id unittest Classe.metodo = VIOLAZIONE con la forma attesa" -- zl2 "$Z/dc.md"
+zspec 'test_testo.py::TestSlug::test_sep[a.b]' "\`slug(\"a\") == \"a\"\` · red if: \`'a' != 'b'\`" > "$Z/dc-par.md"
+expect 0 "^lint2: OK$" "D-C lint2: un punto dentro i parametri [..] non e' un id unittest" -- zl2 "$Z/dc-par.md"
+if mutpc zid 's/^\( *\)E\.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2$/\1pass/'; then
+  expect 0 "^lint2: OK$" "controprova D-C: senza CONTROLLO-ID-PY-LINT2 l'id unittest passa" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-zid/plan-check.sh" lint2 "$Z/dc.md"
+else echo "FAIL [controprova D-C: la mutazione non si applica]"; fail=$((fail+1)); fi
+# D-B
+zconf -
+expect 0 "^AVVISO: T1: il modulo testo di test_testo.py ha report nessuno" "D-B lint2: modulo senza report = AVVISO (la fase test-red sarebbe BLOCKED)" -- zl2 "$Z/da-ok.md"
+expect 0 "^AVVISO: T1: module testo of test_testo.py has report none" "en (MAAT_LINGUA=en) D-B lint2: l'AVVISO in inglese" -- env MAAT_LINGUA=en env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$PC" lint2 "$Z/da-ok.md"
+zconf junit
+refute "report nessuno" "D-B lint2: modulo con report junit = nessun AVVISO" -- zl2 "$Z/da-ok.md"
+# D-D: JUnit of a unittest runner (traceback, no pytest «file:line:» lines)
+zspec "$ZID" "\`slug(\"Hello World\", sep=\"_\") == \"hello_world\"\` · red if: \`unexpected keyword argument 'sep'\`" > "$Z/dd.md"
+zev() { # $1 folder · $2 failure text
+  mkdir -p "$1"
+  printf '<?xml version="1.0"?><testsuites><testsuite name="unittest"><testcase classname="test_testo.TestSlug" name="test_simple"/><testcase classname="test_testo.TestSlug" name="test_sep"><error message="x">%s</error></testcase></testsuite></testsuites>\n' "$2" > "$1/tests-testo.junit.xml"
+  printf '{"gate":"tests-testo","esito":"FAIL","report":"tests-testo.junit.xml","motivo":""}\n' > "$1/tests-testo.json"
+}
+zev "$Z/ev-tb" 'Traceback (most recent call last):
+  File "/home/u/progetto/test_testo.py", line 9, in test_sep
+    self.assertEqual(slug("Hello World", sep="_"), "hello_world")
+TypeError: slug() got an unexpected keyword argument &apos;sep&apos;'
+zr() { env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$PC" rossi "$@"; }
+expect 0 "^rosso T1: dimostrato test_testo.py:9 " "D-D rossi: posizione dal traceback di unittest (File \"…\", line N)" -- zr "$Z/dd.md" --evidence "$Z/ev-tb" --run-dir "$Z/dd.run"
+zev "$Z/ev-tbwin" 'Traceback (most recent call last):
+  File "C:\u\progetto\test_testo.py", line 11, in test_sep
+TypeError: slug() got an unexpected keyword argument &apos;sep&apos;'
+expect 0 "^rosso T1: dimostrato test_testo.py:11 " "D-D rossi: traceback con un percorso Windows" -- zr "$Z/dd.md" --evidence "$Z/ev-tbwin" --run-dir "$Z/dd.run"
+zev "$Z/ev-tbaltro" 'Traceback (most recent call last):
+  File "/home/u/progetto/old_test_testo.py", line 9, in test_sep
+TypeError: slug() got an unexpected keyword argument &apos;sep&apos;'
+expect 1 "^rosso T1: rosso_senza_asserzione .*senza posizione" "D-D rossi: traceback di un altro file (old_test_testo.py) = nessuna posizione" -- zr "$Z/dd.md" --evidence "$Z/ev-tbaltro" --run-dir "$Z/dd.run"
+if mutpc ztb 's/^\( *\)m = TRACEBACK_POS\.findall(raw)  # POSIZIONE-TRACEBACK$/\1m = []/'; then
+  expect 1 "^rosso T1: rosso_senza_asserzione .*senza posizione" "controprova D-D: senza POSIZIONE-TRACEBACK il rosso di unittest torna senza posizione" -- env MAAT_ROOT="$PLUGIN_DIR" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$Z" bash "$T/pcm-ztb/plan-check.sh" rossi "$Z/dd.md" --evidence "$Z/ev-tb" --run-dir "$Z/dd.run"
+else echo "FAIL [controprova D-D: la mutazione non si applica]"; fail=$((fail+1)); fi
+# D-B at test-red: the BLOCKED reason names the remedy
+zconf -
+expect 3 "^rossi: esito=BLOCKED — .*report nessuno: esiti dei test non leggibili .*report.* junit" "D-B rossi: report nessuno = BLOCKED con il rimedio" -- zr "$Z/dd.md" --evidence "$Z/ev-tb" --run-dir "$Z/dd.run"
+zconf junit
+
 # ── oracle (safety constraint 2 of the 1.3.0 plan): on every Italian fixture of this file, plan-check.sh of
 # 1.2.1 (a2c5b99) and the current one give the SAME output, byte for byte: basis (plan fingerprint), contract and
 # lint everywhere, lint2 and route on the format 2 fixtures. Opt-in (MAAT_ORACOLO_121=1: it doubles the run time and
