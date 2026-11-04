@@ -7,7 +7,9 @@
 #                                                              # lets the copy find the repository's scripts)
 # Sections:
 #   1 usage · 2 valida: cases from run-phase.test.sh 6b, compared byte by byte with `run-phase.sh --valida`
-#   3 wrappers: cycle-state.sh and run-phase.sh call the driver only with the certificate (or FIC_DRIVER=1)
+#   3 wrappers (1.5.1): cycle-state.sh and run-phase.sh decide with the driver whatever the certificate says, with the
+#     bash code only with FIC_DRIVER=0; no fallback on error (no Python, Python older than 3.10, driver failed: a STOP);
+#     python.sh with and without pipefail; the 3.10 threshold in its three places
 #   4 run: the state machine (anti-loop, ESITO STOP, run-phase exits 4/6/7, NEEDS_VERIFICATION, invalid
 #     result.json, phase running, budget, dry-run, forwarded flags, context-pack, progress up to DONE)
 #   5 equiv and certificate · 6 plan counterproofs: anti-loop removed, JSON validation removed
@@ -17,6 +19,8 @@
 #     line on both sides; the counterproofs of the comparison run even with DRIVER_TEST_RAPIDO=1)
 #  10 L2 promotion before the review: assorbita only if it holds finalize's check (plan-check.sh l2)
 #  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
+#  12 (1.5.1) the internal readers of cycle-state.sh in the real run-phase.sh: a STOP of its wrapper is a STOP outcome
+#     or a phase not launched, never an OK outcome with state= empty (end of a phase, start and review of a ring, closing)
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -111,34 +115,131 @@ spec_approved() {
 }
 spec_approved
 
-# --- 3. wrappers ---
+# --- 3. wrappers (1.5.1): the driver decides whatever the certificate says, the bash code only with FIC_DRIVER=0; no
+# fallback on error: no Python, a Python older than 3.10 or a driver that fails give ONE line `Next: STOP — <reason>`,
+# exit 0, no State: (the marker of the internal readers of run-phase.sh, section 12). The Python check holds with
+# either engine. Counterproofs on a copy of the plugin (CX), each mutation in a file of its own or put back after.
 cat > "$T/finto-drv.py" <<'EOF'
 import os, sys
 open(os.environ["SPY"], "a").write(" ".join(sys.argv[1:2]) + "\n")
 if os.environ.get("FINTO_ESCE"):
+    sys.stderr.write("rumore\nerrore finto\n\n")
     sys.exit(int(os.environ["FINTO_ESCE"]))
 sys.stdout.buffer.write("Plan status: finto\nState: 000000000000\nNext: FINTO — dal driver\n".encode("utf-8"))
 EOF
 export SPY=$T/spy
-out=$(FIC_DRIVER=1 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "cycle-state.sh, FIC_DRIVER=1 → risponde il driver" 'printf "%s\n" "$out" | grep -qx "Next: FINTO — dal driver"'
-rm -f "$SPY"; out=$(FIC_DRIVER=0 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "cycle-state.sh, FIC_DRIVER=0 → autonomo, il driver non e' chiamato" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && [ ! -f "$SPY" ]'
+# fake interpreter: answers $PY_VER to the version question of python.sh only, hands every other call to the real one
+cat > "$T/py-ver" <<EOF
+#!/usr/bin/env bash
+case "\$*" in *version_info*) echo "\$PY_VER"; exit 0 ;; esac
+exec "$FIC_PY" "\$@"
+EOF
+chmod +x "$T/py-ver"
+cs() { # [variables]: cycle-state.sh (CSX: a variant) on the spec with the fake driver · stdout in out, stderr in $T/cs.err, exit in csrc
+  rm -f "$SPY"
+  out=$(env FIC_DRIVER_PY="$T/finto-drv.py" "$@" bash "${CSX:-$FC/cycle-state.sh}" "$SP" 2>"$T/cs.err"); csrc=$?
+  out=${out//$'\r'/}
+}
+dal_driver() { [ "$csrc" -eq 0 ] && printf '%s\n' "$out" | grep -qx "Next: FINTO — dal driver" && grep -qx next "$SPY" 2>/dev/null; }
+dal_bash() { [ "$csrc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^Next: IMPLEMENT" && printf '%s\n' "$out" | grep -q "^State: " && [ ! -f "$SPY" ]; }
+stop1() { # $1 = the expected start of the text after «Next: STOP — »: exit 0, that single line (no State:, no table)
+  [ "$csrc" -eq 0 ] && [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && case "$out" in "Next: STOP — $1"*) true ;; *) false ;; esac
+}
+cs FIC_DRIVER=1
+check "cycle-state.sh, FIC_DRIVER=1 → risponde il driver" 'dal_driver'
+cs FIC_DRIVER=0
+check "cycle-state.sh, FIC_DRIVER=0 → autonomo, il driver non e' chiamato" 'dal_bash'
+cs FIC_DRIVER=
+check "  FIC_DRIVER vuota → il driver" 'dal_driver'
+cs FIC_DRIVER=si
+check "  FIC_DRIVER=si → il driver, con «AVVISO: FIC_DRIVER=si …» su stderr" 'dal_driver && grep -q "^AVVISO: FIC_DRIVER=si non e. ne. 0 ne. 1: decide il driver Python" "$T/cs.err"'
 h() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
 msgh() { printf 'messages %s\nmaat-msg %s\nmaat_msg %s\n' "$(h "$FC/lib/messages.tsv")" "$(h "$FC/lib/maat-msg.sh")" "$(h "$FC/maat_msg.py")"; }
 { printf 'driver %s\ncycle-state %s\nrun-phase %s\n' "$(h "$T/finto-drv.py")" "$(h "$FC/cycle-state.sh")" "$(h "$FC/run-phase.sh")"; msgh; } > "$T/cert-ok"
 printf 'driver %s\ncycle-state %s\n' "$(h "$T/finto-drv.py")" 0000 > "$T/cert-ko"
-out=$(FIC_DRIVER_CERT="$T/cert-ok" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "cycle-state.sh col certificato valido → il driver" 'printf "%s\n" "$out" | grep -qx "Next: FINTO — dal driver"'
-out=$(FIC_DRIVER_CERT="$T/cert-ko" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "  certificato con un altro hash di cycle-state.sh → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
-out=$(FIC_DRIVER_CERT="$T/non-esiste" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "  nessun certificato → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
 grep -v '^maat_msg ' "$T/cert-ok" > "$T/cert-nomsg"; echo "maat_msg 0000" >> "$T/cert-nomsg"
-out=$(FIC_DRIVER_CERT="$T/cert-nomsg" FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>/dev/null)
-check "  1.4.0: certificato con un altro hash di maat_msg.py → autonomo" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
-out=$(FINTO_ESCE=1 FIC_DRIVER=1 FIC_DRIVER_PY="$T/finto-drv.py" bash "$FC/cycle-state.sh" "$SP" 2>"$T/cs.err")
-check "  driver fallito → autonomo, con AVVISO" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && grep -q "AVVISO: driver.py next non riuscito" "$T/cs.err"'
+cert_casi() { # the engine that answers with each certificate (valid $1, another hash, none, another maat_msg hash)
+  local c r=""
+  for c in "$1" "$T/cert-ko" "$T/non-esiste" "$T/cert-nomsg"; do
+    cs FIC_DRIVER_CERT="$c"; if dal_driver; then r+="driver "; elif dal_bash; then r+="bash "; else r+="altro "; fi
+  done
+  printf '%s' "$r"
+}
+casi=$(cert_casi "$T/cert-ok")
+check "cycle-state.sh con qualunque certificato risponde il driver (1.5.1): valido, altro hash di cycle-state.sh, assente, altro hash di maat_msg.py" '[ "$casi" = "driver driver driver driver " ]'
+cs FINTO_ESCE=1
+check "  driver fallito (exit 1) → «Next: STOP — driver.py next non riuscito (exit 1): <ultima riga del suo stderr> …», e l'uscita e' quella sola riga" 'stop1 "driver.py next non riuscito (exit 1): errore finto — per proseguire con la tabella bash: FIC_DRIVER=0" && [ "$out" = "Next: STOP — driver.py next non riuscito (exit 1): errore finto — per proseguire con la tabella bash: FIC_DRIVER=0" ]'
+NOPY="nessun Python utilizzabile (FIC_PYTHON, py -3, python3, python): imposta FIC_PYTHON=<python 3.10 o successivo>"
+cs FIC_PYTHON="$T/non-esiste.exe"
+check "  Python assente (FIC_PYTHON verso un file inesistente: vince su PATH) → «Next: STOP — nessun Python utilizzabile …», il driver mai chiamato" '[ "$out" = "Next: STOP — $NOPY" ] && stop1 "nessun" && [ ! -f "$SPY" ]'
+cs FIC_DRIVER=0 FIC_PYTHON="$T/non-esiste.exe"
+check "  lo stesso con FIC_DRIVER=0: il controllo di Python vale con ogni motore" '[ "$out" = "Next: STOP — $NOPY" ] && stop1 "nessun"'
+cs FIC_PYTHON="$T/py-ver" PY_VER=3.9
+check "  Python 3.9 (finto) → «Next: STOP — Python 3.9 (<percorso>) e' precedente a 3.10 …», il driver mai chiamato" 'stop1 "Python 3.9 ($T/py-ver) e" && grep -q "precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>$" <<< "$out" && [ ! -f "$SPY" ]'
+cs FIC_DRIVER=0 FIC_PYTHON="$T/py-ver" PY_VER=3.9
+check "  lo stesso con FIC_DRIVER=0: una riga, nessuno State:, nessuna riga della tabella" 'stop1 "Python 3.9 ($T/py-ver) e" && [ ! -f "$SPY" ]'
+cs FIC_PYTHON="$T/py-ver" PY_VER=3.10
+check "  il confine: Python 3.10 (finto) passa il controllo → il driver" 'dal_driver'
+check "  il testo di no_python e dei tre python_old non nomina FIC_DRIVER (il rimedio e' FIC_PYTHON)" '[ "$(awk -F"\t" "\$1 ~ /^(cycle-state-engine\\.no_python|cycle-state-engine\\.python_old|run-phase-engine\\.python_old|driver-engine\\.python_old)\$/" "$FC/lib/messages.tsv" | grep -c .)" = 4 ] && ! awk -F"\t" "\$1 ~ /^(cycle-state-engine\\.no_python|cycle-state-engine\\.python_old|run-phase-engine\\.python_old|driver-engine\\.python_old)\$/" "$FC/lib/messages.tsv" | grep -q FIC_DRIVER'
+# python.sh from an includer with and without pipefail (no pipe in the verdict, Blocco A): the same rc in both modes;
+# a broken interpreter leaves FIC_PY_VER empty, also when FIC_PY_VER=3.12 comes from the environment
+printf '#!/usr/bin/env bash\nexit 1\n' > "$T/py-rotto"; printf '#!/usr/bin/env bash\nexit 0\n' > "$T/py-muto"; chmod +x "$T/py-rotto" "$T/py-muto"
+mkdir -p "$T/vuoto"
+pysh() { # $1 = python.sh to include, then env arguments → «rc=<n> ver=<FIC_PY_VER>» once without and once with pipefail
+  local p=$1 m; shift
+  for m in "set -u" "set -uo pipefail"; do
+    env "$@" "$BASH" -c "$m"'; . "$1"; echo "rc=$? ver=${FIC_PY_VER-}"' _ "$p" | tr -d '\r'
+  done | tr '\n' ' '
+}
+py_casi() { # $1 = python.sh: 0 if the five cases hold
+  local r
+  r=$(pysh "$1")
+  [[ $r =~ ^rc=0\ ver=([0-9]+\.[0-9]+)\ rc=0\ ver=([0-9]+\.[0-9]+)\ $ ]] && [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[2]}" ] || return 1
+  [ "$(pysh "$1" FIC_PY_VER=3.12 FIC_PYTHON="$T/non-esiste.exe")" = "rc=1 ver= rc=1 ver= " ] || return 1
+  [ "$(pysh "$1" FIC_PY_VER=3.12 FIC_PYTHON="$T/py-rotto")" = "rc=1 ver= rc=1 ver= " ] || return 1
+  [ "$(pysh "$1" -u FIC_PYTHON FIC_PY_VER=3.12 PATH="$T/vuoto")" = "rc=1 ver= rc=1 ver= " ] || return 1
+  [ "$(pysh "$1" FIC_PY_VER=3.12 FIC_PYTHON="$T/py-muto")" = "rc=0 ver= rc=0 ver= " ]
+}
+check "python.sh senza e con pipefail: interprete buono rc=0 e la versione; inesistente, import fallito, nessun interprete rc=1 e FIC_PY_VER vuota (anche se 3.12 ereditata); exit 0 muto rc=0 senza versione" 'py_casi "$FC/python.sh"'
+mins() { "$BASH" -c '. "$1"; for v in 3.9 3.10 3.11 4.0 3.1 x; do FIC_PY_VER=$v; fic_py_min_ok && printf "%s:si " $v || printf "%s:no " $v; done' _ "$1"; }
+check "soglie coincidenti (D12): 3.10 in python.sh (fic_py_min_ok), in driver.py (PY_MIN) e in maat-doctor.sh" '[ "$(mins "$FC/python.sh")" = "3.9:no 3.10:si 3.11:si 4.0:si 3.1:no x:no " ] && grep -qx "PY_MIN = (3, 10)" "$DRV" && grep -q "ver_ge \"\$pyv\" 3.10; then" "$FC/maat-doctor.sh"'
+# counterproofs on a copy of the plugin: mut <pair> <source> <dest> replaces exactly one line (line 1 of the pair file,
+# CR ignored) with the other lines of the pair file
+mut() {
+  awk 'FNR == NR { if (FNR == 1) a = $0; else b = b (b == "" ? "" : "\n") $0; next }
+       { l = $0; sub(/\r$/, "", l) } l == a { print b; n++; next } { print } END { exit n != 1 }' "$1" "$2" > "$3"
+}
+CX="$T/plug-cx/maat"; CXS=$CX/scripts; mkdir -p "$T/plug-cx" && cp -r "$ROOT" "$CX" && find "$CX" -name __pycache__ -type d -prune -exec rm -rf {} +
+# (1) the 1.5.0 switch: with FIC_DRIVER unset the certificate decides (the hash of the wrapper itself)
+cat > "$T/m1" <<'EOF'
+if engine_choice; then
+[ -z "${FIC_DRIVER:-}" ] && { grep -qx "cycle-state $(tr -d '\r' < "$0" | sha256sum | cut -c1-64)" "${FIC_DRIVER_CERT:-/non-esiste}" 2>/dev/null || FIC_DRIVER=0; }  # CERTIFICATO-DECIDE
+if engine_choice; then
+EOF
+# (2) the fallback on a failed driver put back: an AVVISO, then the table
+cat > "$T/m2" <<'EOF'
+  echo "Next: STOP — $(msg cycle-state-engine.driver_failed rc="$drc" line="${line:--}")"; exit 0
+  echo "AVVISO: driver.py next failed (exit $drc)" >&2  # RIPIEGO-RIMESSO
+EOF
+check "controprove degli involucri: le mutazioni sono applicate" 'mut "$T/m1" "$CXS/cycle-state.sh" "$CXS/cs-certo.sh" && mut "$T/m2" "$CXS/cycle-state.sh" "$CXS/cs-ripiego.sh" && grep -q CERTIFICATO-DECIDE "$CXS/cs-certo.sh" && grep -q RIPIEGO-RIMESSO "$CXS/cs-ripiego.sh"'
+printf 'cycle-state %s\n' "$(h "$CXS/cs-certo.sh")" > "$T/cert-cx"
+casi=$(CSX="$CXS/cs-certo.sh" cert_casi "$T/cert-cx")
+check "controprova: cycle-state.sh col vecchio interruttore del certificato → valido il driver, gli altri tre il bash (il caso «qualunque certificato» e' rosso)" '[ "$casi" = "driver bash bash bash " ]'
+CSX="$CXS/cs-ripiego.sh" cs FINTO_ESCE=1
+check "controprova: cycle-state.sh col ripiego sul driver fallito → l'uscita ha di nuovo le righe della tabella (il caso «driver fallito» e' rosso)" '! stop1 "driver.py next" && printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
+# (3) python.sh with «> 3.10» and (4) without capturing the version: mutated in the copy and put back
+cp "$CXS/python.sh" "$T/python.sh.orig"
+sed 's/\[ "\$mi" -ge 10 \]/[ "$mi" -gt 10 ]/' "$T/python.sh.orig" > "$CXS/python.sh"   # in mid-line: no marker comment
+CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.10
+check "controprova: python.sh con «> 3.10» → il confine 3.10 da' STOP python_old (il caso del confine e' rosso)" 'grep -qF "[ \"\$mi\" -gt 10 ]" "$CXS/python.sh" && ! dal_driver && stop1 "Python 3.10"'
+sed 's/FIC_PY_VER=\$("\$FIC_PY" -c .import json, shlex, sys; print("%d.%d" % sys.version_info\[:2\]). 2>\/dev\/null)$/"$FIC_PY" -c "import json, shlex" 2>\/dev\/null  # VERSIONE-NON-CATTURATA/' "$T/python.sh.orig" > "$CXS/python.sh"
+CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.9; vecchio=$out
+CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.10
+check "controprova: python.sh che non imposta FIC_PY_VER → «Python vecchio» senza la versione 3.9 nel testo e il confine 3.10 fermo (i due casi rossi)" 'grep -q VERSIONE-NON-CATTURATA "$CXS/python.sh" && case "$vecchio" in *"Python 3.9 ("*) false ;; *) true ;; esac && ! dal_driver'
+# (5) python.sh that does not empty FIC_PY_VER in the else branch → the inherited 3.12 survives with no interpreter
+sed 's/^else FIC_PY_VER=""; false; fi$/else false; fi  # NON-AZZERA/' "$T/python.sh.orig" > "$CXS/python.sh"
+check "controprova: python.sh che non azzera FIC_PY_VER nel ramo else → il caso «3.12 ereditata» e' rosso" 'grep -q NON-AZZERA "$CXS/python.sh" && ! py_casi "$CXS/python.sh" && [ "$(pysh "$CXS/python.sh" -u FIC_PYTHON FIC_PY_VER=3.12 PATH="$T/vuoto")" = "rc=1 ver=3.12 rc=1 ver=3.12 " ]'
+cp "$T/python.sh.orig" "$CXS/python.sh"
 # run-phase.sh: outcome validation goes through the driver only when it delegates (spy on a real phase, fake claude)
 cat > "$T/spia-drv.py" <<EOF
 import os, runpy, sys
@@ -173,9 +274,48 @@ rpc() { # $1 = certificate, $2 = label (FIC_DRIVER not set: the certificate deci
 rpc "$T/cert-rp-ok" 03-implement
 check "run-phase.sh col certificato valido per il suo hash → valida il driver (spia)" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/03-implement.esito" | grep -q "uscita non valida"'
 rpc "$T/cert-rp-ko" 04-implement
-check "  certificato con un altro hash di run-phase.sh → validatore interno (spia muta)" '[ ! -f "$SPY" ] && sed -n 1p "$T/rp.run/log/04-implement.esito" | grep -q "uscita non valida"'
+check "  1.5.1: con un certificato non valido (altro hash di run-phase.sh) valida il driver (spia)" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/04-implement.esito" | grep -q "uscita non valida"'
 rpc "$T/non-esiste" 05-implement
-check "  nessun certificato → validatore interno" '[ ! -f "$SPY" ] && sed -n 1p "$T/rp.run/log/05-implement.esito" | grep -q "uscita non valida"'
+check "  1.5.1: senza certificato valida il driver (spia)" 'grep -qx valida "$SPY" && sed -n 1p "$T/rp.run/log/05-implement.esito" | grep -q "uscita non valida"'
+# 1.5.1: a spy by mode (SPIA_MODO): next1 = exit 1 on `next` only, valida1 = writes result.json then exit 1 on `valida`
+# only; every other call goes to the real driver (also used by section 12)
+cat > "$T/spia-modi.py" <<EOF
+import os, runpy, sys
+m = os.environ.get("SPIA_MODO", "")
+open(os.environ["SPY"], "a").write(sys.argv[1] + "\n")
+if m == "next1" and sys.argv[1] == "next":
+    sys.stderr.write("rumore\nTraceback finto: next rotto\n\n")
+    sys.exit(1)
+if m == "valida1" and sys.argv[1] == "valida":
+    open(sys.argv[5], "w").write("{}")
+    sys.stderr.write("valida rotta\n")
+    sys.exit(1)
+sys.argv = [r"$(cygpath -w "$DRV" 2>/dev/null || echo "$DRV")"] + sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+EOF
+rpe() { # $1 label, then variables: run-phase.sh (RPX: a variant) on $T/rp.run (RPD: another run dir), spy by mode
+  local l=$1; shift; rm -f "$SPY"
+  env FIC_DRIVER_PY="$T/spia-modi.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude" FIC_GATES="$T/gates" \
+    FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 "$@" bash "${RPX:-$FC/run-phase.sh}" "${RPD:-$T/rp.run}" "$l" "$T/prompt.md" >/dev/null 2>&1 </dev/null
+}
+valida_ko() { # $1 run dir, $2 label: the outcome of a driver whose valida failed, and no result.json
+  sed -n 1p "$1/log/$2.esito" | grep -qx "PHASE RESULT implement: STOP — driver.py valida non riuscito (exit 1): valida rotta — per proseguire con il validatore interno: FIC_DRIVER=0" && [ ! -f "$1/log/$2.result.json" ]
+}
+rpe 06-implement SPIA_MODO=valida1
+check "run-phase.sh, driver valida fallito (exit 1, result.json scritto a meta') → .esito «PHASE RESULT implement: STOP — driver.py valida non riuscito …» e nessun result.json" 'grep -qx valida "$SPY" && valida_ko "$T/rp.run" 06-implement'
+rpe 07-implement FIC_DRIVER=0 FIC_PYTHON="$T/py-ver" PY_VER=3.9
+check "  FIC_DRIVER=0 e Python 3.9 (finto) → .esito «PHASE RESULT implement: STOP — Python 3.9 … precedente a 3.10 …», driver mai chiamato" 'sed -n 1p "$T/rp.run/log/07-implement.esito" | grep -q "^PHASE RESULT implement: STOP — Python 3.9 (.*) e. precedente a 3.10, il minimo di Maat" && [ ! -f "$SPY" ] && [ ! -f "$T/rp.run/log/07-implement.result.json" ]'
+rm -f "$SPY" "$T/vv.json"
+FIC_DRIVER_PY="$T/spia-modi.py" bash "$FC/run-phase.sh" --valida "$V/valido.jsonl" "$SCHEMA" implement "$T/vv.json" > "$T/vv.out" 2>&1
+check "  --valida (il riferimento di equiv) resta il validatore interno: la spia non e' chiamata" '[ ! -f "$SPY" ] && grep -qx "ESITO FASE x: OK — finto" "$T/vv.out" && [ -f "$T/vv.json" ]'
+# counterproof: run-phase.sh without the rm -f of the result.json (copy CX, its own run dir: another fingerprint)
+cat > "$T/m3" <<'EOF'
+  rm -f "$4"
+  :  # RM-TOLTO
+EOF
+check "controprova: la mutazione e' applicata (run-phase.sh senza rm -f del result.json)" 'mut "$T/m3" "$CXS/run-phase.sh" "$CXS/rp-norm.sh" && grep -q RM-TOLTO "$CXS/rp-norm.sh"'
+RPX="$CXS/rp-norm.sh" RPD="$T/rpx.run" rpe 01-implement SPIA_MODO=valida1
+check "controprova: senza rm -f il result.json del driver fallito resta (il caso «nessun result.json» e' rosso)" '! valida_ko "$T/rpx.run" 01-implement && [ -f "$T/rpx.run/log/01-implement.result.json" ]'
 
 # --- 4. run: the state machine, with fake run-phase.sh and context-pack.sh ---
 cat > "$T/rp-finto" <<'EOF'
@@ -273,11 +413,22 @@ check "run: fase in corso (.running senza .exit) → exit 4, niente lanci" '[ $r
 rm -rf "$RUN"; spec_approved; printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$SP"; : > "$FAKE_CALLS"
 FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK="$T/cp-finto" "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
 check "run: spec gia' DONE → exit 0 senza lanci" '[ $rc -eq 0 ] && grep -q "Driver result: DONE" "$T/run.out" && [ "$(calls)" = 0 ]'
-# M1: without a valid certificate Next/State come from standalone cycle-state.sh (here a fake one that answers differently)
+# M1 (1.5.1): Next/State come from standalone cycle-state.sh only with FIC_DRIVER=0, the bash engine (here a fake one
+# that answers differently); the certificate is not read by run
 printf '#!/usr/bin/env bash\necho "Plan status: finto"; echo "State: 000000000000"; echo "Next: STOP — finto da cycle-state"\n' > "$T/cs-finto"; chmod +x "$T/cs-finto"
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
+FIC_DRIVER=0 FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
+check "run: FIC_DRIVER=0 → segue FIC_CYCLE_STATE (il finto dice STOP), evento «motore bash» nel log" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — STOP — finto da cycle-state" "$T/run.out" && grep -q "motore bash (FIC_DRIVER=0): Next/State da cycle-state.sh autonomo" "$RUN/driver.log" && [ "$(calls)" = 0 ]'
+rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER_CERT="$T/cert-ko" FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
-check "run: certificato scaduto → segue cycle-state.sh (il finto dice STOP), evento nel log" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — STOP — finto da cycle-state" "$T/run.out" && grep -q "certificato scaduto: next da cycle-state.sh" "$RUN/driver.log" && [ "$(calls)" = 0 ]'
+check "  certificato scaduto e FIC_DRIVER non impostata → il finto non e' consultato (decide il driver)" 'grep -q "Next: IMPLEMENT" "$T/run.out" && ! grep -q "finto da cycle-state\|motore bash" "$T/run.out" "$RUN/driver.log"'
+# D2: the Python check of run holds with either engine; a copy of driver.py with the threshold (99, 0) stops at once
+sed 's/^PY_MIN = (3, 10)$/PY_MIN = (99, 0)  # SOGLIA-99/' "$DRV" > "$T/drv-py99.py"
+check "controprova soglia: la mutazione e' applicata (PY_MIN = (99, 0))" 'grep -q "SOGLIA-99" "$T/drv-py99.py"'
+DRUN_DRV="$T/drv-py99.py" drun nulla "$SP"
+check "run: driver con la soglia (99, 0) → «Driver result: STOP — Python … e' precedente a 99.0 …», exit 1, nessun lancio" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — Python [0-9]*\.[0-9]* (.*) e. precedente a 99\.0, il minimo di Maat: imposta FIC_PYTHON=<python 99\.0 o successivo>" "$T/run.out" && [ "$(calls)" = 0 ]'
+export FIC_DRIVER=0; DRUN_DRV="$T/drv-py99.py" drun nulla "$SP"; unset FIC_DRIVER
+check "  lo stesso con FIC_DRIVER=0 (il controllo viene prima della scelta del motore)" '[ $rc -eq 1 ] && grep -q "Driver result: STOP — Python [0-9]*\.[0-9]* (.*) e. precedente a 99\.0" "$T/run.out" && ! grep -q "motore bash" "$T/run.out" && [ "$(calls)" = 0 ]'
 rm -rf "$RUN"; spec_approved; : > "$FAKE_CALLS"
 FIC_DRIVER=1 FIC_CYCLE_STATE="$T/cs-finto" FAKE_MODE=nulla FIC_RUN_PHASE="$T/rp-finto" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; rc=$?
 check "  controprova: col driver in vigore (FIC_DRIVER=1) il finto non e' consultato" 'grep -q "Next: IMPLEMENT" "$T/run.out" && ! grep -q "finto da cycle-state\|certificato scaduto" "$T/run.out"'
@@ -363,8 +514,16 @@ MC="$T/plug-mc/maat"; mkdir -p "$T/plug-mc" && cp -r "$ROOT" "$MC" && find "$MC"
 printf '# changed\n' >> "$MC/scripts/maat_msg.py"
 FIC_DRIVER_ROOT="$MC" FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
 check "  1.4.0: maat_msg.py cambiato → SCADUTO, e il certificato dice maat_msg" '[ $rc -eq 1 ] && grep -q "SCADUTO — hash diversi: maat_msg" "$T/c.out"'
-out=$(FIC_DRIVER_CERT="$T/cert" bash "$MC/scripts/cycle-state.sh" "$SP" 2>&1)
-check "  e l'involucro cycle-state.sh di quella copia resta autonomo (nessun driver)" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && ! printf "%s\n" "$out" | grep -q "AVVISO: driver.py next"'
+# 1.5.1: the certificate no longer switches the wrapper: a spy that records `next` and hands it to the copy's driver.py
+# tells the two engines apart (both answer Next: IMPLEMENT here)
+cat > "$T/spia-mc.py" <<EOF
+import os, runpy, sys
+open(os.environ["SPY"], "a").write(sys.argv[1] + "\n")
+sys.argv = [r"$(cygpath -w "$MC/scripts/driver.py" 2>/dev/null || echo "$MC/scripts/driver.py")"] + sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+EOF
+rm -f "$SPY"; out=$(FIC_DRIVER_CERT="$T/cert" FIC_DRIVER_PY="$T/spia-mc.py" bash "$MC/scripts/cycle-state.sh" "$SP" 2>&1)
+check "  e la copia con maat_msg.py cambiato decide col driver (spia chiamata una volta, nessun AVVISO)" 'printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT" && ! printf "%s\n" "$out" | grep -q "AVVISO: driver.py" && [ "$(grep -cx next "$SPY" 2>/dev/null)" = 1 ]'
 rm -rf "$T/plug-mc"
 sed -i 's/^driver .*/driver 0000/' "$T/cert"; FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
 check "  hash del driver diverso → SCADUTO (exit 1)" '[ $rc -eq 1 ] && grep -q "SCADUTO — hash diversi: driver" "$T/c.out"'
@@ -583,7 +742,7 @@ spec_l2() {
 }
 printf '#!/usr/bin/env bash\necho "Plan status: APPROVED"; echo "State: 000000000000"; echo "Next: REVIEW — finta"\n' > "$T/cs-review"; chmod +x "$T/cs-review"
 printf '#!/usr/bin/env bash\necho "$2" >> "$FAKE_CALLS"; cp "$1/counterproof/mutations.json" "$FAKE_CALLS.mut"; exit 0\n' > "$T/rp-mut"; chmod +x "$T/rp-mut"
-lrun() { rm -f "$FAKE_CALLS"*; FIC_DRIVER_CERT="$T/cert-ko" FIC_CYCLE_STATE="$T/cs-review" FIC_RUN_PHASE="$T/rp-mut" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; }
+lrun() { rm -f "$FAKE_CALLS"*; FIC_DRIVER=0 FIC_CYCLE_STATE="$T/cs-review" FIC_RUN_PHASE="$T/rp-mut" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/run.out" 2>&1; }
 # maat.json of the fake repo (pk04b-2): plan-check routes files and tests only with the declared modules
 printf '{"versione_schema": 1, "moduli": [{"nome": "be", "radice": "modules/api", "ambiente": "nativo"}]}\n' > "$T/cfg-be.json"
 export MAAT_CONFIG="$T/cfg-be.json"
@@ -641,8 +800,64 @@ e2e it; rc_it=$rc
 check "  lo stesso ciclo in italiano: stesse fasi, stessa fine" '[ $rc_it -eq 0 ] && [ "$(cat "$T/e2e-it.labels")" = "$(cat "$T/e2e-en.labels")" ] && grep -q "^driver: Driver result: DONE — DONE — sezione senza snapshot (legacy)" "$T/e2e-it.out"'
 rm -rf "$RUN" "$T/lock"; git checkout -q -- src
 
+# --- 12. (1.5.1) the internal readers of cycle-state.sh in the REAL run-phase.sh: the driver fails on `next` only (the
+# spy of section 3, SPIA_MODO=next1; `valida` goes to the real driver), so cycle-state.sh answers with the one-line STOP
+# of its wrapper, without State:. End of a phase (implement, chiusura) → STOP outcome with state= empty; start and
+# review of a ring → phase not launched (exit 7, no .esito, no .running). Fake claude and finalize of section 11, the
+# chain of section 4 (mk_catena). Counterproof: the old reading of State: at the end of a phase (copy CX).
+lph() { # $1 run dir, $2 label, then variables: run-phase.sh (RPX: a variant) with the spy failing on next → lrc
+  local d=$1 l=$2; shift 2; rm -f "$SPY"
+  env SPIA_MODO=next1 FIC_DRIVER_PY="$T/spia-modi.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-e2e" \
+    FIC_GATES="$T/gates" FIC_FINALIZE="$T/fin-e2e" FIC_LANES=0 E2E_SPEC="$W/$SP" "$@" \
+    bash "${RPX:-$FC/run-phase.sh}" "$d" "$l" "$T/prompt.md" > "$T/lph.out" 2> "$T/lph.err" </dev/null
+  lrc=$?
+}
+fine_stop() { # $1 .esito of an implement: STOP of the wrapper on line 1, state= empty, the computed outcome kept below
+  sed -n 1p "$1" | grep -qx "PHASE RESULT implement: STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto — per proseguire con la tabella bash: FIC_DRIVER=0" \
+    && grep -qx "state=" "$1" && grep -qx "originale=PHASE RESULT implement: OK — done" "$1"
+}
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src; spec_approved
+lph "$W/$RUN" 01-implement
+check "12 (1.5.1) fine di una fase: next del driver fallito → .esito «PHASE RESULT implement: STOP — driver.py next non riuscito …», state= vuoto" '[ $lrc -eq 0 ] && fine_stop "$RUN/log/01-implement.esito"'
+check "  nessun gate dopo l'implement (l'esito non e' OK), il result.json di valida c'e', nessuna deviazione registrata" '[ ! -f "$RUN/log/01-implement.gates" ] && [ -f "$RUN/log/01-implement.result.json" ] && grep -qx valida "$SPY" && [ ! -f "$RUN/log/deviazioni-difensive.txt" ]'
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src; spec_approved
+SPIA_MODO=next1 FIC_DRIVER_PY="$T/spia-modi.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-e2e" FIC_GATES="$T/gates" \
+  FIC_FINALIZE="$T/fin-e2e" FIC_LANES=0 FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/lrun.out" 2>&1 </dev/null; rc=$?
+check "  driver.py run → «Driver result: STOP — PHASE RESULT implement: STOP — driver.py next …», exit 1, nessun lancio dopo l'implement" '[ $rc -eq 1 ] && grep -q "^driver: Driver result: STOP — PHASE RESULT implement: STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto" "$T/lrun.out" && [ "$(ls "$RUN/log" | grep -c "\.esito$")" = 1 ] && [ -f "$RUN/log/01-implement.esito" ]'
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src
+mk_catena; R2=$W/$CW/spec-m-2-b.run/log
+lph "$W/$CW/spec-m-2-b.run" 01-implement
+check "  inizio di un anello (implement dell'anello 2): exit 7, nessun .esito, nessun .running, «STOP — <motivo> — fase non lanciata», claude non lanciato" '[ $lrc -eq 7 ] && [ ! -f "$R2/01-implement.esito" ] && [ ! -f "$R2/01-implement.running" ] && grep -q "^STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto — .* — fase non lanciata$" "$R2/01-implement.stderr" && git diff --quiet -- src'
+lph "$W/$CW/spec-m-2-b.run" 02-review
+check "  review di un anello (anello 2): exit 7, la review non parte, nessun .esito, nessun .running" '[ $lrc -eq 7 ] && [ ! -f "$R2/02-review.esito" ] && [ ! -f "$R2/02-review.running" ] && grep -q "^STOP — driver.py next non riuscito (exit 1): .* — fase non lanciata$" "$R2/02-review.stderr"'
+mk_catena; rm -rf "$T/lock"
+SPIA_MODO=next1 FIC_DRIVER_PY="$T/spia-modi.py" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-e2e" FIC_GATES="$T/gates" \
+  FIC_FINALIZE="$T/fin-e2e" FIC_LANES=0 FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run $CW/spec-m.md > "$T/lrun.out" 2>&1 </dev/null; rc=$?
+check "  driver.py run sulla madre → l'anello 1 non parte: «Driver result: STOP — catena: STOP — driver.py next …», col motivo (Giro 2)" '[ $rc -eq 1 ] && grep -q "^driver: Driver result: STOP — catena: STOP — driver.py next non riuscito (exit 1): Traceback finto: next rotto" "$T/lrun.out" && [ ! -f $CW/spec-m-1-a.run/log/01-implement.esito ]'
+mk_catena; M=$W/$CW/spec-m.run; mkdir -p $CW/spec-m-1-a.run $CW/spec-m-2-b.run
+printf 'src/a.py\n' > $CW/spec-m-1-a.run/touched.txt; printf 'src/a.py\n' > $CW/spec-m-2-b.run/touched.txt
+git rev-parse HEAD > $CW/spec-m-1-a.run/base.txt
+lph "$M" 01-chiusura
+check "  chiusura con i gate verdi: chiusura.txt IMPLEMENTED (non toccato), .esito «PHASE RESULT chiusura: STOP — driver.py next …», state= vuoto" '[ $lrc -eq 0 ] && grep -q "^Chiusura: IMPLEMENTED — base " "$M/chiusura.txt" && sed -n 1p "$M/log/01-chiusura.esito" | grep -q "^PHASE RESULT chiusura: STOP — driver.py next non riuscito (exit 1): " && grep -qx "state=" "$M/log/01-chiusura.esito"'
+rm -f $CW/spec-m-1-a.run/base.txt; lph "$M" 02-chiusura
+check "  chiusura gia' STOP per un suo motivo (base del primo anello assente) → l'.esito tiene quel motivo, state= vuoto (Giro 2)" 'sed -n 1p "$M/log/02-chiusura.esito" | grep -q "^PHASE RESULT chiusura: STOP — .*base del primo anello assente" && ! grep -q "driver.py next" "$M/log/02-chiusura.esito" && grep -qx "state=" "$M/log/02-chiusura.esito"'
+rm -rf $CW/spec-m*.run $CW/spec-m.md $CW/spec-m-1-a.md $CW/spec-m-2-b.md "$T/lock"; git checkout -q -- src
+# counterproof: run-phase.sh with the reading of State: of 1.5.0 at the end of a phase (no cycle_state_read): the
+# STOP of the wrapper passes and the outcome stays OK with state= empty. Own spec: the copy has another fingerprint
+cat > "$T/m4" <<'EOF'
+  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
+  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cso=$(bash "$HERE/cycle-state.sh" "$sp_md" 2>>"$err"); fi  # LETTORE-VECCHIO
+EOF
+check "controprova lettori: la mutazione e' applicata (run-phase.sh col vecchio sed State: a fine fase)" 'mut "$T/m4" "$CXS/run-phase.sh" "$CXS/rp-lettore.sh" && grep -q LETTORE-VECCHIO "$CXS/rp-lettore.sh"'
+spec_approved; cp "$SP" $CW/spec-v.md
+RPX="$CXS/rp-lettore.sh" lph "$W/$CW/spec-v.run" 01-implement
+check "controprova lettori: col vecchio sed l'.esito resta OK con state= vuoto (il caso «fine di una fase» e' rosso)" '! fine_stop $CW/spec-v.run/log/01-implement.esito && sed -n 1p $CW/spec-v.run/log/01-implement.esito | grep -q "^PHASE RESULT implement: OK" && grep -qx "state=" $CW/spec-v.run/log/01-implement.esito'
+rm -rf $CW/spec-v.md $CW/spec-v.run "$T/lock" "$T/plug-cx"; git checkout -q -- src
+
 cd /
-# informative, not a check: with an SCADUTO certificate the wrappers stay standalone (safe direction)
+# informative, not a check: the certificate no longer switches anything at runtime (1.5.1): the wrappers decide with
+# the driver whatever it says; FIC_DRIVER=0 is the only way back to bash. SCADUTO here is expected while the plugin
+# changes, until it is recertified (tools/certifica.sh)
 echo "driver.test.sh: $(unset FIC_DRIVER_CERT; drv certificato)"
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

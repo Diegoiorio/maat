@@ -4,6 +4,8 @@
 # (touched.txt) and outcome (.esito).
 #   bash plugins/maat/scripts/run-phase.test.sh
 #   RP=/path/variant.sh bash .../run-phase.test.sh   # the variant must live in this folder
+#   FIC_DRIVER=0 RP=/path/variant.sh bash .../run-phase.test.sh   # (1.5.1) a variant that changes VALIDA_PY (the
+#     internal validator): without FIC_DRIVER=0 the Python driver validates and the mutation is not seen
 # The real lock (inside .git) is not touched: FIC_LOCK points to a temporary directory; FIC_REPO points
 # to a temporary git repo, so the fake claude changes files there and not in the project.
 set -uo pipefail
