@@ -13,9 +13,8 @@
 1 finalize
 1 guard
 
-# group 2: the oracle, the rollback, the resume table
+# group 2: the oracle, the resume table
 2 tools/oracolo.test.sh
-2 rollback
 2 cycle-state
 2 messages
 2 phase-events

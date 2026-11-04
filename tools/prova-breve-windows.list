@@ -21,6 +21,5 @@ bash-node
 test-review-surface
 gates
 # total ≈ 2900 s (≈ 48 min): 35 10 16 19 33 47 57 70 94 125 136 200 213 232 247 248 270 826.
-# Left out: ROLLBACK_TEST_RAPIDO=1 rollback (≈ 3100 s, 52 min, measured for 1.5.1): with it the proof would take
-# about 1 h 40 min. Run it by hand when a release touches the wrappers (docs/TESTING-harness.md, «The short proof on
-# Windows»); to add it here, the line is: ROLLBACK_TEST_RAPIDO=1 rollback
+# 1.6.0: rollback.test.sh (the way back to the bash engine, left out of this list in 1.5.1) is gone with the bash
+# engine; going back is reinstalling Maat 1.5.1 (README, «Going back to 1.5.1»).

@@ -256,7 +256,7 @@ chk "en: IMPLEMENTED, Verification e Finalize col dettaglio inglese e i prefissi
 chk "en: tabella Evidence in inglese, «not covered» contato" 'row "R6 nessuno" | grep -q "| not covered (no test ID) |$" && row "R3 mancante" | grep -q "| not covered (no result: tests/test_goals.py::test_inesistente) |$" && grep -q "^Requirement evidence (finalize.sh: requirement → test ID → result of VERIFY, evidence/" "$SP" && printf "%s\n" "$out" | grep -q "^finalize: Evidence composed — 6 requirements, 4 not covered$"' "$out $(grep -A8 "^Requirement evidence" "$SP")"
 chk "en: niente italiano del catalogo nella spec" '! grep -qE "non coperto|alla chiave attuale|controprove rosse|requisito → ID|Evidence composta" "$SP"' "$(grep -A8 "^Finalize" "$SP")"
 chk "en: plan-check.sh closed rilegge la riga Finalize inglese (anello chiuso), in en e in it" 'MAAT_LINGUA=en bash "$ROOT/scripts/plan-check.sh" closed "$SP" >/dev/null 2>&1 && MAAT_LINGUA=it bash "$ROOT/scripts/plan-check.sh" closed "$SP" >/dev/null 2>&1' "$(MAAT_LINGUA=en bash "$ROOT/scripts/plan-check.sh" closed "$SP" 2>&1)"
-nx() { MAAT_LINGUA=$1 FIC_DRIVER=0 bash "$ROOT/scripts/cycle-state.sh" "$SP" 2>/dev/null | tr -d '\r' | sed -n 's/^Next: \([A-Z-]*\).*/\1/p'; }
+nx() { MAAT_LINGUA=$1 bash "$ROOT/scripts/cycle-state.sh" "$SP" 2>/dev/null | tr -d '\r' | sed -n 's/^Next: \([A-Z-]*\).*/\1/p'; }
 chk "en: cycle-state.sh legge la riga Finalize inglese: stessa parola di Next in it e in en" '[ -n "$(nx it)" ] && [ "$(nx it)" = "$(nx en)" ]' "it=$(nx it) en=$(nx en)"
 M="$W/mut-uncov.sh"
 sed 's/^UNCOVERED = ("non coperto", "not covered")$/UNCOVERED = ("non coperto",)/' "$FZ" > "$M"

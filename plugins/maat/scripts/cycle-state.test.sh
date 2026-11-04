@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # cycle-state.test.sh — the resume table, row by row, in a throwaway git repo.
 #   bash plugins/maat/scripts/cycle-state.test.sh
-#   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation
-#   FIC_DRIVER=0 CS=/path/variant.sh bash .../cycle-state.test.sh   # (1.5.1) a variant of the bash table: without
-#     FIC_DRIVER=0 the Python driver decides and the mutation is not seen (the suite proves the default engine)
+#   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation (1.6.0: cycle-state.sh is a
+#     wrapper of driver.py next, the only engine: a mutation of the table is made in driver.py, FIC_DRIVER_PY)
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f
@@ -347,13 +346,13 @@ printf '%s\n' "# A" "## Requisiti funzionali" "1. RF1 — a" > $CW/spec-s-1-a.md
 mkdir -p $CW/spec-s.run; printf 'Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-09-29T00:00:00Z\n' > $CW/spec-s.run/chiusura.txt
 out_has "$SS" "vincolo 1: State della fixture italiana = quello di 1.2.1 (1d0181258ccc)" "^State: 1d0181258ccc$"
 out_has "$SS" "  e la fixture copre la catena (madre, anello aperto, assente, chiusura)" "^Catena: madre di 2 anelli · spec-s-1-a aperto; spec-s-2-b assente; Chiusura: NEEDS_VERIFICATION"
-# 1.4.0, block B (a): the same State in English and in Italian, from cycle-state.sh (standalone) and from driver.py
-# next: chain_state, the basis and the frozen lines do not go through the catalog
+# 1.4.0, block B (a): the same State in English and in Italian, from cycle-state.sh (1.6.0: the wrapper of the driver)
+# and from driver.py next: chain_state, the basis and the frozen lines do not go through the catalog
 . "$HERE/python.sh" >/dev/null 2>&1
 for L in it en; do
   for impl in cycle-state driver; do
     if [ $impl = driver ]; then st=$(MAAT_LINGUA=$L "$FIC_PY" "$HERE/driver.py" next "$SS" 2>&1 | tr -d '\r' | sed -n 's/^State: //p')
-    else st=$(MAAT_LINGUA=$L FIC_DRIVER=0 bash "$HERE/cycle-state.sh" "$SS" 2>&1 | sed -n 's/^State: //p'); fi
+    else st=$(MAAT_LINGUA=$L bash "$HERE/cycle-state.sh" "$SS" 2>&1 | sed -n 's/^State: //p'); fi
     if [ "$st" = 1d0181258ccc ]; then pass=$((pass + 1))
     else fail=$((fail + 1)); echo "FAIL [vincolo 1 (1.4.0): State di $impl in $L = 1d0181258ccc] trovato '$st'"; fi
   done

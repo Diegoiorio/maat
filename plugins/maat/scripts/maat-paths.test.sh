@@ -164,7 +164,7 @@ chmod +x "$T/claude" "$T/claude-attende" "$T/gates"
 echo "/maat:full-implementation-cycle --worker=implement x" > "$T/prompt.md"
 fase() { # $1 plugin (or scripts folder), $2 repo (cwd), $3 run dir, $4 label; fake claude from CLAUDE_BIN
   (cd "$2" && env -u FIC_REPO -u FIC_LOCK -u FIC_PHASE CLAUDE_BIN="${CL_FINTO:-$T/claude}" FIC_GATES="$T/gates" \
-    FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 FIC_DRIVER=0 bash "$1" "$3" "$4" "$T/prompt.md" </dev/null)
+    FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 bash "$1" "$3" "$4" "$T/prompt.md" </dev/null)
 }
 GD=$(cd "$R" && git rev-parse --absolute-git-dir)
 LOCK_ATTESO="$GD/full-implementation-cycle.lock" SPYL="$T/lk.spia" fase "$P/scripts/run-phase.sh" "$R" "$SP/spec-lk.run" 01-implement >/dev/null 2>"$T/lk.err"
@@ -232,6 +232,8 @@ interno scripts/run-phase.sh "$I/run-phase.sh" && interno scripts/python.sh "$I/
   interno schemas/phase-result.schema.json "$RX/script/fic/schemas/phase-result.schema.json"; ri=$?
 check "premessa: harness interno di $INTERNO_REF, lock da git -C \"\$HERE\" con lo stesso nome" '[ $ri -eq 0 ] && grep -qF "gd=\$(git -C \"\$HERE\" rev-parse --absolute-git-dir" "$I/run-phase.sh" && grep -qF "LOCK=\$gd/full-implementation-cycle.lock" "$I/run-phase.sh"'
 rm -f "$T/preso" "$T/rilascio"
+# FIC_DRIVER=0 below is an input of the old internal harness of $INTERNO_REF (its own engine choice, if it has one),
+# not of this plugin: kept as it was, so that the old harness runs as before 1.6.0
 (cd "$RX" && env -u FIC_REPO -u FIC_LOCK -u FIC_PHASE CLAUDE_BIN="$T/claude-attende" PRESO="$T/preso" RILASCIO="$T/rilascio" FIC_GATES="$T/gates" \
   FIC_FINALIZE="$T/non-esiste" FIC_LANES=0 FIC_DRIVER=0 bash "$I/run-phase.sh" "$RX/.claude/.ai-workflow/spec-int.run" 01-implement "$T/prompt.md" \
   </dev/null > "$T/int.out" 2>&1) &
