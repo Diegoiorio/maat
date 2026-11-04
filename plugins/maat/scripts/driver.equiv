@@ -1,9 +1,9 @@
 # driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv --certifica`.
 # Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se driver.py e loro stessi hanno ancora questi hash (CR tolti).
-driver de51be31a47c70652a92c54bae3a2ec1aad068e7664bb39f50c008a483db0ac5
-cycle-state 4f4facd551c657c12580fe5a9f392049e4c4deae3e71ff5576e2bddbb4d637e9
-run-phase 849ea2b7c116b7298bcddb69866440c503a94093d85c184705b9ed0da600566b
-messages b24580d12c15adfbce89a795950bbdbd5a71f84056c9f7e79e7c3ff84dfdd50a
+driver fb83fb0d7c18c1391bbe47006c4efbff0a84a55737d5015cdbfb329093e8a4d1
+cycle-state 075d8e84e50866d11c8e11a328f8ae7c1364c6761aacb11ce96e1644969f46da
+run-phase 179ae8534f5603dc584cc4b218c50e3146c802e6c6c133948a093d370dfc9303
+messages a17c52f72004af124252aaf12474dd601b80c3dcba8122f2c17f122f08b454e4
 maat-msg 3519ac3768279744d149e7315798811898aaa28eaa3048162f28a75848bab32d
 maat_msg fd372b2fa32b5951258155993240217acd604b3d51aee7ce26f75b87bfb57482
-corpus spec=65 jsonl=49 · lingue it,en · 2026-11-02T22:27:46Z · impronta 6b484b23826a · validatori minimo,jsonschema
+corpus spec=65 jsonl=49 · lingue it,en · 2026-11-04T16:43:29Z · impronta 6b484b23826a · validatori minimo,jsonschema

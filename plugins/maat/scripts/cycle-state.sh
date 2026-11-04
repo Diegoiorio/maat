@@ -112,30 +112,38 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # Language (1.4.0): resolved once and exported, so the driver, plan-check.sh and run-phase.sh read the same one
 maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
 
-# WRAPPER (harness-pt14): the same table is ported to script/fic/driver.py (`driver.py next`). It is used
-# instead of the code below only if the certificate script/fic/driver.equiv carries the current hash of driver.py and of
-# THIS file (equivalence proved by `driver.py equiv --certifica` on the real run directories); otherwise this
-# script stays standalone. FIC_DRIVER=0 forces the code below, FIC_DRIVER=1 the driver (tests); FIC_DRIVER_PY and
-# FIC_DRIVER_CERT replace driver and certificate (tests). Driver failed or without a Next line -> code below.
-# Since 1.4.0 the certificate also carries the message catalog and its two readers (messages, maat-msg, maat_msg):
-# the text is part of the certified output.
+# WRAPPER (1.5.1): the same table is ported to driver.py (`driver.py next`), and the driver decides. The code below
+# decides only with FIC_DRIVER=0 (the bash fallback, on request, until 1.5.2); unset, empty or 1 -> the driver; any
+# other value -> one AVVISO on stderr, then the driver. No fallback on error: no usable Python, a Python older than
+# 3.10, or a driver that fails (exit not 0 or no Next line) give `Next: STOP — <reason>`, exit 0 (a STOP is an
+# answer), that single line and NO State: line — the marker the internal readers of run-phase.sh recognise (every
+# answer of the table and of the driver has State: before Next:). The Python check comes first, with either engine:
+# the code below needs Python too (the result.json rule). The certificate driver.equiv no longer switches anything
+# here: it is the proof, at each release, that the code below and the driver are equivalent (tools/certifica.sh, CI).
+# FIC_DRIVER_PY replaces the driver (tests).
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
-CERT=${FIC_DRIVER_CERT:-$MAAT_SCRIPTS/driver.equiv}
-fic_hash() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
-driver_on() {
-  case "${FIC_DRIVER:-}" in 0) return 1 ;; 1) [ -f "$DRV" ]; return ;; esac
-  [ -f "$DRV" ] && [ -f "$CERT" ] || return 1
-  local c; c=$(tr -d '\r' < "$CERT")
-  grep -qx "driver $(fic_hash "$DRV")" <<< "$c" && grep -qx "cycle-state $(fic_hash "${BASH_SOURCE[0]}")" <<< "$c" &&
-    grep -qx "messages $(fic_hash "$HERE/lib/messages.tsv")" <<< "$c" &&
-    grep -qx "maat-msg $(fic_hash "$HERE/lib/maat-msg.sh")" <<< "$c" && grep -qx "maat_msg $(fic_hash "$HERE/maat_msg.py")" <<< "$c"
+FIC_PY=""
+if ! . "$HERE/python.sh" 2>/dev/null; then echo "Next: STOP — $(msg cycle-state-engine.no_python)"; exit 0; fi
+fic_py_min_ok || { echo "Next: STOP — $(msg cycle-state-engine.python_old v="$FIC_PY_VER" py="$FIC_PY")"; exit 0; }
+engine_choice() { # 0 = the driver decides, 1 = the code below (FIC_DRIVER=0)
+  case "${FIC_DRIVER:-}" in
+    0) return 1 ;;
+    ''|1) return 0 ;;
+    *) echo "AVVISO: $(msg driver-engine.fic_driver_unknown v="$FIC_DRIVER")" >&2; return 0 ;;
+  esac
 }
-if driver_on; then
-  FIC_PY=""; . "$HERE/python.sh" 2>/dev/null
-  if [ -n "$FIC_PY" ] && dout=$("$FIC_PY" "$DRV" next "$1" 2>/dev/null) && grep -q '^Next: ' <<< "$dout"; then
-    printf '%s\n' "$dout"; exit 0
-  fi
-  echo "AVVISO: $(msg cycle-state.driver_failed)" >&2
+if engine_choice; then
+  # stdout of the driver in dout, its stderr in derr, without a temporary file ($TMP is created below): the inner
+  # substitution sends stderr to fd 3 (the outer capture); its exit code and stdout follow, after a separator
+  dres=$( { dout=$("$FIC_PY" "$DRV" next "$1" 2>&3 3>&-); drc=$?; printf '\n\036%s\036%s\036' "$drc" "$dout"; } 3>&1 )
+  derr=${dres%%$'\n\036'*}; dres=${dres#*$'\n\036'}; drc=${dres%%$'\036'*}; dout=${dres#*$'\036'}; dout=${dout%$'\036'}
+  if [ "$drc" = 0 ] && grep -q '^Next: ' <<< "$dout"; then printf '%s\n' "$dout"; exit 0; fi
+  # failed (an exit other than 0, or exit 0 with no Next: line): the whole stderr of the driver (a traceback) goes on
+  # to our stderr, as run-phase.sh does for valida; the STOP line on stdout keeps only its last line
+  [ -n "$derr" ] && printf '%s\n' "$derr" >&2
+  line=$(printf '%s\n' "$derr" | tr -d '\r' | sed '/^[[:space:]]*$/d' | tail -1)
+  line=${line:0:200}
+  echo "Next: STOP — $(msg cycle-state-engine.driver_failed rc="$drc" line="${line:--}")"; exit 0
 fi
 PC="$MAAT_SCRIPTS/plan-check.sh"
 RS="$MAAT_SCRIPTS/review-surface.sh"

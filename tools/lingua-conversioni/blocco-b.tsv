@@ -6,7 +6,6 @@
 
 # ---------------------------------------------------------------- cycle-state.sh and driver.py next
 cycle-state.usage	scripts/cycle-state.sh:108#2	-	-	script	usage: {script} <spec-<name>.md>
-cycle-state.driver_failed	scripts/cycle-state.sh:131	AVVISO: 	-	-	driver.py next failed: cycle-state.sh standalone
 cycle-state.json_dev	scripts/driver.py:315	STOP|	-	n devs	declared deviations ({n}): {devs}
 cycle-state.json_dev	scripts/cycle-state.sh:262!py	STOP|	-	n devs	declared deviations ({n}): {devs}
 cycle-state.json_blocked	scripts/driver.py:317	STOP|	-	-	blocked on: 
@@ -144,8 +143,6 @@ driver.reads_reviewer	scripts/driver.py:1178#2	-	-	-	reviewer
 driver.missing	scripts/driver.py:1205	-	-	-	MISSING
 driver.above_cap	scripts/driver.py:1214#2	 	-	cap	ABOVE {cap}
 driver.conditional	scripts/driver.py:1215	 · 	 	-	conditional
-driver.cert_expired	scripts/driver.py:1317	-	-	why	certificate expired: next from cycle-state.sh ({why})
-driver.cert_invalid	scripts/driver.py:1318	-	-	-	driver.equiv not valid for these files
 driver.running	scripts/driver.py:1323#2	-	-	label	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running
 driver.antiloop	scripts/driver.py:1332#2	-	-	label state next	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}
 driver.chain_to	scripts/driver.py:1347	-	-	word dest	chain: {word} — moving to {dest}
@@ -210,7 +207,6 @@ run-phase.v_esito	scripts/run-phase.sh:458!py	-	-	-	outcome STOP:
 run-phase.v_esito	scripts/driver.py:958	-	-	-	outcome STOP: 
 run-phase.v_json_stop	scripts/run-phase.sh:463!py	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
 run-phase.v_json_stop	scripts/driver.py:963	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
-run-phase.drv_valida_failed	scripts/run-phase.sh:485	AVVISO: 	-	-	driver.py valida failed: internal validator of run-phase.sh
 run-phase.usage_valida	scripts/run-phase.sh:490	-	-	script	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>
 run-phase.no_python	scripts/run-phase.sh:491#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
 run-phase.no_python	scripts/run-phase.sh:616#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)

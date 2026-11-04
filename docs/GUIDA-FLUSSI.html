@@ -578,7 +578,7 @@ sequenceDiagram
   end
   D-->>O: Driver result: DONE | STOP | WAIT | BUSY | RUNNING
   O-->>U: final report (no commit)
-</pre><div class="cap">Architecture of the full cycle with the driver (harness-pt14). <code>cycle-state.sh</code> and <code>run-phase.sh</code> remain complete scripts: they call the driver (<code>next</code>, <code>valida</code>) only with the equivalence certificate <code>scripts/driver.equiv</code> valid for their hashes, otherwise they are self-contained.</div></div>
+</pre><div class="cap">Architecture of the full cycle with the driver (harness-pt14). <code>cycle-state.sh</code> and <code>run-phase.sh</code> remain complete scripts, but since 1.5.1 the driver always decides (<code>next</code>, <code>valida</code>); their own bash logic decides only with <code>FIC_DRIVER=0</code>. A driver that fails, or a missing or too old Python, is a <code>STOP</code> with the remedy, never a silent fallback. The equivalence certificate <code>scripts/driver.equiv</code> is the proof of each release that the fallback is equivalent; it switches nothing at runtime.</div></div>
 
 <h3>Resume: <code>cycle-state.sh</code></h3>
 <p>The next phase is <b>computed</b>, not interpreted. The script header is the authoritative table; the first matching row wins.</p>
@@ -900,7 +900,7 @@ flowchart TB
 </table></div>
 <p>The suites are run from the maat repo, one at a time, with <code>bash plugins/maat/scripts/&lt;name&gt;.test.sh</code> (Git Bash on
 Windows, bash on Linux); some run inside WSL. List, durations and Windows/Linux variants: <code>docs/TESTING-harness.md</code>
-in the maat repo. Every suite accepts a variant to test (<code>RP=</code>, <code>CS=</code>, <code>PC=</code>, <code>SCRIPT=</code>, <code>VF=</code>, <code>GT=</code>, <code>CP=</code>): this is how mutation counterproofs of new rules are done. The tests use temporary git repositories and do not touch the real lock.</p>
+in the maat repo. Every suite accepts a variant to test (<code>RP=</code>, <code>CS=</code>, <code>PC=</code>, <code>SCRIPT=</code>, <code>VF=</code>, <code>GT=</code>, <code>CP=</code>): this is how mutation counterproofs of new rules are done. A variant of the bash table (<code>CS=</code>) or of the internal validator of <code>run-phase.sh</code> (<code>RP=</code> that changes <code>VALIDA_PY</code>) is tested with <code>FIC_DRIVER=0</code>: without it the Python driver decides and the mutation is not seen (1.5.1). The tests use temporary git repositories and do not touch the real lock.</p>
 
 <!-- ====================================================================== -->
 <h2 class="sec" id="efficienza">Usage, timing, measurements</h2>
@@ -1052,7 +1052,7 @@ pie showData
 <tr><th>Path</th><th>Content</th><th>Type</th></tr>
 <tr><td><code>${CLAUDE_PLUGIN_ROOT}/skills/&lt;skill&gt;/SKILL.md</code></td><td>rules of each plugin skill (<code>/maat:&lt;skill&gt;</code>)</td><td><span class="tag">normative</span></td></tr>
 <tr><td><span class="tag ok">pt14</span> <code>full-implementation-cycle/{orchestratore.md,workers/&lt;phase&gt;.md,riferimento.md}</code> · <code>plan-review-cycle/{autore.md,revisori.md,formato-1.md}</code> · <code>implementation-review-cycle/{prompt-revisore.md,freschezza.md,gate-manuali.md,light.md}</code></td><td>the prose split by who reads it: each phase loads only the SKILL and its phase's file (≤300 lines, <code>driver.py righe</code>); the others are read only on the path that needs them; <code>riferimento.md</code> lists the rules that became code with their tests</td><td><span class="tag">normative</span></td></tr>
-<tr><td><span class="tag ok">pt14</span> <code>${CLAUDE_PLUGIN_ROOT}/scripts/driver.py</code> · <code>driver.equiv</code></td><td>the full cycle state machine (<code>next</code>, <code>run</code>, <code>valida</code>, <code>equiv</code>, <code>certificato</code>, <code>righe</code>) and the equivalence certificate that enables delegation from the wrapper scripts</td><td><span class="tag">code</span></td></tr>
+<tr><td><span class="tag ok">pt14</span> <code>${CLAUDE_PLUGIN_ROOT}/scripts/driver.py</code> · <code>driver.equiv</code></td><td>the full cycle state machine (<code>next</code>, <code>run</code>, <code>valida</code>, <code>equiv</code>, <code>certificato</code>, <code>righe</code>) and the equivalence certificate, the proof of each release that the bash fallback (<code>FIC_DRIVER=0</code>) decides like the driver</td><td><span class="tag">code</span></td></tr>
 <tr><td><code>${CLAUDE_PLUGIN_ROOT}/agents/*.md</code></td><td>agents; the <code>tools:</code> frontmatter is the real capability set</td><td><span class="tag">normative</span></td></tr>
 <tr><td><code>full-implementation-cycle/child-rules.md</code></td><td>rules appended to the system prompt of every subsession</td><td><span class="tag">normative</span></td></tr>
 <tr><td>headers of <code>cycle-state.sh</code>, <code>run-phase.sh</code>, <code>guard.py</code>, <code>plan-check.sh</code>, <code>review-surface.sh</code>, <code>test-fast.sh</code>, <code>maat-config.py</code></td><td>deterministic behaviour and its guarantees</td><td><span class="tag">normative</span></td></tr>

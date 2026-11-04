@@ -15,7 +15,6 @@ test.accents	accents and dashes — · ok	perché già più — · così
 
 # --- cycle-state (lingua-converti.py)
 cycle-state.usage	usage: {script} <spec-<name>.md>	uso: {script} <spec-<name>.md>
-cycle-state.driver_failed	driver.py next failed: cycle-state.sh standalone	driver.py next non riuscito: cycle-state.sh autonomo
 cycle-state.json_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {devs}
 cycle-state.json_blocked	blocked on: 	bloccato su: 
 cycle-state.json_esito	outcome {esito}: {motivo}	esito {esito}: {motivo}
@@ -93,8 +92,6 @@ driver.reads_reviewer	reviewer	revisore
 driver.missing	MISSING	ASSENTE
 driver.above_cap	ABOVE {cap}	SOPRA {cap}
 driver.conditional	conditional	condizionali
-driver.cert_expired	certificate expired: next from cycle-state.sh ({why})	certificato scaduto: next da cycle-state.sh ({why})
-driver.cert_invalid	driver.equiv not valid for these files	driver.equiv non valido per questi file
 driver.running	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running	log/{label}.running senza .exit: una fase gira ancora (o e' morta senza chiudere); segui il suo log, oppure verifica che nessun processo viva e rimuovi il .running
 driver.antiloop	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}	anti-loop: la fase {label} non ha cambiato lo stato (State {state} prima e dopo): Next {next}
 driver.chain_to	chain: {word} — moving to {dest}	catena: {word} — passo a {dest}
@@ -130,6 +127,21 @@ driver-equiv.open	{spec} not closed (Next: {word}): the proof on this spec cover
 driver-equiv.open_hfp	{spec} with harness.fp {verdict} (Next: {word}): the proof on this spec covers only the fingerprint branch	{spec} con harness.fp {verdict} (Next: {word}): la prova su questa spec copre solo il ramo dell'impronta
 driver-equiv.usage	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <folder|spec.md>… · driver.py equiv --impronta <folder|spec.md>… (only the corpus fingerprint, no proof)	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <cartella|spec.md>… · driver.py equiv --impronta <cartella|spec.md>… (solo l'impronta del corpus, nessuna prova)
 
+# --- cycle-state-engine, run-phase-engine, driver-engine (1.5.1, written by hand like driver-equiv: texts that
+# v1.3.0 does not have, so outside the cycle-state, run-phase and driver sections of
+# tools/lingua-conversioni/blocco-b.tsv). The choice of the
+# engine: the driver decides, the bash code only with FIC_DRIVER=0, no fallback on error (a STOP with the reason).
+# driver-engine.fic_driver_unknown is printed by the three points of choice (cycle-state.sh, run-phase.sh, driver.py).
+cycle-state-engine.no_python	no usable Python (FIC_PYTHON, py -3, python3, python): set FIC_PYTHON=<python 3.10 or newer>	nessun Python utilizzabile (FIC_PYTHON, py -3, python3, python): imposta FIC_PYTHON=<python 3.10 o successivo>
+cycle-state-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
+cycle-state-engine.driver_failed	driver.py next failed (exit {rc}): {line} — to go on with the bash table: FIC_DRIVER=0	driver.py next non riuscito (exit {rc}): {line} — per proseguire con la tabella bash: FIC_DRIVER=0
+run-phase-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
+run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — to go on with the internal validator: FIC_DRIVER=0	driver.py valida non riuscito (exit {rc}): {line} — per proseguire con il validatore interno: FIC_DRIVER=0
+run-phase-engine.cs_no_state	cycle-state.sh gave neither a State: nor a Next: line (exit {rc})	cycle-state.sh non ha dato ne' la riga State: ne' la riga Next: (exit {rc})
+driver-engine.fic_driver_unknown	FIC_DRIVER={v} is neither 0 nor 1: the Python driver decides (FIC_DRIVER=0 for the bash table)	FIC_DRIVER={v} non e' ne' 0 ne' 1: decide il driver Python (FIC_DRIVER=0 per la tabella bash)
+driver-engine.python_old	Python {v} ({py}) is older than {min}, the minimum of Maat: set FIC_PYTHON=<python {min} or newer>	Python {v} ({py}) e' precedente a {min}, il minimo di Maat: imposta FIC_PYTHON=<python {min} o successivo>
+driver-engine.motore_bash	bash engine (FIC_DRIVER=0): Next/State from standalone cycle-state.sh	motore bash (FIC_DRIVER=0): Next/State da cycle-state.sh autonomo
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile
@@ -150,7 +162,6 @@ run-phase.v_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {
 run-phase.v_blocked	blocked on: 	bloccato su: 
 run-phase.v_esito	outcome STOP: 	esito STOP: 
 run-phase.v_json_stop	{stop} (the prose said OK: the most conservative wins)	{stop} (la prosa diceva OK: vale il piu conservativo)
-run-phase.drv_valida_failed	driver.py valida failed: internal validator of run-phase.sh	driver.py valida fallito: validatore interno di run-phase.sh
 run-phase.usage_valida	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>	uso: {script} --valida <log.jsonl> <schema> <fase> <result.json>
 run-phase.no_python	no usable Python interpreter (set FIC_PYTHON)	nessun interprete Python utilizzabile (imposta FIC_PYTHON)
 run-phase.usage_nominati	usage: {script} --nominati <root> <paths-file> <log.jsonl>…	uso: {script} --nominati <radice> <file-dei-path> <log.jsonl>…

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # suite.sh — all the plugin suites, one at a time, from the repo root, on Linux (the CI, or a Linux clone).
-# Usage: bash tools/suite.sh [<results dir>]      (default: ./esiti)
+# Usage: bash tools/suite.sh [--gruppo <k>/<n>] [<results dir>]      (default: ./esiti)
+#   --gruppo <k>/<n> (1.5.1): only the suites of group k of tools/suite-gruppi.list, in the order of suite.list (one
+#   CI job per group; tools/suite-parallelo.sh, one Linux clone per group). The file must have exactly the groups
+#   1..n: exit 2 if an entry of suite.list is in no group or in two, an entry of the file is not in suite.list, or a
+#   group is outside 1..n or has no suite. The CI passes n = strategy.job-total, the number of jobs of its matrix, so a
+#   matrix with fewer or more jobs than the file has groups is red (tools/suite.test.sh checks .github/workflows/ci.yml).
 # Writes <results dir>/<name>.log and <results dir>/riepilogo.txt (one line per suite, like the Linux part of
 # giro-completo.sh). Exit 0 if every suite exits 0; 1 if one fails or changes the plugin; 2 if tools/suite.list does
 # not match the suites on disk (a suite missing from the list, a tools/*.test.sh missing from the list, or an entry
@@ -10,6 +15,13 @@
 # next); a suite after which it differs gets «PLUGIN CAMBIATO» in its line of riepilogo.txt and the exit is 1.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+GRUPPO=
+if [ "${1:-}" = --gruppo ]; then
+  GRUPPO=${2:-}
+  [[ $GRUPPO =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]] && [ "${GRUPPO%/*}" -le "${GRUPPO#*/}" ] ||
+    { echo "usage: bash tools/suite.sh [--gruppo <k>/<n>] [<results dir>]   (1 <= k <= n)" >&2; exit 2; }
+  shift 2
+fi
 OUT=${1:-esiti}
 mkdir -p "$OUT" && OUT=$(cd "$OUT" && pwd)
 cd "$ROOT" || exit 2
@@ -27,6 +39,27 @@ for f in tools/*.test.sh; do
   printf '%s\n' $LIST | grep -qxF -- "$f" || { echo "suite.list: $f is not in the list" >&2; bad=1; }
 done
 [ $bad -eq 0 ] || exit 2
+if [ -n "$GRUPPO" ]; then
+  k=${GRUPPO%/*} n=${GRUPPO#*/}
+  G=$(tr -d '\r' < tools/suite-gruppi.list 2>/dev/null | grep -v '^[[:space:]]*\(#\|$\)') ||
+    { echo "suite-gruppi.list: missing or empty" >&2; exit 2; }
+  while read -r g e x; do
+    if ! [[ $g =~ ^[0-9]+$ ]] || [ -z "$e" ] || [ -n "$x" ]; then
+      echo "suite-gruppi.list: bad line: $g $e $x" >&2; bad=1; continue
+    fi
+    [ "$g" -ge 1 ] && [ "$g" -le "$n" ] || { echo "suite-gruppi.list: $e is in group $g, outside 1..$n" >&2; bad=1; }
+    printf '%s\n' $LIST | grep -qxF -- "$e" || { echo "suite-gruppi.list: $e is not in suite.list" >&2; bad=1; }
+  done <<< "$G"
+  for s in $LIST; do
+    c=$(printf '%s\n' "$G" | awk -v e="$s" '$2 == e' | wc -l)
+    [ "$c" -eq 1 ] || { echo "suite-gruppi.list: $s is in $c groups (exactly one is required)" >&2; bad=1; }
+  done
+  for g in $(seq 1 "$n"); do
+    printf '%s\n' "$G" | awk -v g="$g" '$1 == g' | grep -q . || { echo "suite-gruppi.list: group $g has no suite" >&2; bad=1; }
+  done
+  [ $bad -eq 0 ] || exit 2
+  LIST=$(printf '%s\n' "$G" | awk -v g="$k" '$1 == g { print $2 }' | grep -xF -f - <(printf '%s\n' $LIST))   # order of suite.list
+fi
 prima=$(guardia_impronta plugins/maat) || { echo "suite.sh: plugin fingerprint not computable (tools/lib/guardia-plugin.sh)" >&2; exit 2; }
 # like the Linux run of giro-completo.sh: no WSL (ciclo-worktree.sh would otherwise try to use it)
 export FIC_WT_WSL=0

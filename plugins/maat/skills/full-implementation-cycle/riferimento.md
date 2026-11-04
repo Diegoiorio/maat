@@ -295,7 +295,7 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Numbered labels, `--worker=<fase>` phase prompt, forwarded flags (FIC step 4) | `driver.py run` | `driver.test.sh` §4 |
 | Context pack before each phase (FIC step 4.0) | `driver.py run` → `context-pack.sh` | `driver.test.sh` §4, `context-pack.test.sh` |
 | Chain: on a mother in WAIT, work on the ring it names; a closed ring leads back to the mother (FIC «Chains», «On the mother») | `driver.py run` | `driver.test.sh` §4 |
-| Without a valid equivalence certificate `run` takes Next/State from standalone `cycle-state.sh` | `driver.py run` | `driver.test.sh` §4 |
+| With `FIC_DRIVER=0` `run` takes Next/State from standalone `cycle-state.sh` | `driver.py run` | `driver.test.sh` §4 |
 | Phase budget per invocation | `driver.py run --max-fasi` | `driver.test.sh` §4 |
 | Fix budget (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` row 11b | `cycle-state.test.sh` |
 | Structured outcome: JSON valid for the schema, deviazioni/bloccato_su → STOP, the more conservative of prose and JSON wins (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, counterproof §6 |

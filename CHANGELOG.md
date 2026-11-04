@@ -2,6 +2,69 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.5.1 — the Python driver always decides; bash only on request
+
+**Why a patch:** with an intact plugin a cycle does and prints the same as 1.5.0: the certificate was VALIDO, so the
+driver already decided. What changes is what happens when something is wrong.
+
+- **The driver decides** `next` and `valida`, always. The bash table of `cycle-state.sh` and the internal validator
+  of `run-phase.sh` decide only with `FIC_DRIVER=0`:
+
+  | `FIC_DRIVER` | 1.5.0 | 1.5.1 |
+  |---|---|---|
+  | unset or empty | certificate VALIDO → Python, otherwise bash | Python |
+  | `1` | Python | Python (the same as the default) |
+  | `0` | bash | bash |
+  | any other value | the certificate decides | Python, with a line `AVVISO: FIC_DRIVER=<value> …` |
+
+  The choice is the same in the three places (`cycle-state.sh`, `run-phase.sh` for `valida`, `driver.py run`) and it
+  is inherited: in one invocation one engine decides. With `FIC_DRIVER=0`, `driver.log` says `motore bash` at the
+  first entry into each spec.
+- **No silent fallback.** A driver that fails, no Python, or a Python older than 3.10 now give a `STOP` with the
+  reason and the remedy, instead of the bash code with a warning. The Python check holds with either engine, also
+  with `FIC_DRIVER=0` (the bash table needs Python too); its remedy is `FIC_PYTHON=<python 3.10 or newer>`. The remedy
+  of a failed driver is `FIC_DRIVER=0`. A failed `valida` leaves no `result.json` behind. Inside `run-phase.sh` the
+  four readers of `cycle-state.sh` see such a `STOP` (it is the only output without a `State:` line): a phase not
+  launched (exit 7, at the start and at the review of a ring) or a `STOP` outcome (at the end of a phase and of the
+  `chiusura`), never an `OK` outcome with an empty `state=`.
+- **The certificate no longer switches anything at runtime.** `driver.equiv` is the proof, at each release, that the
+  fallback is equivalent to the driver. The strict check in CI does not change (VALIDO on `main`, on tags and on pull
+  requests to `main`). `driver.py certificato` still shows its status. Its header still says that the wrappers call
+  the driver only with valid hashes: that was the 1.5.0 behaviour, and the header is a frozen line, rewritten in 1.5.2.
+- **Going back to bash in the middle of a cycle, and forth again, needs no confirmation:** `FIC_DRIVER` is not part
+  of the harness fingerprint. `plugins/maat/scripts/rollback.test.sh` proves it with the real `run-phase.sh`: a cycle
+  started with one engine and resumed with the other, after each phase that writes to disk, continues with the same
+  run dirs, the same `harness.fp`, the same `Next` and the same end, in both directions (17 resumes, plus five
+  counterproofs). **Limit:** it covers a format-1 cycle (plan, implement, review, fix) and a STOP with its recovery,
+  in Italian. The rollback is not proven on a chain (mother and rings) nor on a format-2 cycle with lanes, nor in
+  English: there the equivalence of the two engines rests on `driver.equiv` and on the old-against-new oracle.
+- **Oracle:** `tools/oracolo.sh --motore bash|predefinito` (default `bash`, the 1.5.0 behaviour: `FIC_DRIVER=0` on
+  both sides, it proves the bash table did not change). `predefinito` unsets `FIC_DRIVER`, so each side decides with
+  its default engine: it proves the real decider did not change. At the top one line per side shows the verdict of
+  its certificate (informative, it never changes the exit code).
+- **Faster proofs.** The CI runs the suites in three jobs at the same time, one per group of `tools/suite-gruppi.list`
+  (`tools/suite.sh --gruppo <k>/<n>`); the check «linux» is green only when all three are, and each job has a limit
+  of 30 minutes instead of 45 for the single job. On a Linux machine, `tools/suite-parallelo.sh` runs the same groups
+  on three clones at once and runs a suite red in parallel again alone before calling it red; it does not start while
+  `tools/certifica.sh` or a Maat cycle on Windows is running; it is not yet accepted on the real suites (the
+  comparison with the run one at a time on the same machine is still to be done), so it is not for a release yet.
+  `tools/giro-completo.sh` gains `--linux-parallelo` and
+  `--windows-breve`: the short proof on Windows, `tools/prova-breve-windows.list`, about 50 minutes in Git Bash
+  instead of the whole Windows part.
+- **Proof of compatibility:** the certificate is rewritten (the hashes of `driver.py`, `cycle-state.sh`,
+  `run-phase.sh` and `messages.tsv` changed; same examples, same fingerprint `6b484b23826a`): VALIDO in `it` and `en`
+  with both validators. The oracle 1.5.0 against 1.5.1 gives the same result for all 65 specs of the examples, in `it`
+  and in `en`, with both engines (`--motore bash` and `--motore predefinito`). `rollback.test.sh` is green on Linux
+  (17 resumes); the full run is the CI in three groups on Linux, plus the short proof on Windows.
+- **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again; from then
+  on the driver decides. Who set `FIC_DRIVER=0` keeps bash. Who had modified the plugin by hand (certificate SCADUTO)
+  now gets the driver; before, bash in silence. Any other value of `FIC_DRIVER` now prints an `AVVISO`.
+  `FIC_DRIVER_CERT` no longer affects the wrappers nor `run` (it stays for `certificato`, `equiv` and
+  `tools/certifica.sh`). A Python 3.8 or 3.9, outside what is supported, now stops the cycle.
+- **Roadmap:** 1.5.2 removes the bash code (after a period without regressions and one real minimal cycle on
+  Windows); 1.5.3 multi-platform CI, with the Windows proof that today runs by hand.
+
 ## 1.5.0 — the driver certified on public examples, reproducible
 
 **Why 1.5.0 and not a patch:** the proof behind the driver certificate changes nature. Until 1.4.0 it was made on 15

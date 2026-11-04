@@ -2,6 +2,8 @@
 # cycle-state.test.sh — the resume table, row by row, in a throwaway git repo.
 #   bash plugins/maat/scripts/cycle-state.test.sh
 #   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation
+#   FIC_DRIVER=0 CS=/path/variant.sh bash .../cycle-state.test.sh   # (1.5.1) a variant of the bash table: without
+#     FIC_DRIVER=0 the Python driver decides and the mutation is not seen (the suite proves the default engine)
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f

@@ -11,8 +11,9 @@
 #                                        (reference for script/fic/driver.py equiv; below, VALIDA_PY)
 #
 # DRIVER (harness-pt14): phases are launched by script/fic/driver.py (`driver.py run`), always through this script.
-# Here the driver enters at a single point, the outcome validation (`driver.py valida`), and only with a valid
-# equivalence certificate (WRAPPER, below VALIDA_PY). Without a certificate this script is standalone as before.
+# Here the driver enters at a single point, the outcome validation (`driver.py valida`), and decides it (1.5.1): the
+# internal validator decides only with FIC_DRIVER=0 (WRAPPER, below VALIDA_PY). The four reads of cycle-state.sh go
+# through cycle_state_read, which recognises a STOP of its wrapper (INTERNAL READERS, above cycle_state_read).
 #
 #   <run-dir>     .claude/.ai-workflow/spec-<name>.run   (gitignored by "spec-*")
 #   <label>       e.g. 01-plan, 02-implement, 03-review, 04-fix (the phase is read from the label)
@@ -492,30 +493,37 @@ elif jstop and re.match(r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK", riga):
 else:
     print(riga)
 '
-# WRAPPER (harness-pt14): `driver.py valida` instead of VALIDA_PY only if the certificate script/fic/driver.equiv
-# carries the current hash of driver.py and of THIS file (equivalence proved by `driver.py equiv --certifica`);
-# otherwise the internal validator. FIC_DRIVER=0 forces the internal one, FIC_DRIVER=1 the driver (tests); FIC_DRIVER_PY and
-# FIC_DRIVER_CERT replace driver and certificate (tests). Driver failed -> internal validator, with an AVVISO.
-# Since 1.4.0 the certificate also carries the message catalog and its two readers (messages, maat-msg, maat_msg).
+# WRAPPER (1.5.1): `driver.py valida` (the same rules as VALIDA_PY, ported) decides the outcome. VALIDA_PY decides
+# only with FIC_DRIVER=0 (the fallback, on request, until 1.5.2); unset, empty or 1 -> the driver; any other value ->
+# one AVVISO on stderr, then the driver. The Python check comes first, with either engine (VALIDA_PY needs Python
+# too): FIC_PY_VER older than 3.10 -> `PHASE RESULT <phase>: STOP — <reason>`. No fallback on error: a driver that
+# exits not 0 gives `PHASE RESULT <phase>: STOP — <reason>` and its result.json, if written, is removed (a valid
+# result.json of a failed run must not decide). The certificate driver.equiv no longer switches anything here: it is
+# the proof, at each release, that VALIDA_PY and the driver are equivalent. FIC_DRIVER_PY replaces the driver (tests).
+# --valida (below) always runs VALIDA_PY, without the Python check: it is the reference of `driver.py equiv`.
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
-CERT=${FIC_DRIVER_CERT:-$MAAT_SCRIPTS/driver.equiv}
-fic_hash() { tr -d '\r' < "$1" | sha256sum | cut -c1-64; }
-driver_on() { # 0 = delegate to the driver
-  case "${FIC_DRIVER:-}" in 0) return 1 ;; 1) [ -f "$DRV" ]; return ;; esac
-  [ -f "$DRV" ] && [ -f "$CERT" ] || return 1
-  local c; c=$(tr -d '\r' < "$CERT")
-  grep -qx "driver $(fic_hash "$DRV")" <<< "$c" && grep -qx "run-phase $(fic_hash "${BASH_SOURCE[0]}")" <<< "$c" &&
-    grep -qx "messages $(fic_hash "$HERE/lib/messages.tsv")" <<< "$c" &&
-    grep -qx "maat-msg $(fic_hash "$HERE/lib/maat-msg.sh")" <<< "$c" && grep -qx "maat_msg $(fic_hash "$HERE/maat_msg.py")" <<< "$c"
+engine_choice() { # 0 = the driver decides, 1 = VALIDA_PY (FIC_DRIVER=0)
+  case "${FIC_DRIVER:-}" in
+    0) return 1 ;;
+    ''|1) return 0 ;;
+    *) echo "AVVISO: $(msg driver-engine.fic_driver_unknown v="$FIC_DRIVER")" >&2; return 0 ;;
+  esac
 }
 valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see VALIDA_PY)
-  local o
+  local o vres vrc verr line
   msg_py
-  if driver_on; then
-    if o=$("$FIC_PY" "$DRV" valida "$@"); then [ -n "$o" ] && printf '%s\n' "$o"; return 0; fi
-    echo "AVVISO: $(msg run-phase.drv_valida_failed)" >&2
-  fi
-  "$FIC_PY" -c "$VALIDA_PY" "$@"
+  fic_py_min_ok || { echo "PHASE RESULT $3: STOP — $(msg run-phase-engine.python_old v="${FIC_PY_VER:-}" py="$FIC_PY")"; return 0; }
+  engine_choice || { "$FIC_PY" -c "$VALIDA_PY" "$@"; return; }
+  # stdout of the driver in o, its stderr in verr (as in cycle-state.sh: fd 3 is the outer capture), then the
+  # stderr goes on to the caller's stderr as before
+  vres=$( { o=$("$FIC_PY" "$DRV" valida "$@" 2>&3 3>&-); vrc=$?; printf '\n\036%s\036%s\036' "$vrc" "$o"; } 3>&1 )
+  verr=${vres%%$'\n\036'*}; vres=${vres#*$'\n\036'}; vrc=${vres%%$'\036'*}; o=${vres#*$'\036'}; o=${o%$'\036'}
+  [ -n "$verr" ] && printf '%s\n' "$verr" >&2
+  if [ "$vrc" = 0 ]; then [ -n "$o" ] && printf '%s\n' "$o"; return 0; fi
+  rm -f "$4"
+  line=$(printf '%s\n' "$verr" | tr -d '\r' | sed '/^[[:space:]]*$/d' | tail -1)
+  line=${line:0:200}
+  echo "PHASE RESULT $3: STOP — $(msg run-phase-engine.valida_failed rc="$vrc" line="${line:--}")"
 }
 if [ "${1:-}" = "--valida" ]; then
   [ $# -eq 5 ] || { echo "$(msg run-phase.usage_valida script="$0")" >&2; exit 2; }
@@ -1049,8 +1057,23 @@ launch() { # $1 = stdin file, $2 = ">" or ">>" on the log; sets code
 is_ring() { # is the spec of this run dir listed in the Figlie: (Children:) line of a mother in the same folder?
   [ -f "${dir%.run}.md" ] && grep -lsE '^(Figlie|Children):' "$(dirname "$dir")"/spec-*.md 2>/dev/null | xargs -r grep -lF -- "$(basename "${dir%.run}")" >/dev/null 2>&1
 }
+# INTERNAL READERS (1.5.1): every answer of the table and of the driver has a State: line before Next:
+# (cycle-state.sh, top); only a STOP of its wrapper (no usable Python, Python older than 3.10, driver failed) has none.
+# The absence of State: is therefore the marker: it does not depend on the language nor on the catalog texts, and it
+# covers any future STOP of the wrapper. The four reads below all go through here: a STOP of the wrapper is a phase not
+# launched (start of a ring, review of a ring) or a STOP outcome (end of a phase), never an OK outcome with state= empty.
+cycle_state_read() { # <spec>: the output in cso; 1 = no State: line, the reason in cs_why (text after "Next: STOP — ")
+  local rc
+  cso=$(bash "$HERE/cycle-state.sh" "$1" 2>>"$err"); rc=$?
+  cso=${cso//$'\r'/}; cs_why=""
+  grep -q '^State: ' <<< "$cso" && return 0
+  cs_why=$(printf '%s\n' "$cso" | sed -n 's/^Next: //p' | head -1); cs_why=${cs_why#STOP — }
+  [ -n "$cs_why" ] || cs_why=$(msg run-phase-engine.cs_no_state rc="$rc")
+  return 1
+}
 if [ "$phase" = implement ] && ! ls "$dir/log" 2>/dev/null | grep -q '\.pre-tree$' && is_ring; then
-  cn=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r' | sed -n 's/^Next: //p')
+  cycle_state_read "${dir%.run}.md" || { echo "STOP — $cs_why — $(msg run-phase.not_launched)" | tee -a "$err" >&2; finish 7; }
+  cn=$(printf '%s\n' "$cso" | sed -n 's/^Next: //p')
   case "$cn" in "STOP — catena"*|"WAIT — catena"*) echo "$cn — $(msg run-phase.not_launched)" | tee -a "$err" >&2; finish 7 ;; esac
 fi
 # closing of a chain: prepares the MOTHER's run dir (touched.txt, base.txt) and finds the children's e2e
@@ -1520,7 +1543,7 @@ ring_prompt() {
   fi
 }
 if [ "$phase" = review ] && is_ring; then
-  cso=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | tr -d '\r')
+  cycle_state_read "${dir%.run}.md" || ring_stop "STOP — $cs_why — $(msg run-phase.not_launched)"
   rk=$(printf '%s\n' "$cso" | sed -n 's/^Catena: anello \([0-9][0-9]*\)\/.*/\1/p' | head -1)
   rb=$(printf '%s\n' "$cso" | sed -n 's/^Base anello: \([0-9a-f]\{40\}\)$/\1/p')
   if [ "${rk:-1}" -le 1 ]; then :   # ring 1: its base is the usual one
@@ -1739,12 +1762,26 @@ originale=$orig}"
       implement|fix) esito=$(tests_guard "$esito") ;;
     esac
   fi
+  # INTERNAL READER (1.5.1): the state of the spec is read BEFORE the defensive deviations are recorded, to decide the
+  # outcome: a STOP of the wrapper of cycle-state.sh makes it `PHASE RESULT <phase>: STOP — <reason>` (state= empty,
+  # no deviation recorded). Read again only if recording the deviations changed the spec (the State it prints).
+  # Without the spec, state= stays empty as before (run dirs without a spec exist only in the tests).
+  cs_ok=1 st="" sp_md="${dir%.run}.md"
+  # originale= is the subsession's line: an outcome already STOP with its own originale= (the «uscita non valida» of
+  # valida, the checks of the tests) keeps that one, otherwise it is line 1
+  cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n 's/^originale=//p' | head -1); [ -n "$orig" ] ||
+    orig=$(printf '%s\n' "$esito" | sed -n '1p'); cs_ok=0; esito="PHASE RESULT $phase: STOP — $cs_why${orig:+
+originale=$orig}"; }
+  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
   case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)
-    printf '%s\n' "$esito" | sed -n 1p | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' && difensive ;;
+    if [ $cs_ok -eq 1 ] && printf '%s\n' "$esito" | sed -n 1p | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; then
+      sp_sum=$(cksum < "$sp_md" 2>/dev/null)
+      difensive
+      if [ -f "$sp_md" ] && [ "$(cksum < "$sp_md" 2>/dev/null)" != "$sp_sum" ]; then cycle_state_read "$sp_md" || cs_stop; fi
+    fi ;;
   esac
   if [ -n "$esito" ]; then
-    st=""
-    [ -f "${dir%.run}.md" ] && st=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | sed -n 's/^State: //p')
+    [ $cs_ok -eq 1 ] && [ -f "$sp_md" ] && st=$(printf '%s\n' "$cso" | sed -n 's/^State: //p')
     printf '%s\nstate=%s\n' "$esito" "$st" > "$dir/log/$label.esito"
     cat "$dir/log/$label.avvisi" >> "$dir/log/$label.esito" 2>/dev/null   # OTHER FLOWS: after state=, line 1 stays the outcome
   fi
@@ -1772,7 +1809,12 @@ if [ "$phase" = chiusura ]; then
     printf 'Chiusura: NEEDS_VERIFICATION — %s · %s\n' "$chz_why" "$chz_now" > "$dir/chiusura.txt"
     chz_esito="PHASE RESULT chiusura: STOP — $chz_why"
   fi
-  st=$(bash "$HERE/cycle-state.sh" "${dir%.run}.md" 2>>"$err" | sed -n 's/^State: //p')
+  # INTERNAL READER (1.5.1): a STOP of the wrapper of cycle-state.sh -> state= empty and, if the closing was OK, the
+  # outcome becomes that STOP (a closing already STOP keeps its own reason); chiusura.txt, the verdict of the gates
+  # written above, is not touched: the resume decides from it
+  st=""
+  if cycle_state_read "${dir%.run}.md"; then st=$(printf '%s\n' "$cso" | sed -n 's/^State: //p')
+  elif [ -z "$chz_why" ]; then chz_esito="PHASE RESULT chiusura: STOP — $cs_why"; fi
   printf '%s\nstate=%s\n' "$chz_esito" "$st" > "$dir/log/$label.esito"
 fi
 # gates after an implement/fix finished OK, still under the lock (the following review reuses them with an identical key)
