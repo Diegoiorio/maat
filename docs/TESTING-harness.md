@@ -60,11 +60,13 @@ engine».
 
 **The prefix «catena:» (`chain:` in `en`) on an exit 7.** `run-phase.sh` exits 7 («not launched») for a chain STOP
 (rows C1-C4), and also when it cannot read the state of the cycle before launching (`cycle-state.sh` gives no `State:`
-line: for example no Python, or one older than 3.10). `driver.py run` does not tell the two apart: on every exit 7
-that is not a `WAIT — catena` it prints `Driver result: STOP — catena: <last line of the phase's stderr>`. So the
-word «catena» does not mean that the cycle is a chain: the reason is the text after it (for a missing Python,
-`STOP — catena: STOP — driver.py next non riuscito … — fase non lanciata`). `driver.test.sh` checks that the
-`Driver result:` line holds the reason too, not only the prefix.
+line: for example no Python, one older than 3.10, or `driver.py next` failed). `driver.py run` does not tell the two
+apart: on every exit 7 that is not a `WAIT — catena` it prints `Driver result: STOP — catena: <the last lines of the
+phase's stderr, up to three, joined by « | »>`. So the word «catena» does not mean that the cycle is a chain: the
+reason is the text after it. For a failed `driver.py next`, since 1.5.1 its whole stderr (the traceback) is in the
+phase's `.stderr` before the STOP line, so the line reads `STOP — catena: <end of the traceback> | STOP — driver.py
+next non riuscito (exit 1): <last line> — … — fase non lanciata`. `driver.test.sh` checks that the `Driver result:`
+line holds the reason too, not only the prefix.
 
 **Message language (`MAAT_LINGUA`, 1.4.0).** The messages the scripts print for a person come from the catalog
 `scripts/lib/messages.tsv` (`msg` in bash, `lib/maat-msg.sh`; `T` in Python, `maat_msg.py`). The language is
