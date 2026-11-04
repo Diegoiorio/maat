@@ -57,7 +57,7 @@ PS1
     w=$(printf '%s' "$w" | iconv -f utf-8 -t utf-16le | base64 -w0)
     w=$("$PS" -NoProfile -NonInteractive -EncodedCommand "$w" 2>/dev/null | tr -d '\r ')
     [[ $w =~ ^[0-9]+$ ]] || { echo "suite-parallelo: OCCUPATA? — cannot read the Windows processes (MAAT_PARALLELO_FORZA=1 to skip)" >&2; return 3; }
-    [ "$w" -eq 0 ] || { echo "suite-parallelo: OCCUPATA — $w Maat cycle(s) running on Windows (driver.py run)" >&2; return 3; }
+    [ "$w" -eq 0 ] || { echo "suite-parallelo: OCCUPATA — a Maat cycle is running on Windows ($w processes with driver.py run)" >&2; return 3; }
   fi
 fi
 
