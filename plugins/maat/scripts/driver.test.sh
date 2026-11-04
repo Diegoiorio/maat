@@ -125,6 +125,10 @@ open(os.environ["SPY"], "a").write(" ".join(sys.argv[1:2]) + "\n")
 if os.environ.get("FINTO_ESCE"):
     sys.stderr.write("rumore\nerrore finto\n\n")
     sys.exit(int(os.environ["FINTO_ESCE"]))
+if os.environ.get("FINTO_SENZA_NEXT"):   # exit 0 with no Next: line (D3)
+    sys.stderr.write("avviso finto senza Next\n")
+    sys.stdout.buffer.write("Plan status: finto\nState: 000000000000\n".encode("utf-8"))
+    sys.exit(0)
 sys.stdout.buffer.write("Plan status: finto\nState: 000000000000\nNext: FINTO — dal driver\n".encode("utf-8"))
 EOF
 export SPY=$T/spy
@@ -169,6 +173,9 @@ casi=$(cert_casi "$T/cert-ok")
 check "cycle-state.sh con qualunque certificato risponde il driver (1.5.1): valido, altro hash di cycle-state.sh, assente, altro hash di maat_msg.py" '[ "$casi" = "driver driver driver driver " ]'
 cs FINTO_ESCE=1
 check "  driver fallito (exit 1) → «Next: STOP — driver.py next non riuscito (exit 1): <ultima riga del suo stderr> …», e l'uscita e' quella sola riga" 'stop1 "driver.py next non riuscito (exit 1): errore finto — per proseguire con la tabella bash: FIC_DRIVER=0" && [ "$out" = "Next: STOP — driver.py next non riuscito (exit 1): errore finto — per proseguire con la tabella bash: FIC_DRIVER=0" ]'
+check "  e lo stderr intero del driver (non solo l'ultima riga) passa sullo stderr di cycle-state.sh (come valida, B.4)" 'grep -qx rumore "$T/cs.err" && grep -qx "errore finto" "$T/cs.err"'
+cs FINTO_SENZA_NEXT=1
+check "  driver con exit 0 ma senza riga Next: (D3) → «Next: STOP — driver.py next non riuscito (exit 0): <ultima riga del suo stderr> …», una riga sola" 'stop1 "driver.py next non riuscito (exit 0): avviso finto senza Next — per proseguire" && grep -qx "avviso finto senza Next" "$T/cs.err"'
 NOPY="nessun Python utilizzabile (FIC_PYTHON, py -3, python3, python): imposta FIC_PYTHON=<python 3.10 o successivo>"
 cs FIC_PYTHON="$T/non-esiste.exe"
 check "  Python assente (FIC_PYTHON verso un file inesistente: vince su PATH) → «Next: STOP — nessun Python utilizzabile …», il driver mai chiamato" '[ "$out" = "Next: STOP — $NOPY" ] && stop1 "nessun" && [ ! -f "$SPY" ]'
@@ -203,6 +210,11 @@ py_casi() { # $1 = python.sh: 0 if the five cases hold
 check "python.sh senza e con pipefail: interprete buono rc=0 e la versione; inesistente, import fallito, nessun interprete rc=1 e FIC_PY_VER vuota (anche se 3.12 ereditata); exit 0 muto rc=0 senza versione" 'py_casi "$FC/python.sh"'
 mins() { "$BASH" -c '. "$1"; for v in 3.9 3.10 3.11 4.0 3.1 x; do FIC_PY_VER=$v; fic_py_min_ok && printf "%s:si " $v || printf "%s:no " $v; done' _ "$1"; }
 check "soglie coincidenti (D12): 3.10 in python.sh (fic_py_min_ok), in driver.py (PY_MIN) e in maat-doctor.sh" '[ "$(mins "$FC/python.sh")" = "3.9:no 3.10:si 3.11:si 4.0:si 3.1:no x:no " ] && grep -qx "PY_MIN = (3, 10)" "$DRV" && grep -q "ver_ge \"\$pyv\" 3.10; then" "$FC/maat-doctor.sh"'
+# the texts of the catalog too (review): every <major>.<minor> in a message about Python (cycle-state-engine,
+# run-phase-engine, maat-doctor, guard-hook, in it and en) is PY_MIN; driver-engine.python_old takes it as {min}
+pymin=$(sed -n 's/^PY_MIN = (\([0-9]*\), \([0-9]*\))$/\1.\2/p' "$DRV")
+pyver_cat=$(grep -i python "$FC/lib/messages.tsv" | grep -oE '(^|[^0-9.])[0-9]+\.[0-9]+([^0-9.]|$)' | grep -oE '[0-9]+\.[0-9]+' | sort -u)
+check "  e i testi del catalogo: ogni versione nei messaggi su Python e' PY_MIN ($pymin), nelle righe di cycle-state-engine, run-phase-engine e maat-doctor; driver-engine.python_old usa {min}" '[ -n "$pymin" ] && [ "$pyver_cat" = "$pymin" ] && (for k in cycle-state-engine.no_python cycle-state-engine.python_old run-phase-engine.python_old maat-doctor.python_old; do [ "$(awk -F"\t" -v k=$k "\$1 == k { print \$2 \"\n\" \$3 }" "$FC/lib/messages.tsv" | grep -cF "$pymin")" = 2 ] || exit 1; done) && awk -F"\t" "\$1 == \"driver-engine.python_old\"" "$FC/lib/messages.tsv" | grep -q "older than {min}.*precedente a {min}"' "$pyver_cat"
 # counterproofs on a copy of the plugin: mut <pair> <source> <dest> replaces exactly one line (line 1 of the pair file,
 # CR ignored) with the other lines of the pair file
 mut() {
@@ -221,21 +233,37 @@ cat > "$T/m2" <<'EOF'
   echo "Next: STOP — $(msg cycle-state-engine.driver_failed rc="$drc" line="${line:--}")"; exit 0
   echo "AVVISO: driver.py next failed (exit $drc)" >&2  # RIPIEGO-RIMESSO
 EOF
-check "controprove degli involucri: le mutazioni sono applicate" 'mut "$T/m1" "$CXS/cycle-state.sh" "$CXS/cs-certo.sh" && mut "$T/m2" "$CXS/cycle-state.sh" "$CXS/cs-ripiego.sh" && grep -q CERTIFICATO-DECIDE "$CXS/cs-certo.sh" && grep -q RIPIEGO-RIMESSO "$CXS/cs-ripiego.sh"'
+# (2b) the stderr of the failed driver dropped again (only its last line, in the STOP) · (2c) exit 0 enough, no Next: asked
+cat > "$T/m2b" <<'EOF'
+  [ -n "$derr" ] && printf '%s\n' "$derr" >&2
+  :  # STDERR-SCARTATO
+EOF
+cat > "$T/m2c" <<'EOF'
+  if [ "$drc" = 0 ] && grep -q '^Next: ' <<< "$dout"; then printf '%s\n' "$dout"; exit 0; fi
+  if [ "$drc" = 0 ]; then printf '%s\n' "$dout"; exit 0; fi  # NEXT-NON-CHIESTO
+EOF
+check "controprove degli involucri: le mutazioni sono applicate" 'mut "$T/m1" "$CXS/cycle-state.sh" "$CXS/cs-certo.sh" && mut "$T/m2" "$CXS/cycle-state.sh" "$CXS/cs-ripiego.sh" && mut "$T/m2b" "$CXS/cycle-state.sh" "$CXS/cs-scarta.sh" && mut "$T/m2c" "$CXS/cycle-state.sh" "$CXS/cs-senzanext.sh" && grep -q CERTIFICATO-DECIDE "$CXS/cs-certo.sh" && grep -q RIPIEGO-RIMESSO "$CXS/cs-ripiego.sh" && grep -q STDERR-SCARTATO "$CXS/cs-scarta.sh" && grep -q NEXT-NON-CHIESTO "$CXS/cs-senzanext.sh"'
 printf 'cycle-state %s\n' "$(h "$CXS/cs-certo.sh")" > "$T/cert-cx"
 casi=$(CSX="$CXS/cs-certo.sh" cert_casi "$T/cert-cx")
 check "controprova: cycle-state.sh col vecchio interruttore del certificato → valido il driver, gli altri tre il bash (il caso «qualunque certificato» e' rosso)" '[ "$casi" = "driver bash bash bash " ]'
 CSX="$CXS/cs-ripiego.sh" cs FINTO_ESCE=1
 check "controprova: cycle-state.sh col ripiego sul driver fallito → l'uscita ha di nuovo le righe della tabella (il caso «driver fallito» e' rosso)" '! stop1 "driver.py next" && printf "%s\n" "$out" | grep -q "^Next: IMPLEMENT"'
+CSX="$CXS/cs-scarta.sh" cs FINTO_ESCE=1
+check "controprova: cycle-state.sh che scarta lo stderr del driver → «rumore» non c'e' su stderr (il caso dello stderr intero e' rosso), lo STOP resta" 'stop1 "driver.py next non riuscito (exit 1): errore finto" && ! grep -qx rumore "$T/cs.err"'
+CSX="$CXS/cs-senzanext.sh" cs FINTO_SENZA_NEXT=1
+check "controprova: cycle-state.sh senza il grep di Next: → passa l'uscita del driver senza Next: (il caso D3 e' rosso)" '! stop1 "driver.py next non riuscito (exit 0)" && printf "%s\n" "$out" | grep -qx "State: 000000000000" && ! printf "%s\n" "$out" | grep -q "^Next: "'
 # (3) python.sh with «> 3.10» and (4) without capturing the version: mutated in the copy and put back
 cp "$CXS/python.sh" "$T/python.sh.orig"
 sed 's/\[ "\$mi" -ge 10 \]/[ "$mi" -gt 10 ]/' "$T/python.sh.orig" > "$CXS/python.sh"   # in mid-line: no marker comment
 CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.10
 check "controprova: python.sh con «> 3.10» → il confine 3.10 da' STOP python_old (il caso del confine e' rosso)" 'grep -qF "[ \"\$mi\" -gt 10 ]" "$CXS/python.sh" && ! dal_driver && stop1 "Python 3.10"'
 sed 's/FIC_PY_VER=\$("\$FIC_PY" -c .import json, shlex, sys; print("%d.%d" % sys.version_info\[:2\]). 2>\/dev\/null)$/"$FIC_PY" -c "import json, shlex" 2>\/dev\/null  # VERSIONE-NON-CATTURATA/' "$T/python.sh.orig" > "$CXS/python.sh"
-CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.9; vecchio=$out
+# Expected: with FIC_PY_VER never set, the `then` branch of python.sh reads it and the `set -u` of cycle-state.sh stops
+# the wrapper there, with no output and an exit other than 0 (the error goes to the 2>/dev/null of the `.`). That is
+# what makes the two cases red, and it is asserted as such: no «Python 3.9» STOP, no answer of the driver, nothing.
+CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.9; vecchio=$out vecchio_rc=$csrc
 CSX="$CXS/cycle-state.sh" cs FIC_PYTHON="$T/py-ver" PY_VER=3.10
-check "controprova: python.sh che non imposta FIC_PY_VER → «Python vecchio» senza la versione 3.9 nel testo e il confine 3.10 fermo (i due casi rossi)" 'grep -q VERSIONE-NON-CATTURATA "$CXS/python.sh" && case "$vecchio" in *"Python 3.9 ("*) false ;; *) true ;; esac && ! dal_driver'
+check "controprova: python.sh che non imposta FIC_PY_VER → cycle-state.sh si ferma per set -u, uscita vuota ed exit diverso da 0, sia per 3.9 sia per il confine 3.10 (i due casi rossi)" 'grep -q VERSIONE-NON-CATTURATA "$CXS/python.sh" && [ -z "$vecchio" ] && [ "$vecchio_rc" -ne 0 ] && [ -z "$out" ] && [ "$csrc" -ne 0 ] && [ ! -f "$SPY" ]'
 # (5) python.sh that does not empty FIC_PY_VER in the else branch → the inherited 3.12 survives with no interpreter
 sed 's/^else FIC_PY_VER=""; false; fi$/else false; fi  # NON-AZZERA/' "$T/python.sh.orig" > "$CXS/python.sh"
 check "controprova: python.sh che non azzera FIC_PY_VER nel ramo else → il caso «3.12 ereditata» e' rosso" 'grep -q NON-AZZERA "$CXS/python.sh" && ! py_casi "$CXS/python.sh" && [ "$(pysh "$CXS/python.sh" -u FIC_PYTHON FIC_PY_VER=3.12 PATH="$T/vuoto")" = "rc=1 ver=3.12 rc=1 ver=3.12 " ]'
@@ -852,7 +880,31 @@ check "controprova lettori: la mutazione e' applicata (run-phase.sh col vecchio 
 spec_approved; cp "$SP" $CW/spec-v.md
 RPX="$CXS/rp-lettore.sh" lph "$W/$CW/spec-v.run" 01-implement
 check "controprova lettori: col vecchio sed l'.esito resta OK con state= vuoto (il caso «fine di una fase» e' rosso)" '! fine_stop $CW/spec-v.run/log/01-implement.esito && sed -n 1p $CW/spec-v.run/log/01-implement.esito | grep -q "^PHASE RESULT implement: OK" && grep -qx "state=" $CW/spec-v.run/log/01-implement.esito'
-rm -rf $CW/spec-v.md $CW/spec-v.run "$T/lock" "$T/plug-cx"; git checkout -q -- src
+rm -rf $CW/spec-v.md $CW/spec-v.run "$T/lock"; git checkout -q -- src
+# (1.5.1, review) an outcome already STOP with its own originale= (valida: «uscita non valida», the structured output
+# has no esito) and then the STOP of the wrapper: originale= stays the subsession's line, not the STOP of valida.
+# Counterproof: cs_stop with originale= = line 1 (copy).
+cat > "$T/claude-inv" <<'EOF'
+#!/usr/bin/env bash
+cat > /dev/null
+echo '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":{"fase":"implement","motivo":"done"}}'
+EOF
+chmod +x "$T/claude-inv"
+orig_tenuto() { # $1 .esito: the STOP of the wrapper on line 1, one originale=, the subsession's line
+  sed -n 1p "$1" | grep -q "^PHASE RESULT implement: STOP — driver.py next non riuscito (exit 1): " &&
+    [ "$(grep -c "^originale=" "$1")" = 1 ] && grep -qx "originale=PHASE RESULT implement: OK — done" "$1"
+}
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src; spec_approved; lph "$W/$RUN" 01-implement CLAUDE_BIN="$T/claude-inv"
+check "  12 (review) esito gia' STOP con il suo originale= (valida, uscita non valida), poi next fallito → l'originale= resta la riga della sottosessione" 'orig_tenuto "$RUN/log/01-implement.esito"' "$(cat "$RUN/log/01-implement.esito" 2>/dev/null)"
+cat > "$T/m5" <<'EOF'
+  cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n 's/^originale=//p' | head -1); [ -n "$orig" ] ||
+  cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n '1p'); true ||  # ORIGINALE-RIGA-1
+EOF
+check "controprova originale=: la mutazione e' applicata (cs_stop con la riga 1)" 'mut "$T/m5" "$CXS/run-phase.sh" "$CXS/rp-orig.sh" && grep -q ORIGINALE-RIGA-1 "$CXS/rp-orig.sh"'
+rm -rf "$RUN" "$T/lock"; git checkout -q -- src; spec_approved; cp "$SP" $CW/spec-o.md
+RPX="$CXS/rp-orig.sh" lph "$W/$CW/spec-o.run" 01-implement CLAUDE_BIN="$T/claude-inv"
+check "controprova originale=: con la riga 1 l'originale= e' lo STOP di valida (il caso e' rosso)" '! orig_tenuto $CW/spec-o.run/log/01-implement.esito && grep -q "^originale=PHASE RESULT implement: STOP" $CW/spec-o.run/log/01-implement.esito' "$(cat $CW/spec-o.run/log/01-implement.esito 2>/dev/null)"
+rm -rf $CW/spec-o.md $CW/spec-o.run "$RUN" "$T/lock" "$T/plug-cx"; git checkout -q -- src
 
 cd /
 # informative, not a check: the certificate no longer switches anything at runtime (1.5.1): the wrappers decide with

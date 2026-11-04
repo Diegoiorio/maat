@@ -58,6 +58,14 @@ Before the choice, with either engine, the Python check: no interpreter (`python
 does not need to be in `WSLENV` (none of the three runs inside `wsl`). How to go back to bash: «Going back to the bash
 engine».
 
+**The prefix «catena:» (`chain:` in `en`) on an exit 7.** `run-phase.sh` exits 7 («not launched») for a chain STOP
+(rows C1-C4), and also when it cannot read the state of the cycle before launching (`cycle-state.sh` gives no `State:`
+line: for example no Python, or one older than 3.10). `driver.py run` does not tell the two apart: on every exit 7
+that is not a `WAIT — catena` it prints `Driver result: STOP — catena: <last line of the phase's stderr>`. So the
+word «catena» does not mean that the cycle is a chain: the reason is the text after it (for a missing Python,
+`STOP — catena: STOP — driver.py next non riuscito … — fase non lanciata`). `driver.test.sh` checks that the
+`Driver result:` line holds the reason too, not only the prefix.
+
 **Message language (`MAAT_LINGUA`, 1.4.0).** The messages the scripts print for a person come from the catalog
 `scripts/lib/messages.tsv` (`msg` in bash, `lib/maat-msg.sh`; `T` in Python, `maat_msg.py`). The language is
 `MAAT_LINGUA` (`it|en`; any other value: `en`; empty: unset), otherwise `lingua` of `.claude/maat.json`, otherwise
@@ -188,7 +196,9 @@ arguments:
   maat-linux-3`). If the machine is busy the run stops before the Windows part.
 - `--windows-breve`: the Windows part runs only the short proof (below), about 50 minutes.
 
-For a release since 1.5.1: `bash tools/giro-completo.sh --linux-parallelo --windows-breve <folder> <worktree> <branch>`.
+For a release since 1.5.1: `bash tools/giro-completo.sh --windows-breve <folder> <worktree> <branch>` (the Linux part
+one suite at a time). `--linux-parallelo` is not for a release yet: its acceptance on the real suites is still to be
+done («The parallel run», last point).
 
 - In the Windows part most suites run in Git Bash on the worktree; the suites that need `rsync` and `flock`
   (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) and `tools/oracolo.test.sh` run in WSL on
@@ -211,7 +221,7 @@ Windows.
 | `tools/esempi-equiv.test.sh` | about 56 minutes | about 2 minutes (CI: about 128 s per validator) |
 | `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes | a few minutes |
 | `plugins/maat/scripts/rollback.test.sh` (1.5.1) | `ROLLBACK_TEST_RAPIDO=1`: about 52 minutes | complete: about 3.6 minutes (218 s) |
-| `plugins/maat/scripts/driver.test.sh` (1.5.1) | `DRIVER_TEST_RAPIDO=1`: about 39 minutes (machine loaded) | complete: about 6.4 minutes (382 s; section 9 +29 s over 1.5.0) |
+| `plugins/maat/scripts/driver.test.sh` (1.5.1) | `DRIVER_TEST_RAPIDO=1`: about 39 minutes (measured once, shared machine) | complete: about 6.4 minutes (382 s; section 9 +29 s over 1.5.0) |
 
 The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
 not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why
@@ -254,10 +264,12 @@ realigns them (fetch, `checkout --detach`, `clean`), so nothing must be changed 
 - Before 1.5.1 the suites were checked for shared state: they create their files in `mktemp -d` and set a `HOME` of
   their own where it matters (`test-fast`, `counterproof`, the cycle suites); `guard.test.sh` sets a fixed
   `SCRATCH=/tmp/claude/scratch` that nothing uses.
-- **Not yet accepted on the real suites.** Its own cases are in `tools/suite.test.sh` (section 7: fake clones, a suite
-  red only in parallel, a suite always red, the lock, a counterproof). The comparison with the run one at a time on
-  the same commit is made by the CI, split in the same groups, at the push of 1.5.1: since 1.5.1 the full runs are made
-  on the CI; the parallel run is for a local check when the CI is not at hand.
+- **Not yet accepted on the real suites: the acceptance is still to be done.** Its own cases are in
+  `tools/suite.test.sh` (section 7: fake clones, a suite red only in parallel, a suite always red, the lock, a
+  counterproof). The acceptance is the parallel run and the run one at a time on the same commit, on the same machine,
+  with the same outcome for every suite. The CI does not replace it: its groups run on separate runners, so they share
+  neither the machine, nor the load, nor `/tmp`, which are exactly what the parallel run puts at risk. Until then the
+  parallel run is only a quick local check, and a release runs the Linux part one suite at a time (or on the CI).
 
 ### The short proof on Windows (1.5.1)
 
@@ -276,11 +288,16 @@ multi-platform CI (1.5.3).
 
 `.github/workflows/ci.yml` runs at every push and pull request on GitHub. Since 1.5.1 in **three jobs at the same
 time**, one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
-supported version), Node 20, a test git identity, the `jsonschema` venv, then `bash tools/suite.sh --gruppo <k>/3
-esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. A job fails if a suite exits with a code other
-than 0, or if the groups file does not match `suite.list` or the three jobs of the matrix; its logs and
+supported version), Node 20, a test git identity, the `jsonschema` venv, then `bash tools/suite.sh --gruppo <k>/<n>
+esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. `n` is not written by hand: it is
+`strategy.job-total`, the number of jobs of the matrix, and `k` (`matrix.gruppo`) must be the job's position
+(`strategy.job-index` + 1), so the matrix is exactly 1..n. A job fails if a suite exits with a code other than 0, if
+`k` is not its position, or if the groups file does not match `suite.list` or has not exactly the groups 1..n — so a
+matrix with fewer jobs than the file has groups is red, never green without a group. `tools/suite.test.sh` checks
+the link on `ci.yml` itself (the matrix is 1..n with n = the groups of the file, the argument is built from
+`strategy.job-total`); its logs and
 `riepilogo.txt` are kept as the artifact `esiti-gruppo-<k>`. The check to require is **`linux`**: a last job, green
-only if all three groups are (`fail-fast: false`, so a red group does not stop the others). Limit per job: 30 minutes
+only if all the groups are (`fail-fast: false`, so a red group does not stop the others). Limit per job: 30 minutes
 (the longest group about 15 minutes plus the setup, × 1.5; before, one job of 45 minutes used about 42). Locally the
 same run is `bash tools/suite.sh <results folder>` from a Linux clone, or the parallel run.
 

@@ -1,8 +1,12 @@
-# CI: all the plugin suites on Linux, split in three jobs that run at the same time (1.5.1): job k runs
-# `tools/suite.sh --gruppo k/3`, the suites of group k of tools/suite-gruppi.list (groups of similar length; suite.sh
-# refuses a groups file that does not cover tools/suite.list exactly or that has not exactly the groups 1..3, so the
-# matrix below and the file cannot drift apart). Every job has the same setup. The job «linux» succeeds only if all
-# three groups succeed: that is the check to require. Windows and macOS come later (1.5.3).
+# CI: all the plugin suites on Linux, split in jobs that run at the same time (1.5.1), one per group of
+# tools/suite-gruppi.list (groups of similar length; today three). Job k of n runs `tools/suite.sh --gruppo k/n`, with
+# n = strategy.job-total (the number of jobs of the matrix, not a number written by hand) and k = matrix.gruppo, which
+# the step requires equal to strategy.job-index + 1 (the matrix is exactly 1..n, in order). suite.sh refuses a groups
+# file that does not cover tools/suite.list exactly or whose groups are not exactly 1..n: so a matrix with fewer jobs
+# than the file has groups (or more) is red, it cannot be green without a group (tools/suite.test.sh checks this
+# file: the matrix 1..n with n = the groups of the file, and the --gruppo argument built as above). Every job has the
+# same setup. The job «linux» succeeds only if all the groups succeed: that is the check to require. Windows and
+# macOS come later (1.5.3).
 # 1.5.0: tools/esempi-equiv.test.sh proves the driver on the public corpus with the two validators (D14): the system
 # Python (minimal validator) and a venv of its own with jsonschema at a fixed version (MAAT_PY_JSONSCHEMA; the same
 # version tools/certifica.sh --scrivi requires). The strict check of the certificate (MAAT_CERT_RICHIESTO=1:
@@ -10,7 +14,8 @@
 # main, on tags and on pull requests to main: a PR to main that touches a certified file (driver.py, cycle-state.sh,
 # run-phase.sh, messages.tsv, maat-msg.sh, maat_msg.py) or changes the corpus is red until the same PR commits the
 # driver.equiv rewritten with `bash tools/certifica.sh --scrivi` from Linux. Other branches: no strict check. The
-# variable is set in every job, but only tools/esempi-equiv.test.sh reads it: it is in group 3.
+# variable is set in every job, but only tools/esempi-equiv.test.sh reads it: it is in group 3 (if group 3 did not run,
+# the check above makes the run red).
 name: CI
 on:
   push:
@@ -19,7 +24,7 @@ permissions:
   contents: read
 jobs:
   gruppo:
-    name: linux (group ${{ matrix.gruppo }}/3)
+    name: linux (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     # Measure (04/11/2026): the groups take 816, 818 and 804 s on the Linux clone in WSL (1.5.0 full run, plus
     # rollback.test.sh 218 s and driver.test.sh 382 s measured for 1.5.1); in 1.5.0 the CI took 35-42 min for ~38 min
@@ -53,7 +58,10 @@ jobs:
       - name: Suites of group ${{ matrix.gruppo }}
         env:
           MAAT_CERT_RICHIESTO: ${{ ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) || (github.event_name == 'pull_request' && github.base_ref == 'main')) && '1' || '0' }}
-        run: bash tools/suite.sh --gruppo ${{ matrix.gruppo }}/3 esiti
+        run: |
+          test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))" ||
+            { echo "matrix.gruppo ${{ matrix.gruppo }} is not job ${{ strategy.job-index }} + 1: the matrix must be 1..n in order" >&2; exit 2; }
+          bash tools/suite.sh --gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} esiti
       - name: Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: All three groups green
+      - name: All the groups green
         run: |
           echo "groups: ${{ needs.gruppo.result }}"
           test "${{ needs.gruppo.result }}" = success

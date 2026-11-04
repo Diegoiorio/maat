@@ -1767,7 +1767,10 @@ originale=$orig}"
   # no deviation recorded). Read again only if recording the deviations changed the spec (the State it prints).
   # Without the spec, state= stays empty as before (run dirs without a spec exist only in the tests).
   cs_ok=1 st="" sp_md="${dir%.run}.md"
-  cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n '1p'); cs_ok=0; esito="PHASE RESULT $phase: STOP — $cs_why${orig:+
+  # originale= is the subsession's line: an outcome already STOP with its own originale= (the «uscita non valida» of
+  # valida, the checks of the tests) keeps that one, otherwise it is line 1
+  cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n 's/^originale=//p' | head -1); [ -n "$orig" ] ||
+    orig=$(printf '%s\n' "$esito" | sed -n '1p'); cs_ok=0; esito="PHASE RESULT $phase: STOP — $cs_why${orig:+
 originale=$orig}"; }
   if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
   case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)

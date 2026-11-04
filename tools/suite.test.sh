@@ -5,6 +5,8 @@
 #   2 a suite that touches nothing → no PLUGIN CAMBIATO, exit 0 (a plain name, plugins/maat/scripts/<name>.test.sh, too)
 #   3 a tools/x.test.sh not in the list → exit 2 · 4 a tools/… entry with no file → exit 2
 #   5 counterproof: a guard that takes the fingerprint only once (before = after by construction) → case 1 green, red
+#   6 (1.5.1) --gruppo <k>/<n>, and the link of .github/workflows/ci.yml with tools/suite-gruppi.list (n from the
+#   matrix, matrix 1..n), with a counterproof · 7 (1.5.1) tools/suite-parallelo.sh
 #   bash tools/suite.test.sh          (Git Bash or WSL; only in the repo)
 set -uo pipefail
 export MAAT_LINGUA=it
@@ -87,6 +89,23 @@ check "  --gruppo 3/2 (k > n) → exit 2, uso" '[ $rc -eq 2 ] && grep -q "^usage
 check "  il file vero: tools/suite-gruppi.list copre tools/suite.list (ogni suite in un gruppo solo, gruppi 1..3)" \
   '(cd "$ROOT" && G=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite-gruppi.list | tr -d "\r"); L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r");
     [ "$(printf "%s\n" "$G" | awk "{print \$2}" | sort)" = "$(printf "%s\n" "$L" | sort)" ] && [ "$(printf "%s\n" "$G" | awk "{print \$1}" | sort -u | tr "\n" " ")" = "1 2 3 " ])'
+# the link with the CI (review of 1.5.1): in ci.yml n is strategy.job-total (never written by hand), k must be
+# strategy.job-index + 1, and the matrix is 1..n with n = the groups of the file. $1 = ci.yml, $2 = groups file
+ci_legame() {
+  local n m
+  n=$(grep -v '^[[:space:]]*\(#\|$\)' "$2" | tr -d '\r' | awk '{print $1}' | sort -u | wc -l | tr -d ' ')
+  m=$(tr -d '\r' < "$1" | sed -n 's/^[[:space:]]*gruppo: \[\(.*\)\][[:space:]]*$/\1/p' | tr -d ' ')
+  [ "$m" = "$(seq -s, 1 "$n")" ] &&
+    [ "$(tr -d '\r' < "$1" | grep -c -- '--gruppo ${{ matrix.gruppo }}/${{ strategy.job-total }} ')" = 1 ] &&
+    tr -d '\r' < "$1" | grep -qF 'test "${{ matrix.gruppo }}" = "$(( ${{ strategy.job-index }} + 1 ))"' &&
+    ! tr -d '\r' < "$1" | grep -- '--gruppo ' | grep -v '^[[:space:]]*#' | grep -q -- '--gruppo [^$]*/[0-9]'
+}
+check "  il legame con la CI: in ci.yml n = strategy.job-total, k = job-index + 1, la matrice e' 1..n con n = i gruppi del file" \
+  'ci_legame "$ROOT/.github/workflows/ci.yml" "$ROOT/tools/suite-gruppi.list"'
+sed 's|/\${{ strategy.job-total }} esiti|/3 esiti|' "$ROOT/.github/workflows/ci.yml" > "$T/ci-3.yml"
+sed 's|^\(        gruppo: \)\[1, 2, 3\]|\1[1, 2]|' "$ROOT/.github/workflows/ci.yml" > "$T/ci-2.yml"
+check "controprova: ci.yml con /3 scritto a mano, o con la matrice [1, 2] → il legame è rosso" \
+  'grep -q -- "/3 esiti" "$T/ci-3.yml" && ! ci_legame "$T/ci-3.yml" "$ROOT/tools/suite-gruppi.list" && grep -q "gruppo: \[1, 2\]$" "$T/ci-2.yml" && ! ci_legame "$T/ci-2.yml" "$ROOT/tools/suite-gruppi.list"'
 check "  e tools/prova-breve-windows.list nomina solo voci di suite.list" \
   '(cd "$ROOT" && L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r"); grep -v "^[[:space:]]*\(#\|$\)" tools/prova-breve-windows.list | tr -d "\r" |
     while read -r r; do printf "%s\n" "$L" | grep -qxF -- "${r##* }" || exit 1; done)'

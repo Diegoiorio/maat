@@ -138,6 +138,9 @@ if engine_choice; then
   dres=$( { dout=$("$FIC_PY" "$DRV" next "$1" 2>&3 3>&-); drc=$?; printf '\n\036%s\036%s\036' "$drc" "$dout"; } 3>&1 )
   derr=${dres%%$'\n\036'*}; dres=${dres#*$'\n\036'}; drc=${dres%%$'\036'*}; dout=${dres#*$'\036'}; dout=${dout%$'\036'}
   if [ "$drc" = 0 ] && grep -q '^Next: ' <<< "$dout"; then printf '%s\n' "$dout"; exit 0; fi
+  # failed (an exit other than 0, or exit 0 with no Next: line): the whole stderr of the driver (a traceback) goes on
+  # to our stderr, as run-phase.sh does for valida; the STOP line on stdout keeps only its last line
+  [ -n "$derr" ] && printf '%s\n' "$derr" >&2
   line=$(printf '%s\n' "$derr" | tr -d '\r' | sed '/^[[:space:]]*$/d' | tail -1)
   line=${line:0:200}
   echo "Next: STOP — $(msg cycle-state-engine.driver_failed rc="$drc" line="${line:--}")"; exit 0

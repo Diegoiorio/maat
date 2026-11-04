@@ -46,7 +46,9 @@ driver already decided. What changes is what happens when something is wrong.
   (`tools/suite.sh --gruppo <k>/<n>`); the check «linux» is green only when all three are, and each job has a limit
   of 30 minutes instead of 45 for the single job. On a Linux machine, `tools/suite-parallelo.sh` runs the same groups
   on three clones at once and runs a suite red in parallel again alone before calling it red; it does not start while
-  `tools/certifica.sh` or a Maat cycle on Windows is running. `tools/giro-completo.sh` gains `--linux-parallelo` and
+  `tools/certifica.sh` or a Maat cycle on Windows is running; it is not yet accepted on the real suites (the
+  comparison with the run one at a time on the same machine is still to be done), so it is not for a release yet.
+  `tools/giro-completo.sh` gains `--linux-parallelo` and
   `--windows-breve`: the short proof on Windows, `tools/prova-breve-windows.list`, about 50 minutes in Git Bash
   instead of the whole Windows part.
 - **Proof of compatibility:** the certificate is rewritten (the hashes of `driver.py`, `cycle-state.sh`,

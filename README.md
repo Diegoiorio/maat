@@ -254,9 +254,9 @@ yourself.
 
 | Platform | Status |
 |---|---|
-| Windows with WSL | verified with all tests |
-| Windows without WSL | the fallbacks without WSL verified: tests, checks and diagnostics |
-| Linux | verified with all tests, on a Linux with no Windows tools |
+| Linux | verified with all tests at every push (the CI, on a Linux with no Windows tools) |
+| Windows with WSL | verified with all tests up to 1.5.0; since 1.5.1 a short proof in Git Bash before each release (the quick suites, `tools/prova-breve-windows.list`), plus the rollback and driver suites in their quick form, run by hand. The whole Windows run moves to a multi-platform CI in the next version |
+| Windows without WSL | the fallbacks without WSL (tests, checks and diagnostics) verified with all tests up to 1.5.0; since 1.5.1 only their suite in the short proof (`senza-wsl`) |
 | Mac | planned, not yet tried |
 
 Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
@@ -267,13 +267,17 @@ spaces.
 Proven, and where to check it:
 
 - **The automated suites pass** on Linux at every push ([CI](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml));
-  before each release a short proof also runs on Windows (`docs/TESTING-harness.md`).
+  before each release a short proof also runs on Windows: the quick suites in Git Bash, plus the rollback and driver
+  suites in their quick form by hand. The long suites and the proof on the public examples are not run on Windows
+  since 1.5.1 (they were in 1.5.0) until the multi-platform CI (`docs/TESTING-harness.md`, «The short proof on
+  Windows»).
 - **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
   remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
 - **The Python driver decides, and behaves like the original bash code**, which stays as a fallback on request
   (`FIC_DRIVER=0`, until 1.5.2): certified on public examples, reproducible. The examples (`tools/esempi-equiv/`)
   cover every row of the resume table and every branch of the outcome validator; `bash tools/certifica.sh` builds
-  them and repeats the proof in a few minutes on Linux, and the CI repeats it at every push. The `corpus` line of
+  them and repeats the proof in a few minutes on Linux, and the CI repeats it at every push (on Linux; on Windows it
+  was last proven in 1.5.0). The `corpus` line of
   `plugins/maat/scripts/driver.equiv` names the examples it was made on (their fingerprint) and the validators proven
   (`docs/TESTING-harness.md`, «Recertifying the driver»). Going back to bash in the middle of a cycle, and forth
   again, is proven on a plain cycle and on a STOP with its recovery (`plugins/maat/scripts/rollback.test.sh`); not on
@@ -291,7 +295,7 @@ Not proven yet:
 - that Maat finds, on its own, defects nobody had described: in the pilot above the defect the cycle fixed was
   already described in the spec;
 - how often a cycle completes without help, across different projects;
-- Mac, and very large projects.
+- the whole Windows run for this version (only the short proof above), Mac, and very large projects.
 
 ## Developing Maat
 
