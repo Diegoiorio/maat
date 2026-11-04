@@ -72,13 +72,13 @@ die() { echo "attese.sh: $1" >&2; exit "${2:-2}"; }
 nat() { cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1"; }   # a path for the native Python (Windows)
 
 MODO=confronta MOTIVO= MOTIVO_DATO=0 CORPUS= SOLO= LINGUE="it en" ATT=$ATTESE_REPO ESITI= BASE= FORME_DI=
-REPOS=() parziale=0
+REPOS=() parziale=0 ristretto=0   # ristretto: --repo, the comparison block by block of those mini-repos only
 while [ $# -gt 0 ]; do
   case $1 in
     --scrivi) MODO=scrivi; shift ;;
     --motivo) [ $# -ge 2 ] || usage; MOTIVO=$2; MOTIVO_DATO=1; shift 2 ;;
     --corpus) [ $# -ge 2 ] || usage; CORPUS=$2; shift 2 ;;
-    --repo) [ $# -ge 2 ] || usage; REPOS+=("$2"); parziale=1; shift 2 ;;
+    --repo) [ $# -ge 2 ] || usage; REPOS+=("$2"); parziale=1 ristretto=1; shift 2 ;;
     --solo) [ $# -ge 2 ] || usage; SOLO=$2; parziale=1; shift 2
       case $SOLO in next|valida) ;; *) usage ;; esac ;;
     --lingua) [ $# -ge 2 ] || usage; LINGUE=$2; parziale=1; shift 2
@@ -317,7 +317,7 @@ if [ -n "$ESITI" ]; then mkdir -p "$ESITI" && cp "$T/out/"* "$ESITI/" || die "--
 # --- compare, or write ---
 uguali=0 diversi=0 cambiati=()
 for f in "${FILES[@]}"; do
-  if [ $parziale = 1 ]; then "$PY0" "$(nat "$APY")" confronta "$(nat "$ATT/$f")" "$(nat "$T/out/$f")" "${REPOS[@]}" > "$T/cf" 2>&1
+  if [ $ristretto = 1 ]; then "$PY0" "$(nat "$APY")" confronta "$(nat "$ATT/$f")" "$(nat "$T/out/$f")" "${REPOS[@]}" > "$T/cf" 2>&1
   else "$PY0" "$(nat "$APY")" confronta "$(nat "$ATT/$f")" "$(nat "$T/out/$f")" > "$T/cf" 2>&1; fi
   rc=$?
   nb=$(grep -c '^== [^ /]*/[^ ]*$' "$T/out/$f")
