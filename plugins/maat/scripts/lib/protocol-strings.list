@@ -20,20 +20,15 @@ scripts/plan-check.sh	\$\{rec:-assente\}	1: Recorded: assente di basis (entra in
 scripts/plan-check.sh	Plan status: \(assente\)|Test level: legacy \((assente|duplicata: \$n)\)|Superfici a rischio: |Pavimento: \$s \(riga \$pl\)|Obbligo: \$s — né pavimento né ⚠️|Statica sufficiente: \$s — \$why \(riga \$wn\)|Obbligo: \$s — ⚠️ senza deroga \(riga \$wn\)|Rischio: riga |Piano di test: \$\{r:-assente\}|Tracciabilità requisiti: \$\{r:-assente\}	1: chiavi e valori di contract, lette da implementation-review-cycle/SKILL.md:83-86, prompt-revisore.md:69
 
 # --- 2. chain_state and the closing line
-scripts/cycle-state.sh	\$c (assente|chiuso|aperto);	2: chain_state, entra in State (cycle-state.sh:218-220)
 scripts/driver.py	" (assente|chiuso|aperto);"	2: chain_state, gemello Python (driver.py:457-461)
 scripts/run-phase.sh	Chiusura: (IMPLEMENTED|NEEDS_VERIFICATION) — 	2: prima riga di chiusura.txt, letta da cycle-state.sh:464 e driver.py:653
-scripts/cycle-state.sh	"Chiusura: IMPLEMENTED"|\$\{cz#Chiusura: \}	2: lettura del prefisso di chiusura.txt
 scripts/driver.py	"Chiusura: (IMPLEMENTED|)"	2: lettura del prefisso di chiusura.txt (gemello)
 
 # --- 3. cycle-state lines read by others; first word of Next
-scripts/cycle-state.sh	Catena: madre di | anelli · |Catena: anello \$ring_k/\$ring_n di |Anelli precedenti: |Base anello: |Diff anello: 	3: prefissi letti da run-phase.sh:1481-1482, driver.py:1342 e dai prompt (implement.md:10, riferimento.md:235-237)
 scripts/driver.py	Catena: madre di %d anelli · |Catena: anello %d/%d di %s|Catena: anello \[0-9\]\+/\[0-9\]\+ di |"Catena: anello "|Anelli precedenti: |Base anello: |Diff anello: 	3: gemello Python e lettura del WAIT (driver.py:1339-1343)
 scripts/run-phase.sh	Catena: anello |Base anello: 	3: lettura dello stdout di cycle-state (run-phase.sh:1481-1482)
-scripts/cycle-state.sh	(STOP|WAIT) — catena\b	3: prefissi letti da run-phase.sh:1021
 scripts/driver.py	(STOP|WAIT) — catena\b	3: prefissi letti da run-phase.sh:1021 (gemello)
 scripts/run-phase.sh	(STOP|WAIT) — catena\b	3: lettura (run-phase.sh:1021) e ring_stop dello stesso prefisso
-scripts/cycle-state.sh	\bCHIUSURA\b	3: prima parola di Next (nome di passo)
 scripts/driver.py	\bCHIUSURA\b	3: prima parola di Next (gemello) e lettura driver.py:602
 
 # --- 4. harness fingerprint tokens
@@ -52,7 +47,6 @@ scripts/run-phase.sh	\^blocco \(\[\^:\]\+\): scrive=\(\.\*\) · dopo=	5: lettura
 scripts/driver.py	\^blocco\[ \\t\]\+.*dopo=	5: lettura della riga blocco
 scripts/blocks-independent.py	\^blocco\[ \\t\]\+.*dopo=	5: lettura della riga blocco
 scripts/plan-check.sh	Impronta piano:	5: riga di gen/procedura.txt, letta da cycle-state.sh:396, driver.py:555, run-phase.sh:949-950, plan-check.sh:2235
-scripts/cycle-state.sh	Impronta piano: 	5: lettura dell'impronta del piano
 scripts/driver.py	Impronta piano: 	5: lettura dell'impronta del piano
 scripts/run-phase.sh	Impronta piano: 	5: lettura dell'impronta del piano
 scripts/run-phase.sh	DEVIAZIONI DIFENSIVE|EVIDENZE DEI GATE|DIFF DELL'ANELLO|E2E DELLA CATENA|VERIFY IN PARALLELO|CORSIA \$k/2 \(driver, run-phase\.sh\): 	5: marcatori dei prompt, citati da riferimento.md:123/129/302, workers/review.md:5/12-14, workers/chiusura.md:5, workers/implement.md:37, implementation-review-cycle/SKILL.md:116-125
@@ -60,7 +54,6 @@ scripts/plan-check.sh	"nuovo "	5: token di accept («test <path>», «nuovo <pat
 scripts/run-phase.sh	\\\(test\\\|nuovo\\\)	5: lettura dei token di accept
 
 # --- 6. sentinels read as values by another script (and empty values printed in value position)
-scripts/cycle-state.sh	\((assente|nessuno|nessuna|nessun file|vuoto)\)|^["'](nessuno|none)["']$	6: sentinella in posizione di valore (cycle-state.sh:263, righe chiave: valore)
 scripts/driver.py	\((assente|nessuno|nessuna|nessun file|vuoto)\)|^["'](nessuno|none)["']$	6: sentinella (gemello; driver.py:998-999)
 scripts/run-phase.sh	\((assente|nessuno|nessuna|vuoto)\)|^["'](nessuno|none)["']$	6: sentinella (run-phase.sh:455/1351/1359)
 scripts/plan-check.sh	\((assente|vuota|vuoto)\)|^["'](nessuna|nessuno|none)["']$	6: sentinella (plan-check.sh:1589) e valore della spec «Superfici a rischio: nessuna»
@@ -101,7 +94,6 @@ scripts/maat-doctor.sh	^"(altro|windows-senza-wsl)"$	valori di --piattaforma, le
 scripts/plan-check.sh	^"(controprova|rossi|radice|dopo|scrive)"$	chiave di maat.json, nome di sottocomando o chiave interna (scrive/dopo)
 scripts/counterproof.sh	^"(riga|controprova|cartella|radice|anche|esito|motivo|luogo|assorbita|non_eseguita)"$|/anche"$	nome di sottocomando interno; chiavi e valori di maat.json e di <id>.json (letti da finalize.sh), nomi dei file interni di prep
 scripts/driver.py	^"(valida|righe|chiusura|deviazioni|--max-fasi)"$	sottocomando, nome di fase, chiave di result.json, opzione
-scripts/cycle-state.sh	^"(deviazioni)"$	chiave di result.json (1.4.x)
 scripts/test-fast.sh	moduli\.\$i\.controprova\.runner	chiave di maat.json
 scripts/fic-mirror.sh	^"\$\{nuovi\[@\]\}"$	nome di variabile (array dei file da copiare nel ripiego senza rsync)
 scripts/context-pack.sh	^"(esiste|trovato|ambiguo|assente)"$	tipo interno di un candidato
@@ -109,13 +101,11 @@ scripts/gates.sh	\$et=assente|^"nessuno"$	valore nella chiave dei gate (cambiarl
 scripts/run-phase.sh	chiusura\.txt\b|chiusura: OK|"\$nuovi"|\.txt\.(chiusura|nuovo)\b|\.anello\.paths|\$1 == "(fuori|cambiato)"	nome di file del run dir; token interni del confronto dei test
 scripts/plan-check.sh	\(\?:vuoto\|empty\)|Rischio aperto\|Open risk|statica sufficiente\|static sufficient|"⚠️ (Superficie|Rischio aperto)"|"Taglio:"|"Superfici a rischio:"|"Tracciabilit\\u00e0 requisiti"|"File toccati"|"Passi"|"Piano di test"|\(scrive\|dopo\|writes\|after\)|"non verificabile"|"rifiutato"|^"(aggiunge|toglie|stringa|dimostrato)"$	vocabolario della spec e dei rossi (letto in it e en dalla 1.3.0)
 scripts/plan-check.sh	\(none\|nessuno\)	risposta del revisore (Blocked on: nessuno), già bilingue
-scripts/cycle-state.sh	Generated: assente	6: sentinella in posizione di valore, citata da full-implementation-cycle/riferimento.md:51
 scripts/driver.py	Generated: assente	6: sentinella (gemello di cycle-state.sh)
-scripts/cycle-state.sh	chiusura\.txt	nome di file del run dir
 scripts/driver.py	chiusura\.txt|\.corsie-driver|^"w:chiusura"$|workers/controprove\.md|^"--valida"$	nome di file del run dir o di un file del plugin; opzione di run-phase.sh
 scripts/driver.py	^"righe %s: 	uscita di `driver.py righe` (nome del sottocomando), letta da driver.test.sh sez. 8
 scripts/run-phase.sh	\.claude/maat\.json ASSENTE|impronta=%s\\nversione=%s\\nradice=%s	4: righe dell'impronta del harness e formato di harness.fp (hfp_impronta_di)
-scripts/run-phase.sh	^"--valida"$|^"deviazioni"$|\{"fase":"test-red","esito":"OK","motivo":"%s","deviazioni":\[\],"bloccato_su":"nessuno"	opzione; chiavi di result.json (1.4.x)
+scripts/run-phase.sh	^"deviazioni"$|\{"fase":"test-red","esito":"OK","motivo":"%s","deviazioni":\[\],"bloccato_su":"nessuno"	opzione; chiavi di result.json (1.4.x)
 scripts/lib/fixture-cicli.sh	\{"fase":"%s","esito":"%s","motivo":"m","deviazioni":%s,"bloccato_su":"%s","file":\[\],"gate_interni":\[\],"finding":\[\]\}	chiavi di result.json (1.4.x): fixture dei test (rjson, spostata da cycle-state.test.sh nella 1.5.0)
 scripts/run-phase.sh	\.(cambiati-fase|altri-flussi|corsie|cambiati|posteriori|rossi|anello\.diff|prompt-anello|difensive)\b|deviazioni-difensive\.txt|\$t/cambiati|corsia-[12]\.file|rossi\.json|\.gen-corsie	nome di file del run dir
 scripts/run-phase.sh	^"(fuori|cambiato)\\t|^"\$fuori"$	token fra TG_PY e tests_guard; nome di variabile

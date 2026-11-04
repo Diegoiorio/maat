@@ -129,18 +129,16 @@ driver-equiv.usage	equiv: driver.py equiv [--certifica [--validatori-precedenti 
 
 # --- cycle-state-engine, run-phase-engine, driver-engine (1.5.1, written by hand like driver-equiv: texts that
 # v1.3.0 does not have, so outside the cycle-state, run-phase and driver sections of
-# tools/lingua-conversioni/blocco-b.tsv). The choice of the
-# engine: the driver decides, the bash code only with FIC_DRIVER=0, no fallback on error (a STOP with the reason).
-# driver-engine.fic_driver_unknown is printed by the three points of choice (cycle-state.sh, run-phase.sh, driver.py).
+# tools/lingua-conversioni/blocco-b.tsv). 1.6.0: the driver is the only engine, no fallback on error (a STOP with the
+# reason); FIC_DRIVER no longer has any effect, and driver.py run says so (driver-engine.fic_driver_tolta).
 cycle-state-engine.no_python	no usable Python (FIC_PYTHON, py -3, python3, python): set FIC_PYTHON=<python 3.10 or newer>	nessun Python utilizzabile (FIC_PYTHON, py -3, python3, python): imposta FIC_PYTHON=<python 3.10 o successivo>
 cycle-state-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
-cycle-state-engine.driver_failed	driver.py next failed (exit {rc}): {line} — to go on with the bash table: FIC_DRIVER=0	driver.py next non riuscito (exit {rc}): {line} — per proseguire con la tabella bash: FIC_DRIVER=0
+cycle-state-engine.driver_failed	driver.py next failed (exit {rc}): {line} — there is no other engine since Maat 1.6.0 (the bash table is in Maat 1.5.1)	driver.py next non riuscito (exit {rc}): {line} — dalla Maat 1.6.0 non c'e' un altro motore (la tabella bash e' nella Maat 1.5.1)
 run-phase-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
-run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — to go on with the internal validator: FIC_DRIVER=0	driver.py valida non riuscito (exit {rc}): {line} — per proseguire con il validatore interno: FIC_DRIVER=0
+run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — there is no other engine since Maat 1.6.0 (the internal validator is in Maat 1.5.1)	driver.py valida non riuscito (exit {rc}): {line} — dalla Maat 1.6.0 non c'e' un altro motore (il validatore interno e' nella Maat 1.5.1)
 run-phase-engine.cs_no_state	cycle-state.sh gave neither a State: nor a Next: line (exit {rc})	cycle-state.sh non ha dato ne' la riga State: ne' la riga Next: (exit {rc})
-driver-engine.fic_driver_unknown	FIC_DRIVER={v} is neither 0 nor 1: the Python driver decides (FIC_DRIVER=0 for the bash table)	FIC_DRIVER={v} non e' ne' 0 ne' 1: decide il driver Python (FIC_DRIVER=0 per la tabella bash)
+driver-engine.fic_driver_tolta	FIC_DRIVER={v} no longer has any effect: the Python driver decides (for the bash engine, reinstall Maat 1.5.1)	FIC_DRIVER={v} non ha piu' effetto: decide il driver Python (per il motore bash, reinstallare la Maat 1.5.1)
 driver-engine.python_old	Python {v} ({py}) is older than {min}, the minimum of Maat: set FIC_PYTHON=<python {min} or newer>	Python {v} ({py}) e' precedente a {min}, il minimo di Maat: imposta FIC_PYTHON=<python {min} o successivo>
-driver-engine.motore_bash	bash engine (FIC_DRIVER=0): Next/State from standalone cycle-state.sh	motore bash (FIC_DRIVER=0): Next/State da cycle-state.sh autonomo
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
@@ -162,7 +160,6 @@ run-phase.v_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {
 run-phase.v_blocked	blocked on: 	bloccato su: 
 run-phase.v_esito	outcome STOP: 	esito STOP: 
 run-phase.v_json_stop	{stop} (the prose said OK: the most conservative wins)	{stop} (la prosa diceva OK: vale il piu conservativo)
-run-phase.usage_valida	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>	uso: {script} --valida <log.jsonl> <schema> <fase> <result.json>
 run-phase.no_python	no usable Python interpreter (set FIC_PYTHON)	nessun interprete Python utilizzabile (imposta FIC_PYTHON)
 run-phase.usage_nominati	usage: {script} --nominati <root> <paths-file> <log.jsonl>…	uso: {script} --nominati <radice> <file-dei-path> <log.jsonl>…
 run-phase.lock_unknown	git cannot find the repository of the lock	git non trova il repository del lock

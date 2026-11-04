@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 """driver.py — deterministic orchestrator of /full-implementation-cycle (harness-pt14, block 1).
 
-    driver.py next <spec.md>                   the resume table: same output as cycle-state.sh (State/Next)
+    driver.py next <spec.md>                   the resume table, the answer of cycle-state.sh (State/Next)
     driver.py run <spec.md> [--max-fasi N] [--dry-run] [-- <flags forwarded to the phases>…]
                                                the state machine: next -> phase -> next … until DONE/STOP/WAIT
     driver.py valida <log.jsonl> <schema> <fase> <result.json>
-                                               the structured outcome of a phase (the same as run-phase.sh)
+                                               the structured outcome of a phase (run-phase.sh calls it)
     driver.py equiv [--certifica [--validatori-precedenti <v>[,<v>]]] <folder|spec.md>…
-                                               equivalence proof against cycle-state.sh and the validator of
-                                               run-phase.sh, in each language (it, then en); with --certifica, if
-                                               both pass, writes driver.equiv (1.5.0: with the corpus fingerprint and
-                                               the validators proved, this pass's and the --validatori-precedenti ones)
     driver.py equiv --impronta <folder|spec.md>…
-                                               (1.5.0) only prints the corpus fingerprint (_impronta_corpus), no proof
-    driver.py certificato                      certificate status: VALIDO (exit 0) · ASSENTE/SCADUTO (exit 1)
+    driver.py certificato
+                                               the equivalence proof of 1.5.x against the bash engine, which is gone
+                                               in 1.6.0: they no longer prove anything and give way to the expected
+                                               outputs of the public corpus (--impronta stays, as `impronta`)
     driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
                                                exceeds the cap (default 300); separately, with no cap, the conditional files,
                                                the load with plan writing (autore.md) and that of the sub-agents
 
 CHAINS in `run`: a WAIT naming a ring makes the driver go on with that spec; the DONE of a ring brings it
 back to the mother (which names the next ring or the closing). Same budget, same anti-loop; a hand-over
-already made with no launches in between is not repeated. With FIC_DRIVER=0 (the bash engine, on request) `run` takes
-Next/State from standalone cycle-state.sh (FIC_CYCLE_STATE replaces it in tests) and writes it to the log.
+already made with no launches in between is not repeated.
 
 BATCHES AND LANES (step 5). Before a format-2 implement the driver regenerates the procedure from the plan, groups
 the blocks into BATCHES with the implementer's estimated context below FIC_LOTTO_MAX ("LOTTI (driver): …" line in the
@@ -38,35 +35,34 @@ harness fingerprint, attribution, gates.sh, review ∥ VERIFY, counterproof.sh, 
 lanes. The driver adds what used to be prose for the LLM orchestrator (SKILL.md, «Orchestrator mode» and «Resumption»):
 context-pack.sh before every phase, label numbering, phase prompt, reading the outcome, run-phase exits
 as STOP, NEEDS_VERIFICATION in the same invocation -> STOP, anti-loop, phase budget.
-Two parts are ported to Python, with the equivalence proof (`equiv`, the certificate driver.equiv) at each release:
+Two parts used to be bash and are Python (1.5.0, the only engine since 1.6.0):
   - `next`   = the cycle-state.sh table (rows 0-14, 7t/7s/11s/11b/13f, chains C1-C4), which calls the same
                scripts (plan-check.sh contract/basis/closed, review-surface.sh tree/check, run-phase.sh --harness-fp-confronta);
   - `valida` = the outcome validator of run-phase.sh (phase-result schema, prose and JSON: the most conservative).
 
-WRAPPERS AND ENGINE (1.5.1). The driver always decides: cycle-state.sh calls `next`, run-phase.sh calls `valida`,
-`run` uses its own `next`. The bash code (the table of cycle-state.sh, the internal validator of run-phase.sh) decides
-only with FIC_DRIVER=0, the fallback on request until 1.5.2; unset, empty or 1 -> the driver; any other value -> one
-AVVISO, then the driver. No fallback on error: a driver that fails gives a STOP with the reason. The certificate
-driver.equiv no longer switches anything at runtime: it is the proof, at each release, that the bash code and the
-driver are equivalent (`certificato` shows its status; the CI checks it). Its frozen header still describes 1.5.0.
-PYTHON 3.10 OR NEWER, with either engine (the bash table and the internal validator need Python too): `run` checks
-sys.version_info against PY_MIN before reading FIC_DRIVER (Driver result: STOP, exit 1); the wrappers check it through
-python.sh (fic_py_min_ok). So that the check is always reached, this file uses NO SYNTAX NEWER THAN PYTHON 3.7 (no
-walrus, no match, no `X | Y` types, no str.removeprefix): an older interpreter must reach the STOP, not a SyntaxError.
+WRAPPERS (1.6.0). The driver is the only engine: cycle-state.sh calls `next`, run-phase.sh calls `valida`, `run` uses
+its own `next` (FIC_CYCLE_STATE replaces it with a script, in tests). The bash code of 1.5.1 (the table of
+cycle-state.sh, the internal validator of run-phase.sh) is gone: FIC_DRIVER no longer has any effect, and `run` says so
+with one AVVISO when it is set (the wrappers are silent); for the bash engine, reinstall Maat 1.5.1. No fallback on
+error: a driver that fails gives a STOP with the reason.
+PYTHON 3.10 OR NEWER: `run` checks sys.version_info against PY_MIN first (Driver result: STOP, exit 1); the wrappers
+check it through python.sh (fic_py_min_ok). So that the check is always reached, this file uses NO SYNTAX NEWER THAN
+PYTHON 3.7 (no walrus, no match, no `X | Y` types, no str.removeprefix): an older interpreter must reach the STOP, not a
+SyntaxError.
 
 EXITS of `run`: 0 DONE · 1 STOP · 2 usage · 3 WAIT (chain) · 4 phase running (RUNNING) or lock occupato (BUSY).
 The end line is "Driver result: <DONE|STOP|WAIT|BUSY|RUNNING|DRY-RUN> — …" (1.3.0; up to 1.2.x "Esito driver:", with
 OCCUPATO and IN CORSO). The phase result lines are read in both languages (PHASE RESULT / ESITO FASE).
 Events: "driver: …" lines on stdout and in <run-dir>/driver.log.
 
-MESSAGES (1.4.0): the text for a person comes from the catalog lib/messages.tsv (maat_msg.T), with the same keys as
-cycle-state.sh and the validator of run-phase.sh: English by default, Italian with "lingua": "it" or MAAT_LINGUA=it.
+MESSAGES (1.4.0): the text for a person comes from the catalog lib/messages.tsv (maat_msg.T), with the keys that
+cycle-state.sh and the validator of run-phase.sh had: English by default, Italian with "lingua": "it" or MAAT_LINGUA=it.
 The language is resolved once at the start and exported. The protocol stays as it is in both languages: the first
 word of Next, "STOP — catena", "Catena:", "Chiusura:", the harness fingerprint tokens, chain_state and every line
-that enters State. The certificate also covers the catalog and its two readers (messages, maat-msg, maat_msg).
+that enters State.
 
-Variables: FIC_DRIVER (0 = bash engine, above) · FIC_BASH (bash to use) · FIC_RUN_PHASE (run-phase.sh instead of
-the real one, tests) · FIC_CONTEXT_PACK (context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) ·
+Variables: FIC_BASH (bash to use) · FIC_CYCLE_STATE (a script instead of our own `next` in `run`, tests) ·
+FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK (context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) ·
 FIC_DRIVER_CERT (certificate read by `certificato` and written by `equiv --certifica`, tests; no effect on `run`) ·
 FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
 Test: driver.test.sh.
@@ -119,7 +115,7 @@ RIGA_OK = r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK"
 RIGA_STOP = r"(?:PHASE RESULT|ESITO FASE) [^:]*: STOP"
 # Review section heading, both languages
 REVIEW_H = ("## Review implementazione", "## Implementation review")
-# The minimum Python of Maat (1.5.1), checked by `run` with either engine; the same 3.10 as python.sh (fic_py_min_ok)
+# The minimum Python of Maat (1.5.1), checked first by `run`; the same 3.10 as python.sh (fic_py_min_ok)
 # and maat-doctor.sh: driver.test.sh checks that the three agree
 PY_MIN = (3, 10)
 
@@ -874,7 +870,7 @@ def schema_errors(obj, schema):
 
 def cmd_valida(log, schema_path, phase, out):
     """Prints the ESITO line (or the «uscita non valida» STOP and, below it, originale=<line>) and writes result.json if
-    valid. Same rules, same bytes, as the internal validator of run-phase.sh (run-phase.sh --valida)."""
+    valid. Same rules, same bytes, as the internal validator of run-phase.sh up to 1.5.1 (gone in 1.6.0)."""
     res = None
     for ln in open(log, encoding="utf-8", errors="replace"):
         try:
@@ -1285,28 +1281,26 @@ def cmd_run(argv):
         ev("Driver result: %s — %s" % (kind, msg))
         return code
 
-    # 1.5.1 (D2): Python 3.10 or newer with either engine, checked BEFORE FIC_DRIVER is read (the bash table needs
-    # Python too, so an old one has no engine to fall back on)
+    # 1.5.1 (D2): Python 3.10 or newer, checked first (there is no other engine to fall back on)
     if tuple(sys.version_info[:2]) < PY_MIN:
         return fine("STOP", T("driver-engine.python_old", v="%d.%d" % tuple(sys.version_info[:2]), py=sys.executable,
                               min="%d.%d" % PY_MIN), 1)
-    # M1 (1.5.1): the driver decides; Next/State from standalone cycle-state.sh only with FIC_DRIVER=0 (the bash
-    # engine, as in the wrappers); any other value -> one AVVISO, then the driver. The certificate is not read here.
+    # 1.6.0 (D1): the driver is the only engine. FIC_DRIVER set to any non-empty value (0, the bash engine of 1.5.1,
+    # included) no longer has any effect: one AVVISO per invocation, here only (the wrappers are silent).
+    # FIC_CYCLE_STATE (tests) replaces our own `next` with that script, as FIC_RUN_PHASE replaces run-phase.sh.
     fd = os.environ.get("FIC_DRIVER", "")
-    usa_driver = fd != "0"
-    if fd not in ("", "0", "1"):
-        ev("AVVISO: " + T("driver-engine.fic_driver_unknown", v=fd))
+    if fd:
+        ev("AVVISO: " + T("driver-engine.fic_driver_tolta", v=fd))
+    cs_test = os.environ.get("FIC_CYCLE_STATE", "")
 
     while True:
         if spec_fs not in entrati:
             entrati.add(spec_fs)
-            if not usa_driver:
-                ev(T("driver-engine.motore_bash"))
             running = sorted(n[:-8] for n in _names(run_fs) if n.endswith(".running")
                              and not os.path.isfile(os.path.join(run_fs, "log", n[:-8] + ".exit")))
             if running:
                 return fine("RUNNING", T("driver.running", label=running[-1]), 4)
-        out = cycle_state(spec_fs) if usa_driver else _next_da_cycle_state(spec_fs)
+        out = _next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs)
         state = next((l[7:] for l in out if l.startswith("State: ")), "")
         nx = out[-1][6:] if out and out[-1].startswith("Next: ") else ""
         word = nx.split(" ", 1)[0]
@@ -1428,10 +1422,9 @@ def _want():
             ("maat_msg", _hash(os.path.join(HERE, "maat_msg.py")))]
 
 
-def _next_da_cycle_state(spec_fs):
-    """The lines of STANDALONE cycle-state.sh (FIC_DRIVER=0): the source of Next/State of the bash engine."""
-    cs = os.environ.get("FIC_CYCLE_STATE") or CS
-    _, o = _run([BASH, _fw(cs), shown(spec_fs)], env=dict(os.environ, FIC_DRIVER="0"))
+def _next_da_script(cs, spec_fs):
+    """The lines of the script cs (FIC_CYCLE_STATE, tests only): the source of Next/State instead of our own `next`."""
+    _, o = _run([BASH, _fw(cs), shown(spec_fs)])
     return _subst(o.replace("\r", "")).split("\n")
 
 
