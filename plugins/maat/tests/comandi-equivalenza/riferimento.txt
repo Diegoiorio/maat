@@ -1,0 +1,318 @@
+# comandi-equivalenza.test.sh: output of the reference harness d3e9397 on the synthetic repository, normalized.
+# Generated, do not edit: MAAT_RIF_REPO=<repo with d3e9397> bash plugins/maat/scripts/comandi-equivalenza.test.sh --rigenera
+== vue-con-test rec
+INV components/goals/Riga.test.ts
+NPX <copia>/apps/admin|vitest run components/goals/Riga.test.ts
+== vue-con-test righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+== vue-con-test esito
+PASS
+== vue-con-test chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== vue-con-test firma
+IMPLEMENTED
+== vue-senza-test rec
+== vue-senza-test righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: SKIPPED (eseguito) — nessun test esistente per: modules/app/apps/admin/components/x/Solo.vue
+== vue-senza-test esito
+SKIPPED
+== vue-senza-test chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== vue-senza-test firma
+IMPLEMENTED
+== ts-packages-ui rec
+== ts-packages-ui righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: SKIPPED (eseguito) — nessun file sotto modules/app/apps/admin
+== ts-packages-ui esito
+SKIPPED
+== ts-packages-ui chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== ts-packages-ui firma
+IMPLEMENTED
+== router-specchio rec
+PYTEST <repo>/modules/api|-m pytest -q --junitxml=<report> tests/routers/test_goals.py
+== router-specchio righe
+tests-be: PASS (eseguito) — 1 test, 0 falliti, 0 errori, 0 saltati
+tests-fe: SKIPPED (eseguito) — nessun file sotto modules/app/apps/admin
+== router-specchio esito
+PASS
+== router-specchio chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== router-specchio firma
+IMPLEMENTED
+== test-python-diretto rec
+PYTEST <repo>/modules/api|-m pytest -q --junitxml=<report> tests/test_diretto.py
+== test-python-diretto righe
+tests-be: PASS (eseguito) — 1 test, 0 falliti, 0 errori, 0 saltati
+tests-fe: SKIPPED (eseguito) — nessun file sotto modules/app/apps/admin
+== test-python-diretto esito
+PASS
+== test-python-diretto chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== test-python-diretto firma
+IMPLEMENTED
+== livello-min rec
+INV utils/goals.test.ts
+NPX <copia>/apps/admin|vitest run utils/goals.test.ts
+PYTEST <repo>/modules/api|-m pytest -q --junitxml=<report> tests/routers/test_goals.py
+== livello-min righe
+tests-be: PASS (eseguito) — 1 test, 0 falliti, 0 errori, 0 saltati
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+== livello-min esito
+PASS
+== livello-min chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=min
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== livello-min firma
+IMPLEMENTED
+== livello-std rec
+INV utils/goals.test.ts
+NPX <copia>/apps/admin|vitest run utils/goals.test.ts
+PYTEST <repo>/modules/api|-m pytest -q --junitxml=<report> tests/routers/test_goals.py
+== livello-std righe
+tests-be: PASS (eseguito) — 1 test, 0 falliti, 0 errori, 0 saltati
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+== livello-std esito
+PASS
+== livello-std chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== livello-std firma
+IMPLEMENTED
+== livello-full rec
+INV utils/goals.test.ts
+NPX <copia>/apps/admin|vitest run utils/goals.test.ts
+INV --lint modules/app/apps/admin/utils/goals.ts modules/app/packages/ui/Button.ts
+NPM <copia>/apps/admin|run -s lint -- utils/goals.ts
+NPM <repo>/modules/app|run build:admin
+PYTEST <repo>/modules/api|-m pytest -q --junitxml=<report> tests/routers/test_goals.py
+== livello-full righe
+tests-be: PASS (eseguito) — 1 test, 0 falliti, 0 errori, 0 saltati
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+lint: PASS (eseguito) — vitest-fast: esito=PASS luogo=copia
+build: PASS (eseguito) — build ok
+== livello-full esito
+PASS
+== livello-full chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=full
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== livello-full firma
+IMPLEMENTED
+== lint-con-base rec
+INV components/goals/Riga.test.ts
+NPX <copia>/apps/admin|vitest run components/goals/Riga.test.ts
+INV --lint --base <base> modules/app/apps/admin/components/goals/Riga.vue modules/app/packages/ui/Button.ts
+NPX <copia>/packages/ui|eslint --format compact --quiet Button.ts
+NPX <copia>/packages/ui|eslint --format compact --quiet Button.ts
+NPM <copia>/apps/admin|run -s lint -- components/goals/Riga.vue
+NPM <repo>/modules/app|run build:admin
+== lint-con-base righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+lint: PASS (eseguito) — vitest-fast: esito=PASS luogo=copia
+build: PASS (eseguito) — build ok
+== lint-con-base esito
+PASS
+== lint-con-base chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=full
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== lint-con-base firma
+IMPLEMENTED
+== lint-senza-base rec
+INV components/goals/Riga.test.ts
+NPX <copia>/apps/admin|vitest run components/goals/Riga.test.ts
+INV --lint modules/app/apps/admin/components/goals/Riga.vue
+NPM <copia>/apps/admin|run -s lint -- components/goals/Riga.vue
+NPM <repo>/modules/app|run build:admin
+== lint-senza-base righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+lint: PASS (eseguito) — vitest-fast: esito=PASS luogo=copia
+build: PASS (eseguito) — build ok
+== lint-senza-base esito
+PASS
+== lint-senza-base chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=full
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== lint-senza-base firma
+IMPLEMENTED
+== fuori-modulo rec
+INV utils/goals.test.ts
+NPX <copia>/apps/admin|vitest run utils/goals.test.ts
+== fuori-modulo righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: PASS (eseguito) — Tests  1 passed (1)
+== fuori-modulo esito
+PASS
+== fuori-modulo chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=std
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== fuori-modulo firma
+IMPLEMENTED
+== file-eliminato rec
+INV --lint modules/app/apps/admin/utils/vecchio.ts
+NPM <repo>/modules/app|run build:admin
+== file-eliminato righe
+tests-be: SKIPPED (eseguito) — nessun file sotto modules/api
+tests-fe: SKIPPED (eseguito) — nessun test esistente per: modules/app/apps/admin/utils/vecchio.ts
+lint: SKIPPED (eseguito) — vitest-fast: esito=SKIPPED (solo file eliminati) luogo=-
+build: PASS (eseguito) — build ok
+== file-eliminato esito
+PASS
+== file-eliminato chiave
+CI=<non impostata>
+TZ=UTC
+deps=a49a913879aee461da6f6505619964e3d92dd903f28b8f9c51eb63bbdbdcde0c
+eslint=assente
+livello=full
+node=v20.0.0
+node_modules=assente
+pip=88447706fcd25d96e54dd9ae7f79e40547bbf2382eacbc90b6fc154a85297a3a
+python=Python 3.12.1
+schema=gates-1
+tree=<tree>
+tsconfig=eaf8ebfd7d8606ddc71ba3aac3a180791e5f3a8bc864a39c98fab7cb24530ce0
+tz_wsl=UTC|UTC+0000
+vitest=assente
+== file-eliminato firma
+IMPLEMENTED

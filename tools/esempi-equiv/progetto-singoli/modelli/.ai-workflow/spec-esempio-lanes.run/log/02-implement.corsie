@@ -1,0 +1,4 @@
+corsia 1: B1
+scope 1: src/a.py
+corsia 2: B2
+scope 2: src/b.py

@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Stopped before the migration.", "structured_output": {"fase": "implement", "esito": "STOP", "motivo": "migration", "deviazioni": [], "bloccato_su": "migration to apply — m.sql", "file": [], "gate_interni": [], "finding": []}, "total_cost_usd": 0.42, "num_turns": 7}

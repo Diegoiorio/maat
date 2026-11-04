@@ -1,9 +1,9 @@
 # driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv --certifica`.
 # Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se driver.py e loro stessi hanno ancora questi hash (CR tolti).
-driver 906d1284e4896766c70c5f3debab58ac6aded597b7d29d06311a3c709d68dcf6
+driver de51be31a47c70652a92c54bae3a2ec1aad068e7664bb39f50c008a483db0ac5
 cycle-state 4f4facd551c657c12580fe5a9f392049e4c4deae3e71ff5576e2bddbb4d637e9
-run-phase 6df4225d36835883af3316552ec372e9a1a5c71eb268633c1f51076cb3998757
-messages b44af9b4ac24f8e3fff8426a2ba2c1a34e5f81e88be9f4b1a3e0aa9086c0524f
+run-phase 849ea2b7c116b7298bcddb69866440c503a94093d85c184705b9ed0da600566b
+messages b24580d12c15adfbce89a795950bbdbd5a71f84056c9f7e79e7c3ff84dfdd50a
 maat-msg 3519ac3768279744d149e7315798811898aaa28eaa3048162f28a75848bab32d
 maat_msg fd372b2fa32b5951258155993240217acd604b3d51aee7ce26f75b87bfb57482
-corpus spec=15 jsonl=83 · lingue it,en · 2026-11-02T04:37:01Z
+corpus spec=65 jsonl=49 · lingue it,en · 2026-11-02T22:27:46Z · impronta 6b484b23826a · validatori minimo,jsonschema

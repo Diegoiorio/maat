@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "T1 is red.\nPHASE RESULT test-red: OK — red proven: T1", "structured_output": {"fase": "test-red", "esito": "OK", "motivo": "red proven: T1", "deviazioni": [], "bloccato_su": "none", "file": ["src/test_a.py"], "gate_interni": [], "finding": []}, "total_cost_usd": 0.42, "num_turns": 7}

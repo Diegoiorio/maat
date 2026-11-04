@@ -1005,5 +1005,50 @@ for _ in $(seq 1 60); do kill -0 "$lc2" 2>/dev/null || break; sleep 0.25; done; 
 check "  finita la corsia 2, il lock e' orfano e si riprende" 'bash "$RP" --lock-status | grep -q "^libero"'
 rm -rf "$FIC_LOCK"; (cd "$FIC_REPO" && git checkout -q -- .)
 
+# 12. 1.5.0: MAAT_LINGUA in WSLENV. maat.json says "it", MAAT_LINGUA=en set by hand: whatever the sub-session (normal
+#     and each lane) launches in `wsl` must still see "en". The fake wsl passes ONLY the variables named in WSLENV
+#     (name[/flags]), like wsl.exe; the fake claude calls it, records what it saw inside, then runs the usual fake.
+cat > "$T/wsl" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = -- ] && shift
+[ "${1:-}" = bash ] && [ "${2:-}" = -lc ] && set -- bash -c "$3"
+a=(); w=(); IFS=: read -r -a w <<< "${WSLENV:-}"
+for e in ${w[@]+"${w[@]}"}; do v=${e%%/*}; [[ $v =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && [ -n "${!v+x}" ] && a+=("$v=${!v}"); done
+exec env -i PATH="$PATH" ${a[@]+"${a[@]}"} "$@"
+EOF
+cat > "$T/claude-wsl" <<'EOF'
+#!/usr/bin/env bash
+k=${FIC_LANE:-0}
+"$FAKE_WSL" -- bash -lc 'printf "MAAT_LINGUA=%s\nFIC_LANE=%s\nWSL_FOO=%s\n" "${MAAT_LINGUA:-}" "${FIC_LANE:-}" "${WSL_FOO:-}"' > "$FAKE_OUT.wsl-$k" 2>&1
+printf 'WSLENV=%s\n' "${WSLENV:-}" > "$FAKE_OUT.wslenv-$k"
+exec "$FAKE_CLAUDE" "$@"
+EOF
+chmod +x "$T/wsl" "$T/claude-wsl"
+WL="$T/wl"; mkdir -p "$WL/.claude"
+printf '{"versione_schema": 1, "moduli": [{"nome": "tutto", "radice": "."}], "lingua": "it"}\n' > "$WL/.claude/maat.json"
+WLC=$(cygpath -m "$WL/.claude/maat.json" 2>/dev/null || printf '%s' "$WL/.claude/maat.json")
+# $1 = run-phase.sh, $2 = run dir, $3 = label, $4 = fake claude behind the wrapper; WSLENV as given by the caller
+wlrun() { env -u WSLENV ${WLENV:+WSLENV="$WLENV"} MAAT_CONFIG="$WLC" MAAT_LINGUA=en CLAUDE_BIN="$T/claude-wsl" FAKE_WSL="$T/wsl" \
+  FAKE_CLAUDE="$4" FAKE_OUT="$T/$3" WSL_FOO=foo bash "$1" "$2" "$3" "$T/prompt.md" 2>"$T/$3.err" </dev/null; }
+WLENV="" wlrun "$RP" "$WL/a/run" w1-plan "$T/claude"; rc=$?
+check "WSLENV: lingua it in maat.json, MAAT_LINGUA=en a mano → il wsl della sotto-sessione normale vede en" '[ $rc -eq 0 ] && grep -qx "MAAT_LINGUA=en" "$T/w1-plan.wsl-0" && grep -qx "WSLENV=MAAT_LINGUA" "$T/w1-plan.wslenv-0"'
+WLENV="WSL_FOO/u:MAAT_LINGUA/p" wlrun "$RP" "$WL/b/run" w2-plan "$T/claude"
+check "  WSLENV con MAAT_LINGUA gia' presente: nessun doppione, voci e flag conservati" 'grep -qx "WSLENV=WSL_FOO/u:MAAT_LINGUA/p" "$T/w2-plan.wslenv-0" && grep -qx "MAAT_LINGUA=en" "$T/w2-plan.wsl-0" && grep -qx "WSL_FOO=foo" "$T/w2-plan.wsl-0"'
+WLENV="WSL_FOO/u" wlrun "$RP" "$WL/c/run" w3-plan "$T/claude"
+check "  WSLENV con altre voci: MAAT_LINGUA in coda, le altre restano" 'grep -qx "WSLENV=WSL_FOO/u:MAAT_LINGUA" "$T/w3-plan.wslenv-0" && grep -qx "WSL_FOO=foo" "$T/w3-plan.wsl-0" && grep -qx "MAAT_LINGUA=en" "$T/w3-plan.wsl-0"'
+# lanes: a fresh copy of the lanes spec (the run dir of section 11 has an Italian harness.fp)
+W5="$T/w5"; mkdir -p "$W5"; cp "$SPL" "$W5/spec-l.md"
+(cd "$FIC_REPO" && git checkout -q -- .)
+FAKE_TOUCH_1=a.py FAKE_TOUCH_2=b.py FAKE_FILE_1=a.py FAKE_FILE_2=b.py WLENV="" wlrun "$RP" "$W5/spec-l.run" w4-implement "$T/claude-corsie"; rc=$?
+check "  corsie: il wsl di ciascuna corsia vede en e FIC_LANE; WSLENV comincia ancora con FIC_LANE" '[ $rc -eq 0 ] && grep -qx "blocks-independent: esito=parallelo corsie=2" "$W5/spec-l.run/log/w4-implement.corsie" && ( for k in 1 2; do grep -qx "MAAT_LINGUA=en" "$T/w4-implement.wsl-$k" && grep -qx "FIC_LANE=$k" "$T/w4-implement.wsl-$k" && grep -qx "WSLENV=FIC_LANE:MAAT_LINGUA" "$T/w4-implement.wslenv-$k" || exit 1; done )'
+rm -rf "$FIC_LOCK"; (cd "$FIC_REPO" && git checkout -q -- .)
+# counterproof: copy of run-phase.sh without the wslenv_add call → inside the fake wsl the language is empty
+sed 's/^wslenv_add MAAT_LINGUA$/: # MUTANTE: niente wslenv_add/' "$RP" > "$MRP"
+if cmp -s "$RP" "$MRP"; then fail=$((fail + 1)); n=$((n + 1)); echo "FAIL: controprova (WSLENV): la mutazione non si applica"
+else
+  WLENV="" wlrun "$MRP" "$WL/d/run" w5-plan "$T/claude"
+  check "controprova (WSLENV): senza wslenv_add il wsl finto vede la lingua vuota (il caso w1 sarebbe rosso)" 'grep -qx "MAAT_LINGUA=" "$T/w5-plan.wsl-0"'
+fi
+
 echo "run-phase.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

@@ -12,4 +12,6 @@ LICENSE text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
 plugins/maat/tests/phase-usage/* text eol=lf
+plugins/maat/tests/comandi-equivalenza/* text eol=lf
 tools/suite.list text eol=lf
+tools/esempi-equiv/** text eol=lf

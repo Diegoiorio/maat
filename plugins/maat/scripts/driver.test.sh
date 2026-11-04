@@ -13,7 +13,8 @@
 #   5 equiv and certificate · 6 plan counterproofs: anti-loop removed, JSON validation removed
 #   7 batches and lanes decided by the driver (step 5) · 8 lines loaded per phase (step 4, cap on the base load)
 #   9 port of cycle-state.test.sh: every call compares the whole output of cycle-state.sh (standalone) and of
-#     `driver.py next`; the cases must pass AND the two outputs must match
+#     `driver.py next`; the cases must pass AND the two outputs must match (1.5.0: in it and in en, each with a Next:
+#     line on both sides; the counterproofs of the comparison run even with DRIVER_TEST_RAPIDO=1)
 #  10 L2 promotion before the review: assorbita only if it holds finalize's check (plan-check.sh l2)
 #  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
 set -uo pipefail
@@ -321,9 +322,40 @@ check "equiv: tre run dir, next e valida uguali → exit 0" '[ $rc -eq 0 ] && gr
 check "  1.4.0 (c): equiv in it e poi in en nello stesso processo, uguale in tutte e due" '[ "$(grep -c "^equiv: spec=3 diverse=0 · jsonl=3 diversi=0$" "$T/eq.out")" = 2 ] && [ "$(grep "^equiv: lingua " "$T/eq.out" | tr "\n" " ")" = "equiv: lingua it equiv: lingua en " ]'
 check "  e in en lo STOP di spec-z e' quello inglese, uguale nei due lati" 'grep -q "^UGUALE spec-z · Next: STOP — the spec has both .## Review implementazione. and .## Implementation review." "$T/eq.out"'
 check "  spec con «## Review implementazione» e «## Implementation review»: lo stesso STOP da cycle-state.sh e driver.py" 'grep -q "^UGUALE spec-z · Next: STOP — la spec ha sia .## Review implementazione. sia .## Implementation review." "$T/eq.out"'
+# 1.5.0 (D6): the warnings on the cycles not closed, informative. blocco: the lines of the pass in language $2 of the
+# output $1; avvisi_ok: in that pass the frozen summary line, then one AVVISO per spec named in $4 (in the text of the
+# language, $3 = «non chiusa» or «not closed»), then the counts $5 as the last line.
+blocco() { sed -n "/^equiv: lingua $2\$/,/^equiv: lingua [a-z]*\$/p" "$1" | sed '/^equiv: lingua /d'; }
+avvisi_ok() { # $1 output, $2 language, $3 text of the warning, $4 specs, $5 counts line
+  local b s nr na
+  b=$(blocco "$1" "$2")
+  [ "$(printf '%s\n' "$b" | grep -c "^equiv: AVVISO — ")" = "$(printf '%s\n' $4 | grep -c .)" ] || return 1
+  for s in $4; do [ "$(printf '%s\n' "$b" | grep -c "^equiv: AVVISO — $s $3")" = 1 ] || return 1; done
+  [ "$(printf '%s\n' "$b" | tail -1)" = "$5" ] || return 1
+  nr=$(printf '%s\n' "$b" | grep -n "^equiv: spec=" | cut -d: -f1); na=$(printf '%s\n' "$b" | grep -n "^equiv: AVVISO — " | head -1 | cut -d: -f1)
+  [ -n "$nr" ] && [ "$nr" -lt "${na:-999999}" ]
+}
+check "1.5.0 (D6): x, y, z aperte → in it tre avvisi, uno per spec, dopo la riga riassuntiva, poi «aperte=3 · impronta-non-uguale=0»" 'avvisi_ok "$T/eq.out" it "non chiusa (Next: " "spec-x spec-y spec-z" "equiv: aperte=3 · impronta-non-uguale=0"' "$(cat "$T/eq.out")"
+check "  e in en gli stessi tre, col testo inglese" 'avvisi_ok "$T/eq.out" en "not closed (Next: " "spec-x spec-y spec-z" "equiv: aperte=3 · impronta-non-uguale=0"'
+check "  la parola è quella di Next del lato bash (spec-z: STOP, spec-x: IMPLEMENT), exit sempre 0" '[ $rc -eq 0 ] && grep -q "^equiv: AVVISO — spec-z non chiusa (Next: STOP): la prova su questa spec copre la riga che decide quella parola, non il cammino fino a DONE$" "$T/eq.out" && grep -q "^equiv: AVVISO — spec-x not closed (Next: IMPLEMENT): the proof" "$T/eq.out"'
+cp "$T/eq.out" "$T/eq-avvisi.out"
 FIC_DRIVER_CERT="$T/cert" drv equiv --certifica .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv --certifica: scrive il certificato con gli hash attuali" '[ $rc -eq 0 ] && grep -qx "driver $(h "$DRV")" "$T/cert" && grep -qx "cycle-state $(h "$FC/cycle-state.sh")" "$T/cert" && grep -qx "run-phase $(h "$FC/run-phase.sh")" "$T/cert"'
 check "  1.4.0: anche il catalogo e i suoi due lettori (messages, maat-msg, maat_msg), e «lingue it,en» nella riga corpus" 'msgh | while IFS= read -r l; do grep -qxF "$l" "$T/cert" || exit 1; done && grep -q "^corpus spec=3 jsonl=3 · lingue it,en · " "$T/cert"'
+# 1.5.0 (D3): the corpus line ends with the fingerprint of the corpus (= equiv --impronta, 12 digits) and the validator
+# of the interpreter (jsonschema if it imports it, otherwise minimo); --validatori-precedenti joins those of before
+FPC=$(drv equiv --impronta .claude/.ai-workflow 2>&1)
+VAL=minimo; "$FIC_PY" -B -c "import jsonschema" >/dev/null 2>&1 && VAL=jsonschema
+ALTRO=jsonschema; [ $VAL = jsonschema ] && ALTRO=minimo
+check "  1.5.0: riga corpus con «· impronta <12 cifre> · validatori <v>» in coda, l'impronta = equiv --impronta, v = $VAL" '[[ $FPC =~ ^[0-9a-f]{64}$ ]] && grep -qE "^corpus spec=3 jsonl=3 · lingue it,en · [^ ]+ · impronta [0-9a-f]{12} · validatori (minimo|jsonschema)$" "$T/cert" && grep -q " · impronta ${FPC:0:12} · validatori $VAL$" "$T/cert"' "$(grep "^corpus " "$T/cert") · $FPC"
+FIC_DRIVER_CERT="$T/cert2" drv equiv --certifica --validatori-precedenti $ALTRO .claude/.ai-workflow > "$T/eq2.out" 2>&1; rc=$?
+check "  --validatori-precedenti $ALTRO: uniti a quello di questo passaggio, in ordine fisso → «validatori minimo,jsonschema»" '[ $rc -eq 0 ] && grep -q " · impronta ${FPC:0:12} · validatori minimo,jsonschema$" "$T/cert2"' "$(grep "^corpus " "$T/cert2")"
+FIC_DRIVER_CERT="$T/cert3" drv equiv --certifica --validatori-precedenti altro .claude/.ai-workflow > "$T/eq3.out" 2>&1; rc=$?
+check "  un validatore sconosciuto → uso (exit 2), nessuna prova, nessun certificato" '[ $rc -eq 2 ] && [ ! -f "$T/cert3" ] && ! grep -q "^equiv: lingua" "$T/eq3.out" && grep -q "equiv --impronta" "$T/eq3.out"'
+drv equiv --impronta --certifica .claude/.ai-workflow > "$T/eq3.out" 2>&1; rc1=$?
+drv equiv --validatori-precedenti minimo .claude/.ai-workflow > "$T/eq3.out" 2>&1; rc2=$?
+drv equiv --impronta "$T/non-esiste" > "$T/eq3.out" 2>&1; rc3=$?
+check "  --impronta con --certifica, --validatori-precedenti senza --certifica → uso (2); --impronta su un percorso assente → 2" '[ $rc1 -eq 2 ] && [ $rc2 -eq 2 ] && [ $rc3 -eq 2 ] && [ ! -f "$T/cert3" ]'
 FIC_DRIVER_CERT="$T/cert" drv certificato > "$T/c.out"; rc=$?
 check "certificato: VALIDO (exit 0)" '[ $rc -eq 0 ] && grep -q "^certificato: VALIDO" "$T/c.out"'
 # 1.4.0: a change to maat_msg.py (here in a copy of the plugin, FIC_DRIVER_ROOT) makes the certificate expire
@@ -342,7 +374,68 @@ sed 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-stat
 check "controprova equiv: la mutazione e' applicata (il gemello Python punta a un'altra chiave)" 'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/drv-diverso.py"'
 "$FIC_PY" "$T/drv-diverso.py" equiv .claude/.ai-workflow > "$T/eq.out" 2>&1; rc=$?
 check "equiv: un driver che risponde diverso → DIVERSO, exit 1, niente certificato" '[ $rc -eq 1 ] && grep -q "^DIVERSO spec-x" "$T/eq.out" && grep -q "diverse=2" "$T/eq.out"'
+# counterproof: the warnings removed (copy of driver.py) → the case «three warnings» turns red
+sed 's/^        print("equiv: AVVISO — " + w)$/        pass  # AVVISI tolti/' "$DRV" > "$T/drv-noavvisi.py"
+check "controprova avvisi: la mutazione e' applicata" 'grep -q "AVVISI tolti" "$T/drv-noavvisi.py"'
+"$FIC_PY" "$T/drv-noavvisi.py" equiv .claude/.ai-workflow > "$T/eq.out" 2>&1
+check "controprova avvisi: senza le righe AVVISO il caso «tre avvisi» (it) e' rosso" '! avvisi_ok "$T/eq.out" it "non chiusa (Next: " "spec-x spec-y spec-z" "equiv: aperte=3 · impronta-non-uguale=0" && grep -q "^equiv: aperte=3 · impronta-non-uguale=0$" "$T/eq.out"'
 rm -rf .claude/.ai-workflow/spec-y.md .claude/.ai-workflow/spec-y.run .claude/.ai-workflow/spec-z.md .claude/.ai-workflow/spec-z.run
+# 1.5.0 (D6): a closed spec (DONE, legacy) gives no warning; a spec whose harness.fp is not UGUALE (a fake one,
+# impronta=0…0 → CAMBIATO) gives the stronger one, «only the fingerprint branch», and counts in impronta-non-uguale
+EW=.claude/.ai-workflow/spec-w.md; EH=.claude/.ai-workflow/spec-h.md
+{ cat "$SP"; printf '%s\n' "## Review implementazione" "Review status: APPROVED" "Feature status: IMPLEMENTED" \
+    "Verification: VERIFIED" "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1"; } > "$EW"
+cp "$SP" "$EH"; mkdir -p "${EH%.md}.run"; printf 'impronta=%064d\n' 0 > "${EH%.md}.run/harness.fp"
+check "premessa: spec-w chiusa (DONE), spec-h ferma sull'impronta (STOP)" 'FIC_DRIVER=0 bash "$FC/cycle-state.sh" "$EW" | grep -q "^Next: DONE" && FIC_DRIVER=0 bash "$FC/cycle-state.sh" "$EH" | grep -q "^Next: STOP — harness cambiato"'
+drv equiv "$EW" "$EH" > "$T/eq.out" 2>&1; rc=$?
+check "  equiv su spec-w e spec-h: in it nessun avviso per spec-w, quello forte per spec-h, «aperte=1 · impronta-non-uguale=1»" '[ $rc -eq 0 ] && avvisi_ok "$T/eq.out" it "con harness.fp CAMBIATO (Next: STOP): la prova su questa spec copre solo il ramo dell.impronta$" spec-h "equiv: aperte=1 · impronta-non-uguale=1"' "$(cat "$T/eq.out")"
+check "  e in en lo stesso, col testo inglese" 'avvisi_ok "$T/eq.out" en "with harness.fp CAMBIATO (Next: STOP): the proof on this spec covers only the fingerprint branch$" spec-h "equiv: aperte=1 · impronta-non-uguale=1" && ! grep -q "AVVISO — spec-w" "$T/eq.out"'
+rm -rf "$EW" "$EH" "${EH%.md}.run"
+
+# 1.5.0 (D3): the corpus fingerprint, equiv --impronta (no proof). On a copy of the repo with the same name elsewhere.
+# imp_*: 0 if the property holds for driver $1
+IMP_A=$T/altrove/repo; mkdir -p "$T/altrove"; cp -r "$W" "$IMP_A"
+imp() { "$FIC_PY" "$1" equiv --impronta "$2" 2>/dev/null; }
+imp_altrove() { local a b; a=$(imp "$1" "$W/.claude/.ai-workflow"); b=$(imp "$1" "$IMP_A/.claude/.ai-workflow"); [[ $a =~ ^[0-9a-f]{64}$ ]] && [ "$a" = "$b" ]; }
+imp_byte() { # $2 file relative to the copy (created if missing, removed after if so), $3 content, $4 the same with one byte changed
+  local a b f=$IMP_A/$2 c=; [ -e "$f" ] || c=1
+  mkdir -p "$(dirname "$f")"; printf '%s' "$3" > "$f"; a=$(imp "$1" "$IMP_A/.claude/.ai-workflow")
+  printf '%s' "$4" > "$f"; b=$(imp "$1" "$IMP_A/.claude/.ai-workflow")
+  if [ -n "$c" ]; then rm -f "$f"; else printf '%s' "$3" > "$f"; fi
+  [[ $a =~ ^[0-9a-f]{64}$ ]] && [[ $b =~ ^[0-9a-f]{64}$ ]] && [ "$a" != "$b" ]
+}
+check "--impronta: stessa cartella in un altro percorso (stesso nome) → stessa impronta" 'imp_altrove "$DRV"'
+check "  un byte cambiato in un .esito della run dir (ignorata da git) → impronta diversa" 'imp_byte "$DRV" "$RUN/log/09-implement.esito" "PHASE RESULT implement: OK — a
+state=000000000000
+" "PHASE RESULT implement: OK — b
+state=000000000000
+"'
+check "  un byte cambiato in .claude/maat.json → impronta diversa" 'imp_byte "$DRV" .claude/maat.json "{\"lingua\": \"it\"}
+" "{\"lingua\": \"en\"}
+"'
+check "  un byte cambiato in un file di codice (src/a.py) → impronta diversa" 'imp_byte "$DRV" src/a.py "uno
+" "uno!
+"'
+check "  il CR non conta (contenuto senza CR, come il certificato)" 'a=$(imp "$DRV" "$IMP_A/.claude/.ai-workflow"); printf "uno\r\n" > "$IMP_A/src/a.py"; b=$(imp "$DRV" "$IMP_A/.claude/.ai-workflow"); printf "uno\n" > "$IMP_A/src/a.py"; [ "$a" = "$b" ]'
+# the machine's git configuration does not enter: a global core.excludesFile, and the default ignore file of
+# ~/.config/git, that exclude *.py leave an untracked src/nuovo.py in the fingerprint
+H2=$T/home-escludi; mkdir -p "$H2/.config/git"; printf '*.py\n' > "$H2/escludi"; printf '*.py\n' > "$H2/.config/git/ignore"
+printf '[core]\n\texcludesFile = %s\n' "$(cygpath -m "$H2/escludi" 2>/dev/null || printf '%s' "$H2/escludi")" > "$H2/.gitconfig"
+i0=$(imp "$DRV" "$IMP_A/.claude/.ai-workflow"); printf 'nuovo\n' > "$IMP_A/src/nuovo.py"
+i1=$(imp "$DRV" "$IMP_A/.claude/.ai-workflow"); i2=$(HOME=$H2 env -u XDG_CONFIG_HOME "$FIC_PY" "$DRV" equiv --impronta "$IMP_A/.claude/.ai-workflow" 2>/dev/null)
+check "premessa: con quella configurazione globale git esclude src/nuovo.py (e senza no)" '[ -z "$(cd "$IMP_A" && HOME=$H2 env -u XDG_CONFIG_HOME git ls-files -o --exclude-standard src)" ] && [ -n "$(cd "$IMP_A" && git ls-files -o --exclude-standard src)" ]'
+check "  un file non tracciato e non ignorato entra nell'impronta; un core.excludesFile globale che esclude *.py non la cambia" '[ "$i0" != "$i1" ] && [ "$i1" = "$i2" ]' "$i0 $i1 $i2"
+rm -f "$IMP_A/src/nuovo.py"
+# counterproofs on copies of driver.py: a fingerprint that ignores the run dirs (.claude/ not walked) → «byte in a
+# .esito» red; one with the absolute path of the root instead of its name → «another path» red
+sed 's/^                tops = \[os.path.join(r, ".claude")\]$/                tops = []  # RUN-DIR ignorate/' "$DRV" > "$T/drv-norun.py"
+sed 's/^            nome = os.path.basename(r.rstrip("\/\\\\"))$/            nome = r  # PERCORSO assoluto/' "$DRV" > "$T/drv-assoluto.py"
+check "controprove impronta: le due mutazioni sono applicate" 'grep -q "RUN-DIR ignorate" "$T/drv-norun.py" && grep -q "PERCORSO assoluto" "$T/drv-assoluto.py"'
+check "controprova: impronta che ignora le run dir → il caso «byte cambiato in un .esito» e' rosso" '! imp_byte "$T/drv-norun.py" "$RUN/log/09-implement.esito" "a
+" "b
+"'
+check "controprova: impronta col percorso assoluto → il caso «altro percorso» e' rosso" '! imp_altrove "$T/drv-assoluto.py"'
+rm -rf "$T/altrove" "$H2"
 
 # --- 6. plan counterproofs (mutations on a copy; the case must turn red) ---
 sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
@@ -412,21 +505,53 @@ check "righe: il carico BASE di ogni fase e' <=300 righe di istruzioni" '[ $rc -
 check "  e le letture a parte sono riportate (scrittura del piano con autore.md, revisori con il loro agente), senza file mancanti" 'grep "^righe plan:" "$T/righe.out" | grep -q "con la scrittura del piano: [0-9]* (base plan-review-cycle/autore.md=[0-9]*)" && grep "^righe plan:" "$T/righe.out" | grep -q "revisore del piano: [0-9]* (plan-review-cycle/revisori.md=[0-9]* agents/spec-plan-reviewer.md=[0-9]*)" && grep "^righe review:" "$T/righe.out" | grep -q "revisore: [0-9]* (implementation-review-cycle/prompt-revisore.md=[0-9]* agents/implementation-reviewer.md=[0-9]*)" && ! grep -q "=None" "$T/righe.out"'
 
 # --- 9. port of cycle-state.test.sh: same cases, output compared with standalone cycle-state.sh ---
+# 1.5.0 (D): the comparison in both languages. Called with MAAT_LINGUA=it (the direct calls of cycle-state.test.sh) it
+# compares the two sides in it AND in en; called by en_twin (MAAT_LINGUA=en already) only in the language received, not
+# to pay en twice. So en also covers the cases with harness.fp that en_twin skips. Every difference in cs-diff carries
+# its language; a comparison where a side has no «Next:» line goes to cs-nonext (two failures without output are not
+# «the same»). CSC_DRV, CSC_CS, CSC_OUT: the driver, the cycle-state.sh and the folder of the counterproofs below.
+cat > "$T/cs-confronto.sh" <<EOF
+#!/usr/bin/env bash
+DRVC=\${CSC_DRV:-$DRV}; CSC=\${CSC_CS:-$FC/cycle-state.sh}; OD=\${CSC_OUT:-$T}
+confronta() { # \$1 language, then the arguments of cycle-state.sh; sets b (the driver's output)
+  local l=\$1 a; shift
+  a=\$(MAAT_LINGUA=\$l FIC_DRIVER=0 bash "\$CSC" "\$@" 2>/dev/null)
+  b=\$(MAAT_LINGUA=\$l "$FIC_PY" "\$DRVC" next "\$@" 2>&1)
+  [ "\$a" = "\$b" ] || printf '=== [%s] %s\n--- cycle-state.sh\n%s\n--- driver.py next\n%s\n' "\$l" "\$*" "\$a" "\$b" >> "\$OD/cs-diff"
+  { printf '%s\n' "\$a" | grep -q '^Next: ' && printf '%s\n' "\$b" | grep -q '^Next: '; } || printf '[%s] %s\n' "\$l" "\$*" >> "\$OD/cs-nonext"
+}
+l0=\${MAAT_LINGUA:-it}
+confronta "\$l0" "\$@"; out=\$b
+[ "\$l0" = it ] && confronta en "\$@"
+printf '%s\n' "\$out"
+EOF
+# counterproofs of the comparison, on one spec (IMPLEMENT — plan approved, no review), in every run of the suite:
+# (f) a driver wrong only in en (the en text of cycle-state.impl changed in the catalog of a copy) → cs-diff with [en]
+# only; (g) a driver and a cycle-state.sh that both exit 1 without output → the same outputs, but cs-nonext not empty
+CF=.claude/.ai-workflow/spec-confronto.md; SP_PRIMA=$SP
+(cd "$W" && SP=$CF && spec_approved); SP=$SP_PRIMA
+mkdir -p "$T/c9" "$T/c9f/lib" "$T/c9g"
+(cd "$W" && CSC_OUT="$T/c9" bash "$T/cs-confronto.sh" "$CF" > "$T/c9/out")
+check "§9 premessa: sulla spec di prova il confronto in it e in en non registra niente, e il driver dice IMPLEMENT" '[ ! -e "$T/c9/cs-diff" ] && [ ! -e "$T/c9/cs-nonext" ] && grep -q "^Next: IMPLEMENT — piano approvato, nessuna review" "$T/c9/out"'
+cp "$DRV" "$HERE/maat_paths.py" "$HERE/maat_msg.py" "$T/c9f/"; cp "$HERE/lib/maat-msg.sh" "$T/c9f/lib/"
+awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "cycle-state.impl" { $2 = "plan approved, NO review" } { print }' "$HERE/lib/messages.tsv" > "$T/c9f/lib/messages.tsv"
+check "controprova (f): la mutazione e' applicata (testo en di cycle-state.impl nel catalogo della copia)" 'grep -q "^cycle-state.impl	plan approved, NO review	" "$T/c9f/lib/messages.tsv"'
+(cd "$W" && CSC_OUT="$T/c9f" CSC_DRV="$T/c9f/$(basename "$DRV")" bash "$T/cs-confronto.sh" "$CF" > /dev/null)
+check "controprova (f): un driver che sbaglia solo in en → cs-diff non vuoto, con la lingua en (e solo en)" 'grep -q "^=== \[en\] " "$T/c9f/cs-diff" && ! grep -q "^=== \[it\] " "$T/c9f/cs-diff"'
+printf 'import sys\nsys.exit(1)\n' > "$T/c9g/driver-muto.py"; printf '#!/usr/bin/env bash\nexit 1\n' > "$T/c9g/cs-muto.sh"
+(cd "$W" && CSC_OUT="$T/c9g" CSC_DRV="$T/c9g/driver-muto.py" CSC_CS="$T/c9g/cs-muto.sh" bash "$T/cs-confronto.sh" "$CF" > /dev/null)
+check "controprova (g): due lati che escono 1 senza stampare → uscite uguali (cs-diff vuoto) ma cs-nonext non vuoto, in it e in en" '[ ! -e "$T/c9g/cs-diff" ] && grep -q "^\[it\] " "$T/c9g/cs-nonext" && grep -q "^\[en\] " "$T/c9g/cs-nonext"'
+rm -rf "$W/$CF" "$T/c9" "$T/c9f" "$T/c9g"
 if [ "${DRIVER_TEST_RAPIDO:-0}" = 1 ]; then
   echo "driver.test.sh: sezione 9 saltata (DRIVER_TEST_RAPIDO=1)"
 else
-  cat > "$T/cs-confronto.sh" <<EOF
-#!/usr/bin/env bash
-a=\$(FIC_DRIVER=0 bash "$FC/cycle-state.sh" "\$@" 2>/dev/null)
-b=\$("$FIC_PY" "$DRV" next "\$@" 2>&1)
-[ "\$a" = "\$b" ] || printf '=== %s\n--- cycle-state.sh\n%s\n--- driver.py next\n%s\n' "\$*" "\$a" "\$b" >> "$T/cs-diff"
-printf '%s\n' "\$b"
-EOF
   CS="$T/cs-confronto.sh" bash "$FC/cycle-state.test.sh" > "$T/cs.out" 2>&1; rc=$?
   tail -1 "$T/cs.out"
   check "cycle-state.test.sh sul driver: tutti i casi passano" '[ $rc -eq 0 ]'
   check "  e a ogni chiamata l'output del driver e' identico a cycle-state.sh" '[ ! -s "$T/cs-diff" ]'
   [ -s "$T/cs-diff" ] && head -40 "$T/cs-diff"
+  check "  1.5.0: ogni confronto, in it e in en, ha una riga Next: sui due lati (cs-nonext vuoto)" '[ ! -s "$T/cs-nonext" ]'
+  [ -s "$T/cs-nonext" ] && head -20 "$T/cs-nonext"
 fi
 
 # --- 10. L2 promotion before the review (harness-pt15): absorption with the same criterion as finalize.sh ---

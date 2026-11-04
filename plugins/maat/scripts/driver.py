@@ -6,10 +6,13 @@
                                                the state machine: next -> phase -> next … until DONE/STOP/WAIT
     driver.py valida <log.jsonl> <schema> <fase> <result.json>
                                                the structured outcome of a phase (the same as run-phase.sh)
-    driver.py equiv [--certifica] <folder|spec.md>…
+    driver.py equiv [--certifica [--validatori-precedenti <v>[,<v>]]] <folder|spec.md>…
                                                equivalence proof against cycle-state.sh and the validator of
                                                run-phase.sh, in each language (it, then en); with --certifica, if
-                                               both pass, writes driver.equiv
+                                               both pass, writes driver.equiv (1.5.0: with the corpus fingerprint and
+                                               the validators proved, this pass's and the --validatori-precedenti ones)
+    driver.py equiv --impronta <folder|spec.md>…
+                                               (1.5.0) only prints the corpus fingerprint (_impronta_corpus), no proof
     driver.py certificato                      certificate status: VALIDO (exit 0) · ASSENTE/SCADUTO (exit 1)
     driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
                                                exceeds the cap (default 300); separately, with no cap, the conditional files,
@@ -1434,11 +1437,109 @@ def _phase_of(label):
     return "probe"
 
 
+# The outcome validators a proof can run with (1.5.0): the minimal one of run-phase.sh/driver.py, or jsonschema when the
+# interpreter imports it. Fixed order: the one of the `validatori` field of the certificate.
+VALIDATORI = ("minimo", "jsonschema")
+
+
+def _validatore(py):
+    """The validator of interpreter py: jsonschema if it imports the module (VALIDA_PY of run-phase.sh and
+    schema_errors then use it), otherwise minimo."""
+    try:
+        r = subprocess.run([py, "-c", "import jsonschema"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    except OSError:
+        return "minimo"
+    return "jsonschema" if r.returncode == 0 else "minimo"
+
+
+def _git_neutro():
+    """The environment of the git calls of _impronta_corpus: no configuration of the machine. --exclude-standard also
+    reads the global core.excludesFile and, without it, $XDG_CONFIG_HOME/git/ignore (or ~/.config/git/ignore): both
+    change from machine to machine. GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 drop the global and system
+    configuration, XDG_CONFIG_HOME on an empty folder the default ignore file; GIT_DIR and the like of the caller do
+    not move the repository. Returns (env, folder to remove)."""
+    vuota = tempfile.mkdtemp(prefix="fic-fingerprint-")
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+                                                              "GIT_CONFIG", "GIT_CONFIG_PARAMETERS")}
+    env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", XDG_CONFIG_HOME=vuota)
+    return env, vuota
+
+
+def _impronta_corpus(targets):
+    """The fingerprint of a corpus (1.5.0): for every target (folder, or spec file: its folder) the root of its git
+    repository (no repository: the folder itself, every file but .git). Of each root: the files tracked and not
+    ignored (`git ls-files -co --exclude-standard`, the machine's git configuration off) plus all of .claude/ (specs,
+    run dirs, maat.json: ignored by git, they are the corpus); .git excluded. One line per file,
+    "<sha256 of the content without CR> <root name>/<path relative to the root>" (a tracked file missing from the
+    tree: ASSENTE instead of the sha), in UTF-8 byte order of the path; the result is the sha256 of the lines (64 hex
+    digits). The absolute path does not enter: the same folder elsewhere gives the same fingerprint."""
+    env, vuota = _git_neutro()
+    try:
+        roots = []
+        for t in targets:
+            d = os.path.abspath(t if os.path.isdir(t) else os.path.dirname(os.path.abspath(t)))
+            rc, o = _run(["git", "rev-parse", "--show-toplevel"], cwd=d, env=env)
+            r = (os.path.normpath(_subst(o)), True) if rc == 0 and o.strip() else (d, False)
+            if r not in roots:
+                roots.append(r)
+        righe = {}
+        for r, git in roots:
+            rels = set()
+            if git:
+                rc, o = _run(["git", "ls-files", "-z", "-co", "--exclude-standard"], cwd=r, env=env)
+                rels.update(n for n in o.split("\0") if n)
+                tops = [os.path.join(r, ".claude")]
+            else:
+                tops = [r]
+            for top in tops:
+                for d, dirs, fs in os.walk(top):
+                    dirs[:] = [x for x in dirs if x != ".git"]
+                    for n in fs:
+                        rels.add(os.path.relpath(os.path.join(d, n), r).replace(os.sep, "/"))
+            nome = os.path.basename(r.rstrip("/\\"))
+            for rel in rels:
+                if rel == ".git" or rel.startswith(".git/"):
+                    continue
+                p = os.path.join(r, rel)
+                if os.path.isdir(p):   # a submodule (gitlink): not a file of the corpus
+                    continue
+                righe[nome + "/" + rel] = _hash(p) if os.path.isfile(p) else "ASSENTE"
+    finally:
+        shutil.rmtree(vuota, ignore_errors=True)
+    testo = "".join("%s %s\n" % (righe[k], k) for k in sorted(righe, key=lambda s: _enc(s)))
+    return hashlib.sha256(_enc(testo)).hexdigest()
+
+
+def _uso_equiv():
+    _uso()
+    print(T("driver-equiv.usage"), file=sys.stderr)
+    return 2
+
+
 def cmd_equiv(argv):
-    certifica = "--certifica" in argv
-    targets = [a for a in argv if a != "--certifica"]
-    if not targets or any(a.startswith("-") for a in targets):
-        return _uso()
+    certifica = impronta = False
+    precedenti, targets = [], []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--certifica":
+            certifica = True
+        elif a == "--impronta":
+            impronta = True
+        elif a == "--validatori-precedenti":
+            v = argv[i + 1].split(",") if i + 1 < len(argv) else []
+            if not v or any(x not in VALIDATORI for x in v):
+                return _uso_equiv()
+            precedenti += v
+            i += 1
+        elif a.startswith("-"):
+            return _uso_equiv()
+        else:
+            targets.append(a)
+        i += 1
+    if not targets or (impronta and certifica) or (precedenti and not certifica):
+        return _uso_equiv()
     specs = []
     for t in targets:
         if os.path.isdir(t):
@@ -1451,6 +1552,9 @@ def cmd_equiv(argv):
         else:
             print("equiv: " + T("driver.equiv_not_found", t=t), file=sys.stderr)
             return 2
+    if impronta:
+        print(_impronta_corpus(targets))
+        return 0
     # 1.4.0: the proof runs once per language, with MAAT_LINGUA set explicitly on both sides (this process too: T
     # reads the variable at every call) and the environment of the bash side rebuilt for each; the certificate is
     # written only if both languages pass.
@@ -1472,15 +1576,20 @@ def cmd_equiv(argv):
         if not specs:
             print("equiv: " + T("driver.equiv_nothing"), file=sys.stderr)
             return 1
+        # 1.5.0: the corpus line ends with the fingerprint of what was proved and the validators: this pass's (the
+        # interpreter of both sides, _equiv_lingua) joined with those of the earlier passes (tools/certifica.sh)
+        fp = _impronta_corpus(targets)
+        corrente = _validatore(os.environ.get("FIC_PY") or sys.executable)
+        vals = ",".join(v for v in VALIDATORI if v == corrente or v in precedenti)
         with open(_cert_path(), "wb") as fh:
             fh.write(_enc("# driver.equiv — certificato di equivalenza (harness-pt14), scritto da `driver.py equiv "
                           "--certifica`.\n# Gli involucri cycle-state.sh e run-phase.sh chiamano il driver solo se "
                           "driver.py e loro stessi hanno ancora questi hash (CR tolti).\n"))
             for k, v in _want():
                 fh.write(_enc("%s %s\n" % (k, v)))
-            fh.write(_enc("corpus spec=%d jsonl=%d · lingue %s · %s\n" % (
+            fh.write(_enc("corpus spec=%d jsonl=%d · lingue %s · %s · impronta %s · validatori %s\n" % (
                 len(specs), esiti[0][1], ",".join(LINGUE_EQUIV),
-                _utc(int(datetime.datetime.now(datetime.timezone.utc).timestamp())))))
+                _utc(int(datetime.datetime.now(datetime.timezone.utc).timestamp())), fp[:12], vals)))
         print("equiv: " + T("driver.equiv_written", path=_cert_path()))
     return 0
 
@@ -1490,16 +1599,29 @@ LINGUE_EQUIV = ("it", "en")
 
 def _equiv_lingua(specs):
     """One pass of the proof in the language of MAAT_LINGUA: next against standalone cycle-state.sh, valida against
-    run-phase.sh --valida. Prints UGUALE/DIVERSO and the summary line; returns (specs different, jsonl, different)."""
+    run-phase.sh --valida. Prints UGUALE/DIVERSO and the summary line; returns (specs different, jsonl, different).
+    1.5.0 (informative, the exit does not change): after the summary line one «equiv: AVVISO — …» per spec whose Next
+    (bash side) is not DONE, the stronger one when its harness.fp is not UGUALE in this language, and the line
+    «equiv: aperte=<n> · impronta-non-uguale=<k>»."""
     py = os.environ.get("FIC_PY") or sys.executable   # the same interpreter for the driver and for --valida
     env0 = dict(os.environ, FIC_DRIVER="0", FIC_PYTHON=py)
     ds = dj = nj = 0
+    avvisi, nonug = [], 0
     for s in specs:
         _, a = _run([BASH, _fw(CS), shown(s)], env=env0)
         b = "\n".join(cycle_state(s)) + "\n"
         nm = os.path.basename(s)[:-3]
+        nxt = next((l for l in reversed(a.split("\n")) if l.startswith("Next: ")), "")
+        word = (nxt[6:].split() or ["?"])[0]
+        if word != "DONE":
+            v = _hfp_verdetto(s, env0)
+            if v is not None and v != "UGUALE":
+                nonug += 1
+                avvisi.append(T("driver-equiv.open_hfp", spec=nm, verdict=v, word=word))
+            else:
+                avvisi.append(T("driver-equiv.open", spec=nm, word=word))
         if a == b:
-            print("UGUALE %s · %s" % (nm, next((l for l in reversed(a.split("\n")) if l.startswith("Next: ")), "")))
+            print("UGUALE %s · %s" % (nm, nxt))
         else:
             ds += 1
             print("DIVERSO %s" % nm)
@@ -1535,7 +1657,23 @@ def _equiv_lingua(specs):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("equiv: spec=%d diverse=%d · jsonl=%d diversi=%d" % (len(specs), ds, nj, dj))
+    for w in avvisi:
+        print("equiv: AVVISO — " + w)
+    print("equiv: aperte=%d · impronta-non-uguale=%d" % (len(avvisi), nonug))
     return ds, nj, dj
+
+
+def _hfp_verdetto(spec_fs, env):
+    """The first word of `run-phase.sh --harness-fp-confronta` (UGUALE, CAMBIATO, …) on the harness.fp of the spec's
+    run dir, with env (its MAAT_LINGUA: the language is part of the fingerprint); None without harness.fp. The repo
+    as harness_gap of cycle_state finds it."""
+    hf = spec_fs[:-3] + ".run" + os.sep + "harness.fp"
+    if not os.path.isfile(hf):
+        return None
+    cwd = os.path.dirname(spec_fs)
+    repo = os.environ.get("FIC_REPO") or _subst(_run(["git", "rev-parse", "--show-toplevel"], cwd=cwd)[1])
+    out = _subst(_run([BASH, _fw(RP), "--harness-fp-confronta", _fw(hf), repo], cwd=cwd, env=env)[1]) if repo else ""
+    return (out.split() or ["NON-CALCOLABILE"])[0]
 
 
 def cmd_certificato():

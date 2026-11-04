@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Un rilievo.\n```json\n{\"fase\": \"review\", \"esito\": \"OK\", \"motivo\": \"NEEDS_CHANGES, 1 rilievo\", \"deviazioni\": [], \"bloccato_su\": \"nessuno\", \"file\": [], \"gate_interni\": [], \"finding\": [{\"severita\": \"major\", \"file\": \"src/a.py\", \"riga\": 2, \"testo\": \"manca il caso zero\"}]}\n```\nESITO FASE review: OK — 1 rilievo", "total_cost_usd": 0.42, "num_turns": 7}

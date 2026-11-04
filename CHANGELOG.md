@@ -2,6 +2,73 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.5.0 — the driver certified on public examples, reproducible
+
+**Why 1.5.0 and not a patch:** the proof behind the driver certificate changes nature. Until 1.4.0 it was made on 15
+closed cycles of a private project, which nobody else could run again. Now it is made on public examples in this repo,
+anyone can repeat it in a few minutes, and the CI repeats it at every push. The format of the certificate changes
+(its `corpus` line says on which examples and with which validators), and `driver.py equiv` prints new lines. What a
+cycle does and prints does not change, with one exception: `MAAT_LINGUA` set by hand now reaches WSL (below).
+
+- **Public examples:** `tools/esempi-equiv/`, seven small git repositories built from models by
+  `tools/esempi-equiv/costruisci.sh`: 65 specs and 49 jsonl, in the Italian 1.2.x and the English 1.3+ formats,
+  single cycles and chains. Two closed lists say what they cover: `righe.list`, every row of the resume table of
+  `cycle-state.sh` (49 labels), and `rami-valida.list`, every branch of the outcome validator and every phase (28
+  labels). `tools/esempi-equiv.test.sh` fails if a label has no case, if a spec changes its word of `Next`, if a
+  counted jsonl is empty, or if no jsonl labelled with a branch really goes through it (`run-phase.sh --valida`
+  against the expectation written in `rami-valida.list`). The builder is deterministic (no git configuration of the machine, fixed identity, dates,
+  permissions and line endings). The test checks it on the same machine, in two folders and at two different seconds:
+  on Linux two builds of the whole corpus give the same fingerprint; on Windows (a whole build costs ~15 min) the
+  check is reduced to the one mini-repo whose files carry the sha of the base commit, built again against its
+  fingerprint in the first build. Across platforms it was compared by hand for this release: a whole build in Git
+  Bash on Windows and one on Linux give the same fingerprint (`6b484b23826a`).
+- **The certificate in one command:** `bash tools/certifica.sh` builds the examples and proves the driver on them;
+  `--scrivi` also writes `plugins/maat/scripts/driver.equiv`, from Linux only. The `corpus` line gains, at its end,
+  ` · impronta <12 hex> · validatori minimo,jsonschema`: the fingerprint of the examples and the validators proven
+  (the part before is that of 1.4.0).
+- **Two validators:** the outcome validator uses `jsonschema` when the interpreter has it, a minimal one otherwise.
+  Both are now proven, in CI too (a venv with `jsonschema==4.23.0`). Writing the certificate needs both interpreters;
+  preparing them is a one-time installation, described in `docs/TESTING-harness.md`.
+- **Strict check in CI:** on pushes to `main`, on tags and on pull requests to `main`, the certificate must be VALIDO
+  and carry the fingerprint of the examples. A pull request to `main` that touches a certified file (`driver.py`,
+  `cycle-state.sh`, `run-phase.sh`, `messages.tsv`, `maat-msg.sh`, `maat_msg.py`) or changes the examples is red
+  until it also commits the certificate rewritten with `tools/certifica.sh --scrivi`. Other branches: no strict check.
+- **Warnings of `equiv`:** for each spec whose `Next` is not `DONE`, a line `equiv: AVVISO — …` says what the proof on
+  it covers (the row that decides that word; only the fingerprint branch, when its `harness.fp` is not `UGUALE`).
+  Each pass ends with `equiv: aperte=<n> · impronta-non-uguale=<k>`, after the summary line, which does not change.
+  The warnings do not block `--certifica`. `driver.py equiv --impronta <folders>` prints only the fingerprint.
+- **`MAAT_LINGUA` reaches WSL:** `run-phase.sh` adds it to `WSLENV`, so a value set by hand also reaches the commands
+  that the phase session and each lane run in `wsl`. Before, inside WSL the `lingua` of `.claude/maat.json` was read
+  again; it mattered only when the two differed.
+- **The old-against-new oracle is in the repo:** `bash tools/oracolo.sh <old> <new> <project>…` compares two
+  versions of the plugin (folders or git refs) on the same projects, in `it` and in `en`, without writing them;
+  `tools/oracolo.test.sh` runs it on the examples.
+- **`comandi-equivalenza.test.sh` runs again.** It compares the commands of the gates with a reference harness of the
+  private history, and since 1.1.0 it was skipped everywhere that history was missing. The reference side is now
+  frozen in `plugins/maat/tests/comandi-equivalenza/riferimento.txt`, with no value of the machine in it: the test
+  runs in WSL and on Linux, in CI included.
+- **More checks in the suites:** section 10 of `messages.test.sh` runs `lingua-converti.py copertura` and `check` on
+  the conversion tables (not skipped in CI); section 9 of `driver.test.sh` compares driver and bash in both languages
+  at every call, and a comparison where a side prints no `Next:` line fails.
+- **Guard of the full run:** `tools/giro-completo.sh` and `tools/suite.sh` mark `PLUGIN CAMBIATO` when a file of the
+  plugin changes during the run, and `giro-completo.sh` warns when the Linux clone and the worktree are not the same
+  tree. `tools/suite.list` accepts the tests of the repo (`tools/<name>.test.sh`).
+- **Times:** on Linux the proof on the examples takes about 2 minutes. In Git Bash on Windows it is slow
+  (`tools/esempi-equiv.test.sh` from about 1 to 1 h 45 min, the oracle on the examples about 70 min): the examples
+  are kept whole, the certificate is written from Linux, and in the Windows part of the full run the oracle runs in
+  WSL. `tools/esempi-equiv.test.sh` stays in Git Bash there: it is the proof for Windows. In Git Bash
+  `tools/giro-completo.sh` now gives each suite up to 5 hours instead of 90 minutes (`driver.test.sh` took about
+  4 hours there for this release).
+- **Proof of compatibility:** the certificate on the public examples is VALIDO in `it` and `en` with both
+  validators (65 specs, 49 jsonl, no difference; minimal validator 155 s, `jsonschema` 175 s on Linux). The oracle
+  1.4.0 against 1.5.0 gives the same `Next` for all 65 specs of the examples, in `it` and in `en`. On the private
+  corpus of 1.4.0, proven once more for this release: the oracle gives 15 specs equal out of 15 in both languages,
+  and `driver.py equiv` finds no difference (15 specs, 83 jsonl), but its new warnings say that all 15 cycles are
+  open and 11 have a `harness.fp` that is not `UGUALE`: on those the two sides stop on the same branch, so that
+  corpus proves less than it seemed. The public examples are now the proof that counts.
+- **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again.
+
 ## 1.4.0 — runtime messages in English, `"lingua": "it"` keeps them Italian
 
 **Why 1.4.0 and not a patch:** the output changes for whoever has no `lingua` in `.claude/maat.json`. The messages

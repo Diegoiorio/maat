@@ -1,0 +1,2 @@
+{"type": "system", "subtype": "init", "session_id": "s-0001", "model": "claude-model", "tools": ["Read", "Edit", "Bash"]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "PHASE RESULT fix: OK — F1 and F2 fixed", "structured_output": {"fase": "fix", "esito": "OK", "motivo": "F1 and F2 fixed", "deviazioni": ["finding F2 closed differently"], "bloccato_su": "none", "file": ["src/a.py"], "gate_interni": [], "finding": []}, "total_cost_usd": 0.42, "num_turns": 7}

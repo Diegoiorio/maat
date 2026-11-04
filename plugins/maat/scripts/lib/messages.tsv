@@ -123,6 +123,13 @@ driver.cert_stale	different hashes: {keys} (relaunch driver.py equiv --certifica
 driver.usage	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | equiv [--certifica] <folder|spec.md>… | certificato | righe [<cap>]	uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <fase> <result.json> | equiv [--certifica] <cartella|spec.md>… | certificato | righe [<tetto>]
 driver.usage_next	usage: driver.py next <spec-<name>.md>	uso: driver.py next <spec-<name>.md>
 
+# --- driver-equiv (1.5.0, written by hand: texts that v1.3.0 does not have, so outside the driver section of
+# tools/lingua-conversioni/blocco-b.tsv, whose check refuses a key typed by hand). driver.py equiv: the warnings on
+# the cycles not closed (after «equiv: AVVISO — ») and the usage of its options.
+driver-equiv.open	{spec} not closed (Next: {word}): the proof on this spec covers the row that decides that word, not the path to DONE	{spec} non chiusa (Next: {word}): la prova su questa spec copre la riga che decide quella parola, non il cammino fino a DONE
+driver-equiv.open_hfp	{spec} with harness.fp {verdict} (Next: {word}): the proof on this spec covers only the fingerprint branch	{spec} con harness.fp {verdict} (Next: {word}): la prova su questa spec copre solo il ramo dell'impronta
+driver-equiv.usage	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <folder|spec.md>… · driver.py equiv --impronta <folder|spec.md>… (only the corpus fingerprint, no proof)	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <cartella|spec.md>… · driver.py equiv --impronta <cartella|spec.md>… (solo l'impronta del corpus, nessuna prova)
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

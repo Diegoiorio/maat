@@ -217,6 +217,16 @@ RS="$MAAT_SCRIPTS/review-surface.sh"
 # Python (VALIDA_PY, TG_PY, LANE_PY, DIFENSIVE_PY) imports maat_msg.py from MAAT_MSG_PY, in native form (msg_py).
 . "$HERE/lib/maat-msg.sh"; maat_msg_carica
 maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
+# wsl.exe passes into WSL only the variables named in WSLENV: without this, whatever the sub-sessions (normal and
+# lanes) launch in `wsl` would reread maat.json there and lose a MAAT_LINGUA set by hand (1.5.0). Inert outside Windows.
+wslenv_add() { # $1 = variable name: appended once; the entries already there and their /p /l /u /w flags are kept
+  local e w=()
+  IFS=: read -r -a w <<< "${WSLENV:-}"
+  for e in ${w[@]+"${w[@]}"}; do [ "${e%%/*}" = "$1" ] && { export WSLENV; return 0; }; done
+  WSLENV=${WSLENV:+$WSLENV:}$1
+  export WSLENV
+}
+wslenv_add MAAT_LINGUA
 msg_py() {
   [ -n "${MAAT_MSG_PY:-}" ] || MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py")
   export MAAT_MSG_PY
