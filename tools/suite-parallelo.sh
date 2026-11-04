@@ -50,8 +50,11 @@ if [ "${MAAT_PARALLELO_FORZA:-0}" != 1 ]; then
   local PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe w
   if [ -x "$PS" ]; then
     # Windows processes whose command line runs `driver.py run` (a cycle of any project); EncodedCommand: no quoting
-    w=$(printf '%s' '@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match ''driver\.py"?\s+run(\s|$)'' }).Count' |
-      iconv -f utf-8 -t utf-16le | base64 -w0)
+    w=$(cat <<'PS1'
+@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'driver\.py"?\s+run(\s|$)' }).Count
+PS1
+)
+    w=$(printf '%s' "$w" | iconv -f utf-8 -t utf-16le | base64 -w0)
     w=$("$PS" -NoProfile -NonInteractive -EncodedCommand "$w" 2>/dev/null | tr -d '\r ')
     [[ $w =~ ^[0-9]+$ ]] || { echo "suite-parallelo: OCCUPATA? — cannot read the Windows processes (MAAT_PARALLELO_FORZA=1 to skip)" >&2; return 3; }
     [ "$w" -eq 0 ] || { echo "suite-parallelo: OCCUPATA — $w Maat cycle(s) running on Windows (driver.py run)" >&2; return 3; }
