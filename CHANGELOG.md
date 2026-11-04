@@ -49,10 +49,11 @@ driver already decided. What changes is what happens when something is wrong.
   `tools/certifica.sh` or a Maat cycle on Windows is running. `tools/giro-completo.sh` gains `--linux-parallelo` and
   `--windows-breve`: the short proof on Windows, `tools/prova-breve-windows.list`, about 50 minutes in Git Bash
   instead of the whole Windows part.
-- **Proof of compatibility:** TODO blocco I — certificate rewritten (hashes of the four certified files touched:
-  `driver.py`, `cycle-state.sh`, `run-phase.sh`, `messages.tsv`; same corpus, same fingerprint `6b484b23826a`); oracle
-  1.5.0 against 1.5.1 with both engines; `rollback.test.sh` on Linux and the short proof on Windows; the full run on
-  Linux.
+- **Proof of compatibility:** the certificate is rewritten (the hashes of `driver.py`, `cycle-state.sh`,
+  `run-phase.sh` and `messages.tsv` changed; same examples, same fingerprint `6b484b23826a`): VALIDO in `it` and `en`
+  with both validators. The oracle 1.5.0 against 1.5.1 gives the same result for all 65 specs of the examples, in `it`
+  and in `en`, with both engines (`--motore bash` and `--motore predefinito`). `rollback.test.sh` is green on Linux
+  (17 resumes); the full run is the CI in three groups on Linux, plus the short proof on Windows.
 - **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, then run the cycle again; from then
   on the driver decides. Who set `FIC_DRIVER=0` keeps bash. Who had modified the plugin by hand (certificate SCADUTO)
