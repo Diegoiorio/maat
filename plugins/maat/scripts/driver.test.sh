@@ -10,7 +10,8 @@
 #     outputs of the public corpus, tools/esempi-equiv/attese/)
 #   3 wrappers (1.6.0): cycle-state.sh and run-phase.sh decide with the driver, the only engine; FIC_DRIVER (0, 1,
 #     anything) changes nothing and the wrappers are silent about it; no fallback on error (no Python, Python older
-#     than 3.10, driver failed: a STOP); python.sh with and without pipefail; the 3.10 threshold in its three places
+#     than 3.10, driver failed: a STOP); python.sh with and without pipefail; the 3.10 threshold in its two places
+#     (python.sh, driver.py; maat-doctor.sh uses fic_py_min_ok since 1.6.0)
 #   4 run: the state machine (anti-loop, ESITO STOP, run-phase exits 4/6/7, NEEDS_VERIFICATION, invalid
 #     result.json, phase running, budget, dry-run, forwarded flags, context-pack, progress up to DONE); FIC_DRIVER set
 #     → one AVVISO per invocation, from run only; FIC_CYCLE_STATE (tests) replaces our own next
@@ -196,7 +197,7 @@ py_casi() { # $1 = python.sh: 0 if the five cases hold
 }
 check "python.sh senza e con pipefail: interprete buono rc=0 e la versione; inesistente, import fallito, nessun interprete rc=1 e FIC_PY_VER vuota (anche se 3.12 ereditata); exit 0 muto rc=0 senza versione" 'py_casi "$FC/python.sh"'
 mins() { "$BASH" -c '. "$1"; for v in 3.9 3.10 3.11 4.0 3.1 x; do FIC_PY_VER=$v; fic_py_min_ok && printf "%s:si " $v || printf "%s:no " $v; done' _ "$1"; }
-check "soglie coincidenti (D12): 3.10 in python.sh (fic_py_min_ok), in driver.py (PY_MIN) e in maat-doctor.sh" '[ "$(mins "$FC/python.sh")" = "3.9:no 3.10:si 3.11:si 4.0:si 3.1:no x:no " ] && grep -qx "PY_MIN = (3, 10)" "$DRV" && grep -q "ver_ge \"\$pyv\" 3.10; then" "$FC/maat-doctor.sh"'
+check "soglie coincidenti (D12): 3.10 in python.sh (fic_py_min_ok) e in driver.py (PY_MIN); maat-doctor.sh usa fic_py_min_ok (1.6.0), nessuna soglia sua" '[ "$(mins "$FC/python.sh")" = "3.9:no 3.10:si 3.11:si 4.0:si 3.1:no x:no " ] && grep -qx "PY_MIN = (3, 10)" "$DRV" && grep -q "^elif ! fic_py_min_ok; then" "$FC/maat-doctor.sh" && ! grep -q "ver_ge \"\$pyv\"" "$FC/maat-doctor.sh"'
 # the texts of the catalog too (review): every <major>.<minor> in a message about Python (cycle-state-engine,
 # run-phase-engine, maat-doctor, guard-hook, in it and en) is PY_MIN; driver-engine.python_old takes it as {min}
 pymin=$(sed -n 's/^PY_MIN = (\([0-9]*\), \([0-9]*\))$/\1.\2/p' "$DRV")

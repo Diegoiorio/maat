@@ -150,6 +150,14 @@ maat-doctor-z.report_none_fix	set "report": "junit" on the module, with a test c
 cycle-state-z.rim_git_bash	(in Git Bash)	(in Git Bash)
 run-phase-z.rim_git_bash	(in Git Bash)	(in Git Bash)
 
+# --- maat-doctor-f (1.6.0 block F, written by hand like driver-cmd: texts that v1.3.0 does not have, so outside the
+# maat-doctor section of tools/lingua-conversioni/blocco-d.doctor.tsv). FIC_DRIVER set (the rule of driver.py run:
+# not empty) and, on macOS only, the GNU tools from Homebrew.
+maat-doctor-f.fic_driver	FIC_DRIVER={v} is set but has no effect since Maat 1.6.0: the Python driver decides — remove it from the environment; for the bash engine reinstall Maat 1.5.1 (README, Going back to 1.5.1)	FIC_DRIVER={v} è impostata ma dalla Maat 1.6.0 non ha più effetto: decide il driver Python — toglila dall'ambiente; per il motore bash reinstalla la Maat 1.5.1 (README, Going back to 1.5.1)
+maat-doctor-f.mac_ok	GNU tools for macOS: {t}	strumenti GNU per macOS: {t}
+maat-doctor-f.mac_missing_gnubin	GNU {t} not found (macOS: Maat uses the GNU options) — brew install {f}, then put "$(brew --prefix)/opt/{f}/libexec/gnubin" first in PATH	{t} GNU non trovato (macOS: Maat usa le opzioni GNU) — brew install {f}, poi metti "$(brew --prefix)/opt/{f}/libexec/gnubin" in testa al PATH
+maat-doctor-f.mac_missing	{t} not found (macOS) — brew install {f}	{t} non trovato (macOS) — brew install {f}
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

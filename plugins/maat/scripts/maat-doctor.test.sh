@@ -16,6 +16,10 @@
 # and of the plugin before and after, without --prova-test). pk08: counterproof tools (rsync/flock missing => OK
 # «di ripiego»; sha256sum, timeout, rsync and tar together => ATTENZIONE BLOCKED). Mutation counterproofs at the end: the doctor is copied with the plugin
 # into a temporary folder, a sed mutates it, and the case the mutation must break turns red.
+# 1.6.0 block F (D9): the Python threshold is fic_py_min_ok of python.sh (fake 3.9 MANCA, 3.10 OK; a python.sh with
+# another threshold moves the doctor too); FIC_DRIVER not empty => ATTENZIONE (empty or unset: no line); on macOS (a fake
+# uname in PATH) GNU sed, grep and stat, sha256sum, timeout and flock, a BSD sed or grep or a missing flock => MANCA with
+# the brew command; outside macOS no line about them.
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -24,7 +28,7 @@ DOC=$HERE/maat-doctor.sh
 . "$HERE/python.sh" || true
 [ -n "${FIC_PY:-}" ] || { echo "maat-doctor.test.sh: nessun Python utilizzabile" >&2; exit 2; }
 export PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8
-unset MAAT_CONFIG FIC_REPO PROJECT_ROOT MAAT_ROOT CLAUDE_BIN FIC_PHASE FIC_GATES_VENV_PY FIC_SESSION_GUARD CLAUDE_PROJECT_DIR
+unset FIC_DRIVER MAAT_CONFIG FIC_REPO PROJECT_ROOT MAAT_ROOT CLAUDE_BIN FIC_PHASE FIC_GATES_VENV_PY FIC_SESSION_GUARD CLAUDE_PROJECT_DIR
 export FIC_PYTHON=$FIC_PY   # the same interpreter even with the reduced PATH
 pass=0 fail=0
 T=$(mktemp -d) || exit 2
@@ -102,6 +106,79 @@ check "D-B: modulo senza comando di test -> nessuna ATTENZIONE sul report" '! ha
 # --- 4. fake Python 3.8 --------------------------------------------------------------------------------------------------
 doc FIC_PYTHON="$(cygm "$T/py38/python")"
 check "Python finto 3.8 -> MANCA, exit 1" '[ "$rc" = 1 ] && ha "^MANCA Python 3\.8\.10 sotto la 3\.10"'
+
+# --- 4b. 1.6.0 block F (D9 a): the Python threshold is fic_py_min_ok of python.sh (3.9 no, 3.10 yes) -------------------
+# A fake Python: the two version questions (python.sh <major>.<minor>, the doctor <major>.<minor>.<micro>) get
+# PY_FINTO, every other call goes to the real interpreter (config, guard, units).
+mkdir -p "$T/pyf"
+{ printf '#!/bin/sh\n'
+  printf 'case "$*" in *version_info*) case "$*" in *%%d.%%d.%%d*) echo "$PY_FINTO.0" ;; *) echo "$PY_FINTO" ;; esac; exit 0 ;; esac\n'
+  printf 'exec %s "$@"\n' "'$FIC_PY'"; } > "$T/pyf/python"
+chmod +x "$T/pyf/python"
+caso_py39() { DOCX=${1:-} doc FIC_PYTHON="$(cygm "$T/pyf/python")" PY_FINTO=3.9; [ "$rc" = 1 ] && ha "^MANCA Python 3\.9\.0 sotto la 3\.10"; }
+caso_py310() { DOCX=${1:-} doc FIC_PYTHON="$(cygm "$T/pyf/python")" PY_FINTO=3.10; [ "$rc" = 0 ] && ha "^OK Python 3\.10\.0 " && ! ha '^MANCA'; }
+check "1.6.0: Python finto 3.9 -> MANCA «sotto la 3.10», exit 1 (soglia di python.sh)" 'caso_py39'
+check "1.6.0: Python finto 3.10 (il confine) -> OK, exit 0" 'caso_py310'
+
+# --- 4c. 1.6.0 block F (D9 b): FIC_DRIVER set (not empty, the rule of driver.py run) -> ATTENZIONE ------------------------
+caso_fic_driver() { DOCX=${1:-} doc FIC_DRIVER=0; [ "$rc" = 0 ] && ha "^ATTENZIONE FIC_DRIVER=0 è impostata ma dalla Maat 1\.6\.0 non ha più effetto: decide il driver Python — toglila dall'ambiente; per il motore bash reinstalla la Maat 1\.5\.1"; }
+check "1.6.0: FIC_DRIVER=0 -> ATTENZIONE «non ha più effetto … reinstalla la Maat 1.5.1», exit 0" 'caso_fic_driver'
+doc FIC_DRIVER=1 MAAT_LINGUA=en
+check "1.6.0 en: FIC_DRIVER=1 -> WARNING in inglese" '[ "$rc" = 0 ] && ha "^WARNING FIC_DRIVER=1 is set but has no effect since Maat 1\.6\.0: the Python driver decides — remove it from the environment; for the bash engine reinstall Maat 1\.5\.1"'
+doc FIC_DRIVER=
+check "1.6.0: FIC_DRIVER vuota (il predefinito della 1.5.1) -> nessuna riga" '[ "$rc" = 0 ] && ! ha "FIC_DRIVER"'
+doc
+check "1.6.0: FIC_DRIVER non impostata -> nessuna riga" '[ "$rc" = 0 ] && ! ha "FIC_DRIVER"'
+
+# --- 4d. 1.6.0 block F (D9 c): macOS (uname -s = Darwin from a fake in PATH): the GNU tools from Homebrew -------------------
+mkdir -p "$T/darwin" "$T/bsdsed" "$T/bsdgrep"
+printf '#!/bin/sh\n[ "$1" = -s ] && { echo Darwin; exit 0; }\nexec %s "$@"\n' "'$(command -v uname)'" > "$T/darwin/uname"
+# BSD sed refuses --version; BSD grep says «BSD grep, GNU compatible» (not «(GNU »); both run the real one otherwise
+printf '#!/bin/sh\n[ "$1" = --version ] && { echo "sed: illegal option -- -" >&2; exit 1; }\nexec %s "$@"\n' "'$(command -v sed)'" > "$T/bsdsed/sed"
+printf '#!/bin/sh\n[ "$1" = --version ] && { echo "grep (BSD grep, GNU compatible) 2.6.0-FreeBSD"; exit 0; }\nexec %s "$@"\n' "'$(command -v grep)'" > "$T/bsdgrep/grep"
+chmod +x "$T/darwin/uname" "$T/bsdsed/sed" "$T/bsdgrep/grep"
+MAC_VIA=""   # the presence-only tools missing on this machine: on the fake macOS they are MANCA
+for s in sha256sum timeout flock; do command -v "$s" >/dev/null 2>&1 || MAC_VIA+=" $s"; done
+caso_mac() { # [doctor]: every tool in the OK line or in a MANCA with brew; the GNU three in the OK line
+  local s
+  DOCX=${1:-} DPATH="$T/darwin:$PATH" doc
+  ha '^OK strumenti GNU per macOS: sed, grep, stat' || return 1
+  for s in $MAC_VIA; do ha "^MANCA $s non trovato .* — brew install " || return 1; done
+  [ -n "$MAC_VIA" ] || [ "$rc" = 0 ]
+}
+caso_mac_sed() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdsed:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA sed GNU non trovato \(macOS: Maat usa le opzioni GNU\) — brew install gnu-sed, poi metti "\$\(brew --prefix\)/opt/gnu-sed/libexec/gnubin" in testa al PATH$' && ! ha '^OK strumenti GNU per macOS: sed'; }
+caso_mac_grep() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdgrep:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA grep GNU non trovato .* — brew install grep, poi metti' && ha '^OK strumenti GNU per macOS: sed, stat'; }
+check "1.6.0 macOS (uname finto): sed, grep e stat GNU nella riga OK; gli strumenti assenti qui ($MAC_VIA) MANCA con brew" 'caso_mac'
+check "1.6.0 macOS: sed BSD (rifiuta --version) -> MANCA con «brew install gnu-sed» e la cartella gnubin, exit 1" 'caso_mac_sed'
+check "1.6.0 macOS: grep BSD («BSD grep, GNU compatible») -> MANCA con «brew install grep»" 'caso_mac_grep'
+DPATH="$T/darwin:$T/bsdsed:$PATH" doc MAAT_LINGUA=en
+check "1.6.0 macOS en: MISSING in inglese" '[ "$rc" = 1 ] && ha "^MISSING GNU sed not found \(macOS: Maat uses the GNU options\) — brew install gnu-sed, then put"'
+senza() { # <tool> -> PATH where each folder holding <tool> is replaced by a folder of symlinks to all its files but <tool>
+  local out="" d n f IFS=:
+  for d in $PATH; do
+    if [ -e "$d/$1" ]; then
+      n="$T/senza-$1/$(printf '%s' "$d" | tr '/:' '__')"; mkdir -p "$n"
+      for f in "$d"/* "$d"/.[!.]*; do [ -e "$f" ] && [ "${f##*/}" != "$1" ] && ln -s "$f" "$n/" 2>/dev/null; done
+      d=$n
+    fi
+    out+="${out:+:}$d"
+  done
+  printf '%s' "$out"
+}
+caso_mac_flock() { DOCX=${1:-} DPATH="$T/darwin:$PATH_SENZA_FLOCK" doc; [ "$rc" = 1 ] && ha '^MANCA flock non trovato \(macOS\) — brew install flock$'; }
+if [ "$WIN" = 1 ]; then
+  echo "SALTATO [macOS: flock assente]: su Windows i collegamenti simbolici di Git Bash sono copie (cartelle di sistema intere)"
+else
+  PATH_SENZA_FLOCK=$(senza flock)
+  check "1.6.0 macOS: flock assente dal PATH -> MANCA «brew install flock», exit 1" 'caso_mac_flock'
+fi
+if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+  doc
+  check "1.6.0 macOS vero: la riga degli strumenti GNU c'è" 'ha "^OK strumenti GNU per macOS: "'
+else
+  doc
+  check "1.6.0 fuori da macOS (Linux, Windows): nessuna riga sugli strumenti GNU" '[ "$rc" = 0 ] && ! ha "macOS"'
+fi
 
 # --- 5. duplicate hook ---------------------------------------------------------------------------------------------------
 cp -r "$P" "$T/p5"
@@ -433,6 +510,17 @@ m=$(mutante strumenti-ripiego 's/^                elif assenti:$/               
 check "controprova: rsync/flock assenti senza la riga di ripiego -> «presenti», rosso" '[ -n "$m" ] && ! caso_strumenti "$m"'
 m=$(mutante strumenti-sha 's/manca = \[s for s in ("sha256sum", "timeout") if not ha\[s\]\]/manca = []/')
 check "controprova: sha256sum e timeout non controllati -> nessun BLOCKED, rosso" '[ -n "$m" ] && ! caso_strumenti "$m"'
+m=$(mutante py-soglia 's/^elif ! fic_py_min_ok; then/elif false; then/')
+check "controprova: doctor senza la soglia di Python -> il 3.9 finto passa, rosso" '[ -n "$m" ] && ! caso_py39 "$m"'
+mkdir -p "$T/mut"; cp -r "$PLUGIN" "$T/mut/py-311"
+sed 's/\[ "\$mi" -ge 10 \]/[ "$mi" -ge 11 ]/' "$HERE/python.sh" > "$T/mut/py-311/scripts/python.sh"
+check "controprova: python.sh con la soglia 3.11 -> il doctor la segue, il 3.10 finto MANCA, rosso" '! cmp -s "$HERE/python.sh" "$T/mut/py-311/scripts/python.sh" && ! caso_py310 "$T/mut/py-311/scripts/maat-doctor.sh"'
+m=$(mutante fic-driver 's/^if \[ -n "\${FIC_DRIVER:-}" \]; then riga/if false; then riga/')
+check "controprova: un doctor che non guarda FIC_DRIVER -> il caso ATTENZIONE è rosso" '[ -n "$m" ] && ! caso_fic_driver "$m"'
+m=$(mutante mac-spento 's/" = Darwin \]; then$/" = NonDarwin ]; then/')
+check "controprova: controllo macOS spento -> il sed BSD non si vede, rosso" '[ -n "$m" ] && ! caso_mac_sed "$m"'
+m=$(mutante mac-gnu "s/grep -qF '(GNU '/grep -qF 'GNU'/")
+check "controprova: «GNU» invece di «(GNU » -> il grep BSD passa, rosso" '[ -n "$m" ] && ! caso_mac_grep "$m"'
 if [ "$WIN" = 1 ]; then
   m=$(mutante wsl-livello 's/riga("OK", T("maat-doctor.wsl_missing_ok"/riga("MANCA", T("maat-doctor.wsl_missing_ok"/')
   check "controprova: WSL assente come MANCA -> exit 1, rosso" '[ -n "$m" ] && ! caso_wsl_assente "$m"'
