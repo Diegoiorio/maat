@@ -145,7 +145,7 @@ expect "  prefisso inglese storpiato («defensive:» senza spazio) → STOP" "^S
 rjson 02-implement implement STOP '[]' "migration to apply — m.sql"
 expect "  bloccato_su diverso da «none» → STOP" "^STOP — 02-implement: bloccato su: migration to apply"
 reset
-# review section with the English heading; both headings → STOP (the same in driver.py: section 9 of driver.test.sh)
+# review section with the English heading; both headings → STOP (decided by driver.py, the only engine since 1.6.0)
 { above; plan APPROVED; review NEEDS_CHANGES PLANNED | sed 's/^## Review implementazione$/## Implementation review/'; } > "$SP"
 expect "«## Implementation review» letta come sezione di review" "^FIX"
 { above; plan APPROVED; review NEEDS_CHANGES PLANNED; printf '%s\n' "## Implementation review" "Review status: APPROVED"; } > "$SP"
@@ -394,7 +394,7 @@ reset
 
 # --- row 0: harness fingerprint (pt03; pk04a-2: decided by run-phase.sh --harness-fp-confronta), only above the phases
 # to launch. Mutations are made on a COPY of the plugin: MAAT_ROOT for cycle-state.sh and FIC_DRIVER_ROOT for
-# `driver.py next` (ported in driver.test.sh, section 9: both must print the same path in the remedy).
+# `driver.py next` (1.6.0: cycle-state.sh is its wrapper, so the path in the remedy is the driver's).
 unset FIC_REPO   # the repository is the spec's one, not that of a phase hosting the test
 HPC="$O/plug/maat"; mkdir -p "$O/plug" && cp -r "$HERE/.." "$HPC" && find "$HPC" -name __pycache__ -type d -prune -exec rm -rf {} +
 HPC_M=$(cygpath -m "$HPC" 2>/dev/null || printf '%s' "$HPC")
