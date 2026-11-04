@@ -143,8 +143,6 @@ driver.reads_reviewer	scripts/driver.py:1178#2	-	-	-	reviewer
 driver.missing	scripts/driver.py:1205	-	-	-	MISSING
 driver.above_cap	scripts/driver.py:1214#2	 	-	cap	ABOVE {cap}
 driver.conditional	scripts/driver.py:1215	 · 	 	-	conditional
-driver.cert_expired	scripts/driver.py:1317	-	-	why	certificate expired: next from cycle-state.sh ({why})
-driver.cert_invalid	scripts/driver.py:1318	-	-	-	driver.equiv not valid for these files
 driver.running	scripts/driver.py:1323#2	-	-	label	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running
 driver.antiloop	scripts/driver.py:1332#2	-	-	label state next	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}
 driver.chain_to	scripts/driver.py:1347	-	-	word dest	chain: {word} — moving to {dest}

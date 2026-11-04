@@ -92,8 +92,6 @@ driver.reads_reviewer	reviewer	revisore
 driver.missing	MISSING	ASSENTE
 driver.above_cap	ABOVE {cap}	SOPRA {cap}
 driver.conditional	conditional	condizionali
-driver.cert_expired	certificate expired: next from cycle-state.sh ({why})	certificato scaduto: next da cycle-state.sh ({why})
-driver.cert_invalid	driver.equiv not valid for these files	driver.equiv non valido per questi file
 driver.running	log/{label}.running without .exit: a phase is still running (or died without closing); follow its log, or check that no process is alive and remove the .running	log/{label}.running senza .exit: una fase gira ancora (o e' morta senza chiudere); segui il suo log, oppure verifica che nessun processo viva e rimuovi il .running
 driver.antiloop	anti-loop: phase {label} did not change the state (State {state} before and after): Next {next}	anti-loop: la fase {label} non ha cambiato lo stato (State {state} prima e dopo): Next {next}
 driver.chain_to	chain: {word} — moving to {dest}	catena: {word} — passo a {dest}
@@ -141,6 +139,8 @@ run-phase-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of
 run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — to go on with the internal validator: FIC_DRIVER=0	driver.py valida non riuscito (exit {rc}): {line} — per proseguire con il validatore interno: FIC_DRIVER=0
 run-phase-engine.cs_no_state	cycle-state.sh gave neither a State: nor a Next: line (exit {rc})	cycle-state.sh non ha dato ne' la riga State: ne' la riga Next: (exit {rc})
 driver-engine.fic_driver_unknown	FIC_DRIVER={v} is neither 0 nor 1: the Python driver decides (FIC_DRIVER=0 for the bash table)	FIC_DRIVER={v} non e' ne' 0 ne' 1: decide il driver Python (FIC_DRIVER=0 per la tabella bash)
+driver-engine.python_old	Python {v} ({py}) is older than {min}, the minimum of Maat: set FIC_PYTHON=<python {min} or newer>	Python {v} ({py}) e' precedente a {min}, il minimo di Maat: imposta FIC_PYTHON=<python {min} o successivo>
+driver-engine.motore_bash	bash engine (FIC_DRIVER=0): Next/State from standalone cycle-state.sh	motore bash (FIC_DRIVER=0): Next/State da cycle-state.sh autonomo
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
