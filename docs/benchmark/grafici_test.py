@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests of grafici.py with synthetic records (standard library only):  python3 grafici_test.py
 
-Cases: complete (30 runs, every measure), partial (some runs, review and adjudication not there yet), measures
-missing (null cost, no hidden score), a run that ended in STOP, no record at all. Every chart must be valid XML,
+Cases: complete (30 runs, every measure), partial (some runs, review and adjudication not there yet: «pending»),
+measures missing from finished runs (null cost, no hidden score: «missing»), a run that ended in STOP, no record at
+all; the dashed line of the starting commit on the hidden-tests chart. Every chart must be valid XML,
 contain no NaN or infinity, and be byte-for-byte the same when built twice or from records written in another
 order.
 """
@@ -99,6 +100,7 @@ class Grafici(unittest.TestCase):
             self.assertNotIn("not yet available", svg)
             self.assertEqual(svg.count("n=3 of 3"), 10 * (2 if "Wall-clock" in svg else 1))
         self.assertIn(">0%<", ch["hidden-tests.svg"])           # fixed 0-100 % scale
+        self.assertEqual(ch["hidden-tests.svg"].count('stroke-dasharray="5 3"'), 5)   # the starting commit, per task
         self.assertIn(">100%<", ch["hidden-tests.svg"])
 
     def test_partial(self):
@@ -118,6 +120,9 @@ class Grafici(unittest.TestCase):
         self.check_deterministic(missing())
         hid = ch["hidden-tests.svg"]
         self.assertEqual(hid.count("n=0 of 3"), 9)              # null score and total 0: not available
+        self.assertEqual(hid.count(">missing<"), 2)            # a finished run without a score is «missing»…
+        self.assertEqual(hid.count(">1 missing<"), 2)
+        self.assertNotIn("missing", ch["undisclosed-defects.svg"])   # …the adjudication not done yet is «pending»
         cost = ch["cost-time.svg"]
         self.assertEqual(cost.count("n=1 of 3"), 1 + 2)         # cost: only T3-maat; time: T1-maat, T2-baseline
 

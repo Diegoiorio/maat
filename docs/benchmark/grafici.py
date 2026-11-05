@@ -31,6 +31,9 @@ import sys
 TASKS = ("T1", "T2", "T3", "T4", "T5")
 SIDES = ("maat", "baseline")
 PLANNED = 3                      # runs per task and side (protocol)
+# Hidden tests on the unchanged starting commit (README, «Hidden acceptance tests»): the dashed line of the chart
+START_HIDDEN = {"T1": (9, 120), "T2": (6, 21), "T3": (6, 21), "T4": (2, 45), "T5": (87, 106)}
+PENDING = ("undisclosed", "review")   # null until the adjudication after all 30 runs; null elsewhere = missing
 SIDE_LABEL = {"maat": "Maat", "baseline": "Baseline"}
 
 # Colours: one light surface on every theme (GitHub shows an SVG as an image: an explicit background is the only
@@ -117,6 +120,16 @@ def values(records, measure):
     return res
 
 
+def missing(records, measure):
+    """{(task, side): number of records whose value is null or not finite}"""
+    fn, res = MEASURES[measure], {(t, s): 0 for t in TASKS for s in SIDES}
+    for r in records.values():
+        v = fn(r)
+        if v is None or not math.isfinite(v):
+            res[(r["task"], r["side"])] += 1
+    return res
+
+
 def median(xs):
     s, n = sorted(xs), len(xs)
     return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2.0
@@ -188,9 +201,10 @@ def legend(y):
     return out
 
 
-def panel(vals, top, height, unit, digits, fixed_max=None, axis_label=""):
-    # fixed_max: a number (fixed scale), "int" (counts: integer grid) or None (a round maximum)
-    """One bar panel: y from top to top+height. Returns the SVG lines."""
+def panel(vals, top, height, unit, digits, fixed_max=None, axis_label="", miss=None, pending=False, start=None):
+    """One bar panel: y from top to top+height. Returns the SVG lines. fixed_max: a number (fixed scale), "int"
+    (counts: integer grid) or None (a round maximum). miss: {(task, side): records without the value}; pending: a
+    missing value is not there yet (after all runs), else it is missing. start: {task: value} drawn as a dashed line."""
     out = []
     base = top + height
     present = [v for xs in vals.values() for v in xs]
@@ -217,11 +231,15 @@ def panel(vals, top, height, unit, digits, fixed_max=None, axis_label=""):
             label = "Maat" if side == "maat" else "Base"
             out.append(text(cx, base + 15, label, 11, INK2, "middle"))
             out.append(text(cx, base + 28, "n=%d of %d" % (len(xs), PLANNED), 10, MUTED, "middle"))
+            nm = (miss or {}).get((task, side), 0)
+            if nm and not pending:
+                out.append(text(cx, base + 39, "%d missing" % nm, 9, MUTED, "middle"))
             if not xs:
                 out.append('<rect x="%s" y="%s" width="%d" height="%s" rx="4" fill="none" stroke="%s" '
                            'stroke-dasharray="3 3"/>' % (fmt(x, 1), fmt(top, 1), BAR_W, fmt(height, 1), BORDER))
                 ty = top + height / 2
-                out.append(text(cx + 4, ty, "not yet available", 10, MUTED, "middle",
+                why = "missing" if nm and not pending else "not yet available"
+                out.append(text(cx + 4, ty, why, 10, MUTED, "middle",
                                 extra=' transform="rotate(-90 %s %s)"' % (fmt(cx + 4, 1), fmt(ty, 1))))
                 continue
             med, lo, hi = median(xs), min(xs), max(xs)
@@ -237,13 +255,17 @@ def panel(vals, top, height, unit, digits, fixed_max=None, axis_label=""):
                            % (fmt(cx, 1), fmt(ylo, 1), fmt(yhi, 1), fmt(cx - 6, 1), fmt(ylo, 1), fmt(cx + 6, 1),
                               fmt(cx - 6, 1), fmt(yhi, 1), fmt(cx + 6, 1), INK))
             out.append(text(cx, min(yhi, base - h) - 5, fmt(med, digits) + unit, 10, INK, "middle"))
-        out.append(text(LEFT + GROUP_W * gi + GROUP_W / 2, base + 46, task, 13, INK, "middle", "600"))
+        if start and task in start:
+            ys = base - height * start[task] / ymax
+            out.append('<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" stroke-width="1.5" stroke-dasharray="5 3"/>'
+                       % (fmt(gx - 6, 1), fmt(ys, 1), fmt(gx + 2 * BAR_W + BAR_GAP + 6, 1), fmt(ys, 1), INK2))
+        out.append(text(LEFT + GROUP_W * gi + GROUP_W / 2, base + 54, task, 13, INK, "middle", "600"))
     return out
 
 
 def chart(title, subtitle, panels):
-    """panels: list of (heading, vals, unit, digits, fixed_max, axis_label)."""
-    ph, gap, head = 220, 78, 92
+    """panels: list of (heading, vals, unit, digits, fixed_max, axis_label, options of panel)."""
+    ph, gap, head = 220, 86, 92
     height = head + len(panels) * (ph + gap) + 6
     out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" '
            'aria-labelledby="t d" %s>' % (W, height, W, height, FONT),
@@ -253,11 +275,11 @@ def chart(title, subtitle, panels):
            text(LEFT - 50, 30, title, 17, INK, weight="600"), text(LEFT - 50, 50, subtitle, 12, INK2)]
     out += legend(74)
     y = head
-    for heading, vals, unit, digits, fmax, alabel in panels:
+    for heading, vals, unit, digits, fmax, alabel, opts in panels:
         if heading:
             out.append(text(LEFT, y + 4, heading, 13, INK, weight="600"))
             y += 16
-        out += panel(vals, y, ph, unit, digits, fmax, alabel)
+        out += panel(vals, y, ph, unit, digits, fmax, alabel, **opts)
         y += ph + gap - (16 if heading else 0)
     out.append("</svg>")
     return "\n".join(out) + "\n"
@@ -270,22 +292,26 @@ def build(records):
     """{file name: svg text}."""
     def avail_note(vals):
         return "" if any(vals.values()) else " Not yet available: filled in after all 30 runs."
+
+    def opts(m, **kw):
+        return dict(miss=missing(records, m), pending=m in PENDING, **kw)
     v_und, v_hid, v_rev = values(records, "undisclosed"), values(records, "hidden"), values(records, "review")
     v_cost, v_time = values(records, "cost"), values(records, "time")
+    start = {t: 100.0 * p / n for t, (p, n) in START_HIDDEN.items()}
     return {
         "undisclosed-defects.svg": chart(
             "Undisclosed defects per run (lower is better)", SUB + avail_note(v_und),
-            [("", v_und, "", 1, "int", "defects")]),
+            [("", v_und, "", 1, "int", "defects", opts("undisclosed"))]),
         "hidden-tests.svg": chart(
-            "Hidden acceptance tests passed (higher is better)", SUB + avail_note(v_hid),
-            [("", v_hid, "%", 0, 100.0, "share passed")]),
+            "Hidden acceptance tests passed (higher is better)", SUB + " Dashed line: the unchanged starting commit.",
+            [("", v_hid, "%", 0, 100.0, "share passed", opts("hidden", start=start))]),
         "blind-review.svg": chart(
             "Defects confirmed from the blind review (lower is better)", SUB + avail_note(v_rev),
-            [("", v_rev, "", 1, "int", "defects")]),
+            [("", v_rev, "", 1, "int", "defects", opts("review"))]),
         "cost-time.svg": chart(
             "Cost and wall-clock time per run", SUB,
-            [("API-equivalent cost (USD)", v_cost, "", 2, None, "USD"),
-             ("Wall-clock time (minutes)", v_time, "", 0, None, "minutes")]),
+            [("API-equivalent cost (USD)", v_cost, "", 2, None, "USD", opts("cost")),
+             ("Wall-clock time (minutes)", v_time, "", 0, None, "minutes", opts("time"))]),
     }
 
 

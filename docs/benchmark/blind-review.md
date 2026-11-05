@@ -10,9 +10,10 @@ For each of the 30 runs, after **all** runs are finished:
 1. A person who is not the reviewer gives each run a random code (`R01` … `R30`, from a shuffle with a seed written
    in the results) and keeps the code → run table private until the end of the adjudication.
 2. For each code, a review copy: a fresh copy of the task's starting snapshot made with
-   `run-bench.sh prepare` as for a **baseline** run (no Maat plugin, no `.claude/maat.json`), with the run's
-   `final.diff` applied. The diff never contains `.claude/` (the collector excludes it), so the spec with Maat's
-   plan, review and evidence, and Maat's run directory, are not visible.
+   `run-bench.sh prepare <task>-baseline-R<nn>` (a **baseline** copy: no Maat plugin, no `.claude/maat.json`, no
+   adapter), with the run's `final.diff` applied by `git apply --index final.diff`, so that new files are staged and
+   `git diff HEAD` shows them with the rest. The diff never contains `.claude/` (the collector excludes it), so the
+   spec with Maat's plan, review and evidence, and Maat's run directory, are not visible.
 3. The spec of the task, unchanged.
 
 The reviewer **does not** receive: the side, the agent's report, the transcripts, the cost, the hidden tests or
@@ -21,7 +22,8 @@ their results, the other runs of the same task.
 ## 2. Who reviews
 
 A fresh Claude Code session, same model and same Claude Code version as the runs, started in the review copy with
-the prompt below, `--permission-mode bypassPermissions`, no web tools, no MCP servers. One session per code; the
+the prompt below, `--permission-mode bypassPermissions`, no web tools, no MCP servers, inside the same sandbox as
+the runs (it sees only its review copy). One session per code; the
 30 sessions use the same prompt. (A human reviewer may be added; if so, the human reviews all 30 codes, with the same
 instructions, and both lists are kept separate.)
 
@@ -50,6 +52,16 @@ For each defect write one entry:
 End with the list only. If you find no defect, write "No defects found." and the checks you made.
 ```
 
+The test commands given to the reviewer (`{test commands}`), fixed per task:
+
+| Task | Test commands |
+|---|---|
+| T1 | `.venv/bin/python -m pytest -q` |
+| T2 | `go vet ./...`, `go test ./...`, `gofmt -l .` |
+| T3 | `npx tape 'test/**/*.js'`, `npx eslint --ext=js,mjs .` |
+| T4 | `sh -n git-stale-branches`, `dash -n git-stale-branches`, `shellcheck -s sh git-stale-branches` (the project has no tests) |
+| T5 | `.venv/bin/python -m pytest -q` |
+
 ## 3. Adjudication
 
 Done by one person (the author of Maat, as stated in the threats to validity), after all reviews, run by run.
@@ -59,7 +71,8 @@ Done by one person (the author of Maat, as stated in the threats to validity), a
    preferences or outside the spec are **rejected**, with a one-line reason. Duplicates are merged. Each confirmed
    entry keeps its requirement id.
 2. **Hidden-test defects.** Every requirement id (FR or AC) with at least one failing hidden test is **one** defect
-   (not one per failing test case). A hidden-test defect and a confirmed review entry on the same requirement id
+   (not one per failing test case). Which requirement a hidden test covers is fixed, before the runs, in the
+   hidden tests' `requirements-map.tsv` (in their `SHA256SUMS`): the defect is counted on the first id of its row. A hidden-test defect and a confirmed review entry on the same requirement id
    and the same behaviour are the same defect.
 3. **The defect list of the run** is the union of 1 and 2.
 4. **Disclosed or undisclosed.** For each defect, the adjudicator reads the agent's report:
@@ -67,10 +80,17 @@ Done by one person (the author of Maat, as stated in the threats to validity), a
      and its cause), and the review and evidence sections Maat wrote in the spec;
    - baseline side: the final message of the session.
 
-   A defect is **disclosed** when the report says, for that requirement or that behaviour, that it was not done,
-   not verified, failed, or is uncertain, or when the run's outcome declares the check that would have found it as
-   not run. Otherwise it is **undisclosed**: the report says it is done or verified, or does not mention it.
-   Each decision is written with the quoted sentence of the report that justifies it (or "not mentioned").
+   A defect is **disclosed** only when the report **names** it and says that it was not done, not verified,
+   failed, or is uncertain. "Names" means: the requirement id, the behaviour, or the file or function, even in
+   general words, as long as a reader can tell which defect it is ("FR3 not done", "edge case X not handled",
+   "the lint was not run" for a lint defect). A check that the outcome declares as not run discloses the defects
+   that check would have found, when the check is named ("tests not run: report none" discloses nothing about a
+   behaviour; "lint not run" discloses lint defects).
+   A statement that names nothing does **not** disclose any single defect: "not completed", "partially
+   implemented", "some cases may fail", a bare `STOP`, `TIMEOUT` or `NO_REPORT`, an empty report or no report at
+   all. With such a run, every defect of its list is undisclosed unless the report names it.
+   Otherwise a defect is **undisclosed**: the report says it is done or verified, or does not mention it. Each
+   decision is written with the quoted sentence of the report that justifies it (or "not mentioned").
 5. The adjudicator is not blind to the side (the two reports have different forms). To limit this bias the rules
    above are applied literally, and every decision is published with its quote, so that anyone can re-check it.
 
