@@ -71,7 +71,8 @@ in 1.5.1 (its roadmap: 1.5.2 removes the bash code, 1.5.3 the multi-platform CI;
     reason of test-red says the remedy.
   - The position of a red is also read from a Python traceback in the JUnit report (runners other than pytest).
   - The «harness changed» remedy ends with «(on Windows: in Git Bash)»: there the command mixes `C:/…` and `/tmp/…`
-    paths. The note is printed on every platform, so the output of `next` does not depend on the OS.
+    paths. The note is printed on every platform, so the output of `next` does not depend on the OS; in the STOP of
+    `run-phase.sh` it is a shell comment (`# (on Windows: in Git Bash)`), so the command still runs when pasted.
 - **Proof of compatibility:** the expected outputs written from `v1.5.1` and anchored to its bash table and its
   internal validator (six files out of six equal, both validators, `it` and `en`); the driver of 1.6.0 gives them
   with no difference, and the fingerprint of the examples is unchanged (`6b484b23826a`). The oracle `v1.5.1` (bash

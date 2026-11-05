@@ -249,7 +249,7 @@ From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cy
 the fixes found by the real cycles (`CHANGELOG.md`, block Z): `plan-check.sh lint2` refuses a plan whose red holds
 only with a signature stub in an existing file and a Python test id `file.py::Class.method`, and warns (`AVVISO`) for
 a module with `report` none; the `BLOCKED` reason of test-red for that module is longer (it says the remedy);
-`maat-doctor` gives a `WARNING` for it; the «harness changed» remedy ends with «(on Windows: in Git Bash)». The
+`maat-doctor` gives a `WARNING` for it; the «harness changed» remedy ends with «(on Windows: in Git Bash)», a shell comment in `run-phase.sh`. The
 Python driver already decided, and it is now the only engine. The bash code that decided with `FIC_DRIVER=0` is gone:
 `FIC_DRIVER` set to any value no longer changes anything, and `driver.py run` and `maat-doctor` say so (an `AVVISO`,
 a `WARNING`). The remedies of the two STOPs of a failed driver no longer suggest `FIC_DRIVER=0`. If you need the

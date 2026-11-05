@@ -418,7 +418,7 @@ check "un byte di uno script del plugin → STOP, exit 6, la sottosessione non p
 check "  il motivo con la data, su stderr; il rimedio a percorso assoluto nello .stderr della label" 'grep -q "STOP: harness cambiato dal [0-9T:-]*Z: ricomincia la fase o conferma (impronta registrata [0-9a-f]\{12\}, attuale [0-9a-f]\{12\}; file del plugin in $HP_M e .claude/maat.json)" "$T/h04-fix.err" && grep -qF "bash \"$HP_M/scripts/run-phase.sh\" --harness-fp > \"$T/h.run/harness.fp\"" "$T/h.run/log/04-fix.stderr"'
 check "  e il lock di codice e' rilasciato" '[ ! -d "$FIC_LOCK" ]'
 # 1.6.0 (code review): the note for Windows after the remedy, on every platform (no branch on the OS)
-check "  il rimedio finisce con la nota per Windows, su ogni piattaforma" 'grep -qF "harness.fp\" (su Windows: in Git Bash)" "$T/h.run/log/04-fix.stderr"'
+check "  il rimedio finisce con la nota per Windows, un commento di shell, su ogni piattaforma" 'grep -qF "harness.fp\" # (su Windows: in Git Bash) — e rilancia" "$T/h.run/log/04-fix.stderr"'
 rimedio "$T/h.run/log/04-fix.stderr"
 check "  il rimedio eseguito cosi' com'e' scrive harness.fp di tre righe" '[ "$(wc -l < "$T/h.run/harness.fp")" -eq 3 ] && [ "$(hfpc "$T/h.run/harness.fp")" = UGUALE ]'
 hrun "$T/h.run" 05-fix; rc=$?
