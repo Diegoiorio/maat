@@ -9,9 +9,10 @@
       "regola_test": "specchio",
       "specchio": { "da": "**/{m}.js", "a": "test/*.js" },
       "ambiente": "nativo",
+      "report": "junit",
       "comandi": {
-        "test": "npx tape {test}",
-        "lint": { "comando": "npx eslint --ext=js,mjs {file}", "cartella": "repo" }
+        "test": "python3 .claude/bench/tape-junit.py {report} {test}",
+        "lint": { "comando": "npx eslint --ext=js,mjs {file}; r=$?; case $r in 0) e=PASS ;; 1) e=FAIL ;; *) e=BLOCKED ;; esac; echo \"vitest-fast: esito=$e (eslint exit $r)\"; exit $r", "cartella": "repo" }
       },
       "controlli": [
         { "glob": "**/*.js", "comando": "node --check {file}" }

@@ -71,6 +71,7 @@ cmd_check() {
   echo "maat_tag: ${MAAT_TAG:?}"
   echo "git: $(git --version)"; echo "python: $(python3 --version)"; echo "node: $(node --version)"
   echo "go: $("${GO:-go}" version)"; echo "dash: $(command -v dash)"
+  echo "shellcheck: $(shellcheck --version 2>/dev/null | sed -n 2p)"
   [ -d "${CLAUDE_CONFIG_DIR:?}" ] || die "CLAUDE_CONFIG_DIR missing"
   [ ! -e "$CLAUDE_CONFIG_DIR/CLAUDE.md" ] || die "the benchmark config dir must not have a CLAUDE.md"
 }
@@ -117,6 +118,10 @@ cmd_prepare() {
     ( cd "$c" && "$CLAUDE_BIN" plugin marketplace add "https://github.com/Diegoiorio/maat.git#$MAAT_TAG" --scope project >/dev/null \
         && "$CLAUDE_BIN" plugin install maat@maat --scope project >/dev/null )
     cp "$HERE/tasks/$(dirname "$spec")/maat.json" "$c/.claude/maat.json"
+    # the task's format adapter (T2, T3: test output -> JUnit that Maat reads), outside the project's code
+    local a; for a in "$HERE/tasks/$(dirname "$spec")"/*-junit.py; do
+      [ ! -f "$a" ] || { mkdir -p "$c/.claude/bench" && cp "$a" "$c/.claude/bench/"; }
+    done
     local root v; root=$(plugin_root)
     v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/.claude-plugin/plugin.json")
     [ "v$v" = "$MAAT_TAG" ] || die "installed Maat $v, expected $MAAT_TAG"
