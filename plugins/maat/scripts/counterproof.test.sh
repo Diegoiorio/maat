@@ -65,12 +65,14 @@ fi
 if [ -n "${FAKE_KILL:-}" ]; then
   echo $$ >> "$FAKE_LOG.pids"
   # 1.6.0: the pkill of macOS (BSD) leaves out its own ancestors, and counterproof.sh is one of them (exit 1, no
-  # signal); then the ancestors whose command line holds FAKE_KILL get it, as pkill gives it on Linux (procps)
+  # signal); then the ancestors whose command line holds FAKE_KILL get it, all with one kill as pkill gives it on Linux
+  # (procps): collected first, because a subshell signalled alone dies and breaks the chain up to counterproof.sh
   if ! pkill -TERM -f "$FAKE_KILL"; then
-    p=$$
+    p=$$ anc=""
     while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
-      case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) kill -TERM "$p" 2>/dev/null ;; esac
+      case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) anc+=" $p" ;; esac
     done
+    [ -z "$anc" ] || kill -TERM $anc 2>/dev/null
   fi
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
