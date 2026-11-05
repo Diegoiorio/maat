@@ -43,6 +43,9 @@ BIN=$T/bin; mkdir -p "$BIN"
 # 1.6.0: the real rsync found in the PATH, not /usr/bin/rsync (on macOS that is openrsync; GNU rsync from Homebrew is in
 # the PATH). The same file on Linux.
 export FAKE_RSYNC_VERO=$(command -v rsync)
+# and pkill/pgrep of the fake npx resolved here: the PATH without rsync and flock (path_senza) gives them as a link
+# outside /usr/bin, and on macOS that pkill finds no process (CI of 1.6.0: pkill exit 1, the signal never sent)
+export FAKE_PKILL_VERO=$(command -v pkill) FAKE_PGREP_VERO=$(command -v pgrep)
 # fake vitest (npx): reads the sources in the cwd (the mirror's apps/admin) and writes the JSON report like vitest 1.6.
 #   IMPORTROTTO in a source -> the test file does not load · ROSSO in src.ts/other.ts -> "somma vale uno"
 #   red on "expected 2 to be 1" · DIVERSO -> red with another message · "altro resta verde" always green.
@@ -63,8 +66,8 @@ if [ -n "${FAKE_SECOND:-}" ] && mkdir "$FAKE_SECOND.once" 2>/dev/null; then
 fi
 # FAKE_KILL: signal to the running counterproof.sh; the run (and one of its children) stay alive FAKE_KILL_SLEEP seconds
 if [ -n "${FAKE_KILL:-}" ]; then
-  echo $$ >> "$FAKE_LOG.pids"; pkill -TERM -f "$FAKE_KILL"
-  echo "pkill=$? $(command -v pkill) $(ls -l "$(command -v pkill)" 2>&1 | cut -c1-120) · $(pgrep -fl "$FAKE_KILL" 2>&1 | tr '\n' ' ')" >> "$FAKE_LOG.all"
+  echo "pgrep del PATH: $(command -v pgrep) [$(pgrep -f "$FAKE_KILL" 2>&1 | tr '\n' ' ')] · vero: $FAKE_PGREP_VERO [$("$FAKE_PGREP_VERO" -f "$FAKE_KILL" 2>&1 | tr '\n' ' ')]" >> "$FAKE_LOG.all"
+  echo $$ >> "$FAKE_LOG.pids"; "$FAKE_PKILL_VERO" -TERM -f "$FAKE_KILL"; echo "pkill=$?" >> "$FAKE_LOG.all"
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""

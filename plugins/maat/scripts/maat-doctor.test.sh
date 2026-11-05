@@ -36,7 +36,9 @@ trap 'rm -rf "$T"' EXIT
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; sed 's/^/    /' "$T/out" 2>/dev/null; fi; }
 cygm() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
-PATH_SENZA_WSL=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ]; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
+# 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see (an app execution alias of
+# WindowsApps is a reparse point: Git Bash does not stat it, Python's shutil.which finds it; on some CI runners)
+PATH_SENZA_WSL=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ] || ls -A "$d" 2>/dev/null | grep -qixE 'wsl(\.exe)?'; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
 
 mkdir -p "$T/bin" "$T/home/.claude" "$T/py38"
 printf '#!/bin/sh\necho "2.1.285 (Claude Code)"\n' > "$T/bin/claude"
@@ -218,6 +220,9 @@ caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ 
 caso_piattaforma() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
 if [ "$WIN" = 1 ]; then
   check "copia_wsl auto, moduli nativi, PATH senza wsl -> exit 0 con «WSL assente»" 'caso_wsl_assente'
+  caso_wsl_assente || {   # detail of a red: which wsl the Python of the doctor finds on that PATH, and from which folder
+    . "$HERE/python.sh" >/dev/null 2>&1
+    echo "    wsl per shutil.which con il PATH senza wsl: $(PATH="$T/bin:$PATH_SENZA_WSL" "$FIC_PY" -c 'import shutil; print(shutil.which("wsl"), shutil.which("wsl.exe"))' 2>&1)"; }
   check "--piattaforma con PATH senza wsl -> windows-senza-wsl" 'caso_piattaforma'
 else
   echo "SALTATO [WSL assente, --piattaforma windows-senza-wsl]: la piattaforma non è Windows (uname/OSTYPE)"
