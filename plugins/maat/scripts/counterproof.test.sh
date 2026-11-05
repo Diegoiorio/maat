@@ -64,6 +64,7 @@ fi
 # FAKE_KILL: signal to the running counterproof.sh; the run (and one of its children) stay alive FAKE_KILL_SLEEP seconds
 if [ -n "${FAKE_KILL:-}" ]; then
   echo $$ >> "$FAKE_LOG.pids"; pkill -TERM -f "$FAKE_KILL"
+  echo "pkill=$? $(command -v pkill) $(ls -l "$(command -v pkill)" 2>&1 | cut -c1-120) · $(pgrep -fl "$FAKE_KILL" 2>&1 | tr '\n' ' ')" >> "$FAKE_LOG.all"
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
@@ -479,6 +480,7 @@ FAKE_KILL="$CP" cpb "$PX" "$OUT/one.json"
 check "  segnale durante il run -> exit 143, mirror ripristinato, lock di ripiego rilasciato" '[ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ]'
 [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ] ||   # detail of a red
   { echo "    rc=$(rc) src.ts=$(cat "$M/apps/admin/src.ts" 2>&1) lock=$(ls -la "$M/.fic-lock.d" 2>&1 | tr '\n' ' ') pid=$(cat "$M/.fic-lock.d/pid" 2>&1)"
+    echo "    pkill con PATH senza rsync e flock: $(PATH=$PX command -v pkill) · normale: $(command -v pkill)"
     sed 's/^/    out: /' "$T/out" | tail -15; sed 's/^/    npx: /' "$FAKE_LOG.all" 2>/dev/null | tail -8; }
 # tools without fallback
 for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync tar flock"; do
