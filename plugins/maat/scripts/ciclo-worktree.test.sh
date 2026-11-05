@@ -355,6 +355,8 @@ mkdir -p "$W2M/modules/x" && mkjunction "$SEN2" "$W2M/modules/x/node_modules"
 (cd "$MM2" && bash "$MU/scripts/ciclo-worktree.sh" rimuovi uno >/dev/null 2>&1)
 if [ $SEGUE -eq 1 ]; then
   check "controprova 2: senza links_left la sentinella NON e' intatta" '[ "$(sen_s "$SEN2")" != "$s0" ]'
+elif [ $TWIN -eq 1 ]; then   # 1.6.0: a junction that git does not follow nor remove: the worktree stays either way
+  echo "SALTATO [controprova 2]: questo git non segue la giunzione e non rimuove il worktree che la contiene: nessun effetto da misurare (sentinella intatta: $([ "$(sen_s "$SEN2")" = "$s0" ] && echo si || echo no))"
 else   # pk08: with a symlink the sentinel stays; the mutant's effect is that the removal no longer stops (case 9b)
   check "controprova 2 (symlink): senza links_left il collegamento non registrato non ferma la rimozione" '[ ! -e "$W2M" ]'
 fi

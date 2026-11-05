@@ -131,27 +131,34 @@ doc
 check "1.6.0: FIC_DRIVER non impostata -> nessuna riga" '[ "$rc" = 0 ] && ! ha "FIC_DRIVER"'
 
 # --- 4d. 1.6.0 block F (D9 c): macOS (uname -s = Darwin from a fake in PATH): the GNU tools from Homebrew -------------------
-mkdir -p "$T/darwin" "$T/bsdsed" "$T/bsdgrep"
+mkdir -p "$T/darwin" "$T/bsdsed" "$T/bsdgrep" "$T/gnufinti"
 printf '#!/bin/sh\n[ "$1" = -s ] && { echo Darwin; exit 0; }\nexec %s "$@"\n' "'$(command -v uname)'" > "$T/darwin/uname"
 # BSD sed refuses --version; BSD grep says «BSD grep, GNU compatible» (not «(GNU »); both run the real one otherwise
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo "sed: illegal option -- -" >&2; exit 1; }\nexec %s "$@"\n' "'$(command -v sed)'" > "$T/bsdsed/sed"
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo "grep (BSD grep, GNU compatible) 2.6.0-FreeBSD"; exit 0; }\nexec %s "$@"\n' "'$(command -v grep)'" > "$T/bsdgrep/grep"
 chmod +x "$T/darwin/uname" "$T/bsdsed/sed" "$T/bsdgrep/grep"
+# a host whose sed, grep or stat is not GNU (Ubuntu 26.04 of the CI: the uutils coreutils, «stat (uutils coreutils)»):
+# on the fake macOS that tool answers --version as GNU, and runs the real one otherwise (the premise of the cases below)
+for s in sed grep stat; do
+  "$s" --version 2>/dev/null </dev/null | head -1 | grep -qF '(GNU ' && continue
+  printf '#!/bin/sh\n[ "$1" = --version ] && { echo "%s (GNU coreutils) 9.4"; exit 0; }\nexec %s "$@"\n' "$s" "'$(command -v "$s")'" > "$T/gnufinti/$s"
+  chmod +x "$T/gnufinti/$s"
+done
 MAC_VIA=""   # the presence-only tools missing on this machine: on the fake macOS they are MANCA
 for s in sha256sum timeout flock; do command -v "$s" >/dev/null 2>&1 || MAC_VIA+=" $s"; done
 caso_mac() { # [doctor]: every tool in the OK line or in a MANCA with brew; the GNU three in the OK line
   local s
-  DOCX=${1:-} DPATH="$T/darwin:$PATH" doc
+  DOCX=${1:-} DPATH="$T/darwin:$T/gnufinti:$PATH" doc
   ha '^OK strumenti GNU per macOS: sed, grep, stat' || return 1
   for s in $MAC_VIA; do ha "^MANCA $s non trovato .* — brew install " || return 1; done
   [ -n "$MAC_VIA" ] || [ "$rc" = 0 ]
 }
-caso_mac_sed() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdsed:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA sed GNU non trovato \(macOS: Maat usa le opzioni GNU\) — brew install gnu-sed, poi metti "\$\(brew --prefix\)/opt/gnu-sed/libexec/gnubin" in testa al PATH$' && ! ha '^OK strumenti GNU per macOS: sed'; }
-caso_mac_grep() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdgrep:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA grep GNU non trovato .* — brew install grep, poi metti' && ha '^OK strumenti GNU per macOS: sed, stat'; }
+caso_mac_sed() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdsed:$T/gnufinti:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA sed GNU non trovato \(macOS: Maat usa le opzioni GNU\) — brew install gnu-sed, poi metti "\$\(brew --prefix\)/opt/gnu-sed/libexec/gnubin" in testa al PATH$' && ! ha '^OK strumenti GNU per macOS: sed'; }
+caso_mac_grep() { DOCX=${1:-} DPATH="$T/darwin:$T/bsdgrep:$T/gnufinti:$PATH" doc; [ "$rc" = 1 ] && ha '^MANCA grep GNU non trovato .* — brew install grep, poi metti' && ha '^OK strumenti GNU per macOS: sed, stat'; }
 check "1.6.0 macOS (uname finto): sed, grep e stat GNU nella riga OK; gli strumenti assenti qui ($MAC_VIA) MANCA con brew" 'caso_mac'
 check "1.6.0 macOS: sed BSD (rifiuta --version) -> MANCA con «brew install gnu-sed» e la cartella gnubin, exit 1" 'caso_mac_sed'
 check "1.6.0 macOS: grep BSD («BSD grep, GNU compatible») -> MANCA con «brew install grep»" 'caso_mac_grep'
-DPATH="$T/darwin:$T/bsdsed:$PATH" doc MAAT_LINGUA=en
+DPATH="$T/darwin:$T/bsdsed:$T/gnufinti:$PATH" doc MAAT_LINGUA=en
 check "1.6.0 macOS en: MISSING in inglese" '[ "$rc" = 1 ] && ha "^MISSING GNU sed not found \(macOS: Maat uses the GNU options\) — brew install gnu-sed, then put"'
 senza() { # <tool> -> PATH where each folder holding <tool> is replaced by a folder of symlinks to all its files but <tool>
   local out="" d n f IFS=:
