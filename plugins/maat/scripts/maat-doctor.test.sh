@@ -220,9 +220,9 @@ caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ 
 caso_piattaforma() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
 if [ "$WIN" = 1 ]; then
   check "copia_wsl auto, moduli nativi, PATH senza wsl -> exit 0 con «WSL assente»" 'caso_wsl_assente'
-  caso_wsl_assente || {   # detail of a red: which wsl the Python of the doctor finds on that PATH, and from which folder
-    . "$HERE/python.sh" >/dev/null 2>&1
-    echo "    wsl per shutil.which con il PATH senza wsl: $(PATH="$T/bin:$PATH_SENZA_WSL" "$FIC_PY" -c 'import shutil; print(shutil.which("wsl"), shutil.which("wsl.exe"))' 2>&1)"; }
+  caso_wsl_assente || (   # detail of a red: which wsl the Python of the doctor finds on that PATH, and from which folder
+    . "$HERE/python.sh" >/dev/null 2>&1   # in a subshell: python.sh does not change the shell of the test
+    echo "    wsl per shutil.which con il PATH senza wsl: $(PATH="$T/bin:$PATH_SENZA_WSL" "$FIC_PY" -c 'import shutil; print(shutil.which("wsl"), shutil.which("wsl.exe"))' 2>&1)" )
   check "--piattaforma con PATH senza wsl -> windows-senza-wsl" 'caso_piattaforma'
 else
   echo "SALTATO [WSL assente, --piattaforma windows-senza-wsl]: la piattaforma non è Windows (uname/OSTYPE)"

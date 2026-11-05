@@ -9,7 +9,9 @@
 #   matrix, matrix 1..n), with a counterproof · 7 (1.5.1) tools/suite-parallelo.sh
 #   8 (1.6.0) --gruppi <file>: lines «- <entry> <reason>» (left out: counted as covered, ESCLUSA in riepilogo.txt, only
 #   in group 1) and «<g> VAR=value <entry>»; the three matrices of ci.yml (linux and macos on tools/suite-gruppi.list,
-#   windows on tools/suite-gruppi-windows.list), the Windows file against suite.list, with counterproofs
+#   windows on tools/suite-gruppi-windows.list), the Windows file against suite.list, with counterproofs; the five
+#   entries left out on Windows, no «VAR=» line in the two groups files of the CI, the needs of the job ci; --gruppi
+#   with every entry left out → exit 2
 #   bash tools/suite.test.sh          (Git Bash or WSL; only in the repo)
 set -uo pipefail
 export MAAT_LINGUA=it
@@ -132,6 +134,35 @@ awk '!f && /^- / { f = 1; next } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$
 awk '$1 == "1" { $1 = "9" } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-buco.list"
 check "controprova: senza la prima riga «-» il file Windows non copre suite.list; il gruppo 1 rinominato 9 → gruppi non 1..n" \
   '! cmp -s "$T/w-senza.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-senza.list" && ! cmp -s "$T/w-buco.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_copre "$T/w-buco.list"'
+# the entries left out on Windows are exactly these five (review of the CI of 1.6.0). $1 = groups file
+WIN_ESCLUSE="comandi-equivalenza counterproof test-fast tools/oracolo.test.sh vitest-classify "
+win_escluse() { [ "$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r' | awk '$1 == "-" { print $2 }' | sort | tr '\n' ' ')" = "$WIN_ESCLUSE" ]; }
+check "  il file Windows esclude esattamente le cinque voci attese ($WIN_ESCLUSE)" 'win_escluse "$ROOT/tools/suite-gruppi-windows.list"'
+sed 's/^1 run-phase$/- run-phase motivo finto/' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-piu.list"
+check "controprova: un'esclusa in piu' (run-phase), o una in meno (senza la prima riga «-») → rosso" \
+  '! cmp -s "$T/w-piu.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_escluse "$T/w-piu.list" && ! win_escluse "$T/w-senza.list"'
+# no «<g> VAR=value <entry>» line in the groups files of the CI: a variable there (MAAT_ATTESE_RICHIESTE, FIC_WT_WSL,
+# PATH, BASH_ENV…) would change the environment of a suite in CI without a trace in ci.yml. $1 = groups file
+senza_var() { ! grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r' | awk '$1 != "-" && (NF != 2 || $2 ~ /=/)' | grep -q .; }
+check "  nessuna riga VAR= in tools/suite-gruppi.list e tools/suite-gruppi-windows.list (i file della CI)" \
+  'senza_var "$ROOT/tools/suite-gruppi.list" && senza_var "$ROOT/tools/suite-gruppi-windows.list"'
+awk '!f && $1 == "1" { $0 = "1 MAAT_ATTESE_RICHIESTE=0 " $2; f = 1 } 1' "$ROOT/tools/suite-gruppi.list" > "$T/g-var.list"
+awk '!f && $1 == "2" { $0 = "2 PATH=/x " $2; f = 1 } 1' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-var.list"
+check "controprova: una riga «1 MAAT_ATTESE_RICHIESTE=0 <voce>» nel file di Linux, o «2 PATH=/x <voce>» in quello Windows → rosso" \
+  'grep -q "^1 MAAT_ATTESE_RICHIESTE=0 " "$T/g-var.list" && ! senza_var "$T/g-var.list" && grep -q "^2 PATH=/x " "$T/w-var.list" && ! senza_var "$T/w-var.list"'
+# the job ci needs the three platforms and wants success from each. $1 = ci.yml
+ci_needs() {
+  local b p; b=$(ci_blocco "$1" ci)
+  printf '%s\n' "$b" | grep -qx '    needs: \[linux, macos, windows\]' || return 1
+  for p in linux macos windows; do
+    printf '%s\n' "$b" | grep -v '^[[:space:]]*#' | grep -qF "test \"\${{ needs.$p.result }}\" = success" || return 1
+  done
+}
+check "  il job ci: needs: [linux, macos, windows] e success richiesto a tutti e tre" 'ci_needs "$CIY"'
+sed 's/^    needs: \[linux, macos, windows\]$/    needs: [linux, windows]/' "$CIY" > "$T/ci-n.yml"
+sed 's/ && test "\${{ needs.macos.result }}" = success//' "$CIY" > "$T/ci-s.yml"
+check "controprova: ci.yml senza macos nei needs, o senza il success di macos → rosso" \
+  '! cmp -s "$CIY" "$T/ci-n.yml" && ! ci_needs "$T/ci-n.yml" && ! cmp -s "$CIY" "$T/ci-s.yml" && ! ci_needs "$T/ci-s.yml"'
 check "  e tools/prova-breve-windows.list nomina solo voci di suite.list" \
   '(cd "$ROOT" && L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r"); grep -v "^[[:space:]]*\(#\|$\)" tools/prova-breve-windows.list | tr -d "\r" |
     while read -r r; do printf "%s\n" "$L" | grep -qxF -- "${r##* }" || exit 1; done)'
@@ -168,6 +199,9 @@ corri_f "$L8" "- tools/finta-esclusa.test.sh motivo;1 1V=x finta;2 tools/finta-f
 check "  una variabile che non è un nome → exit 2" '[ $rc -eq 2 ] && grep -q "bad line: 1 1V=x finta" "$T/out"' "$(cat "$T/out")"
 corri_f "$L8" "$F8" --gruppi "$T/assente.list" --gruppo 1/2
 check "  un file dei gruppi che non c'è → exit 2" '[ $rc -eq 2 ] && grep -q "assente.list: missing or empty" "$T/out"' "$(cat "$T/out")"
+corri_f "$L8" "- tools/finta-esclusa.test.sh m;- finta m;- tools/finta-ferma.test.sh m" --gruppi "$T/gruppi-f.list"
+check "  --gruppi senza --gruppo con tutte le voci escluse → exit 2, nessuna suite lanciata" \
+  '[ $rc -eq 2 ] && grep -q "every entry is left out" "$T/out" && [ ! -f "$T/esiti/riepilogo.txt" ]' "$(cat "$T/out")"
 rm -f "$R/tools/finta-esclusa.test.sh"
 
 # --- 7. (1.5.1) tools/suite-parallelo.sh on two fake clones (Linux: it needs flock) ---

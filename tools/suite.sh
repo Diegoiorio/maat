@@ -10,7 +10,8 @@
 #   1..n: exit 2 if an entry of suite.list is in no line or in two, an entry of the file is not in suite.list, or a
 #   group is outside 1..n or has no suite. The CI passes n = strategy.job-total, the number of jobs of its matrix, so a
 #   matrix with fewer or more jobs than the file has groups is red (tools/suite.test.sh checks .github/workflows/ci.yml).
-#   --gruppi without --gruppo: every entry of the file that is not left out, with the same checks (n = its groups).
+#   --gruppi without --gruppo: every entry of the file that is not left out, with the same checks (n = its groups);
+#   exit 2 if every entry is left out (no suite to run).
 # Writes <results dir>/<name>.log and <results dir>/riepilogo.txt (one line per suite, like the Linux part of
 # giro-completo.sh). Exit 0 if every suite exits 0; 1 if one fails or changes the plugin; 2 if tools/suite.list does
 # not match the suites on disk (a suite missing from the list, a tools/*.test.sh missing from the list, or an entry
@@ -91,6 +92,7 @@ if [ -n "$GRUPPI" ]; then
     [ "$k" = 1 ] || ESCLUSE=""
   else
     LIST=$(printf '%s' "$E" | awk '$1 != "-" { print $2 }' | grep -xF -f - <(printf '%s\n' $LIST))
+    [ -n "$LIST" ] || { echo "$gf: every entry is left out: no suite to run" >&2; exit 2; }
   fi
 fi
 prima=$(guardia_impronta plugins/maat) || { echo "suite.sh: plugin fingerprint not computable (tools/lib/guardia-plugin.sh)" >&2; exit 2; }

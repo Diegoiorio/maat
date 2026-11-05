@@ -310,7 +310,7 @@ check "opzione al posto del path -> 64" 'PROJECT_ROOT=$R bash "$CP" --help >/dev
 # 11. death halfway through the run: the trap puts the mirror file back
 MIR1=$(mir_hash)
 FAKE_KILL="$CP" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
-check "morte durante il run: il trap ripristina il mirror" '[ "$(mir_hash)" = "$MIR1" ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts"'
+check "morte durante il run: exit 143 (SIGTERM), il trap ripristina il mirror" '[ "$(rc)" = 143 ] && [ "$(mir_hash)" = "$MIR1" ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts"'
 
 # 11b. signal during step 2: no surviving process (not even in the timeout groups), no copy
 alive() { local p s; for p in $(cat "$FAKE_LOG.pids" 2>/dev/null); do s=$(ps -o stat= -p "$p" 2>/dev/null); [ -n "$s" ] && [ "${s#Z}" = "$s" ] && echo "$p"; done; }
