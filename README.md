@@ -286,7 +286,9 @@ accepts a lower version (no need to uninstall and install again). To come back t
   internal validator of `run-phase.sh` decide (in 1.5.1: `docs/TESTING-harness.md`, «Going back to the bash
   engine»).
 - **Proven:** these commands from 1.5.1 to 1.5.0 and back, on a small example project with a cycle in progress,
-  before this release. TODO blocco H: the way back from 1.6.0 to 1.5.1 on a run dir created by 1.6.0.
+  before 1.6.0; and, before this release, from 1.6.0 to 1.5.1 and back on a run dir written by a real 1.6.0 cycle
+  (at its end, `NEEDS_VERIFICATION`): `maat-doctor` OK at 1.5.1, «harness changed» with its remedy, and after the
+  remedy, run as printed, the same `Next` with and without `FIC_DRIVER=0`.
 
 ## Uninstalling
 
