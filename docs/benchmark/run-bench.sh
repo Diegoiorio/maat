@@ -3,17 +3,21 @@
 #
 #   bash run-bench.sh check                      versions and tools; prints the «environment» block of the records
 #   bash run-bench.sh schedule <seed>            writes schedule.tsv: the 30 runs in random order (seed: see README)
-#   bash run-bench.sh prepare <run-id>           builds the clean copy of one run (no Claude call)
+#   bash run-bench.sh prepare <run-id>           builds the clean copy of one run; no Claude session (on the Maat side
+#                                                it only runs `claude plugin marketplace add` and `plugin install`)
 #   bash run-bench.sh run <run-id>               launches the run's side on its copy, then collects the record
-#   bash run-bench.sh all <N>                    prepare + run every row of schedule.tsv, N at a time, in order
+#   bash run-bench.sh hidden <run-id>            the hidden acceptance tests on the run's final tree (after `run`)
+#   bash run-bench.sh group <first> <last> [N]   one group of the schedule, orders <first>..<last> (at most 6 runs):
+#                                                prepare each in order, then run + hidden, N at a time (default 1)
 #
 # Environment (all required, fixed for the whole benchmark and written in each record):
 #   BENCH_HOME        work folder (copies, mirrors, records), outside any repository
 #   CLAUDE_BIN        the Claude Code binary, same for both sides (Maat's phases use it too)
 #   CLAUDE_CONFIG_DIR a configuration folder used only for the benchmark: logged in, no CLAUDE.md, no plugins,
-#                     no MCP servers, no hooks
+#                     no MCP servers, no hooks (the Maat plugin is installed in it, at project scope, by `prepare`)
 #   ANTHROPIC_MODEL   the model id, same for both sides
-#   MAAT_TAG          the Maat release under test (e.g. v1.5.0)
+#   MAAT_TAG          the Maat release under test (v1.6.0)
+#   HIDDEN_DIR        the folder of the hidden acceptance tests (private until the end: never inside BENCH_HOME/records)
 #   GO, NODE_VERSION  optional: go binary (default go); node must be in PATH (Node 20 recommended)
 #
 # Safety: both sides run with --permission-mode bypassPermissions (Maat's phases always do). Run the benchmark on a
@@ -22,7 +26,9 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 : "${BENCH_HOME:?set BENCH_HOME}"
-mkdir -p "$BENCH_HOME"/{mirrors,copies,records,nm}
+mkdir -p "$BENCH_HOME"/{mirrors,copies,records,nm,hidden}
+export DISABLE_AUTOUPDATER=1               # one Claude Code binary for the whole benchmark
+MAX_GROUP=6                                # runs per group; the quota is checked before each group (README)
 TIME_CAP_S=${TIME_CAP_S:-14400}            # 4 h, the same cap for both sides (pre-registered)
 BASE_DATE='2026-01-01T00:00:00 +0000'      # fixed date of the snapshot commit: same commit id for every copy
 
@@ -43,8 +49,10 @@ task_row() {
 # Environment of a copy, prepared before the run (the agents do not install anything).
 setup_env() { # setup_env <task> <copy>
   case "$1" in
-    T1|T5) python3 -m venv "$2/.venv"
-           "$2/.venv/bin/python" -m pip install -q --disable-pip-version-check -e "$2" pytest freezegun >/dev/null ;;
+    T1)    python3 -m venv "$2/.venv"   # the project's `tests` extra: tests/test_benchmarks.py needs pytest-codspeed
+           "$2/.venv/bin/python" -m pip install -q --disable-pip-version-check -e "$2[tests]" >/dev/null ;;
+    T5)    python3 -m venv "$2/.venv"
+           "$2/.venv/bin/python" -m pip install -q --disable-pip-version-check -e "$2" pytest >/dev/null ;;
     T2)    (cd "$2" && "${GO:-go}" mod download && "${GO:-go}" build ./...) ;;
     T3)    if [ ! -d "$BENCH_HOME/nm/T3/node_modules" ]; then
              mkdir -p "$BENCH_HOME/nm/T3" && cp "$2/package.json" "$BENCH_HOME/nm/T3/"
@@ -105,9 +113,13 @@ cmd_prepare() {
   # Same project settings on both sides: no web tools (the upstream fixes of T2 and T5 are public).
   printf '%s\n' '{ "permissions": { "deny": ["WebFetch", "WebSearch"] } }' > "$c/.claude/settings.json"
   if [ "$side" = maat ]; then
+    : "${CLAUDE_CONFIG_DIR:?set CLAUDE_CONFIG_DIR}" "${MAAT_TAG:?set MAAT_TAG}"; export CLAUDE_CONFIG_DIR
     ( cd "$c" && "$CLAUDE_BIN" plugin marketplace add "https://github.com/Diegoiorio/maat.git#$MAAT_TAG" --scope project >/dev/null \
         && "$CLAUDE_BIN" plugin install maat@maat --scope project >/dev/null )
     cp "$HERE/tasks/$(dirname "$spec")/maat.json" "$c/.claude/maat.json"
+    local root v; root=$(plugin_root)
+    v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/.claude-plugin/plugin.json")
+    [ "v$v" = "$MAAT_TAG" ] || die "installed Maat $v, expected $MAAT_TAG"
   fi
   ( cd "$c" && git rev-parse HEAD ) > "$c/.git/bench-base"
   echo "$c"
@@ -145,13 +157,16 @@ collect() { # the raw material of the record; the record itself is filled in wit
   ( cd "$c" && git add -A -N . && git diff --binary "$base" -- . ':(exclude).claude' ) > "$r/final.diff"
   sha256sum "$r/final.diff" | cut -d' ' -f1 > "$r/final.diff.sha256"
   sha256sum "$c/.claude/.ai-workflow/$name" | cut -d' ' -f1 > "$r/spec-after-run.sha256"
+  # the versions of the prepared environment (installed at prepare time, so they can differ between runs)
+  if [ -x "$c/.venv/bin/python" ]; then "$c/.venv/bin/python" -m pip freeze --exclude-editable > "$r/env-packages.txt" 2>&1 || true
+  elif [ -d "$c/node_modules" ]; then (cd "$c" && npm ls --all --parseable 2>/dev/null | sed "s|^$c/||") > "$r/env-packages.txt" || true; fi
   if [ "$side" = maat ]; then
     local root; root=$(plugin_root)
     cp "$c/.claude/.ai-workflow/$name" "$r/spec-with-plan-and-review.md"   # Maat writes plan, review, evidence here
     cp -r "$c/.claude/.ai-workflow/${name%.md}.run" "$r/run-dir" 2>/dev/null || true
     ( cd "$c" && . "$root/scripts/python.sh" && "$FIC_PY" "$root/scripts/phase-usage.py" --summary ".claude/.ai-workflow/${name%.md}.run" ) \
       > "$r/cost-summary.txt" 2>&1 || true
-    grep -a '^Driver result' "$r/driver-stdout.txt" | tail -1 > "$r/outcome.txt" || true
+    grep -a 'Driver result: ' "$r/driver-stdout.txt" | tail -1 > "$r/outcome.txt" || true
   else
     python3 - "$r/transcript.jsonl" > "$r/report.md" <<'PY'
 import json, sys
@@ -171,11 +186,31 @@ PY
   echo "collected: $r"
 }
 
-cmd_all() {
-  local n=${1:?N}
+task_dir() { local spec; read -r _ _ spec <<<"$(task_row "$1")"; dirname "$spec"; }
+
+cmd_hidden() { # the hidden tests, right after the run: fixed in advance, no judgement. Detail stays private.
+  local id=${1:?run-id}; local task=${id%%-*}
+  local c="$BENCH_HOME/copies/$id" r="$BENCH_HOME/records/$id" h="$BENCH_HOME/hidden/$id"
+  : "${HIDDEN_DIR:?set HIDDEN_DIR}"
+  [ -f "$r/final.diff" ] || die "run $id first"; [ ! -e "$h" ] || die "$h exists: hidden tests run once per run"
+  [ ! -e "$r/hidden_tests.txt" ] || die "$r/hidden_tests.txt exists"
+  local line
+  line=$(NM="$BENCH_HOME/nm/T3/node_modules" bash "$HIDDEN_DIR/$(task_dir "$task")/run.sh" "$c" "$h" 2>"$h.stderr" | tail -1) || true
+  case "$line" in hidden:\ *) ;; *) line="hidden: error (see $h.stderr)" ;; esac
+  echo "$line" > "$r/hidden_tests.txt"    # published: the score only, never the tests or their output
+  echo "$id $line"
+}
+
+cmd_group() { # one group: at most MAX_GROUP consecutive rows of schedule.tsv
+  local first=${1:?first order} last=${2:?last order} n=${3:-1}
   [ -f "$HERE/schedule.tsv" ] || die "run schedule first"
-  tail -n +2 "$HERE/schedule.tsv" | cut -f2 | xargs -P "$n" -I{} bash -c '
-    bash "$0" prepare "$1" > /dev/null && bash "$0" run "$1"' "$0" {}
+  : "${HIDDEN_DIR:?set HIDDEN_DIR}"
+  [ "$last" -ge "$first" ] && [ $((last - first + 1)) -le "$MAX_GROUP" ] || die "a group has 1 to $MAX_GROUP runs"
+  local ids; ids=$(awk -F'\t' -v a="$first" -v b="$last" 'NR > 1 && $1 >= a && $1 <= b { print $2 }' "$HERE/schedule.tsv")
+  [ -n "$ids" ] || die "no row $first..$last in schedule.tsv"
+  local id; for id in $ids; do cmd_prepare "$id" > /dev/null; done    # in order, one at a time (shared caches)
+  # every run is followed by its hidden tests, also when the run failed or hit the cap
+  printf '%s\n' $ids | xargs -P "$n" -I{} bash -c 'bash "$0" run "$1"; bash "$0" hidden "$1"' "$0" {}
 }
 
 case "${1:-}" in
@@ -183,6 +218,7 @@ case "${1:-}" in
   schedule) shift; cmd_schedule "$@" ;;
   prepare) shift; cmd_prepare "$@" ;;
   run) shift; cmd_run "$@" ;;
-  all) shift; cmd_all "$@" ;;
-  *) sed -n 2,22p "$0"; exit 2 ;;
+  hidden) shift; cmd_hidden "$@" ;;
+  group) shift; cmd_group "$@" ;;
+  *) sed -n 2,26p "$0"; exit 2 ;;
 esac

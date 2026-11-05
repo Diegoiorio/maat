@@ -1,6 +1,6 @@
 {
   "versione_schema": 1,
-  "harness": ">=1.5",
+  "harness": ">=1.6",
   "lingua": "en",
   "moduli": [
     {
