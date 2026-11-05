@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 """tape-junit.py — format adapter of the benchmark (T3): runs tape one test file at a time and writes a JUnit report
-that Maat 1.6.0 reads (report "junit"). Not part of the project: on the Maat side it is installed in .claude/bench/
-(excluded from the final diff); the baseline side does not use it.
+that Maat 1.6.0 reads (report "junit"). Not part of the project: on the Maat side it is installed, with
+tape-objects.js, in .claude/bench/ (excluded from the final diff); the baseline side does not use it.
 
     python3 .claude/bench/tape-junit.py <report.xml> [test files…]     (from the package root; NODE = node binary)
 
-With no file it runs every `test/**/*.js`, as the project's `npx tape 'test/**/*.js'`. Each file runs on its own
-(`node node_modules/tape/bin/tape <file>`) and its TAP output is read: each `test('name', …)` is one <testcase>,
-classname = the file path with "/" written as "." (the form Maat matches with the plan's `file::name`), name = the
-test name. A test fails when one of its assertions is `not ok`; the failure keeps the `not ok` line and its YAML
-block (operator, expected, actual, `at: … (file:line:col)`), with absolute paths written from the package root, so
-Maat finds the line of the red. A file that does not load, or exits non-zero with no failed assertion, gives one
-case with no classname named after the file: Maat reads it as the whole file being red. Exit status: 1 if
-anything failed, else 0.
+With no file it runs every `test/**/*.js`, as the project's `npx tape 'test/**/*.js'`. Each file runs on its own,
+through tape-objects.js, which prints tape's object stream (not TAP text, where a comment looks like a test name):
+each `test('name', …)` is one <testcase>, classname = the file path with "/" written as "." (the form Maat matches
+with the plan's `file::name`), name = the test name. A test fails when one of its assertions fails; the failure
+keeps the assertion's name, operator, expected, actual and `at: … (file:line:col)`, with absolute paths written from
+the package root, so Maat finds the line of the red. A file that does not load, or exits non-zero with no failed
+assertion, gives one case with no classname named after the file: Maat reads it as the whole file being red.
+Exit status: 1 if anything failed, else 0.
 """
 
 import glob
+import json
 import os
-import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
 NODE = os.environ.get("NODE", "node")
-TAPE = os.path.join("node_modules", "tape", "bin", "tape")
-OK = re.compile(r"^(not ok|ok) [0-9]+")
+WRAPPER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tape-objects.js")
 
 
 def files_of(argv):
@@ -34,30 +33,31 @@ def files_of(argv):
 
 
 def run_file(path):
-    p = subprocess.run([NODE, TAPE, path], capture_output=True, text=True)
+    p = subprocess.run([NODE, WRAPPER, path], capture_output=True, text=True)
     cwd = os.getcwd().replace("\\", "/").rstrip("/") + "/"
-    out = p.stdout.replace(cwd, "")
-    err = p.stderr.replace(cwd, "")
-    tests, cur, block = [], None, None
-    for line in out.splitlines():
-        if line.startswith("# ") and not re.match(r"^# (tests|pass|fail|ok)\b", line):
-            cur = {"name": line[2:], "fail": [], "n": 0}
-            tests.append(cur)
-            block = None
+    tests, by_id = [], {}
+    for line in p.stdout.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
             continue
-        m = OK.match(line)
-        if m:
-            if cur is None:
-                cur = {"name": "(no test name)", "fail": [], "n": 0}
-                tests.append(cur)
-            cur["n"] += 1
-            block = [line] if m.group(1) == "not ok" else None
-            if block is not None:
-                cur["fail"].append(block)
-            continue
-        if block is not None and line.startswith("  "):
-            block.append(line)
-    return p.returncode, tests, out, err
+        if row.get("type") == "test":
+            t = {"name": row.get("name") or "(no name)", "fail": [], "n": 0}
+            tests.append(t)
+            by_id[row.get("id")] = t
+        elif row.get("type") == "assert":
+            t = by_id.get(row.get("test"))
+            if t is None:
+                t = {"name": "(assertion outside a test)", "fail": [], "n": 0}
+                tests.append(t)
+                by_id[row.get("test")] = t
+            t["n"] += 1
+            if not row.get("ok") and not row.get("todo"):
+                text = "not ok %s %s\n  operator: %s\n  expected: %s\n  actual:   %s\n  at: %s\n  stack: %s" % (
+                    row.get("id"), row.get("name"), row.get("operator"), row.get("expected"), row.get("actual"),
+                    row.get("at"), row.get("stack"))
+                t["fail"].append(text.replace(cwd, ""))
+    return p.returncode, tests, p.stdout.replace(cwd, ""), p.stderr.replace(cwd, "")
 
 
 def main(argv):
@@ -77,11 +77,10 @@ def main(argv):
             if t["fail"]:
                 bad_any = True
                 f += 1
-                text = "\n".join("\n".join(b) for b in t["fail"])
-                ET.SubElement(c, "failure", message=t["fail"][0][0]).text = text
+                ET.SubElement(c, "failure", message=t["fail"][0].split("\n", 1)[0]).text = "\n".join(t["fail"])
         if rc != 0 and not bad_any:
             c = ET.SubElement(suite, "testcase", classname="", name=path)
-            ET.SubElement(c, "error", message="%s exited %d" % (path, rc)).text = (out + "\n" + err).strip()
+            ET.SubElement(c, "error", message="%s exited %d" % (path, rc)).text = (err + "\n" + out).strip()
             n += 1
             f += 1
     suite.set("tests", str(n))

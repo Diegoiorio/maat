@@ -5,13 +5,15 @@ from the final diff); the baseline side does not use it.
 
     python3 .claude/bench/go-junit.py <report.xml> [ignored…]      (from the module root; GO = go binary, default go)
 
-Runs every package (`go test -count=1 -json ./...`), like the project's own `go test ./...`. Each test and subtest
-is one <testcase>: classname = the path of the `_test.go` file that declares its top-level `func TestX`, relative
-to the module root, with "/" written as "." (the form Maat matches with the plan's `file::name`); name = the test
-name as Go prints it (`TestX/sub`). A failure keeps the test's output, with every `xxx_test.go:NN:` position
-written as its path from the module root, so Maat finds the line of the red. A package that does not build (or
-fails outside any test) gives one case with no classname, named after each test file its output names (or the
-package folder): Maat reads it as the whole file being red. Exit status: the one of `go test`.
+Runs every package (`go test -count=1 -json ./...`), like the project's own `go test ./...`. Each test, subtest,
+example and fuzz test is one <testcase>: classname = the path of the `_test.go` file that declares its top-level
+function, relative to the module root, with "/" written as "." (the form Maat matches with the plan's
+`file::name`); name = the name Go prints (`TestX/sub`). A failure keeps the test's output, with every
+`xxx_test.go:NN` position (also `./xxx_test.go:NN:CC` of the compiler) written as its path from the module root, so
+Maat finds the line of the red. A package that does not build (or fails outside any test) gives one case with no
+classname, named after each test file its output names (or the package folder): Maat reads it as the whole file
+being red. When a package fails (a panic, a crash, a timeout), every test declared in its files that has no result
+is a failed case «did not run», never a missing one. Exit status: the one of `go test`.
 """
 
 import json
@@ -22,13 +24,12 @@ import sys
 import xml.etree.ElementTree as ET
 
 GO = os.environ.get("GO", "go")
-FUNC = re.compile(r"^func\s+(Test\w*)\s*\(", re.M)
-POS = re.compile(r"(?<![\w./-])([\w.-]+_test\.go):([0-9]+)")
+FUNC = re.compile(r"^func\s+((?:Test|Example|Fuzz)\w*)\s*\(", re.M)
+POS = re.compile(r"(?<![\w/.-])(?:\./)?((?:[\w.-]+/)*[\w.-]+_test\.go):([0-9]+)")
 
 
 def rel(path):
-    r = os.path.relpath(path, os.getcwd()).replace(os.sep, "/")
-    return r
+    return os.path.relpath(path, os.getcwd()).replace(os.sep, "/")
 
 
 def packages():
@@ -42,29 +43,34 @@ def packages():
     return out
 
 
+def in_folder(folder, name):
+    return name if folder in ("", ".") else folder + "/" + name
+
+
 def test_files(folder):
-    """{TestX: relative path of the _test.go file that declares it}, [test files of the folder]"""
-    decl, files = {}, []
+    """{TestX: path of the _test.go file that declares it}, in the order of the files and of the declarations"""
+    decl = {}
     for f in sorted(os.listdir(folder or ".")):
         if not f.endswith("_test.go"):
             continue
-        path = f if folder in ("", ".") else folder + "/" + f
-        files.append(path)
+        path = in_folder(folder, f)
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 for name in FUNC.findall(fh.read()):
                     decl.setdefault(name, path)
         except OSError:
             pass
-    return decl, files
+    return decl
 
 
 def fix_positions(text, folder):
-    """`bytes_test.go:12` -> `<folder>/bytes_test.go:12` (Go prints the base name only)."""
-    if folder in ("", "."):
-        return text
-    return POS.sub(lambda m: "%s/%s:%s" % (folder, m.group(1), m.group(2))
-                   if "/" not in m.group(1) else m.group(0), text)
+    """`./bytes_test.go:12:3` or `bytes_test.go:12` -> `<folder>/bytes_test.go:12…` (Go prints base names)."""
+    def one(m):
+        f = m.group(1)
+        if "/" not in f:
+            f = in_folder(folder, f)
+        return "%s:%s" % (f, m.group(2))
+    return POS.sub(one, text)
 
 
 def main(argv):
@@ -74,15 +80,15 @@ def main(argv):
     report = argv[0]
     pk = packages()
     p = subprocess.run([GO, "test", "-count=1", "-json", "./..."], capture_output=True, text=True)
-    tests, order, pkg_out, pkg_fail = {}, [], {}, {}
+    tests, order, pkg_out, pkg_fail = {}, [], {}, set()
+    loose = []
     for line in p.stdout.splitlines():
         try:
             ev = json.loads(line)
         except ValueError:
-            pkg_out.setdefault("", []).append(line + "\n")
+            loose.append(line + "\n")
             continue
-        ip = ev.get("Package") or ev.get("ImportPath") or ""
-        ip = ip.split(" ")[0]          # "pkg [pkg.test]" of build events
+        ip = (ev.get("Package") or ev.get("ImportPath") or "").split(" ")[0]   # "pkg [pkg.test]" of build events
         act, t = ev.get("Action"), ev.get("Test")
         if t:
             k = (ip, t)
@@ -93,53 +99,65 @@ def main(argv):
                 tests[k]["out"].append(ev.get("Output", ""))
             elif act in ("pass", "fail", "skip"):
                 tests[k]["res"] = act
-        else:
-            if act in ("output", "build-output"):
-                pkg_out.setdefault(ip, []).append(ev.get("Output", ""))
-            elif act in ("fail", "build-fail"):
-                pkg_fail[ip] = True
-    if p.stderr:
-        pkg_out.setdefault("", []).append(p.stderr)
+        elif act in ("output", "build-output"):
+            pkg_out.setdefault(ip, []).append(ev.get("Output", ""))
+        elif act in ("fail", "build-fail"):
+            pkg_fail.add(ip)
+    extra = "".join(loose) + (p.stderr or "")
+    decls = {}
+
+    def decl(folder):
+        if folder not in decls:
+            decls[folder] = test_files(folder)
+        return decls[folder]
+
     suite = ET.Element("testsuite", name="go test")
     n = f = 0
-    decls = {}
+
+    def case(cn, name, kind=None, msg="", text=""):
+        nonlocal n, f
+        c = ET.SubElement(suite, "testcase", classname=cn, name=name)
+        n += 1
+        if kind in ("failure", "error"):
+            f += 1
+            ET.SubElement(c, kind, message=msg).text = text
+        elif kind == "skipped":
+            ET.SubElement(c, "skipped")
+
+    ran = {}
     for ip, t in order:
         folder = pk.get(ip, ".")
-        if folder not in decls:
-            decls[folder] = test_files(folder)
         top = t.split("/", 1)[0]
-        file = decls[folder][0].get(top, (folder + "/" if folder not in ("", ".") else "") + "unknown_test.go")
+        file = decl(folder).get(top, in_folder(folder, "unknown_test.go"))
         r = tests[(ip, t)]
-        c = ET.SubElement(suite, "testcase", classname=file.replace("/", "."), name=t)
-        n += 1
-        if r["res"] == "fail" or r["res"] is None:
-            f += 1
-            text = fix_positions("".join(r["out"]), folder)
-            ET.SubElement(c, "failure", message="FAIL: " + t if r["res"] else "no result: " + t).text = text
+        ran.setdefault(ip, set()).add(top)
+        text = fix_positions("".join(r["out"]), folder)
+        if r["res"] == "pass":
+            case(file.replace("/", "."), t)
         elif r["res"] == "skip":
-            ET.SubElement(c, "skipped")
-    failed_tests = {ip for (ip, t), r in tests.items() if r["res"] != "pass" and r["res"] != "skip"}
-    for ip in sorted(set(pkg_fail) | ({""} if "" in pkg_out and p.returncode and not failed_tests else set())):
-        if ip in failed_tests:
-            continue
+            case(file.replace("/", "."), t, "skipped")
+        elif r["res"] == "fail":
+            case(file.replace("/", "."), t, "failure", "FAIL: " + t, text)
+        else:
+            case(file.replace("/", "."), t, "failure", "no result: " + t, text + "\n(the test started and did not end)")
+    for ip in sorted(pkg_fail | ({""} if p.returncode and not tests and extra.strip() else set())):
         folder = pk.get(ip, ".")
-        text = "".join(pkg_out.get(ip, []) + (pkg_out.get("", []) if ip != "" else []))
-        if folder not in decls:
-            decls[folder] = test_files(folder)
-        text = fix_positions(text, folder)
-        named = sorted({m.group(1) if "/" in m.group(1) or folder in ("", ".") else folder + "/" + m.group(1)
-                        for m in POS.finditer(text)})
+        text = fix_positions("".join(pkg_out.get(ip, [])) + (extra if ip in ("", next(iter(sorted(pkg_fail)), "")) else ""), folder)
+        if ip in ran:
+            # a panic, a crash or a timeout: the tests of the package that never ran are failed, not missing
+            for name, file in decl(folder).items():
+                if name not in ran[ip]:
+                    case(file.replace("/", "."), name, "failure", "did not run: " + name,
+                         "the package failed before this test ran\n" + text)
+            continue
+        named = sorted({m.group(1) if "/" in m.group(1) else in_folder(folder, m.group(1)) for m in POS.finditer(text)})
         for name in named or [folder]:
-            c = ET.SubElement(suite, "testcase", classname="", name=name)
-            ET.SubElement(c, "error", message="package %s failed" % (ip or "?")).text = text
-            n += 1
-            f += 1
+            case("", name, "error", "package %s failed" % (ip or "?"), text)
     suite.set("tests", str(n))
     suite.set("failures", str(f))
     root = ET.Element("testsuites")
     root.append(suite)
     ET.ElementTree(root).write(report, encoding="utf-8", xml_declaration=True)
-    sys.stdout.write(p.stdout if os.environ.get("GO_JUNIT_VERBOSE") else "")
     print("go-junit: %d cases, %d failed, go test exit %d -> %s" % (n, f, p.returncode, report))
     return p.returncode
 
