@@ -1,8 +1,13 @@
 # Benchmark protocol
 
-**Status: not yet run.** This document fixes, before any run, what the Maat benchmark will measure and how. It is
-planned after Maat 1.6.0 (the 1.5.3 of the old roadmap: the multi-platform CI). Until it is run, the README claims
-nothing about Maat being better than Claude Code alone.
+**Status: not yet run; prepared for Maat 1.6.0.** This document fixes, before any run, what the Maat benchmark will
+measure and how. The benchmark is run with Maat 1.6.0 (release tag `v1.6.0`); its application to five tasks, with
+the versions of Claude Code and of the model, is [`benchmark/README.md`](benchmark/README.md). Until it is run, the
+README claims nothing about Maat being better than Claude Code alone.
+
+**Protocol version 2** (2026-11-05, before any run). Version 1 planned the benchmark after Maat 1.5.3 (in the old
+roadmap, the multi-platform CI, released as part of 1.6.0). Version 2 changes only this status and the version
+references; the questions, the measures, the runs and the pre-registration are those of version 1.
 
 ## The two questions
 
@@ -58,4 +63,5 @@ beginning, under a new version of this protocol, published before its first run.
 
 ## Results
 
-Not available yet. They will be added here, with the raw records, when the benchmark is run.
+Not available yet. They are published with the raw records in [`benchmark/README.md`](benchmark/README.md)
+(«Results»), marked as partial until all the runs are done.
