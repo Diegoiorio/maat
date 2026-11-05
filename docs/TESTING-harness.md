@@ -211,9 +211,9 @@ done («The parallel run», last point).
 
 | what | Git Bash (Windows) | WSL or Linux |
 |---|---|---|
-| `tools/esempi-equiv.test.sh` (1.6.0: the expected outputs) | the corpus alone (build, 130 `next`, 196 `valida`) about 1 hour, measured on a busy machine; TODO blocco D: the time on the CI runner | about 2 minutes (127 s, both validators) |
+| `tools/esempi-equiv.test.sh` (1.6.0: the expected outputs) | the corpus alone (build, 130 `next`, 196 `valida`) about 1 hour, measured on a busy machine; about 18 minutes (1091 s) on the CI runner | about 2 minutes (127 s, both validators) |
 | `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes (1.5.0) | about 6 minutes |
-| `plugins/maat/scripts/driver.test.sh` (1.6.0) | TODO blocco D: the time on the CI runner | about 1–1.5 minutes (59–85 s) |
+| `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner | about 1–1.5 minutes (59–85 s) |
 
 The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
 not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why
@@ -231,7 +231,11 @@ clone per group). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k o
 refuses (exit 2) a groups file that does not cover `suite.list` exactly (an entry in no group or in two, an entry not
 in the list) or that has not exactly the groups 1..n. A new suite goes into both files; to rebalance, move a line
 using the times of the last `riepilogo.txt`. `tools/esempi-equiv.test.sh`, the one that reads `MAAT_ATTESE_RICHIESTE`,
-is in group 3. TODO blocco D: the groups rebalanced on the times of the CI (1.6.0), and the groups file of Windows.
+is in group 3. Since 1.6.0 the same three groups run on macOS, and Windows has its own groups file,
+`tools/suite-gruppi-windows.list` (five groups balanced on the times of the CI runner, and lines `- <entry> <reason>`
+for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/5
+<folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. Since 1.6.0 the Linux groups are
+shorter (block C) and not rebalanced: the longest job is about 12 minutes.
 
 ### The parallel run (1.5.1)
 
@@ -271,16 +275,28 @@ Since 1.5.1 a release does not run the whole Windows part (about 10 hours in Git
 `context-pack`, `genericita`, `senza-wsl`, `maat-paths`, `messages`, `cycle-report`, `guard`, `bash-node`,
 `test-review-surface`, `gates`). It runs with `bash tools/giro-completo.sh --windows-breve …`. A line may start with
 `VAR=value` words, which the suite runs with. Since 1.6.0 it stays as an optional local proof: the Windows proof is
-the CI (TODO blocco D: what the CI runs on Windows, and when). `rollback.test.sh`, left out of the list in 1.5.1, went
+the CI, which runs every suite on Windows at every push except the oracle and the four suites that need WSL. `rollback.test.sh`, left out of the list in 1.5.1, went
 with the bash engine.
 
 ## CI
 
-`.github/workflows/ci.yml` runs at every push and pull request on GitHub. TODO blocco D: the three platforms (the
-matrices of Linux, Windows and macOS, their final jobs `linux`, `windows`, `macos` and which are required, when the
-whole Windows run goes and when its subset, `concurrency`, `workflow_dispatch`, the limits per job, the setup of
-Windows — `FIC_PYTHON` from `setup-python`, the venv in `Scripts/python.exe` — and of macOS — `brew install`, `gnubin`
-and `awk` = gawk first in `PATH`, `TMPDIR` — and the suites left out on Windows with their reason). **On Linux**, since
+`.github/workflows/ci.yml` runs at every push and pull request on GitHub, and by hand (`workflow_dispatch`). Since
+1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the three groups of
+`tools/suite-gruppi.list`, Windows the five of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
+`windows` are green only if all the groups of their platform are, and **`ci`** only if all three are: `ci` is the
+check to require on `main`. `concurrency`: a new push stops the run of the same event and branch still going, except
+on `main` and on tags. Limits per job: Linux 25 minutes, Windows 35, macOS 90 (with the Homebrew setup). **Windows**:
+Git Bash of the runner, `FIC_PYTHON` = the Python 3.10 of `setup-python` (otherwise `py -3` would choose the newest),
+the `jsonschema` venv in `Scripts/python.exe`, `core.autocrlf false`, `TEMP` rewritten in its long form (the runner
+gives `C:\Users\RUNNER~1\…`, which Python expands and bash does not). The whole Windows run goes at every push: the
+rule is complete at every push if it fits in at most 8 jobs of at most 45 minutes, and it is 5 jobs of about 16–22
+minutes. Left out on Windows, with the reason in its groups file: `test-fast`, `counterproof`, `vitest-classify`,
+`comandi-equivalenza` (they need `rsync` and `flock`; on Windows they run in WSL, which the runner does not have: run
+them locally from WSL before each release) and `tools/oracolo.test.sh` (it runs on Linux and macOS). **macOS**:
+`setup-python` first, then `brew install` of bash and the GNU tools (with a cache of the downloads), their `gnubin`
+folders first in `PATH`, `awk` = gawk, `TMPDIR=$RUNNER_TEMP`; the runner usually has 3 CPUs, so the step 2 cases of
+`counterproof` (they want at least 4) are `SALTATO` there with the reason. The longest job: Linux about 12 minutes,
+macOS about 16, Windows about 22. **On Linux**, since
 1.5.1 in **three jobs at the same time**, one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
 supported version), Node 20, a test git identity, the `jsonschema` venv, then `bash tools/suite.sh --gruppo <k>/<n>
 esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. `n` is not written by hand: it is
@@ -290,9 +306,8 @@ esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. `n` is not w
 matrix with fewer jobs than the file has groups is red, never green without a group. `tools/suite.test.sh` checks
 the link on `ci.yml` itself (the matrix is 1..n with n = the groups of the file, the argument is built from
 `strategy.job-total`); its logs and
-`riepilogo.txt` are kept as the artifact `esiti-gruppo-<k>`. The check to require is **`linux`**: a last job, green
-only if all the groups are (`fail-fast: false`, so a red group does not stop the others). Limit per job: 30 minutes
-(the longest group about 15 minutes plus the setup, × 1.5; before, one job of 45 minutes used about 42). Locally the
+`riepilogo.txt` are kept as the artifact `esiti-<platform>-<k>` (`fail-fast: false`, so a red group does not stop the
+others). Locally the
 same run is `bash tools/suite.sh <results folder>` from a Linux clone, or the parallel run.
 
 **The two validators (1.5.0).** The outcome validator, `driver.py valida`, uses the `jsonschema` module when the
@@ -309,7 +324,8 @@ expected outputs are rewritten with `attese.sh --scrivi --motivo …` in the sam
 what changes («The expected outputs»). A change of `driver.py` or of the catalog that does not change an output needs
 nothing more (in 1.5.x it made the certificate expire).
 
-What CI does not cover: TODO blocco D (on Windows the suites left out and the WSL ones; macOS if «in progress»). What
+What CI does not cover: on Windows the four suites that need WSL (run locally before each release) and the oracle
+(run on Linux and macOS); on a macOS runner with fewer than 4 CPUs, the parallel step of `counterproof`. What
 skips with a declared reason, as in the Linux clone: part 2 of `vitest-classify.test.sh` (specific to the guide
 project). Since 1.5.0 `comandi-equivalenza.test.sh` and section 10 of `messages.test.sh` run in CI too.
 
@@ -455,7 +471,7 @@ the internal validator. (ii) The expected outputs were written **once with the p
 `next` with `FIC_DRIVER=0` (the bash table) and `valida` with `MAAT_ATTESE_VALIDA=run-phase` (`run-phase.sh --valida`
 of 1.5.1, the internal validator), both validators, `it` and `en`: no difference. The driver of 1.6.0 gives them with
 no difference too. (iii) At every push the CI compares the driver with them, on every row of `righe.list` and every
-branch of `rami-valida.list` (TODO blocco D: on which platforms). **The lines rewritten since do not come from the
+branch of `rami-valida.list` (on Linux, macOS and Windows). **The lines rewritten since do not come from the
 bash table any more**: `STORIA` lists them, with the reason.
 
 **When and how to rewrite them.** Only when an output changes on purpose (a new row of the table, a new message, a
@@ -480,8 +496,9 @@ with a `jsonschema` of a version other than the one of `.github/workflows/ci.yml
 A change of `driver.py`, of the catalog or of the wrappers that does not change an output needs no rewrite.
 
 **On Windows** the expected outputs are the same as on Linux once normalized (measured while preparing 1.6.0, on
-two mini-repos in Git Bash, forms `-m` and `-u`, minimal validator: no difference). TODO blocco D: the expected outputs in the
-Windows CI (the whole corpus or a part, the time).
+two mini-repos in Git Bash, forms `-m` and `-u`, minimal validator: no difference). The Windows CI compares the
+whole corpus with them at every push, both validators, in about 18 minutes (`tools/esempi-equiv.test.sh`, group 2 of
+`tools/suite-gruppi-windows.list`).
 
 **Going back to the bash engine** is no longer a switch: it is reinstalling Maat 1.5.1 (README, «Going back to
 1.5.1»). `rollback.test.sh`, which proved the switch in the middle of a cycle in 1.5.1, went with it.

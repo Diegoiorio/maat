@@ -48,12 +48,24 @@ in 1.5.1 (its roadmap: 1.5.2 removes the bash code, 1.5.3 the multi-platform CI;
   side always decides with its default engine. The line at the top is `oracolo: lato <side> · motore <m>`, with the
   verdict of the certificate only for a side that still has one. `tools/suite-parallelo.sh` does not start while
   `attese.sh --scrivi` is running (it was `tools/certifica.sh`).
-- **CI on three platforms.** TODO blocco D: the matrices (Linux, Windows, macOS), the final jobs `linux`, `windows`,
-  `macos` and which are required, Windows complete at every push or on pull requests, tags and by hand (the rule and
-  its measure), the suites left out on Windows (`test-fast`, `counterproof`, `vitest-classify`,
-  `comandi-equivalenza`: they need WSL; `tools/oracolo.test.sh`: about 70 minutes, logic independent of the
-  platform) and the four WSL suites run by hand before each release, macOS with bash and the GNU tools of Homebrew
-  (or «in progress», not blocking, with the open reds), the times.
+- **CI on three platforms, at every push and pull request** (and by hand, `workflow_dispatch`). Linux and macOS run
+  the three groups of `tools/suite-gruppi.list`, Windows the five of the new `tools/suite-gruppi-windows.list`, all
+  jobs at the same time; the final jobs `linux`, `macos`, `windows` succeed only if all the groups of their platform
+  do, and `ci` only if all three do: `ci` is the required check. A new push stops the run of the same branch still
+  going (not on `main` nor on tags). Windows runs in Git Bash with `FIC_PYTHON` = the Python 3.10 of `setup-python`,
+  complete at every push (5 jobs of about 16–22 minutes; the rule: complete if it fits in at most 8 jobs of at most
+  45 minutes). Left out on Windows, written with their reason in its groups file: `test-fast`, `counterproof`,
+  `vitest-classify`, `comandi-equivalenza` (they need `rsync` and `flock`, which on Windows run in WSL, and the runner
+  has no WSL: they run locally from WSL before each release) and `tools/oracolo.test.sh` (its logic does not depend
+  on the platform: it runs on Linux and macOS). macOS runs with bash and the GNU tools of Homebrew first in `PATH`
+  (`awk` = gawk) and is blocking. The longest job: Linux about 12 minutes, macOS about 16, Windows about 22.
+  `tools/suite.sh --gruppi <file>` reads another groups file, with lines `- <entry> <reason>` (left out, printed as
+  `ESCLUSA` in the summary) and `<group> VAR=value <entry>`.
+- **`counterproof.sh` on macOS:** without `/proc/meminfo` the free memory that limits the parallel copies comes from
+  `vm_stat` (free, inactive and speculative pages); on Linux and Windows nothing changes. The suites run on macOS too:
+  the fake commands of the tests call the `rsync`, `cp` and `mv` found in `PATH`, and the cases that need what a
+  machine lacks (step 2 in parallel with fewer than 4 CPUs; a git that does not follow junctions) are `SALTATO` with
+  the reason.
 - **`maat-doctor`:** the Python line uses the threshold of `python.sh` (`fic_py_min_ok`), so 3.10 is written in two
   places instead of three; `FIC_DRIVER` set and not empty gives a `WARNING` («no longer has any effect … for the bash
   engine reinstall Maat 1.5.1»); on macOS only, GNU `sed`, `grep` and `stat`, `sha256sum`, `timeout` and `flock` are

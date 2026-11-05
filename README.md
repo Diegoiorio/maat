@@ -74,10 +74,9 @@ brew install bash coreutils gnu-sed grep flock
 export PATH="$(brew --prefix)/opt/coreutils/libexec/gnubin:$(brew --prefix)/opt/gnu-sed/libexec/gnubin:$(brew --prefix)/opt/grep/libexec/gnubin:$(brew --prefix)/bin:$PATH"
 ```
 
-`maat-doctor` checks these tools on a Mac only, and for a missing one prints the `brew` command. TODO blocco D: say
-whether the Mac is verified in CI or «in progress», with the open reds; and, only once it is true, that the suites
-of Maat are tested on a Mac with the same tools plus `findutils`, `gawk` (as `awk`) and `rsync`
-(`docs/TESTING-harness.md`, «CI»).
+`maat-doctor` checks these tools on a Mac only, and for a missing one prints the `brew` command. The Mac is verified
+in CI: the suites of Maat run on macOS at every push with the same tools plus `findutils`, `gawk` (as `awk`) and
+`rsync` (`docs/TESTING-harness.md`, «CI»).
 
 For the full cycle the tests must leave a **report Maat can read**: JUnit XML (pytest `--junitxml`, which also runs
 `unittest` tests) or the output of vitest. Before the code, the cycle proves that each new test fails on its own
@@ -308,9 +307,9 @@ yourself.
 | Platform | Status |
 |---|---|
 | Linux | verified with all tests at every push (the CI, on a Linux with no Windows tools) |
-| Windows with WSL | TODO blocco D: what the CI runs on Windows (every push or pull requests, tags and by hand; the suites left out and why) and the times. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
-| Windows without WSL | TODO blocco D: the same CI as above (it has no WSL: the fallbacks without WSL are what runs there) |
-| Mac | TODO blocco D: «verified in CI, with bash and the GNU tools from Homebrew» or «in progress», with the open reds (see «Before you start») |
+| Windows with WSL | verified in CI at every push, in Git Bash, in 5 jobs of about 16–22 minutes; left out there, with the reason in `tools/suite-gruppi-windows.list`: the oracle (its logic does not depend on the platform; it runs on Linux and macOS) and the four suites below. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
+| Windows without WSL | verified by the same CI: the runner has no WSL, so the fallbacks without WSL are what runs there |
+| Mac | verified in CI at every push, with bash and the GNU tools from Homebrew (see «Before you start»); the parallel step of `counterproof` needs at least 4 CPUs, and is skipped with the reason on a smaller runner |
 
 Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
 spaces.
@@ -320,7 +319,8 @@ spaces.
 Proven, and where to check it:
 
 - **The automated suites pass** on Linux at every push ([CI](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml));
-  TODO blocco D: Windows and macOS in the CI (when, which suites, what is left out and why).
+  on Windows and macOS too, at every push: on Windows all but the oracle and the four suites that need WSL, which run
+  locally before each release (`tools/suite-gruppi-windows.list`, with the reasons).
 - **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
   remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
 - **One engine, the Python driver, and it decides like the bash code of 1.5.1** (since 1.6.0 the bash code is
@@ -330,8 +330,8 @@ Proven, and where to check it:
   branch of the outcome validator. The expected outputs come from the bash table and the internal validator of 1.5.1:
   written once with the plugin of `v1.5.1` and checked against its bash engine, with no difference; except the lines
   rewritten since, listed in `tools/esempi-equiv/attese/STORIA` with their reason. `bash tools/esempi-equiv/attese.sh`
-  compares the driver with them in about 2 minutes on Linux, and the CI does it at every push (TODO blocco D: on which
-  platforms). An intended change of an output is a rewrite with its reason, visible in the diff of the pull request
+  compares the driver with them in about 2 minutes on Linux, and the CI does it at every push (on Linux, macOS and
+  Windows). An intended change of an output is a rewrite with its reason, visible in the diff of the pull request
   (`docs/TESTING-harness.md`, «The expected outputs»). Going back to the bash engine is reinstalling 1.5.1 («Going
   back to 1.5.1»).
 
@@ -347,8 +347,8 @@ Not proven yet:
 - that Maat finds, on its own, defects nobody had described: in the pilot above the defect the cycle fixed was
   already described in the spec;
 - how often a cycle completes without help, across different projects;
-- TODO blocco D: what of Windows and Mac is not proven (the suites left out, a Mac «in progress»); very large
-  projects.
+- on Windows, in CI, the four suites that need WSL (they run locally, by hand, before each release); on a Mac, the
+  parallel step of `counterproof` when the runner has fewer than 4 CPUs; very large projects.
 
 ## Developing Maat
 
