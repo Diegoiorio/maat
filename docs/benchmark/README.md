@@ -11,7 +11,8 @@ go: a flaw found later restarts the benchmark under a new version of the protoco
 - **Maat side:** Maat **1.6.0** (release tag `v1.6.0`, commit `f079090`), installed in the copy with the two
   commands of the main README (`claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.6.0 --scope
   project`, then `claude plugin install maat@maat --scope project`), with the task's frozen `.claude/maat.json` (in
-  `tasks/<task>/`, in place of an interactive `/maat:setup`). The full cycle is started by its deterministic driver,
+  `tasks/<task>/`, in place of an interactive `/maat:setup`; for T2 and T3 also the task's format adapter, see
+  Clarifications). The full cycle is started by its deterministic driver,
   the same command that `/maat:full-implementation-cycle` launches: `driver.py run .claude/.ai-workflow/<spec> --`,
   with no flag (since 1.6.0 the driver is Maat's only engine; `FIC_DRIVER` has no effect and is not set). Nobody
   answers during the run: a `STOP` ends the run, and its cause is recorded.
@@ -21,7 +22,7 @@ go: a flaw found later restarts the benchmark under a new version of the protoco
   as `CLAUDE_BIN`, auto-update disabled, logged in with a Claude Max subscription), model **`claude-opus-5-5`**
   (`ANTHROPIC_MODEL`), a configuration folder used only for the benchmark (no `CLAUDE.md`, plugins, hooks or MCP
   servers of the operator), the same machine and OS (Linux: Ubuntu 24.04 on WSL2; Python 3.12, Node 20, Go 1.27,
-  git 2.43, `dash`), `--permission-mode bypassPermissions`, no web tools (`WebFetch` and `WebSearch` denied in the
+  git 2.43, `dash`, ShellCheck 0.10.0, all in `PATH`), `--permission-mode bypassPermissions`, no web tools (`WebFetch` and `WebSearch` denied in the
   project settings and on the command line), the spec at the same path `.claude/.ai-workflow/<spec>`, the same
   prepared environment (dependencies installed before the run; neither side needs to install anything), the same
   time cap of 4 hours.
@@ -68,21 +69,23 @@ SHA-256 of the files as committed (LF line endings, `.gitattributes` in this fol
 | `tasks/T4-git-toolbelt-stale-branches/spec-stale-branches.md` | `487a18afd7ce77a00fea1b612caf3399880dcaf935fcbccfeb403eed86fbd91c` |
 | `tasks/T5-click-short-help-abbreviation/spec-short-help-abbreviation.md` | `2c0ebc44b4cf96d1c6e7e8e436b8cd7e8b652fb46e80183961592bf75fdb3754` |
 | `tasks/T1-humanize-parse-size/maat.json` | `1694cb2c3f45456e825a82b7da7addaf0138024d4d873ccd6a8dcb13464693f3` |
-| `tasks/T2-go-humanize-bytes-rounding/maat.json` | `edd3f9c2e6b7554f9a9cabf9bea84c7100456079529569c6b1333ec5ae382bbe` |
-| `tasks/T3-minimist-split-modules/maat.json` | `a2b168ff6e1dcef711024d7adb365930f2c4370a5877c97b63d03a7345308135` |
+| `tasks/T2-go-humanize-bytes-rounding/maat.json` | `84da359d19bb0166e148a85df128d852667b6133465a6ea110834f8f88394574` |
+| `tasks/T3-minimist-split-modules/maat.json` | `2ec85c4d13fee772a58b0c1b6b379ed8a2f502cd17a83eaf5e9c09943d0d857a` |
 | `tasks/T4-git-toolbelt-stale-branches/maat.json` | `69c1c71fda0c2d91e686fa5b50f134ee2b24771362cd52b0a4196bab49743408` |
 | `tasks/T5-click-short-help-abbreviation/maat.json` | `980db7b0b5d062ca1b4148bb25ac96abacef94ced5d399fbb92e787e9087608b` |
+| `tasks/T2-go-humanize-bytes-rounding/go-junit.py` | `bceecf2133267c529a17c98269f29c821f7b26e7ed1d0284b487d3b670b32dfb` |
+| `tasks/T3-minimist-split-modules/tape-junit.py` | `720c89cc1d1b7cc794044c6f95e6516a95d3d89e6423e94a08cc054046b60330` |
 | `baseline-prompt.txt` | `6274809c45f9f189436dfd5e8cee7bd5bffd3b35df628130c25886040bb454e6` |
 | `blind-review.md` | `09b5123477f258a30a9e03542626a11cb29905313175526904497802f4660690` |
-| `run-bench.sh` | `b48393a546f9f0bc973d914dc95ec211e6a29fdbc2a243b6e3b49b5febe7c6d6` |
+| `run-bench.sh` | `a5543780c0c3f4bb2eb7dac5f868c724543ef903a51969a5f8fd2ecf71a11a22` |
 | `run-record.md` | `bd6cc840cdc060446f5594913b351202d5fcb01d0f82f075886a1c2d5f4cd3fd` |
 | `run-record.template.json` | `d1f9511875ae0208b6b34bb1e20708281ec217102d6ad116b2e0a960019c7819` |
 | `grafici.py` | `992f4a7f4d71a88e2ca2333f7a19925bc32c8ca7cf6c680f28618bd3af2a3f78` |
 | `grafici_test.py` | `99bbbfa458791d9a57cf3641427d044827f55fb7d91bed539c45412cb064876c` |
 | Hidden acceptance tests: SHA-256 of their `SHA256SUMS` list (published with the results) | `c134b3397d4744a8260e14bdd44091a5c1a54885231587ae74b0db3df5b037dd` |
 
-The `maat.json` files, the baseline prompt, the review instructions, the run script, the record format and the
-chart script are in `SHA256SUMS` too.
+The `maat.json` files, the format adapters of T2 and T3, the baseline prompt, the review instructions, the run
+script, the record format and the chart script are in `SHA256SUMS` too.
 
 ## Measures
 
@@ -148,6 +151,21 @@ These do not change the protocol; they fix choices it leaves open.
   nothing in the procedure: no run is repeated or discarded, and the order stays the one fixed by the seed.
 - **Hidden tests after each run**, not only at the end: they are fixed before the first run and give a number
   without judgement, so running them early cannot depend on what was seen (step 6 of the Procedure).
+- **Format adapters for T2 and T3** (Maat side only). Maat 1.6.0 reads the outcome of single tests only from a
+  JUnit report in the pytest form or from vitest; without it, the test-red phase of every plan stops `BLOCKED`
+  («report none»). Go and tape do not write such a report, so each of the two tasks has a small converter, the
+  same thing a user of Maat with a Go or tape project would write: [`go-junit.py`](tasks/T2-go-humanize-bytes-rounding/go-junit.py)
+  runs `go test -json ./...`, [`tape-junit.py`](tasks/T3-minimist-split-modules/tape-junit.py) runs tape one file
+  at a time and reads its TAP; both write JUnit with one case per test, the test file as class name and the
+  `file:line` of each failure, using only Python 3 and the project's own `go` or `node`. They are called by the
+  `test` command of the task's `maat.json` (`"report": "junit"`) and installed by `prepare` in
+  `.claude/bench/` of the Maat copy: outside the project's code, so they never enter the final diff, the review
+  copy or the hidden tests, and the baseline copy does not have them. In the same way the lint command of T3 ends
+  with the outcome line (`vitest-fast: esito=PASS|FAIL`) that Maat 1.6.0 requires of a lint gate; ESLint itself
+  prints nothing when the code is clean, and the gate would otherwise be `BLOCKED`. Checked before the freeze, on a
+  prepared copy of each task, with Maat's own `gates.sh` and `plan-check.sh rossi` (the check of the test-red
+  phase): a new test red on its assertion is read as red with its `file:line`, the same test green as green, and
+  without the adapter the phase is `BLOCKED` as described.
 - **Quota.** The runs go in groups of at most 6. Before each group the usage of the subscription is checked: above
   75% of the current window, the group waits for the reset. A run slowed by the quota is recorded as it is.
 
@@ -163,6 +181,10 @@ These do not change the protocol; they fix choices it leaves open.
   quota check before each group (Clarifications) limits how often it happens.
 - Partial results are public while the runs go on, and the operator sees them; nothing in the procedure depends
   on them (fixed order, no run repeated or discarded, review and adjudication only at the end).
+- T2 and T3 depend on the format adapters (Clarifications): a fault in one of them would hurt only the Maat side.
+  They are small, published with the frozen files, and checked on red, green and missing-adapter cases before the
+  freeze; their effect is the one a Go or tape user of Maat 1.6.0 would need anyway, which also means the result
+  on these two tasks holds for Maat with such an adapter, not for Maat out of the box.
 - The prepared environments install the current versions of the packages at preparation time, so two runs of a
   task may get different versions; they are recorded with each run (`env-packages.txt`).
 
