@@ -3,8 +3,8 @@
 # Lines: «<group> [VAR=value …] <entry>» (the entry runs in that group, with those variables) and «- <entry> <reason>»
 # (left out on Windows: counted as covered, written as ESCLUSA in riepilogo.txt). Every entry of suite.list in exactly
 # one line; groups 1..n (tools/suite.sh refuses otherwise, tools/suite.test.sh checks the link with ci.yml).
-# Balanced on the seconds of the first CI of 1.6.0 on the Windows runner (before block C; driver.test.sh estimated
-# after it at ~300 s, 65 s on Linux): group 1 ≈ 1150 s, 2 ≈ 1160, 3 ≈ 1170, 4 ≈ 1140, 5 ≈ 1000. The runner is about
+# Balanced on the seconds of the first CI of 1.6.0 on the Windows runner (before block C; driver.test.sh measured
+# after it at 409-412 s on the runner, 59-85 s on Linux): group 1 ≈ 1150 s, 2 ≈ 1160, 3 ≈ 1170, 4 ≈ 1140, 5 ≈ 1000. The runner is about
 # three times faster than the local Windows machine (gates 234 s against 826).
 # Locally the same set: bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list <results dir> (from Git Bash).
 

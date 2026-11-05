@@ -51,8 +51,8 @@ in 1.5.1 (its roadmap: 1.5.2 removes the bash code, 1.5.3 the multi-platform CI;
 - **CI on three platforms, at every push and pull request** (and by hand, `workflow_dispatch`). Linux and macOS run
   the three groups of `tools/suite-gruppi.list`, Windows the five of the new `tools/suite-gruppi-windows.list`, all
   jobs at the same time; the final jobs `linux`, `macos`, `windows` succeed only if all the groups of their platform
-  do, and `ci` only if all three do: `ci` is the required check. A new push stops the run of the same branch still
-  going (not on `main` nor on tags). Windows runs in Git Bash with `FIC_PYTHON` = the Python 3.10 of `setup-python`,
+  do, and `ci` only if all three do: `ci` is the required check. On a branch a new push stops the run still going;
+  on `main` and on tags every commit has its own run, never cancelled. Windows runs in Git Bash with `FIC_PYTHON` = the Python 3.10 of `setup-python`,
   complete at every push (5 jobs of about 16–22 minutes; the rule: complete if it fits in at most 8 jobs of at most
   45 minutes). Left out on Windows, written with their reason in its groups file: `test-fast`, `counterproof`,
   `vitest-classify`, `comandi-equivalenza` (they need `rsync` and `flock`, which on Windows run in WSL, and the runner

@@ -309,7 +309,7 @@ yourself.
 | Linux | verified with all tests at every push (the CI, on a Linux with no Windows tools) |
 | Windows with WSL | verified in CI at every push, in Git Bash, in 5 jobs of about 16–22 minutes; left out there, with the reason in `tools/suite-gruppi-windows.list`: the oracle (its logic does not depend on the platform; it runs on Linux and macOS) and the four suites below. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
 | Windows without WSL | verified by the same CI: the runner has no WSL, so the fallbacks without WSL are what runs there |
-| Mac | verified in CI at every push, with bash and the GNU tools from Homebrew (see «Before you start»); the parallel step of `counterproof` needs at least 4 CPUs, and is skipped with the reason on a smaller runner |
+| Mac | verified in CI at every push, with bash and the GNU tools from Homebrew (see «Before you start»); `counterproof` itself runs there, in its serial mode; only the tests of its parallel step need at least 4 CPUs, and on a smaller runner those tests are `SALTATO` with the reason |
 
 Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
 spaces.

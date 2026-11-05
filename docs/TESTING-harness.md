@@ -284,8 +284,10 @@ with the bash engine.
 1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the three groups of
 `tools/suite-gruppi.list`, Windows the five of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
 `windows` are green only if all the groups of their platform are, and **`ci`** only if all three are: `ci` is the
-check to require on `main`. `concurrency`: a new push stops the run of the same event and branch still going, except
-on `main` and on tags. Limits per job: Linux 25 minutes, Windows 35, macOS 90 (with the Homebrew setup). **Windows**:
+check to require on `main`. `concurrency`: on a branch a new push stops the run of the same event and branch still
+going; on `main` and on tags every commit has its own run, never cancelled. Limits per job (about 1.5 × the longest
+measured job, rounded up to 5 minutes): Linux 25 minutes, Windows 40 (worst job 1546 s), macOS 30 (longest 984 s,
+with the Homebrew setup). **Windows**:
 Git Bash of the runner, `FIC_PYTHON` = the Python 3.10 of `setup-python` (otherwise `py -3` would choose the newest),
 the `jsonschema` venv in `Scripts/python.exe`, `core.autocrlf false`, `TEMP` rewritten in its long form (the runner
 gives `C:\Users\RUNNER~1\…`, which Python expands and bash does not). The whole Windows run goes at every push: the
