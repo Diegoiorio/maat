@@ -492,7 +492,9 @@ printf '%s
 drv impronta > "$T/imp0.out" 2>&1; rc1=$?
 drv impronta --altro .claude/.ai-workflow > "$T/imp0.out" 2>&1; rc2=$?
 drv impronta "$T/non-esiste" > "$T/imp0.out" 2>&1; rc3=$?
-check "impronta: senza argomenti o con un'opzione → uso (exit 2); un percorso assente → exit 2 «driver.py impronta: non trovato: <percorso>»" '[ $rc1 -eq 2 ] && [ $rc2 -eq 2 ] && [ $rc3 -eq 2 ] && grep -qx "driver.py impronta: non trovato: $T/non-esiste" "$T/imp0.out"'
+# the path as the native Python receives it (on Windows Git Bash converts /tmp/… into C:/…)
+NE=$(cygpath -m "$T/non-esiste" 2>/dev/null || printf '%s' "$T/non-esiste")
+check "impronta: senza argomenti o con un'opzione → uso (exit 2); un percorso assente → exit 2 «driver.py impronta: non trovato: <percorso>»" '[ $rc1 -eq 2 ] && [ $rc2 -eq 2 ] && [ $rc3 -eq 2 ] && grep -qx "driver.py impronta: non trovato: $NE" "$T/imp0.out"'
 check "  la cartella del repo → 64 cifre esadecimali, exit 0" '[[ $(drv impronta .claude/.ai-workflow 2>/dev/null) =~ ^[0-9a-f]{64}$ ]]'
 
 # 1.5.0 (D3): the corpus fingerprint, no proof. On a copy of the repo with the same name elsewhere.

@@ -36,6 +36,9 @@ printf 'node_modules\n.nuxt\n.venv\n__pycache__\nrun/\n' > "$R/.gitignore"
 (cd "$R" && git init -q . && git config user.email t@t && git config user.name t && git add -A && git commit -qm init)
 
 BIN=$T/bin; mkdir -p "$BIN"
+# 1.6.0: the real rsync found in the PATH, not /usr/bin/rsync (on macOS that is openrsync; GNU rsync from Homebrew is in
+# the PATH). The same file on Linux.
+export FAKE_RSYNC_VERO=$(command -v rsync)
 # fake vitest (npx): reads the sources in the cwd (the mirror's apps/admin) and writes the JSON report like vitest 1.6.
 #   IMPORTROTTO in a source -> the test file does not load · ROSSO in src.ts/other.ts -> "somma vale uno"
 #   red on "expected 2 to be 1" · DIVERSO -> red with another message · "altro resta verde" always green.
@@ -110,7 +113,7 @@ cat > "$BIN/rsync" <<'EOF'
 [ -n "${FAKE_RSYNC_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_RSYNC_LOG"
 [ -n "${FAKE_RSYNC_FAIL:-}" ] && exit 23
 [ -n "${FAKE_RSYNC_NOOP:-}" ] && exit 0
-exec /usr/bin/rsync "$@"
+exec "$FAKE_RSYNC_VERO" "$@"
 EOF
 chmod +x "$BIN/npx" "$BIN/fakepy" "$BIN/rsync"
 export PATH="$BIN:$PATH" HOME=$T/home FAKE_LOG=$T/npx FIC_PYTEST_PY=$BIN/fakepy
@@ -152,7 +155,7 @@ export const x = 1'),
 $(entry VERDE $V/uncovered.ts 'w = 1' 'w = 2'),
 $(entry PY modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')
 ]")
-mkdir -p "$MA" && /usr/bin/rsync -a --exclude=__pycache__ "$API/" "$MA/"   # initial state of the api mirror
+mkdir -p "$MA" && "$FAKE_RSYNC_VERO" -a --exclude=__pycache__ "$API/" "$MA/"   # initial state of the api mirror
 WT0=$(wt_hash); MIR0=$(mir_hash)
 FIC_CP_PARALLEL=1 cpr "$LIST"
 check "lista con FAIL -> exit 1, ultima riga esito=FAIL" '[ "$(rc)" = 1 ] && tail -1 "$T/out" | grep -q "esito=FAIL prove=4/6 fail=2 bloccate=0"'

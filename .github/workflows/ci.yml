@@ -131,7 +131,7 @@ jobs:
           for c in bash sed awk grep find xargs stat date sha256sum timeout flock rsync diff python3 git; do
             printf '%-10s %s · %s\n' "$c" "$(command -v "$c")" "$("$c" --version 2>&1 | head -1)"
           done
-          echo "TMPDIR=$TMPDIR"
+          echo "TMPDIR=$TMPDIR · nproc $(nproc) · $(sysctl -n hw.memsize) bytes"; vm_stat | head -6
       - name: Test identity for the temporary git repositories
         run: |
           git config --global user.name "Maat CI"
