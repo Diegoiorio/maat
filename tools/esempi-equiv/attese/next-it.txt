@@ -1,0 +1,764 @@
+== progetto-singoli/spec-esempio-two-reviews
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: LEGACY
+Code: n/a
+Last code phase: (nessuna)
+State: fe2c009b886d
+Next: STOP — la spec ha sia '## Review implementazione' sia '## Implementation review': la stessa sezione in due lingue. Tieni il titolo che c'era, porta le righe di stato in quella sezione e togli l'altra, poi riprendi
+== exit 0
+== progetto-singoli/spec-esempio-review-no-plan
+Plan status: (assente)
+Plan basis: n/a
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: (nessuna)
+State: 9959438ef0f4
+Next: STOP — sezione di review senza piano: niente da pianificare sopra un'implementazione
+== exit 0
+== progetto-singoli/spec-esempio-no-plan
+Plan status: (assente)
+Plan basis: n/a
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 75a11da44c80
+Next: PLAN — nessun piano
+== exit 0
+== progetto-singoli/spec-esempio-draft
+Plan status: DRAFT
+Plan basis: LEGACY
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 969ad8318793
+Next: PLAN — piano in DRAFT
+== exit 0
+== progetto-singoli/spec-esempio-reopened
+Plan status: DRAFT
+Plan basis: LEGACY
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: (nessuna)
+State: 91b2dafd92b0
+Next: STOP — piano riaperto (DRAFT) dopo la review: la review esistente vale ancora? decisione tua
+== exit 0
+== progetto-singoli/spec-esempio-open-decision
+Plan status: NEEDS HUMAN DECISION
+Plan basis: LEGACY
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 44b2a0765814
+Next: STOP — decisione aperta sul piano (Plan status: NEEDS HUMAN DECISION)
+== exit 0
+== progetto-singoli/spec-esempio-pending
+Plan status: PENDING
+Plan basis: LEGACY
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 021c814941d2
+Next: STOP — Plan status non riconosciuto: 'PENDING'
+== exit 0
+== progetto-singoli/spec-esempio-stale-spec
+Plan status: APPROVED
+Plan basis: STALE (spec)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: d01444a68999
+Next: STOP — spec o piano cambiati dopo l'approvazione (STALE (spec)): riapri il piano con /plan-review-cycle
+== exit 0
+== progetto-singoli/spec-esempio-stale-plan
+Plan status: APPROVED
+Plan basis: STALE (plan)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: cf4e2db401e9
+Next: STOP — spec o piano cambiati dopo l'approvazione (STALE (plan)): riapri il piano con /plan-review-cycle
+== exit 0
+== progetto-singoli/spec-esempio-stale-tests
+Plan status: APPROVED
+Plan basis: STALE (tests)
+Plan format: 2
+Generated: assente
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 299615424ec8
+Next: STOP — test di accettazione cambiati dopo la fase test-red (Approved basis: tests): una modifica ai test di accettazione e' una deviazione, decide una persona. Se voluta: bash <MAAT>/scripts/plan-check.sh basis <REPO>/.claude/.ai-workflow/spec-esempio-stale-tests.md --write-tests registra l'impronta attuale; altrimenti riporta i test com'erano (<REPO>/.claude/.ai-workflow/spec-esempio-stale-tests.run/test-red/tests.txt)
+== exit 0
+== progetto-singoli/spec-esempio-test-red
+Plan status: APPROVED
+Plan basis: FRESH
+Plan format: 2
+Generated: assente
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 641fb54c9cfe
+Next: TEST-RED — piano in formato 2 approvato: test di accettazione e stub da scrivere e dimostrare rossi prima dell'implementazione
+== exit 0
+== progetto-singoli/spec-esempio-test-red-stop
+Plan status: APPROVED
+Plan basis: FRESH
+Plan format: 2
+Generated: assente
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 8d8fbeecc4e0
+Next: STOP — 02-test-red: test di accettazione non registrati (PHASE RESULT test-red: STOP — acceptance tests not proven: T1 green). Decidi (piano da correggere e riapprovare, o test da rivedere): correggere i test di accettazione e' una decisione umana. Per rilanciare la fase: rinomina <REPO>/.claude/.ai-workflow/spec-esempio-test-red-stop.run/log/02-test-red.esito in 02-test-red.esito.visto
+== exit 0
+== progetto-singoli/spec-esempio-json-stop
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · PHASE RESULT implement: STOP — JSON: declared deviations (1): step 1 adapted: the guard moved to the caller (the prose said OK: the most conservative wins) · result.json: STOP — deviazioni dichiarate (1): step 1 adapted: the guard moved to the caller
+State: 30f71834df19
+Next: STOP — 02-implement: deviazioni dichiarate (1): step 1 adapted: the guard moved to the caller (regola in codice su <REPO>/.claude/.ai-workflow/spec-esempio-json-stop.run/log/02-implement.result.json). Decidi; per riprendere dopo la decisione (es. migrazione applicata) rinomina quel file in 02-implement.result.json.visto: decide la riga ESITO di 02-implement.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano (spec cambiata), non con la rinomina
+== exit 0
+== progetto-singoli/spec-esempio-lanes
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · PHASE RESULT implement: OK — lanes merged: lane 1: a() returns 20 · lane 2: b() returns 21 · result.json: OK — m
+State: d4af7f752884
+Next: REVIEW — implementazione finita (02-implement)
+== exit 0
+== progetto-singoli/spec-esempio-implement-retry
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 08-implement
+State: 3b6b12919f4f
+Next: IMPLEMENT — piano approvato, nessuna review
+== exit 0
+== progetto-singoli/spec-esempio-attribution
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 03-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: 971ed7b89c3a
+Next: STOP — attribuzione non misurata (02-implement con .pre-tree ancora aperto): la review non saprebbe quali file sono della feature. Con il .pre-tree: git -c core.quotePath=false diff --name-only --no-renames $(cat <pre-tree>) $(bash <MAAT>/scripts/review-surface.sh tree) >> <REPO>/.claude/.ai-workflow/spec-esempio-attribution.run/touched.txt, poi quel tree in <label>.post-tree (e' cio' che fa run-phase). Senza .pre-tree: elenca a mano in touched.txt i file della feature, poi crea il .post-tree — decisione tua
+== exit 0
+== progetto-singoli/spec-esempio-review-decision
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS HUMAN DECISION
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: a1c454eb93c4
+Next: STOP — Review status: NEEDS HUMAN DECISION
+== exit 0
+== progetto-singoli/spec-esempio-contract-changed
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: STALE
+Code: FRESH
+Last code phase: (nessuna)
+State: 692b530d82e3
+Next: REVIEW — spec o piano cambiati dopo la review (Reviewed contract diverso): giro a scope pieno
+== exit 0
+== progetto-singoli/spec-esempio-excluded-touched
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+Last code phase: (nessuna)
+State: 438fa9e36c27
+Next: STOP — la review ha escluso un file toccato dalla feature: src/b.py. Rilancia /implementation-review-cycle <name>: legge touched.txt e rivede quel file (mai la promozione); oppure, se il file non e' della feature, toglilo da <REPO>/.claude/.ai-workflow/spec-esempio-excluded-touched.run/touched.txt
+== exit 0
+== progetto-singoli/spec-esempio-fix-json-stop
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: 04-fix · PHASE RESULT fix: STOP — JSON: declared deviations (1): finding F2 closed differently (the prose said OK: the most conservative wins) · result.json: STOP — deviazioni dichiarate (1): finding F2 closed differently
+State: 4466cd6f21bd
+Next: STOP — 04-fix: deviazioni dichiarate (1): finding F2 closed differently (regola in codice su <REPO>/.claude/.ai-workflow/spec-esempio-fix-json-stop.run/log/04-fix.result.json). Decidi; per riprendere dopo la decisione (es. migrazione applicata) rinomina quel file in 04-fix.result.json.visto: decide la riga ESITO di 04-fix.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano (spec cambiata), non con la rinomina
+== exit 0
+== progetto-singoli/spec-esempio-needs-changes
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: (nessuna)
+State: 4fc84d6f076c
+Next: FIX — Review status: NEEDS_CHANGES
+== exit 0
+== progetto-singoli/spec-esempio-budget-spent
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: (nessuna)
+State: a45fabcf9d83
+Next: STOP — budget dei fix esaurito (Review rounds 3/3 · post-approval NEEDS_CHANGES 0/1): un fix che nessuna review vedra' non si scrive; decide una persona
+== exit 0
+== progetto-singoli/spec-esempio-budget-unreadable
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: (nessuna)
+State: e4a47556fe22
+Next: STOP — budget dei fix non calcolabile: riga 'Review rounds: n/3 · post-approval NEEDS_CHANGES: k/1' assente o illeggibile ('')
+== exit 0
+== progetto-singoli/spec-esempio-needs-verification
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: NEEDS_VERIFICATION
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: (nessuna)
+State: c989ef9b37c9
+Next: REVIEW — NEEDS_VERIFICATION: un tentativo di promozione
+== exit 0
+== progetto-singoli/spec-esempio-finalize-older
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+Last code phase: (nessuna)
+State: 2159b7e8caa5
+Next: REVIEW — Finalize: piu' vecchia dell'ultima review lanciata (04-review): nel nuovo regime lo stato finale lo firma <MAAT>/scripts/finalize.sh (fail-closed; vedi log/<label>.finalize)
+== exit 0
+== progetto-singoli/spec-esempio-done
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: a7423008c1c0
+Next: DONE — codice uguale allo snapshot approvato
+== exit 0
+== progetto-singoli/spec-esempio-code-changed
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: STALE
+  Status: STALE
+  Delta (approved tree → current, manifest paths):
+    M	src/a.py
+    EXCLUDED-CHANGED	src/b.py
+  Test signals: none
+  Gate-only eligible: no — non e' un file di test: src/a.py
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: 1d457eea89c8
+Next: REVIEW — codice cambiato dopo l'approvazione (STALE)
+== exit 0
+== progetto-singoli/spec-esempio-code-unknown
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: UNKNOWN
+  Status: UNKNOWN (tree 0123456789ab potato da gc, nessuna impronta registrata)
+Last code phase: (nessuna)
+State: 4007434574bd
+Next: REVIEW — codice cambiato dopo l'approvazione (UNKNOWN)
+== exit 0
+== progetto-singoli/spec-esempio-impossible
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: (nessuna)
+State: 0e77e8680975
+Next: STOP — combinazione non riconosciuta: Review status 'APPROVED' · Feature status 'PLANNED'
+== exit 0
+== progetto-singoli/spec-esempio-harness-changed
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 6291b1aa027f
+Next: STOP — harness cambiato dal 2026-01-01T00:00:00Z (impronta registrata 000000000000, attuale <impronta-attuale>): ricomincia la fase o conferma. Rimedio: se il cambio e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-changed.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT); altrimenti riporta il harness com'era
+== exit 0
+== progetto-singoli/spec-esempio-harness-old
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 412c0ba67d64
+Next: STOP — impronta di formato precedente: ciclo iniziato col harness interno (impronta registrata 5f70bf18a086 dal 2026-01-01T00:00:00Z, attuale <impronta-attuale>). Rimedio: se il passaggio al plugin e' voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-old.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT); altrimenti riprendi il ciclo col harness interno
+== exit 0
+== progetto-singoli/spec-esempio-harness-unreadable
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: a8ee6aebb116
+Next: STOP — harness.fp illeggibile (vuoto o senza impronta, registrato dal 2026-01-01T00:00:00Z; attuale <impronta-attuale>). Rimedio: se il harness attuale e' quello voluto, bash "<MAAT>/scripts/run-phase.sh" --harness-fp > "<REPO>/.claude/.ai-workflow/spec-esempio-harness-unreadable.run/harness.fp" (su Windows: in Git Bash) e riprendi (prossima fase: IMPLEMENT)
+== exit 0
+== progetto-singoli/spec-esempio-json-unreadable
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: STOP — result.json illeggibile
+State: bc67d23116bf
+Next: STOP — 02-implement: result.json illeggibile (regola in codice su <REPO>/.claude/.ai-workflow/spec-esempio-json-unreadable.run/log/02-implement.result.json). Decidi; per riprendere dopo la decisione (es. migrazione applicata) rinomina quel file in 02-implement.result.json.visto: decide la riga ESITO di 02-implement.esito (STOP -> la fase si rilancia, in completion). Una deviazione si accetta riaprendo il piano (spec cambiata), non con la rinomina
+== exit 0
+== progetto-singoli/spec-esempio-json-seen
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · PHASE RESULT implement: STOP — JSON: declared deviations (1): step 1 skipped: already done (the prose said OK: the most conservative wins)
+State: 4308a3edf857
+Next: IMPLEMENT — piano approvato, nessuna review
+== exit 0
+== progetto-storico/spec-esempio-chiusa-legacy
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: 02-implement · ESITO FASE implement: OK — fatto
+State: 785d74d98b95
+Next: DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile
+== exit 0
+== progetto-storico/spec-esempio-legacy
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: (assente)
+Feature status: (assente)
+Reviewed contract: LEGACY
+Code: n/a
+Last code phase: (nessuna)
+State: 4a1bcb5193aa
+Next: REVIEW — sezione di review legacy senza righe di stato: la review fa un giro pieno
+== exit 0
+== progetto-storico/spec-esempio-fix-inline
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: present
+Review status: NEEDS_CHANGES
+Feature status: PLANNED
+Reviewed contract: FRESH
+Code: n/a
+Last code phase: 04-fix · ESITO FASE fix: OK — inline
+State: ca48d6701278
+Next: REVIEW — correzione finita (04-fix)
+== exit 0
+== progetto-storico/spec-esempio-difensiva
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · ESITO FASE implement: OK — fatto · result.json: OK — m
+State: ba24b9a2ded5
+Next: REVIEW — implementazione finita (02-implement)
+== exit 0
+== progetto-storico/spec-esempio-bloccata
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: 02-implement · ESITO FASE implement: STOP — migrazione da applicare · result.json: STOP — esito STOP: m
+State: c160c53ab8e1
+Next: IMPLEMENT — piano approvato, nessuna review
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-a
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-a-1-api chiuso; spec-esempio-catena-a-2-ui chiuso; Chiusura: IMPLEMENTED — base b233fbc0bd6ee25864a82f50822a148cca49e063 · tree a5d91e884afda4c93dea1889428310d13644de83 · gates PASS · e2e not required · 2026-01-01T12:00:00Z
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: c9bcdebffd71
+Next: DONE — catena chiusa: 2 anelli IMPLEMENTED e chiusura IMPLEMENTED sul codice attuale
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-a-1-api
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/2 di spec-esempio-catena-a
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+  Status: FRESH
+    EXCLUDED-CHANGED	src/b.py
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: 6cf56fccfd84
+Next: DONE — codice uguale allo snapshot approvato
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-a-2-ui
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 2/2 di spec-esempio-catena-a
+Anelli precedenti: src/a.py — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: 5905b710f99475475dfe1b1788c759af42e58f79
+Diff anello: src/b.py
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+Last code phase: 03-implement · PHASE RESULT implement: OK — b() returns 20
+State: e352e5f6066a
+Next: DONE — codice uguale allo snapshot approvato
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-b
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 1 anelli · spec-esempio-catena-b-1-dati chiuso;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: ae3577c46692
+Next: CHIUSURA — 1 anelli chiusi: gate full sull'albero finale contro la base della madre (base.txt del primo anello), e2e via /dev-verify se le figlie hanno [e2e-locator:
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-b-1-dati
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/1 di spec-esempio-catena-b
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: 02-implement
+State: 233e20540723
+Next: DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-c
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 1 anelli · spec-esempio-catena-c-1-report chiuso; Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-01-01T12:00:00Z
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 7a428b12bb82
+Next: STOP — chiusura della catena non riuscita (NEEDS_VERIFICATION — gates FAIL · 2026-01-01T12:00:00Z): vedi <REPO>/.claude/.ai-workflow/spec-esempio-catena-c.run/log/*-chiusura.*; corretto il motivo, per rilanciarla rinomina <REPO>/.claude/.ai-workflow/spec-esempio-catena-c.run/chiusura.txt in chiusura.txt.visto
+== exit 0
+== progetto-catene-chiuse/spec-esempio-catena-c-1-report
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/1 di spec-esempio-catena-c
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: (nessuna)
+State: d9b2a8bccc6f
+Next: DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile
+== exit 0
+== progetto-catena-codice-cambiato/spec-esempio-catena-d
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 1 anelli · spec-esempio-catena-d-1-core chiuso; Chiusura: IMPLEMENTED — base 8472faa77d8bc5ac415f86c5ed554b044c7896de · tree 85557a110cb7935b14840654f02368df17d87d9a · gates PASS · e2e not required · 2026-01-01T12:00:00Z
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 690ab9873c52
+Next: CHIUSURA — codice della catena cambiato dopo la chiusura (STALE): si rifa'
+== exit 0
+== progetto-catena-codice-cambiato/spec-esempio-catena-d-1-core
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/1 di spec-esempio-catena-d
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: STALE
+  Status: STALE
+  Delta (approved tree → current, manifest paths):
+    M	src/a.py
+  Test signals: none
+  Gate-only eligible: no — non e' un file di test: src/a.py
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns the new value · result.json: OK — m
+State: 621623ef7422
+Next: REVIEW — codice cambiato dopo l'approvazione (STALE)
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-e
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-e-1-modello chiuso; spec-esempio-catena-e-2-vista aperto;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: d7b196aa4a71
+Next: WAIT — catena: anello 2/2 (spec-esempio-catena-e-2-vista) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-e-1-modello
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/2 di spec-esempio-catena-e
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: FRESH
+Code: FRESH
+Last code phase: 02-implement · ESITO FASE implement: OK — fatto · result.json: OK — m
+State: 985e257948b8
+Next: DONE — codice uguale allo snapshot approvato
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-e-2-vista
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 2/2 di spec-esempio-catena-e
+Anelli precedenti: src/a.py — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: 5905b710f99475475dfe1b1788c759af42e58f79
+Diff anello: (vuoto)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 55a1390a3cce
+Next: IMPLEMENT — piano approvato, nessuna review
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-f
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-f-1-schema aperto; spec-esempio-catena-f-2-import aperto;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: d2e08371b6c5
+Next: WAIT — catena: anello 1/2 (spec-esempio-catena-f-1-schema) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-f-1-schema
+Plan status: DRAFT
+Plan basis: LEGACY
+Catena: anello 1/2 di spec-esempio-catena-f
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: a2fb73348678
+Next: PLAN — piano in DRAFT
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-f-2-import
+Plan status: (assente)
+Plan basis: n/a
+Catena: anello 2/2 di spec-esempio-catena-f
+Anelli precedenti: (nessun file) — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: (assente: l'anello precedente non ha un .post-tree)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 75a11da44c80
+Next: WAIT — catena: il piano dell'anello 2 parte quando il piano dell'anello 1 (spec-esempio-catena-f-1-schema) e' APPROVED (ora: DRAFT)
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-g
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-g-1-api aperto; spec-esempio-catena-g-2-client aperto;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: dabb1477197c
+Next: WAIT — catena: anello 1/2 (spec-esempio-catena-g-1-api) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-g-1-api
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/2 di spec-esempio-catena-g
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 327a562b6f82
+Next: IMPLEMENT — piano approvato, nessuna review
+== exit 0
+== progetto-catena-aperta/spec-esempio-catena-g-2-client
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 2/2 di spec-esempio-catena-g
+Anelli precedenti: (nessun file) — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: (assente: l'anello precedente non ha un .post-tree)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 373e640728e8
+Next: WAIT — catena: l'implement dell'anello 2 aspetta l'anello 1 (spec-esempio-catena-g-1-api) IMPLEMENTED; il piano puo' girare
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-h
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-h-1-missing assente; spec-esempio-catena-h-2-missing assente;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 64d2f3db8f44
+Next: STOP — catena: la figlia spec-esempio-catena-h-1-missing (anello 1/2) non esiste: la riga Figlie: e i file devono coincidere
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-i
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-i-1-base chiuso; spec-esempio-catena-i-2-next aperto;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: c88c0f3cbef7
+Next: WAIT — catena: anello 2/2 (spec-esempio-catena-i-2-next) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-i-1-base
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/2 di spec-esempio-catena-i
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: (nessuna)
+State: b0ee9e8fb1c2
+Next: DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-i-2-next
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 2/2 di spec-esempio-catena-i
+Anelli precedenti: (nessun file) — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: (assente: l'anello precedente non ha un .post-tree)
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: bd111c7652b2
+Next: STOP — catena: l'anello 1 (spec-esempio-catena-i-1-base) non ha un .post-tree: la base dell'anello 2 non e' misurata. Decisione tua
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-j
+Plan status: (assente)
+Plan basis: n/a
+Catena: madre di 2 anelli · spec-esempio-catena-j-1-base chiuso; spec-esempio-catena-j-2-next aperto;
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 9464ebfcee4b
+Next: WAIT — catena: anello 2/2 (spec-esempio-catena-j-2-next) non chiuso: il ciclo gira su quell'anello; la madre chiude dopo l'ultimo
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-j-1-base
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 1/2 di spec-esempio-catena-j
+Review section: present
+Review status: APPROVED
+Feature status: IMPLEMENTED
+Reviewed contract: LEGACY
+Code: LEGACY
+Last code phase: 02-implement · PHASE RESULT implement: OK — a() returns 10
+State: f3b8c6f07cd2
+Next: DONE — sezione senza snapshot (legacy): freschezza del codice non verificabile
+== exit 0
+== progetto-catena-albero-cambiato/spec-esempio-catena-j-2-next
+Plan status: APPROVED
+Plan basis: FRESH
+Catena: anello 2/2 di spec-esempio-catena-j
+Anelli precedenti: src/a.py — stessa catena, anello precedente: ne' altri flussi ne' misti, niente completion
+Base anello: 5905b710f99475475dfe1b1788c759af42e58f79
+Diff anello: src/c.py
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 4b17502fd8e5
+Next: STOP — catena: il working tree (46bdeeb30f8e2c5baa92eac3e49681f6f2e8350e) non e' il .post-tree dell'anello 1 (5905b710f99475475dfe1b1788c759af42e58f79): modifiche fatte dopo la sua chiusura, che l'anello 2 si attribuirebbe. Decisione tua: riportale fuori dal tree e riprendi; per tenerle nella catena aggiungile al touched.txt di spec-esempio-catena-j-1-base e registra il tree attuale come suo .post-tree (bash <MAAT>/scripts/review-surface.sh tree)
+== exit 0
+== progetto-impronta-nc/spec-esempio-harness-not-computable
+Plan status: APPROVED
+Plan basis: FRESH
+Review section: absent
+Reviewed contract: n/a
+Code: n/a
+Last code phase: (nessuna)
+State: 527780fd1c3f
+Next: STOP — impronta del harness non calcolabile (file del plugin in <MAAT> o .claude/maat.json di <REPO> non leggibili, oppure repository non trovato; registrata dal 2026-01-01T00:00:00Z): verifica il plugin e il repository, poi riprendi
+== exit 0

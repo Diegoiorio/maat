@@ -445,7 +445,7 @@ EOF
 chmod +x "$W/claude-rq"
 rq() { # $1 replay.sh to use, $2 spy
   (cd "$PJ" && env -u MAAT_ROOT -u MAAT_PLUGIN_DIR -u FIC_REPO -u FIC_LOCK -u FIC_PHASE CLAUDE_BIN="$W/claude-rq" SPY="$2" \
-    FIC_DRIVER=0 FIC_LANES=0 bash "$1" rq plan --source "$SRCQ" --out "$W/out-$(basename "$2")" </dev/null)
+    FIC_LANES=0 bash "$1" rq plan --source "$SRCQ" --out "$W/out-$(basename "$2")" </dev/null)
 }
 pdir() { grep -A1 -x -- "--plugin-dir" "$1" 2>/dev/null | sed -n 2p; }
 rq "$RP" "$W/spia-rq" > "$W/rq.out" 2>&1

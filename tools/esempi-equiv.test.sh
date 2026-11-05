@@ -1,39 +1,49 @@
 #!/usr/bin/env bash
-# esempi-equiv.test.sh — the public equivalence corpus, tools/esempi-equiv/ (Maat 1.5.0). A test of the repo only.
+# esempi-equiv.test.sh — the public corpus, tools/esempi-equiv/ (Maat 1.5.0; 1.6.0: the expected outputs in place
+# of the equivalence certificate). A test of the repo only.
 #   bash tools/esempi-equiv.test.sh          (Git Bash or Linux)
 #   MAAT_PY_JSONSCHEMA=<python with jsonschema>   the second validator (D14; the CI sets it, venv of its own)
 #   MAAT_PY_MINIMO=<python without jsonschema>    the first one, when the interpreter of python.sh imports jsonschema
-#   MAAT_CERT_RICHIESTO=1                         the strict check of the certificate (CI: main, tags, PRs to main)
+#   MAAT_ATTESE_RICHIESTE=1                       the strict checks of §5 (the CI, at every push)
 #   MAAT_ESEMPI_DETERMINISMO=completo|ridotto     the second build of case 1 (default: completo on Linux, ridotto
 #                                                 elsewhere: on Windows a whole build costs ~15 min, on Linux ~30 s)
 # Block A of the 1.5.0 plan (the builder):
 #   1. the corpus built twice, in two folders and at two different seconds of the clock → the same fingerprint
-#      (driver.py equiv --impronta, printed by the builder), exit 0, no placeholder left. «completo»: the whole corpus
+#      (driver.py impronta, printed by the builder), exit 0, no placeholder left. «completo»: the whole corpus
 #      twice; «ridotto»: the whole corpus once, then one mini-repo (the one whose files carry the sha of the base
 #      commit) again, against the fingerprint of the same mini-repo in the first build;
 #   2. the manifests: every row of righe.list and every branch of rami-valida.list has a case in casi.tsv, every spec
 #      and every jsonl of the built corpus is in casi.tsv and vice versa, no counted jsonl is empty;
 #      2b. every branch of rami-valida.list with an expectation (out, result, in) is gone through by at least one of its
-#      jsonl, by `run-phase.sh --valida` on the built corpus; every fase-<f> label of a jsonl is its phase (_phase_of);
-#      2c. the copy of snap_fp in the builder gives the same result as the one of cycle-state.sh;
+#      jsonl, by `driver.py valida` on the built corpus; every fase-<f> label of a jsonl is its phase (_phase_of);
+#      2c. the copy of snap_fp in the builder gives the same result as _snap_fp of driver.py;
 #   3. a model with a placeholder outside the list, or naming a state that does not exist → exit 2.
-# Block D (the proof on the corpus; one build, the first one, shared by every case below):
-#   4. `driver.py equiv` on the built corpus with each validator available (D14: the interpreter of python.sh, by what
-#      it imports, or MAAT_PY_MINIMO → «minimo»; MAAT_PY_JSONSCHEMA → «jsonschema»; a missing one: «SALTATO: <v>»):
-#      every spec UGUALE, «diverse=0 · diversi=0» in it and in en, the counts = casi.tsv, the first word of Next of
-#      every spec = casi.tsv in both languages;
-#   5. with MAAT_CERT_RICHIESTO=1: plugins/maat/scripts/driver.equiv VALIDO, the fingerprint of its corpus line = that
-#      of the corpus built, its «spec=<n> jsonl=<m>» = the counts of casi.tsv, «validatori minimo,jsonschema», and no
-#      validator SALTATO.
+# The proof on the corpus (1.6.0, D2; one build, the first one, shared by every case below):
+#   4. tools/esempi-equiv/attese.sh on the built corpus, with each validator available (the interpreter of python.sh,
+#      by what it imports, or MAAT_PY_MINIMO → «minimo»; MAAT_PY_JSONSCHEMA or ~/maat-venv → «jsonschema»; a missing
+#      one: «SALTATO: <v>»): exit 0, next-it and next-en UGUALE (one block per spec of casi.tsv), every valida file of
+#      an available validator UGUALE (one block per jsonl), the first word of Next of every spec = casi.tsv in both
+#      languages; attese/STORIA starts with the writing from the plugin of v1.5.1 (the anchor of the proof);
+#   5. with MAAT_ATTESE_RICHIESTE=1: no validator SALTATO, and the files of attese/ changed since the base (merge-base
+#      with origin/main) only with a new line in attese/STORIA (attese.sh --storia).
 # Counterproofs: (A) a copy of the builder without the fixed dates (the DATE-FISSE line) → two builds of a mini-repo
 # whose files carry the sha of the base commit give two fingerprints (the determinism case would be red);
-# (a) a copy of driver.py whose Python twin of IMPLEMENT points to another key → DIVERSO on the IMPLEMENT specs;
-# (b) DIFENSIVA = ("difensiva: ",) → DIVERSO on a jsonl (valida) and on a spec (next) of the «defensive:» branch;
+# (a) a copy of the plugin whose driver.py has the Python twin of IMPLEMENT pointing to another key → attese.sh DIVERSO
+# only on IMPLEMENT specs (progetto-storico, next, it);
+# (b) DIFENSIVA = ("difensiva: ",) → DIVERSO on a jsonl (valida) and on a spec (next) of progetto-singoli (it);
 # (c) the case of row C2-chiusura-assente removed from a copy of casi.tsv → «row without a case», red;
 # (d) a counted jsonl of the built corpus emptied → «empty jsonl», red;
-# (e) a certificate VALIDO for the hashes but with another fingerprint → the strict check is red; (e') the same with the
-# fingerprint of the corpus but the counts of one spec → red;
-# (f) in a copy of rami-valida.list, v-badjson with the expected output of v-nojson → only v-badjson red.
+# (f) in a copy of rami-valida.list, v-badjson with the expected output of v-nojson → only v-badjson red;
+# (g) a copy of attese/ with one line of next-it.txt changed → DIVERSO on that block only (the real attese/ on the same
+# mini-repo: UGUALE);
+# (h) the normalizations (attese.py normalizza, the forms of attese.sh --forme): every form of the closed list becomes
+# its token, at the boundary of a path or of hex digits only (a longer name, a 13th digit: untouched), the longest
+# first (<MAAT> under <REPO>), forms of equal length all replaced; one character of the reason changed in each line →
+# a different line (a real difference stays red);
+# (i) MAAT_PY_JSONSCHEMA pointing to a Python without jsonschema → attese.sh --validatori: «SALTATO: jsonschema», exit
+# 1 with MAAT_ATTESE_RICHIESTE=1, exit 0 without;
+# (j) on a fake repo: a file of attese/ changed and STORIA unchanged → attese.sh --storia red; one line appended →
+# green; STORIA rewritten (not appended) → red.
 set -uo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # no __pycache__ in the plugin (driver.py imports maat_msg, maat_paths)
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -73,7 +83,7 @@ I1=$(impronta "$T/c1.out"); I2=$(impronta "$T/c2.out")
 if [ $DET = completo ]; then
   check "due costruzioni, in cartelle e secondi diversi → la stessa impronta" '[[ $I1 =~ ^[0-9a-f]{64}$ ]] && [ "$I1" = "$I2" ]' "$I1 / $I2"
 else
-  I1R=$("$FIC_PY" "$DRV" equiv --impronta "$T/c1/$CP/.claude/.ai-workflow" 2>/dev/null | tr -d '\r')
+  I1R=$("$FIC_PY" "$DRV" impronta "$T/c1/$CP/.claude/.ai-workflow" 2>/dev/null | tr -d '\r')
   check "due costruzioni, in cartelle e secondi diversi → la stessa impronta (ridotto: $CP)" '[[ $I1 =~ ^[0-9a-f]{64}$ ]] && [[ $I1R =~ ^[0-9a-f]{64}$ ]] && [ "$I1R" = "$I2" ]' "$I1R / $I2"
 fi
 check "  nessun segnaposto rimasto nel corpus costruito" '[ -z "$(grep -rlF "{{" "$T/c1"/*/.claude 2>/dev/null)" ]'
@@ -96,7 +106,7 @@ check "casi.tsv: 6 campi per riga, tipo spec o jsonl" '[ -z "$campi" ]' "$campi"
 # rami-valida.list: 5 fields, none empty (IFS=$'\t' read in rami_non_provati merges consecutive tabs)
 campi_v=$(tr -d '\r' < "$EQ/rami-valida.list" | grep -v '^#' | grep . | awk -F'\t' '{ v = 0; for (i = 1; i <= NF; i++) if ($i == "") v = 1 } NF != 5 || v' | head -3)
 check "rami-valida.list: 5 campi per riga, nessuno vuoto" '[ -z "$campi_v" ]' "$campi_v"
-# the built corpus against casi.tsv: the specs (with their run dir) and the counted jsonl (equiv: log/<n>-<label>.jsonl, no
+# the built corpus against casi.tsv: the specs (with their run dir) and the counted jsonl (attese.sh: log/<n>-<label>.jsonl, no
 # dot in the label, and not of the phase chiusura: _phase_of of driver.py, «chiusura» anywhere in the file name only)
 for d in "$T/c1"/*/; do
   m=$(basename "$d")
@@ -128,14 +138,14 @@ SCR=$ROOT/plugins/maat/scripts
 nat() { cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1"; }   # a path for the native Python (Windows)
 SCHEMA=$(nat "$ROOT/plugins/maat/schemas/phase-result.schema.json")
 casi | awk -F'\t' '$1 == "jsonl" { print $2 "/.claude/.ai-workflow/" $3 "\t" $5 }' > "$T/jsonl-rami"
-# the phase of each jsonl: _phase_of of driver.py on its label, as equiv passes it to --valida
+# the phase of each jsonl: _phase_of of driver.py on its label, as attese.sh passes it to valida
 sed -E 's|^.*/log/([0-9]+-[^/]*)\.jsonl\t.*$|\1|' "$T/jsonl-rami" |
   "$FIC_PY" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from driver import _phase_of; [print(_phase_of(l.strip())) for l in sys.stdin]' \
   "$(nat "$SCR")" | tr -d '\r' > "$T/jsonl-fasi"
 mkdir -p "$T/valida"; : > "$T/valida/indice"; k=0
 while IFS=$'\t' read -r f et ph; do
   k=$((k + 1)); rm -f "$T/valida/r.json"
-  o=$(cd "$T" && MAAT_LINGUA=it bash "$SCR/run-phase.sh" --valida "$(nat "$T/c1/$f")" "$SCHEMA" "$ph" "$(nat "$T/valida/r.json")" 2>/dev/null); rc=$?
+  o=$(cd "$T" && MAAT_LINGUA=it "$FIC_PY" "$(nat "$DRV")" valida "$(nat "$T/c1/$f")" "$SCHEMA" "$ph" "$(nat "$T/valida/r.json")" 2>/dev/null); rc=$?
   printf '%s' "$o" | tr -d '\r' | awk 'NR > 1 { printf " ## " } { printf "%s", $0 } END { print "" }' > "$T/valida/$k.out"
   [ -f "$T/valida/r.json" ] && tr -d '\r' < "$T/valida/r.json" > "$T/valida/$k.res"
   printf '%s\t%s\t%s\t%s\t%s\n' "$k" "$et" "$f" "$ph" "$rc" >> "$T/valida/indice"
@@ -158,7 +168,7 @@ rami_non_provati() { # $1 a rami-valida.list → the labels with a condition (ou
 }
 np=$(rami_non_provati "$EQ/rami-valida.list")
 nr=$(tr -d '\r' < "$EQ/rami-valida.list" | grep -v '^#' | awk -F'\t' 'NF == 5 && $3 $4 $5 != "---"' | grep -c .)
-check "ogni ramo di rami-valida.list con un'attesa ($nr) e' percorso da almeno un suo jsonl (run-phase.sh --valida)" '[ -z "$np" ] && [ "$nr" -gt 0 ]' "$np
+check "ogni ramo di rami-valida.list con un'attesa ($nr) e' percorso da almeno un suo jsonl (driver.py valida)" '[ -z "$np" ] && [ "$nr" -gt 0 ]' "$np
     (uscite: $(head -c 600 "$T/valida/1.out"))"
 fasi_ko=$(while IFS=$'\t' read -r k lab f ph rc; do
   for e in $(printf '%s\n' "$lab" | tr ',' '\n' | sed -n 's/^fase-//p'); do [ "$e" = "$ph" ] || echo "$f: fase-$e, _phase_of $ph"; done
@@ -170,18 +180,22 @@ np_f=$(rami_non_provati "$T/rami-scambiati")
 check "controprova (f): v-badjson con l'attesa di v-nojson in una copia di rami-valida.list → solo v-badjson rosso" \
   '! cmp -s <(tr -d "\r" < "$EQ/rami-valida.list") "$T/rami-scambiati" && [ "$np_f" = v-badjson ]' "$np_f"
 
-# --- 2c. snap_fp: the copy in the builder ({{finalize}}) gives the same result as the formula of cycle-state.sh ---
+# --- 2c. snap_fp: the copy in the builder ({{finalize}}) gives the same result as _snap_fp of driver.py ---
 sfp() { # $1 file whose «snap_fp() » line is evaluated, $2 value → its snap_fp
   ( eval "$(tr -d '\r' < "$1" | grep -m1 '^snap_fp() ')" && snap_fp "$2" )
+}
+sfp_drv() { # $1 value → _snap_fp of driver.py
+  "$FIC_PY" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from driver import _snap_fp; sys.stdout.write(_snap_fp(sys.argv[2]))' \
+    "$(nat "$SCR")" "$1" 2>/dev/null | tr -d '\r'
 }
 SFP_IN=("base 0123456789ab · tree 0123456789ab · fingerprint 0123456789ab · 2 paths"
         "  base 0123456789ab  ·	tree 0123456789ab ·  fingerprint 0123456789ab · 2 paths	 " "")
 sfp_ko=""
 for v in "${SFP_IN[@]}"; do
-  a=$(sfp "$B" "$v"); c=$(sfp "$SCR/cycle-state.sh" "$v")
-  [[ $a =~ ^[0-9a-f]{12}$ ]] && [ "$a" = "$c" ] || sfp_ko+=" «$v»: costruttore $a, cycle-state.sh $c;"
+  a=$(sfp "$B" "$v"); c=$(sfp_drv "$v")
+  [[ $a =~ ^[0-9a-f]{12}$ ]] && [ "$a" = "$c" ] || sfp_ko+=" «$v»: costruttore $a, driver.py $c;"
 done
-check "snap_fp del costruttore = snap_fp di cycle-state.sh (${#SFP_IN[@]} valori, spazi e tab compressi)" '[ -z "$sfp_ko" ]' "$sfp_ko"
+check "snap_fp del costruttore = _snap_fp di driver.py (${#SFP_IN[@]} valori, spazi e tab compressi)" '[ -z "$sfp_ko" ]' "$sfp_ko"
 # the inputs discriminate: the first two differ only in spaces and tabs, so a formula that did not squeeze them would differ
 check "  i valori distinguono: i primi due danno la stessa impronta, una formula senza la compressione degli spazi no" \
   '[ "$(sfp "$B" "${SFP_IN[0]}")" = "$(sfp "$B" "${SFP_IN[1]}")" ] && [ "$(printf "%s" "${SFP_IN[0]}" | sha256sum | cut -c1-12)" != "$(printf "%s" "${SFP_IN[1]}" | sha256sum | cut -c1-12)" ]'
@@ -213,97 +227,141 @@ check "controprova: senza date fisse due costruzioni danno impronte diverse (il 
   '[[ $K1 =~ ^[0-9a-f]{64}$ ]] && [[ $K2 =~ ^[0-9a-f]{64}$ ]] && [ "$K1" != "$K2" ]' "$K1 / $K2"
 rm -rf "$T/c2" "$T/k1" "$T/k2" "$T/q1" "$T/q2" "$T/q3" "$T/copia"
 
-# --- 4. equiv on the corpus, with each validator available (D14) ---
-# the targets in the fixed order of the builder (its «esempi-equiv: <mini-repo> · spec=» lines)
-TARGETS=(); while IFS= read -r m; do TARGETS+=("$T/c1/$m/.claude/.ai-workflow"); done < <(sed -n 's/^esempi-equiv: \(progetto-[^ ]*\) · spec=.*/\1/p' "$T/c1.out")
+# --- 4. the expected outputs: attese.sh on the corpus built (D2), with each validator available ---
+AT=$EQ/attese.sh
 NS=$(casi | awk -F'\t' '$1 == "spec"' | grep -c .); NJ=$(casi | awk -F'\t' '$1 == "jsonl"' | grep -c .)
-casi | awk -F'\t' '$1 == "spec" { print $3 " " $4 }' | LC_ALL=C sort > "$T/parole-attese"
 validatore() { "$1" -c "import jsonschema" >/dev/null 2>&1 && echo jsonschema || echo minimo; }
-blocco() { tr -d '\r' < "$1" | sed -n "/^equiv: lingua $2\$/,/^equiv: lingua [a-z]*\$/p" | sed '/^equiv: lingua /d'; }
-declare -A PYV=()
-PYV[$(validatore "$FIC_PY")]=$FIC_PY
-if [ -n "${MAAT_PY_MINIMO:-}" ]; then
-  check "MAAT_PY_MINIMO non importa jsonschema" '[ "$(validatore "$MAAT_PY_MINIMO")" = minimo ]' "$MAAT_PY_MINIMO"
-  [ "$(validatore "$MAAT_PY_MINIMO")" = minimo ] && PYV[minimo]=$MAAT_PY_MINIMO
-fi
-if [ -n "${MAAT_PY_JSONSCHEMA:-}" ]; then
-  check "MAAT_PY_JSONSCHEMA importa jsonschema" '[ "$(validatore "$MAAT_PY_JSONSCHEMA")" = jsonschema ]' "$MAAT_PY_JSONSCHEMA"
-  [ "$(validatore "$MAAT_PY_JSONSCHEMA")" = jsonschema ] && PYV[jsonschema]=$MAAT_PY_JSONSCHEMA
-fi
+[ -z "${MAAT_PY_MINIMO:-}" ] || check "MAAT_PY_MINIMO non importa jsonschema" '[ "$(validatore "$MAAT_PY_MINIMO")" = minimo ]' "$MAAT_PY_MINIMO"
+[ -z "${MAAT_PY_JSONSCHEMA:-}" ] || check "MAAT_PY_JSONSCHEMA importa jsonschema" '[ "$(validatore "$MAAT_PY_JSONSCHEMA")" = jsonschema ]' "$MAAT_PY_JSONSCHEMA"
+attese() { env -u MAAT_ATTESE_RICHIESTE -u MAAT_ATTESE_PLUGIN -u MAAT_ATTESE_VALIDA -u FIC_DRIVER bash "$AT" "$@"; }
+t0=$(date +%s)
+attese --corpus "$T/c1" --esiti "$T/att" > "$T/att.out" 2>&1; rc=$?
+echo "esempi-equiv: attese $(( $(date +%s) - t0 ))s · $(grep '^attese: confronto' "$T/att.out")"
+check "attese.sh sul corpus costruito: exit 0, nessun DIVERSO" '[ $rc -eq 0 ] && ! grep -q "^attese: .* DIVERSO" "$T/att.out" && grep -q "^attese: confronto · .*diversi=0" "$T/att.out"' \
+  "rc=$rc $(grep -v '^attese: [a-z-]*\.txt UGUALE' "$T/att.out" | head -60)"
+# the first word of Next of every spec, from the outputs just computed
+parole() { awk '/^== [^ \/]*\/[^ ]*$/ { cur = substr($0, 4); w = "-"; next } /^Next: / { w = $2 } /^== exit / { print cur, w }' "$1" | LC_ALL=C sort; }
+casi | awk -F'\t' '$1 == "spec" { print $2 "/" $3, $4 }' | LC_ALL=C sort > "$T/parole-attese"
+for l in it en; do
+  check "  next-$l.txt UGUALE alle attese ($NS spec)" 'grep -qx "attese: next-$l.txt UGUALE ($NS blocchi)" "$T/att.out"' "$(grep "next-$l" "$T/att.out")"
+  dp=$(diff "$T/parole-attese" <(parole "$T/att/next-$l.txt" 2>/dev/null))
+  check "  ($l) la prima parola di Next di ogni spec = casi.tsv" '[ -s "$T/att/next-$l.txt" ] && [ -z "$dp" ]' "$dp"
+done
 saltati=""
 for v in minimo jsonschema; do
-  py=${PYV[$v]:-}
-  if [ -z "$py" ]; then echo "SALTATO: $v (nessun interprete con il validatore $v)"; saltati+=" $v"; continue; fi
-  t0=$(date +%s)
-  FIC_PY=$py "$py" "$DRV" equiv "${TARGETS[@]}" > "$T/eq-$v.out" 2>&1; rc=$?
-  echo "esempi-equiv: equiv $v $(( $(date +%s) - t0 ))s · $(grep '^equiv: spec=' "$T/eq-$v.out" | tr -d '\r' | tr '\n' ' ')"
-  check "equiv ($v): exit 0 e nessun DIVERSO" '[ $rc -eq 0 ] && ! grep -q "^DIVERSO" "$T/eq-$v.out"' "$(grep -A8 "^DIVERSO" "$T/eq-$v.out" | head -40)"
+  if grep -q "^SALTATO: $v " "$T/att.out"; then
+    echo "SALTATO: $v (attese.sh: nessun interprete con il validatore $v)"; saltati+=" $v"; continue
+  fi
   for l in it en; do
-    blocco "$T/eq-$v.out" $l > "$T/eq-$v-$l"
-    check "  ($v, $l) «equiv: spec=$NS diverse=0 · jsonl=$NJ diversi=0» e $NS righe UGUALE" \
-      'grep -qx "equiv: spec=$NS diverse=0 · jsonl=$NJ diversi=0" "$T/eq-$v-$l" && [ "$(grep -c "^UGUALE " "$T/eq-$v-$l")" = "$NS" ]' \
-      "$(grep "^equiv: spec=" "$T/eq-$v-$l")"
-    sed -n 's/^UGUALE \(spec-[^ ]*\) · Next: \([^ ]*\).*/\1 \2/p' "$T/eq-$v-$l" | LC_ALL=C sort > "$T/parole-$v-$l"
-    dp=$(diff "$T/parole-attese" "$T/parole-$v-$l")
-    check "  ($v, $l) la prima parola di Next di ogni spec = casi.tsv" '[ -z "$dp" ]' "$dp"
+    check "  valida-$v-$l.txt UGUALE alle attese ($NJ jsonl)" 'grep -qx "attese: valida-$v-$l.txt UGUALE ($NJ blocchi)" "$T/att.out"' "$(grep "valida-$v-$l" "$T/att.out")"
   done
 done
+prima=$(tr -d '\r' < "$EQ/attese/STORIA" 2>/dev/null | grep -v '^\(#\|[[:space:]]*$\)' | head -1)
+check "attese/STORIA: la prima riga e' la scrittura dal plugin di v1.5.1 (l'ancora della prova)" \
+  '[[ $prima == *" · plugin ref v1.5.1 ("*", versione 1.5.1 · "* ]]' "${prima:-(nessuna riga)}"
 
-# --- counterproofs (a), (b): copies of driver.py (with the modules next to it: they read their own catalog) ---
-mutato() { # $1 name, $2 sed expression → $T/<name>/driver.py
-  mkdir -p "$T/$1/lib"; cp "$ROOT/plugins/maat/scripts/"{maat_paths.py,maat_msg.py} "$T/$1/"
-  cp "$ROOT/plugins/maat/scripts/lib/"{messages.tsv,maat-msg.sh} "$T/$1/lib/"
-  sed "$2" "$DRV" > "$T/$1/driver.py"
-}
-spec_di() { # $1 awk condition on casi.tsv → the spec files of the built corpus
-  casi | awk -F'\t' "\$1 == \"spec\" && ($1) { print \$2 \"/.claude/.ai-workflow/\" \$3 \".md\" }" | sed "s|^|$T/c1/|"
-}
-mutato drv-a 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-state.plan_draft")/'
-check "controprova (a): la mutazione e' applicata (il gemello Python di IMPLEMENT punta a un'altra chiave)" 'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/drv-a/driver.py"'
-mapfile -t SA < <(spec_di '$4 == "IMPLEMENT"')
-FIC_DRIVER_ROOT=$ROOT/plugins/maat "$FIC_PY" "$T/drv-a/driver.py" equiv "${SA[@]}" > "$T/eq-a.out" 2>&1; rc=$?
-fuori_a=$(sed -n 's/^DIVERSO \(spec-[^ ]*\)$/\1/p' "$T/eq-a.out" | while IFS= read -r s; do grep -qx "$s IMPLEMENT" "$T/parole-attese" || echo "$s"; done)
-check "controprova (a): DIVERSO sulle spec IMPLEMENT (${#SA[@]}), exit 1" '[ $rc -eq 1 ] && grep -q "^DIVERSO spec-" "$T/eq-a.out" && [ -z "$fuori_a" ]' "rc=$rc $(grep "^equiv: spec=" "$T/eq-a.out")"
-mutato drv-b 's/^DIFENSIVA = ("difensiva: ", "defensive: ")$/DIFENSIVA = ("difensiva: ",)/'
-check "controprova (b): la mutazione e' applicata (DIFENSIVA senza «defensive: »)" 'grep -qx "DIFENSIVA = (\"difensiva: \",)" "$T/drv-b/driver.py"'
-# the specs of the run dirs with a jsonl of the «defensive» branch
-mapfile -t SB < <(casi | awk -F'\t' '$1 == "jsonl" && ("," $5 ",") ~ /,defensive,/ { sub(/\.run\/.*/, "", $3); print $2 "\t" $3 }' | LC_ALL=C sort -u |
-  while IFS=$'\t' read -r m s; do echo "$T/c1/$m/.claude/.ai-workflow/$s.md"; done)
-FIC_DRIVER_ROOT=$ROOT/plugins/maat "$FIC_PY" "$T/drv-b/driver.py" equiv "${SB[@]}" > "$T/eq-b.out" 2>&1; rc=$?
-check "controprova (b): DIVERSO su almeno un jsonl (valida) e su almeno una spec (next) del ramo defensive (${#SB[@]} spec)" \
-  '[ $rc -eq 1 ] && grep -q "^DIVERSO valida " "$T/eq-b.out" && grep -q "^DIVERSO spec-" "$T/eq-b.out"' "rc=$rc $(grep "^DIVERSO\|^equiv: spec=" "$T/eq-b.out")"
+# --- counterproofs (a), (b): copies of the plugin with a mutated driver.py, against the expected outputs ---
+copia_plugin() { mkdir -p "$T/$1" && cp -R "$ROOT/plugins/maat/." "$T/$1/" && find "$T/$1" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null; return 0; }
+diversi() { sed -n 's/^  DIVERSO \(.*\)$/\1/p' "$1"; }
+copia_plugin drv-a
+sed 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-state.plan_draft")/' "$DRV" > "$T/drv-a/scripts/driver.py"
+check "controprova (a): la mutazione e' applicata (il gemello Python di IMPLEMENT punta a un'altra chiave)" 'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/drv-a/scripts/driver.py"'
+mutata() { env -u MAAT_ATTESE_RICHIESTE -u MAAT_ATTESE_VALIDA -u FIC_DRIVER MAAT_ATTESE_PLUGIN="$1" bash "$AT" "${@:2}"; }
+mutata "$T/drv-a" --corpus "$T/c1" --repo progetto-storico --solo next --lingua it > "$T/att-a.out" 2>&1; rc=$?
+d_a=$(diversi "$T/att-a.out")
+fuori_a=$(printf '%s\n' "$d_a" | grep . | while IFS= read -r s; do grep -qx "$s IMPLEMENT" "$T/parole-attese" || echo "$s"; done)
+check "controprova (a): DIVERSO solo sulle spec IMPLEMENT di progetto-storico (next, it), exit 1" '[ $rc -eq 1 ] && [ -n "$d_a" ] && [ -z "$fuori_a" ]' \
+  "rc=$rc $(grep -v '^    ' "$T/att-a.out" | tail -8) · fuori: $fuori_a"
+copia_plugin drv-b
+sed 's/^DIFENSIVA = ("difensiva: ", "defensive: ")$/DIFENSIVA = ("difensiva: ",)/' "$DRV" > "$T/drv-b/scripts/driver.py"
+check "controprova (b): la mutazione e' applicata (DIFENSIVA senza «defensive: »)" 'grep -qx "DIFENSIVA = (\"difensiva: \",)" "$T/drv-b/scripts/driver.py"'
+mutata "$T/drv-b" --corpus "$T/c1" --repo progetto-singoli --lingua it > "$T/att-b.out" 2>&1; rc=$?
+d_b=$(diversi "$T/att-b.out")
+check "controprova (b): DIVERSO su almeno un jsonl (valida) e su almeno una spec (next) di progetto-singoli, exit 1" \
+  '[ $rc -eq 1 ] && printf "%s\n" "$d_b" | grep -q "\.jsonl$" && printf "%s\n" "$d_b" | grep -q "/spec-[^/]*$"' "rc=$rc $(grep -v '^    ' "$T/att-b.out" | tail -10)"
 
-# --- 5. the certificate: strict check with MAAT_CERT_RICHIESTO=1 ---
-cert_ok() { # $1 certificate, $2 fingerprint of the corpus (64) → 0, or the reason on stdout
-  local o c
-  o=$(FIC_DRIVER_CERT="$1" "$FIC_PY" "$DRV" certificato 2>&1 | tr -d '\r')
-  case $o in "certificato: VALIDO"*) ;; *) echo "$o"; return 1 ;; esac
-  c=$(tr -d '\r' < "$1" | grep '^corpus ')
-  [[ $c == *" · impronta ${2:0:12} · "* ]] || { echo "impronta diversa da ${2:0:12}: $c"; return 1; }
-  [[ $c == "corpus spec=$NS jsonl=$NJ · "* ]] || { echo "conteggi diversi da casi.tsv (spec=$NS jsonl=$NJ): $c"; return 1; }
-  [[ $c == *" · validatori minimo,jsonschema" ]] || { echo "validatori non minimo,jsonschema: $c"; return 1; }
-}
-# counterproof (e): a certificate with the hashes of today but the fingerprint of one mini-repo only (equiv --certifica
-# on one closed spec) → red; with the fingerprint of the corpus put in but its counts (spec=1) → still red; with the
-# fingerprint and the counts of the corpus put in → green (the check is not always red)
-SE=$(spec_di '$4 == "DONE"' | head -1)
-altro=jsonschema; [ "$(validatore "$FIC_PY")" = jsonschema ] && altro=minimo
-FIC_DRIVER_CERT="$T/cert-e" "$FIC_PY" "$DRV" equiv --certifica --validatori-precedenti $altro "$SE" > "$T/eq-e.out" 2>&1
-sed "s/ · impronta [0-9a-f]\{12\} · / · impronta ${I1:0:12} · /" "$T/cert-e" > "$T/cert-e-ridotto"
-sed "s/^corpus spec=[0-9]* jsonl=[0-9]* · /corpus spec=$NS jsonl=$NJ · /" "$T/cert-e-ridotto" > "$T/cert-e-giusto"
-mot_e=$(cert_ok "$T/cert-e" "$I1"); mot_r=$(cert_ok "$T/cert-e-ridotto" "$I1"); ok_e=$(cert_ok "$T/cert-e-giusto" "$I1")
-check "controprova (e): certificato VALIDO ma con un'altra impronta → controllo rigido rosso (e con l'impronta del corpus verde)" \
-  '[ -f "$T/cert-e" ] && ! grep -q " · impronta ${I1:0:12} · " "$T/cert-e" && [[ $mot_e == "impronta diversa"* ]] && cert_ok "$T/cert-e-giusto" "$I1" >/dev/null' "$mot_e · $ok_e"
-check "controprova (e'): l'impronta del corpus ma i conteggi di una spec sola (spec=1) → controllo rigido rosso" \
-  '! grep -q "^corpus spec=$NS jsonl=$NJ · " "$T/cert-e-ridotto" && [[ $mot_r == "conteggi diversi"* ]]' "$mot_r"
-if [ "${MAAT_CERT_RICHIESTO:-0}" = 1 ]; then
-  mot=$(cert_ok "$ROOT/plugins/maat/scripts/driver.equiv" "$I1")
-  check "MAAT_CERT_RICHIESTO=1: driver.equiv VALIDO, impronta = corpus costruito (${I1:0:12}), validatori minimo,jsonschema" '[ -z "$mot" ]' "$mot
-    rimedio: bash tools/certifica.sh --scrivi (da Linux), poi committare plugins/maat/scripts/driver.equiv"
-  check "  MAAT_CERT_RICHIESTO=1: nessun validatore SALTATO" '[ -z "$saltati" ]' "SALTATO:$saltati"
+# --- counterproof (g): an expected output with one line changed ---
+mkdir -p "$T/att-g" && cp "$EQ/attese/"* "$T/att-g/"
+awk 'BEGIN { m = 0 } /^== progetto-impronta-nc\// && !m { b = 1 } b && /^Next: / { $0 = $0 " (cambiata)"; b = 0; m = 1 } { print }' "$EQ/attese/next-it.txt" > "$T/att-g/next-it.txt"
+check "controprova (g): la mutazione e' applicata (una riga Next: di progetto-impronta-nc in next-it.txt)" \
+  '[ "$(diff "$EQ/attese/next-it.txt" "$T/att-g/next-it.txt" | grep -c "^>")" = 1 ]'
+attese --attese "$T/att-g" --corpus "$T/c1" --repo progetto-impronta-nc --solo next --lingua it > "$T/att-g.out" 2>&1; rc=$?
+d_g=$(diversi "$T/att-g.out")
+attese --corpus "$T/c1" --repo progetto-impronta-nc --solo next --lingua it > "$T/att-g0.out" 2>&1; rc0=$?
+check "controprova (g): un'attesa con una riga cambiata → DIVERSO su quel blocco solo, exit 1 (le attese vere: exit 0)" \
+  '[ $rc -eq 1 ] && [ "$d_g" = "progetto-impronta-nc/spec-esempio-harness-not-computable" ] && [ $rc0 -eq 0 ]' "rc=$rc rc0=$rc0 $d_g · $(tail -3 "$T/att-g0.out")"
+
+# --- counterproof (h): the normalizations, one by one ---
+norm() { "$FIC_PY" "$(nat "$EQ/attese.py")" normalizza "$(nat "$1")"; }
+H=$T/h; mkdir -p "$H/vera/r/maat"
+ln -s vera "$H/link" 2>/dev/null
+LINK=0; [ -L "$H/link" ] && [ -d "$H/link/r" ] && LINK=1
+if [ $LINK = 1 ]; then R=$H/link/r; else R=$H/vera/r; echo "SALTATO: (h) forma pwd -P (nessun collegamento simbolico qui)"; fi
+M=$R/maat
+F64=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+{ bash "$AT" --forme "$R" | sed 's/^/path	<REPO>	/'; bash "$AT" --forme "$M" | sed 's/^/path	<MAAT>	/'
+  printf 'hex\t<impronta-attuale>\t%s\nhex\t<impronta-attuale>\t%s\n' "$F64" "${F64:0:12}"; } > "$H/forme"
+# input <TAB> expected; every input carries «motivo A», the counterproof changes it to «motivo B»
+{ printf 'STOP — motivo A: %s/.claude/x.md\tSTOP — motivo A: <REPO>/.claude/x.md\n' "$R"
+  printf 'motivo A: di %s.\tmotivo A: di <REPO>.\n' "$R"
+  printf 'motivo A: %s/scripts/review-surface.sh tree\tmotivo A: <MAAT>/scripts/review-surface.sh tree\n' "$M"
+  printf 'motivo A: %s-altro/x e %sx/y e /pre%s/z\tmotivo A: %s-altro/x e %sx/y e /pre%s/z\n' "$R" "$R" "$R" "$R" "$R" "$R"
+  printf 'motivo A: attuale %s, registrata %s\tmotivo A: attuale <impronta-attuale>, registrata <impronta-attuale>\n' "${F64:0:12}" "$F64"
+  printf 'motivo A: %s e %sa\tmotivo A: %s e %sa\n' "${F64:0:13}" "$F64" "${F64:0:13}" "$F64"
+  if [ $LINK = 1 ]; then
+    printf 'motivo A: %s/.claude/maat.json e %s/scripts\tmotivo A: <REPO>/.claude/maat.json e <MAAT>/scripts\n' "$H/vera/r" "$H/vera/r/maat"
+  fi
+  if command -v cygpath >/dev/null 2>&1; then
+    printf 'motivo A: %s/x e %s/y\tmotivo A: <REPO>/x e <REPO>/y\n' "$(cygpath -m "$R")" "$(cygpath -u "$(cygpath -m "$R")")"
+  fi
+} > "$H/casi"
+command -v cygpath >/dev/null 2>&1 || echo "SALTATO: (h) forme cygpath -m e -u (niente cygpath: non Windows)"
+cut -f1 "$H/casi" > "$H/in"; cut -f2 "$H/casi" > "$H/atteso"
+norm "$H/forme" < "$H/in" | tr -d '\r' > "$H/out"
+dh=$(diff "$H/atteso" "$H/out")
+check "controprova (h): ogni forma dell'elenco chiuso diventa il suo segnaposto, solo al confine ($(grep -c . "$H/in") righe)" '[ -s "$H/in" ] && [ -z "$dh" ]' "$dh"
+sed 's/motivo A/motivo B/' "$H/in" | norm "$H/forme" | tr -d '\r' > "$H/out-b"
+uguali_b=$(paste -d '\n' "$H/out" "$H/out-b" | awk 'NR % 2 { a = $0; next } a == $0 { print a }')
+check "controprova (h): un carattere del motivo cambiato in ogni riga → ogni riga normalizzata diversa (rossa)" '[ -s "$H/out-b" ] && [ -z "$uguali_b" ]' "$uguali_b"
+printf 'path\t<REPO>\t/x/aaaa\npath\t<MAAT>\t/x/bbbb\n' > "$H/forme-pari"
+o=$(printf 'motivo A: /x/aaaa/1 e /x/bbbb/2\n' | norm "$H/forme-pari" | tr -d '\r')
+check "controprova (h): forme di pari lunghezza, tutte e due sostituite" '[ "$o" = "motivo A: <REPO>/1 e <MAAT>/2" ]' "$o"
+
+# --- 5. the strict checks: no validator SALTATO, attese/ changed only with STORIA (MAAT_ATTESE_RICHIESTE=1) ---
+# counterproof (i): MAAT_PY_JSONSCHEMA pointing to a Python without jsonschema
+PYNO=""
+for c in "${MAAT_PY_MINIMO:-}" "$FIC_PY"; do [ -n "$c" ] && [ "$(validatore "$c")" = minimo ] && { PYNO=$c; break; }; done
+if [ -n "$PYNO" ]; then
+  MAAT_ATTESE_RICHIESTE=1 MAAT_PY_JSONSCHEMA=$PYNO bash "$AT" --validatori > "$T/vi1.out" 2>&1; rc1=$?
+  env -u MAAT_ATTESE_RICHIESTE MAAT_PY_JSONSCHEMA=$PYNO bash "$AT" --validatori > "$T/vi0.out" 2>&1; rc0=$?
+  check "controprova (i): MAAT_PY_JSONSCHEMA senza jsonschema → con MAAT_ATTESE_RICHIESTE=1 SALTATO e rosso (exit 1), senza SALTATO e verde" \
+    '[ $rc1 -eq 1 ] && grep -q "^SALTATO: jsonschema" "$T/vi1.out" && grep -q "ROSSO" "$T/vi1.out" && [ $rc0 -eq 0 ] && grep -q "^SALTATO: jsonschema" "$T/vi0.out"' \
+    "rc1=$rc1 rc0=$rc0 $(cat "$T/vi1.out")"
 else
-  echo "esempi-equiv: controllo rigido del certificato non richiesto (MAAT_CERT_RICHIESTO=1 per attivarlo) · $(FIC_DRIVER_CERT= "$FIC_PY" "$DRV" certificato 2>&1 | tr -d '\r' | head -1 | cut -c1-120)"
+  echo "SALTATO: controprova (i) (nessun interprete senza jsonschema: MAAT_PY_MINIMO)"
 fi
+# counterproof (j): a fake repo with attese/ changed and STORIA not
+J=$T/j; mkdir -p "$J/tools/esempi-equiv/attese"; cp "$AT" "$EQ/attese.py" "$J/tools/esempi-equiv/"
+printf 'a\n' > "$J/tools/esempi-equiv/attese/next-it.txt"; printf '# t\nriga 1\n' > "$J/tools/esempi-equiv/attese/STORIA"
+gj() { git -C "$J" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.autocrlf=false "$@" >/dev/null 2>&1; }
+gj init -q && gj add -A && gj commit -q -m base && JB=$(git -C "$J" rev-parse HEAD)
+printf 'b\n' > "$J/tools/esempi-equiv/attese/next-it.txt"; gj commit -q -am cambio
+bash "$J/tools/esempi-equiv/attese.sh" --storia "$JB" > "$T/vj1.out" 2>&1; rj1=$?
+printf 'riga 2\n' >> "$J/tools/esempi-equiv/attese/STORIA"
+bash "$J/tools/esempi-equiv/attese.sh" --storia "$JB" > "$T/vj2.out" 2>&1; rj2=$?
+printf '# t\nriga 1 riscritta\nriga 2\n' > "$J/tools/esempi-equiv/attese/STORIA"
+bash "$J/tools/esempi-equiv/attese.sh" --storia "$JB" > "$T/vj3.out" 2>&1; rj3=$?
+check "controprova (j): attese/ cambiata e STORIA invariata → rosso; una riga in fondo → verde; STORIA riscritta → rosso" \
+  '[ -n "${JB:-}" ] && [ $rj1 -eq 1 ] && [ $rj2 -eq 0 ] && [ $rj3 -eq 1 ]' "rj1=$rj1 rj2=$rj2 rj3=$rj3 $(cat "$T/vj1.out" "$T/vj2.out" "$T/vj3.out")"
+if [ "${MAAT_ATTESE_RICHIESTE:-0}" = 1 ]; then
+  check "MAAT_ATTESE_RICHIESTE=1: nessun validatore SALTATO" '[ -z "$saltati" ]' "SALTATO:$saltati"
+  bash "$AT" --storia > "$T/storia.out" 2>&1; rc=$?
+  check "MAAT_ATTESE_RICHIESTE=1: attese/ cambiata solo con una riga nuova in attese/STORIA (base: merge-base con origin/main)" '[ $rc -eq 0 ]' "rc=$rc $(cat "$T/storia.out")"
+else
+  echo "esempi-equiv: controlli rigidi non richiesti (MAAT_ATTESE_RICHIESTE=1 per attivarli) · saltati:${saltati:- nessuno} · $(bash "$AT" --storia 2>&1 | head -1)"
+fi
+
+find "$ROOT/plugins/maat" -name __pycache__ -type d | grep -q . && { echo "FAIL [__pycache__ nel plugin]"; fail=$((fail + 1)); }
 
 echo "esempi-equiv.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

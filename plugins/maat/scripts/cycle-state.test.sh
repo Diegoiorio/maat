@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # cycle-state.test.sh — the resume table, row by row, in a throwaway git repo.
 #   bash plugins/maat/scripts/cycle-state.test.sh
-#   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation
-#   FIC_DRIVER=0 CS=/path/variant.sh bash .../cycle-state.test.sh   # (1.5.1) a variant of the bash table: without
-#     FIC_DRIVER=0 the Python driver decides and the mutation is not seen (the suite proves the default engine)
+#   CS=/path/variant.sh bash .../cycle-state.test.sh   # counterproof on a mutation (1.6.0: cycle-state.sh is a
+#     wrapper of driver.py next, the only engine: a mutation of the table is made in driver.py, FIC_DRIVER_PY)
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 set -f
@@ -146,7 +145,7 @@ expect "  prefisso inglese storpiato («defensive:» senza spazio) → STOP" "^S
 rjson 02-implement implement STOP '[]' "migration to apply — m.sql"
 expect "  bloccato_su diverso da «none» → STOP" "^STOP — 02-implement: bloccato su: migration to apply"
 reset
-# review section with the English heading; both headings → STOP (the same in driver.py: section 9 of driver.test.sh)
+# review section with the English heading; both headings → STOP (decided by driver.py, the only engine since 1.6.0)
 { above; plan APPROVED; review NEEDS_CHANGES PLANNED | sed 's/^## Review implementazione$/## Implementation review/'; } > "$SP"
 expect "«## Implementation review» letta come sezione di review" "^FIX"
 { above; plan APPROVED; review NEEDS_CHANGES PLANNED; printf '%s\n' "## Implementation review" "Review status: APPROVED"; } > "$SP"
@@ -347,13 +346,14 @@ printf '%s\n' "# A" "## Requisiti funzionali" "1. RF1 — a" > $CW/spec-s-1-a.md
 mkdir -p $CW/spec-s.run; printf 'Chiusura: NEEDS_VERIFICATION — gates FAIL · 2026-09-29T00:00:00Z\n' > $CW/spec-s.run/chiusura.txt
 out_has "$SS" "vincolo 1: State della fixture italiana = quello di 1.2.1 (1d0181258ccc)" "^State: 1d0181258ccc$"
 out_has "$SS" "  e la fixture copre la catena (madre, anello aperto, assente, chiusura)" "^Catena: madre di 2 anelli · spec-s-1-a aperto; spec-s-2-b assente; Chiusura: NEEDS_VERIFICATION"
-# 1.4.0, block B (a): the same State in English and in Italian, from cycle-state.sh (standalone) and from driver.py
-# next: chain_state, the basis and the frozen lines do not go through the catalog
+# 1.4.0, block B (a): the same State in English and in Italian: chain_state, the basis and the frozen lines do not go
+# through the catalog. 1.6.0: one engine, so this no longer compares two engines: it checks the language on both entry
+# points of the driver, the wrapper cycle-state.sh and driver.py next called directly
 . "$HERE/python.sh" >/dev/null 2>&1
 for L in it en; do
   for impl in cycle-state driver; do
     if [ $impl = driver ]; then st=$(MAAT_LINGUA=$L "$FIC_PY" "$HERE/driver.py" next "$SS" 2>&1 | tr -d '\r' | sed -n 's/^State: //p')
-    else st=$(MAAT_LINGUA=$L FIC_DRIVER=0 bash "$HERE/cycle-state.sh" "$SS" 2>&1 | sed -n 's/^State: //p'); fi
+    else st=$(MAAT_LINGUA=$L bash "$HERE/cycle-state.sh" "$SS" 2>&1 | sed -n 's/^State: //p'); fi
     if [ "$st" = 1d0181258ccc ]; then pass=$((pass + 1))
     else fail=$((fail + 1)); echo "FAIL [vincolo 1 (1.4.0): State di $impl in $L = 1d0181258ccc] trovato '$st'"; fi
   done
@@ -395,14 +395,15 @@ reset
 
 # --- row 0: harness fingerprint (pt03; pk04a-2: decided by run-phase.sh --harness-fp-confronta), only above the phases
 # to launch. Mutations are made on a COPY of the plugin: MAAT_ROOT for cycle-state.sh and FIC_DRIVER_ROOT for
-# `driver.py next` (ported in driver.test.sh, section 9: both must print the same path in the remedy).
+# `driver.py next` (1.6.0: cycle-state.sh is its wrapper, so the path in the remedy is the driver's).
 unset FIC_REPO   # the repository is the spec's one, not that of a phase hosting the test
 HPC="$O/plug/maat"; mkdir -p "$O/plug" && cp -r "$HERE/.." "$HPC" && find "$HPC" -name __pycache__ -type d -prune -exec rm -rf {} +
 HPC_M=$(cygpath -m "$HPC" 2>/dev/null || printf '%s' "$HPC")
 fdr_prima=${FIC_DRIVER_ROOT-__non_impostata__}
 export MAAT_ROOT="$HPC" FIC_DRIVER_ROOT="$HPC"
 hfp() { bash "$HERE/run-phase.sh" --harness-fp "$W" > "$RUN/harness.fp"; }
-RIM="bash \"$HPC_M/scripts/run-phase\.sh\" --harness-fp > \"[^\"]*harness\.fp\""
+# 1.6.0 (code review): the remedy ends with the note for Windows, on every platform
+RIM="bash \"$HPC_M/scripts/run-phase\.sh\" --harness-fp > \"[^\"]*harness\.fp\" \(su Windows: in Git Bash\)"
 { above; plan APPROVED; } > "$SP"; with_basis; mkdir -p "$RUN"; hfp
 expect "harness invariato → la riga della tabella" "^IMPLEMENT"
 printf '#' >> "$HPC/scripts/context-pack.sh"

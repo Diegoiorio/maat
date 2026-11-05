@@ -21,3 +21,7 @@ scripts/finalize.sh:309#1!py	token di esito «NOT RUN» (m.startswith), protocol
 scripts/review-surface.sh:241#2	confronto con la riga «Test signals: none» stampata da review-surface.sh:155 di v1.3.0 (protocollo inglese)
 scripts/maat-doctor.sh:686#4!pytail	«in WSL»: valore di {where} uguale in en e in it (WSL è un nome), resta nel codice
 scripts/maat-doctor.sh:693#3!pytail	«in WSL»: valore di {where} uguale in en e in it (WSL è un nome), resta nel codice
+
+# --- frozen protocol of v1.3.0 code removed in 1.6.0 (the bash table of cycle-state.sh): protocol-strings.list covers
+# only the current tree, so its entry went away with the code; the frozen twin is in driver.py
+scripts/cycle-state.sh:384#2	prefisso «Base anello: » della riga letta da run-phase.sh e dai prompt (congelato, come il gemello di driver.py)

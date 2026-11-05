@@ -113,34 +113,50 @@ driver.rp_other	sub-session exited {rc}	sotto-sessione uscita {rc}
 driver.result_invalid	result.json of {label} not valid: {errs}	result.json di {label} non valido: {errs}
 driver.nv_done	cycle finished: signature NEEDS_VERIFICATION — to verify: {what}; the promotion to IMPLEMENTED belongs to a later invocation, after the verification	ciclo finito: firma NEEDS_VERIFICATION — da verificare: {what}; la promozione a IMPLEMENTED e' di un'invocazione successiva, dopo la verifica
 driver.nv_no_detail	detail not found in the spec (Finalize:/Verification: lines)	dettaglio non trovato nella spec (righe Finalize:/Verification:)
-driver.equiv_not_found	not found: {t}	non trovato: {t}
-driver.equiv_nothing	no run directory: nothing to certify	nessuna run directory: niente da certificare
-driver.equiv_written	certificate written: {path}	certificato scritto: {path}
-driver.cert_stale	different hashes: {keys} (relaunch driver.py equiv --certifica)	hash diversi: {keys} (rilancia driver.py equiv --certifica)
-driver.usage	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | equiv [--certifica] <folder|spec.md>… | certificato | righe [<cap>]	uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <fase> <result.json> | equiv [--certifica] <cartella|spec.md>… | certificato | righe [<tetto>]
 driver.usage_next	usage: driver.py next <spec-<name>.md>	uso: driver.py next <spec-<name>.md>
 
-# --- driver-equiv (1.5.0, written by hand: texts that v1.3.0 does not have, so outside the driver section of
-# tools/lingua-conversioni/blocco-b.tsv, whose check refuses a key typed by hand). driver.py equiv: the warnings on
-# the cycles not closed (after «equiv: AVVISO — ») and the usage of its options.
-driver-equiv.open	{spec} not closed (Next: {word}): the proof on this spec covers the row that decides that word, not the path to DONE	{spec} non chiusa (Next: {word}): la prova su questa spec copre la riga che decide quella parola, non il cammino fino a DONE
-driver-equiv.open_hfp	{spec} with harness.fp {verdict} (Next: {word}): the proof on this spec covers only the fingerprint branch	{spec} con harness.fp {verdict} (Next: {word}): la prova su questa spec copre solo il ramo dell'impronta
-driver-equiv.usage	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <folder|spec.md>… · driver.py equiv --impronta <folder|spec.md>… (only the corpus fingerprint, no proof)	equiv: driver.py equiv [--certifica [--validatori-precedenti <minimo|jsonschema>[,…]]] <cartella|spec.md>… · driver.py equiv --impronta <cartella|spec.md>… (solo l'impronta del corpus, nessuna prova)
 
-# --- cycle-state-engine, run-phase-engine, driver-engine (1.5.1, written by hand like driver-equiv: texts that
+# --- driver-cmd (1.6.0, written by hand: texts that v1.3.0 does not have, so outside the driver section of
+# tools/lingua-conversioni/blocco-b.tsv, whose check refuses a key typed by hand). The usage of driver.py, without
+# equiv and certificato (gone in 1.6.0) and with impronta (up to 1.5.1 `equiv --impronta`).
+driver-cmd.usage	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | impronta <folder|spec.md>… | righe [<cap>]	uso: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <fase> <result.json> | impronta <cartella|spec.md>… | righe [<tetto>]
+driver-cmd.not_found	driver.py impronta: not found: {t}	driver.py impronta: non trovato: {t}
+
+# --- cycle-state-engine, run-phase-engine, driver-engine (1.5.1, written by hand like driver-cmd: texts that
 # v1.3.0 does not have, so outside the cycle-state, run-phase and driver sections of
-# tools/lingua-conversioni/blocco-b.tsv). The choice of the
-# engine: the driver decides, the bash code only with FIC_DRIVER=0, no fallback on error (a STOP with the reason).
-# driver-engine.fic_driver_unknown is printed by the three points of choice (cycle-state.sh, run-phase.sh, driver.py).
+# tools/lingua-conversioni/blocco-b.tsv). 1.6.0: the driver is the only engine, no fallback on error (a STOP with the
+# reason); FIC_DRIVER no longer has any effect, and driver.py run says so (driver-engine.fic_driver_tolta).
 cycle-state-engine.no_python	no usable Python (FIC_PYTHON, py -3, python3, python): set FIC_PYTHON=<python 3.10 or newer>	nessun Python utilizzabile (FIC_PYTHON, py -3, python3, python): imposta FIC_PYTHON=<python 3.10 o successivo>
 cycle-state-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
-cycle-state-engine.driver_failed	driver.py next failed (exit {rc}): {line} — to go on with the bash table: FIC_DRIVER=0	driver.py next non riuscito (exit {rc}): {line} — per proseguire con la tabella bash: FIC_DRIVER=0
+cycle-state-engine.driver_failed	driver.py next failed (exit {rc}): {line} — there is no other engine since Maat 1.6.0 (the bash table is in Maat 1.5.1)	driver.py next non riuscito (exit {rc}): {line} — dalla Maat 1.6.0 non c'e' un altro motore (la tabella bash e' nella Maat 1.5.1)
 run-phase-engine.python_old	Python {v} ({py}) is older than 3.10, the minimum of Maat: set FIC_PYTHON=<python 3.10 or newer>	Python {v} ({py}) e' precedente a 3.10, il minimo di Maat: imposta FIC_PYTHON=<python 3.10 o successivo>
-run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — to go on with the internal validator: FIC_DRIVER=0	driver.py valida non riuscito (exit {rc}): {line} — per proseguire con il validatore interno: FIC_DRIVER=0
+run-phase-engine.valida_failed	driver.py valida failed (exit {rc}): {line} — there is no other engine since Maat 1.6.0 (the internal validator is in Maat 1.5.1)	driver.py valida non riuscito (exit {rc}): {line} — dalla Maat 1.6.0 non c'e' un altro motore (il validatore interno e' nella Maat 1.5.1)
 run-phase-engine.cs_no_state	cycle-state.sh gave neither a State: nor a Next: line (exit {rc})	cycle-state.sh non ha dato ne' la riga State: ne' la riga Next: (exit {rc})
-driver-engine.fic_driver_unknown	FIC_DRIVER={v} is neither 0 nor 1: the Python driver decides (FIC_DRIVER=0 for the bash table)	FIC_DRIVER={v} non e' ne' 0 ne' 1: decide il driver Python (FIC_DRIVER=0 per la tabella bash)
+driver-engine.fic_driver_tolta	FIC_DRIVER={v} no longer has any effect: the Python driver decides (for the bash engine, reinstall Maat 1.5.1)	FIC_DRIVER={v} non ha piu' effetto: decide il driver Python (per il motore bash, reinstallare la Maat 1.5.1)
 driver-engine.python_old	Python {v} ({py}) is older than {min}, the minimum of Maat: set FIC_PYTHON=<python {min} or newer>	Python {v} ({py}) e' precedente a {min}, il minimo di Maat: imposta FIC_PYTHON=<python {min} o successivo>
-driver-engine.motore_bash	bash engine (FIC_DRIVER=0): Next/State from standalone cycle-state.sh	motore bash (FIC_DRIVER=0): Next/State da cycle-state.sh autonomo
+
+# --- plan-check-z, maat-doctor-z, cycle-state-z, run-phase-z (1.6.0 block Z, written by hand like driver-cmd:
+# texts that v1.3.0 does not have, so outside the sections of tools/lingua-conversioni/). plan-check.sh lint2 and rossi:
+# Python test ids, reds that need a stub in an existing file, modules without a report (D-A, D-B, D-C); maat-doctor.sh:
+# report none (D-B); driver.py (next, cycle-state-z) and run-phase.sh: the harness-changed remedy says that on Windows
+# it runs in Git Bash (on every platform: the output does not depend on the OS).
+plan-check-z.id_py	line {n}: {id}: `{got}` is not a pytest node id: in a Python test the class and the method are separated by :: (the unittest form Class.method matches no case of the report, and the test-red phase would stop with a conflict with the existing suite); write `{want}`	riga {n}: {id}: `{got}` non è un id di pytest: in un test Python classe e metodo si separano con :: (la forma Classe.metodo di unittest non si abbina a nessun caso del report e la fase test-red si fermerebbe con un conflitto con la suite esistente); scrivi `{want}`
+plan-check-z.sig_kw	line {n}: {id}: {fn}() in {f} has no parameter {p}: on the base the test fails with TypeError ({fn}() got an unexpected keyword argument '{p}') before its assertion, because the test-red phase writes stubs only in the files the plan declares new; the declared red ({texts}) holds only with a signature stub that nobody writes. Write the red of the base in the assertion: red if: `unexpected keyword argument '{p}'`	riga {n}: {id}: {fn}() in {f} non ha il parametro {p}: sulla base il test fallisce con TypeError ({fn}() got an unexpected keyword argument '{p}') prima della sua asserzione, perché la fase test-red scrive gli stub solo nei file che il piano dichiara nuovi; il rosso dichiarato ({texts}) vale solo con uno stub di firma che nessuno scrive. Scrivi nell'asserzione il rosso della base: rosso se: `unexpected keyword argument '{p}'`
+plan-check-z.sig_pos	line {n}: {id}: {fn}() in {f} takes {k} positional arguments, the test passes {m}: on the base the test fails with TypeError ({fn}() takes … positional argument… but {m} were given) before its assertion, because the test-red phase writes stubs only in the files the plan declares new; the declared red ({texts}) holds only with a signature stub that nobody writes. Write the red of the base in the assertion: red if: `positional argument`	riga {n}: {id}: {fn}() in {f} accetta {k} argomenti posizionali, il test ne passa {m}: sulla base il test fallisce con TypeError ({fn}() takes … positional argument… but {m} were given) prima della sua asserzione, perché la fase test-red scrive gli stub solo nei file che il piano dichiara nuovi; il rosso dichiarato ({texts}) vale solo con uno stub di firma che nessuno scrive. Scrivi nell'asserzione il rosso della base: rosso se: `positional argument`
+plan-check-z.report_none	{id}: module {nome} of {path} has report none in .claude/maat.json: the test-red phase cannot read the outcome of the single tests and will stop BLOCKED. Configuration, not plan: set report junit with a test command that writes the JUnit to {{report}} (pytest --junitxml {{report}} also runs unittest tests) or report vitest, then run maat-doctor.sh	{id}: il modulo {nome} di {path} ha report nessuno in .claude/maat.json: la fase test-red non può leggere l'esito dei singoli test e si fermerà BLOCKED. Configurazione, non piano: report junit con un comando di test che scrive il JUnit in {{report}} (pytest --junitxml {{report}} esegue anche i test unittest) o report vitest, poi maat-doctor.sh
+plan-check-z.red_report_none_fix	remedy: in .claude/maat.json report junit, with a test command that writes the JUnit to {{report}}, or report vitest; then maat-doctor.sh	rimedio: in .claude/maat.json report junit, con un comando di test che scrive il JUnit in {{report}}, o report vitest; poi maat-doctor.sh
+maat-doctor-z.report_none	module {nome}: tests without a readable report (report none): every new plan is in format 2 and its test-red phase reads the outcome of each test from the report, so the full cycle would stop BLOCKED at test-red	modulo {nome}: test senza un report leggibile (report nessuno): ogni piano nuovo è in formato 2 e la sua fase test-red legge l'esito di ogni test dal report, quindi il ciclo completo si fermerebbe BLOCKED a test-red
+maat-doctor-z.report_none_fix	set "report": "junit" on the module, with a test command that writes the JUnit to {{report}} (pytest: --junitxml {{report}}, which also runs unittest tests), or "report": "vitest" for vitest; /maat:setup proposes it	metti "report": "junit" nel modulo, con un comando di test che scrive il JUnit in {{report}} (pytest: --junitxml {{report}}, che esegue anche i test unittest), o "report": "vitest" per vitest; /maat:setup lo propone
+cycle-state-z.rim_git_bash	(on Windows: in Git Bash)	(su Windows: in Git Bash)
+run-phase-z.rim_git_bash	(on Windows: in Git Bash)	(su Windows: in Git Bash)
+
+# --- maat-doctor-f (1.6.0 block F, written by hand like driver-cmd: texts that v1.3.0 does not have, so outside the
+# maat-doctor section of tools/lingua-conversioni/blocco-d.doctor.tsv). FIC_DRIVER set (the rule of driver.py run:
+# not empty) and, on macOS only, the GNU tools from Homebrew.
+maat-doctor-f.fic_driver	FIC_DRIVER={v} is set but has no effect since Maat 1.6.0: the Python driver decides — remove it from the environment; for the bash engine reinstall Maat 1.5.1 (README, Going back to 1.5.1)	FIC_DRIVER={v} è impostata ma dalla Maat 1.6.0 non ha più effetto: decide il driver Python — toglila dall'ambiente; per il motore bash reinstalla la Maat 1.5.1 (README, Going back to 1.5.1)
+maat-doctor-f.mac_ok	GNU tools for macOS: {t}	strumenti GNU per macOS: {t}
+maat-doctor-f.mac_missing_gnubin	GNU {t} not found (macOS: Maat uses the GNU options) — brew install {f}, then put "$(brew --prefix)/opt/{f}/libexec/gnubin" first in PATH	{t} GNU non trovato (macOS: Maat usa le opzioni GNU) — brew install {f}, poi metti "$(brew --prefix)/opt/{f}/libexec/gnubin" in testa al PATH
+maat-doctor-f.mac_missing	{t} not found (macOS) — brew install {f}	{t} non trovato (macOS) — brew install {f}
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
@@ -162,7 +178,6 @@ run-phase.v_dev	declared deviations ({n}): {devs}	deviazioni dichiarate ({n}): {
 run-phase.v_blocked	blocked on: 	bloccato su: 
 run-phase.v_esito	outcome STOP: 	esito STOP: 
 run-phase.v_json_stop	{stop} (the prose said OK: the most conservative wins)	{stop} (la prosa diceva OK: vale il piu conservativo)
-run-phase.usage_valida	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>	uso: {script} --valida <log.jsonl> <schema> <fase> <result.json>
 run-phase.no_python	no usable Python interpreter (set FIC_PYTHON)	nessun interprete Python utilizzabile (imposta FIC_PYTHON)
 run-phase.usage_nominati	usage: {script} --nominati <root> <paths-file> <log.jsonl>…	uso: {script} --nominati <radice> <file-dei-path> <log.jsonl>…
 run-phase.lock_unknown	git cannot find the repository of the lock	git non trova il repository del lock

@@ -4,7 +4,6 @@
 *.json text eol=lf
 *.svg  text eol=lf
 *.cases text eol=lf
-*.equiv text eol=lf
 *.html text eol=lf
 *.tsv  text eol=lf
 *.list text eol=lf

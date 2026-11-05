@@ -1,0 +1,53 @@
+# The suites of tools/suite.list on Windows (Git Bash of the GitHub runner, Maat 1.6.0): one CI job per group
+# (.github/workflows/ci.yml, job windows-gruppo), `tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo k/n`.
+# Lines: «<group> [VAR=value …] <entry>» (the entry runs in that group, with those variables) and «- <entry> <reason>»
+# (left out on Windows: counted as covered, written as ESCLUSA in riepilogo.txt). Every entry of suite.list in exactly
+# one line; groups 1..n (tools/suite.sh refuses otherwise, tools/suite.test.sh checks the link with ci.yml).
+# Balanced on the seconds of the first CI of 1.6.0 on the Windows runner (before block C; driver.test.sh measured
+# after it at 409-412 s on the runner, 59-85 s on Linux): group 1 ≈ 1150 s, 2 ≈ 1160, 3 ≈ 1170, 4 ≈ 1140, 5 ≈ 1000. The runner is about
+# three times faster than the local Windows machine (gates 234 s against 826).
+# Locally the same set: bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list <results dir> (from Git Bash).
+
+# left out on Windows
+- test-fast            needs rsync and flock: on Windows it runs in WSL, which the runner does not have (locally at release)
+- counterproof         needs rsync and flock: on Windows it runs in WSL, which the runner does not have (locally at release)
+- vitest-classify      needs rsync and flock: on Windows it runs in WSL, which the runner does not have (locally at release)
+- comandi-equivalenza  needs rsync and flock: on Windows it runs in WSL, which the runner does not have (locally at release)
+- tools/oracolo.test.sh  about 70 minutes in Git Bash on the local machine; logic that does not depend on the platform: it runs on Linux and macOS
+
+# group 1: run-phase (1047 s)
+1 run-phase
+1 tools/suite.test.sh
+1 phase-usage
+1 session-start
+1 stop-hook
+
+# group 2: the expected outputs of the public corpus (1009 s)
+2 tools/esempi-equiv.test.sh
+2 bash-node
+2 cycle-report
+
+# group 3: cycle-state (726 s), plan-check (440 s)
+3 cycle-state
+3 plan-check
+
+# group 4: finalize, gates, messages, ciclo-worktree, maat-doctor
+4 finalize
+4 gates
+4 messages
+4 ciclo-worktree
+4 maat-doctor
+
+# group 5: the driver and the short ones
+5 driver
+5 spazi
+5 guard
+5 test-review-surface
+5 maat-paths
+5 senza-wsl
+5 phase-events
+5 context-pack
+5 genericita
+5 maat-config
+5 harness-merge
+5 blocks-independent

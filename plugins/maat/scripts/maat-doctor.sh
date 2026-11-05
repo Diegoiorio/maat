@@ -15,9 +15,12 @@
 # English the levels are OK|WARNING|MISSING; --piattaforma prints the same three values in every language.
 #
 # Checks:
-#   versions       bash >= 4, Python >= 3.10 (python.sh), git >= 2.35, Claude Code (CLAUDE_BIN, then the VS Code
-#                  extension, then PATH: the order of run-phase.sh): below the version tested in pk01 ATTENZIONE; not
-#                  found ATTENZIONE «versione non verificata»
+#   versions       bash >= 4, Python >= 3.10 (fic_py_min_ok of python.sh, the threshold of the wrappers), git >= 2.35,
+#                  Claude Code (CLAUDE_BIN, then the VS Code extension, then PATH: the order of run-phase.sh): below
+#                  the version tested in pk01 ATTENZIONE; not found ATTENZIONE «versione non verificata»
+#   FIC_DRIVER     (1.6.0) set and not empty -> ATTENZIONE: it no longer has any effect (the rule of driver.py run)
+#   macOS          (1.6.0) only on Darwin: GNU sed, grep and stat, sha256sum, timeout, flock; missing -> MANCA with
+#                  the brew command
 #   configuration  maat.json present and valid (maat-config.py valida), plugin version compatible with `harness`
 #   WSL            Windows only (uname/OSTYPE, like run_cp of run-phase.sh: never the presence of wsl.exe). WSL missing
 #                  = wsl.exe not on PATH, or `wsl -- true` failed or took longer than MAAT_DOCTOR_WSL_TIMEOUT seconds (30).
@@ -44,6 +47,7 @@
 # Read-only: no temporary files, PYTHONDONTWRITEBYTECODE=1 (the imports of maat-config.py do not write
 # __pycache__ into the plugin). The Python code is at the end of this file and reaches the interpreter through a pipe.
 # Variables: MAAT_CONFIG (the maat.json, like maat-config.py) · FIC_REPO (project root) · FIC_PYTHON (python.sh)
+# · FIC_DRIVER (only to warn that it does nothing)
 # · CLAUDE_BIN · MAAT_DOCTOR_WSL_TIMEOUT. Test: maat-doctor.test.sh.
 set -uo pipefail
 export PYTHONDONTWRITEBYTECODE=1 PYTHONIOENCODING=utf-8 PYTHONUTF8=1
@@ -128,9 +132,13 @@ pyv=""
 [ -n "$py_ok" ] && pyv=$("$FIC_PY" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null | tr -d '\r' | head -1)
 if [ -z "$py_ok" ] || [ -z "$pyv" ]; then
   riga MANCA "$(msg maat-doctor.no_python)"; py_ok=""
-elif ! ver_ge "$pyv" 3.10; then
+elif ! fic_py_min_ok; then   # 1.6.0 (D9 a): the threshold of python.sh, the one of the wrappers (FIC_PY_VER)
   riga MANCA "$(msg maat-doctor.python_old pyv="$pyv" py="$FIC_PY")"; py_ok=""
 else riga OK "Python $pyv ($FIC_PY)"; fi
+
+# 1.6.0 (D9 b): FIC_DRIVER no longer chooses an engine. Set = not empty, the rule of driver.py run (FIC_DRIVER= empty
+# was already the default in 1.5.1 and stays silent).
+if [ -n "${FIC_DRIVER:-}" ]; then riga ATTENZIONE "$(msg maat-doctor-f.fic_driver v="$FIC_DRIVER")"; fi
 
 gv=$(git --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
 if [ -z "$gv" ]; then riga MANCA "$(msg maat-doctor.no_git)"
@@ -154,6 +162,22 @@ else
   if [ -z "$cv" ]; then riga ATTENZIONE "$(msg maat-doctor.claude_no_version cl="$CL")"
   elif ver_ge "$cv" "$CLAUDE_MIN"; then riga OK "Claude Code $cv"
   else riga ATTENZIONE "$(msg maat-doctor.claude_old cv="$cv" min="$CLAUDE_MIN")"; fi
+fi
+
+# 1.6.0 (D9 c): on macOS Maat uses the GNU tools from Homebrew (README, Requirements). Only on Darwin (uname -s): on
+# Linux and Windows no line. <tool>:<Homebrew formula>:<gnu|-> — gnu: the first line of --version must say «(GNU »
+# (BSD grep says «BSD grep, GNU compatible»), and the formula puts the tool in libexec/gnubin; -: present on PATH.
+if [ "$(uname -s 2>/dev/null | tr -d '\r')" = Darwin ]; then
+  mac_ok=""
+  for mst in sed:gnu-sed:gnu grep:grep:gnu stat:coreutils:gnu sha256sum:coreutils:- timeout:coreutils:- flock:flock:-; do
+    mt=${mst%%:*} mf=${mst#*:}; mg=${mf#*:} mf=${mf%%:*} mok=0
+    if [ "$mg" = gnu ]; then "$mt" --version 2>/dev/null </dev/null | head -1 | grep -qF '(GNU ' && mok=1
+    else command -v "$mt" >/dev/null 2>&1 && mok=1; fi
+    if [ "$mok" = 1 ]; then mac_ok+="${mac_ok:+, }$mt"
+    elif [ "$mf" = flock ]; then riga MANCA "$(msg maat-doctor-f.mac_missing t="$mt" f="$mf")"
+    else riga MANCA "$(msg maat-doctor-f.mac_missing_gnubin t="$mt" f="$mf")"; fi
+  done
+  [ -z "$mac_ok" ] || riga OK "$(msg maat-doctor-f.mac_ok t="$mac_ok")"
 fi
 
 # --- project, configuration, WSL, modules -----------------------------------------------------------------------------
@@ -667,6 +691,11 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             out.append(lambda et=et, sp=c["se_presente"]: riga("OK", T("maat-doctor.not_run_present", et=et, sp=sp)))
             continue
         out.append(eseguibile(et, c["comando"], cart_abs))
+        if tipo == "test" and (m.get("report") or "nessuno") == "nessuno":
+            # D-B (1.6.0): every new plan is format 2, and its test-red phase reads the outcome of each test from the
+            # report: without one the full cycle stops BLOCKED at test-red. ATTENZIONE, not MANCA: plan and review
+            # cycles work without it, and a project that only uses them keeps its exit code.
+            out.append(lambda: riga("ATTENZIONE", T("maat-doctor-z.report_none", nome=nome), T("maat-doctor-z.report_none_fix")))
 
     # --- controlli (checks)
     for j, v in enumerate(m.get("controlli", [])):

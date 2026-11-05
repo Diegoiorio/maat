@@ -2,6 +2,105 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.6.0 — one engine, proven on expected outputs; CI on Linux, Windows and macOS
+
+**Why 1.6.0 and not a patch:** with an intact plugin and `FIC_DRIVER` not set, a cycle does and prints the same as
+1.5.1, as in a patch, except the fixes of block Z (below): `plan-check.sh lint2` refuses two kinds of plans (a red
+that holds only with a signature stub in an existing file; a Python test id `file.py::Class.method`) and gives an
+`AVVISO` for a module with `report` none, the `BLOCKED` reason of test-red for that module is longer (it says the
+remedy), `maat-doctor` gives a `WARNING` (`ATTENZIONE` in Italian) for it, and the «harness changed» remedy ends with
+a note for Windows. But documented interfaces are removed (`FIC_DRIVER=0`, `driver.py equiv` and `certificato`,
+`driver.equiv`, `run-phase.sh --valida`, `tools/certifica.sh`); the proof behind the driver changes nature, from the
+certificate to expected outputs, which is the reason 1.5.0 was a minor too; and a new platform (macOS) is a new
+feature. Not 2.0.0: no format Maat reads (specs, plans, run dirs, `maat.json`) changes, and the removal was announced
+in 1.5.1 (its roadmap: 1.5.2 removes the bash code, 1.5.3 the multi-platform CI; both are this release).
+
+- **The bash engine is gone.** `driver.py` is the only engine of `next` and `valida`. `cycle-state.sh` is a wrapper
+  of `driver.py next` (Python present and at least 3.10, then the driver; a STOP when the driver fails), with the
+  same `State`/`Next` contract; its header still documents the table, implemented by `driver.py` `_cycle_state`.
+  `run-phase.sh` validates the outcome only with `driver.py valida`: the internal validator (`VALIDA_PY`) and
+  `run-phase.sh --valida` are gone. **`FIC_DRIVER`** set to any value that is not empty no longer changes anything:
+  `driver.py run` prints one `AVVISO: FIC_DRIVER=<value> no longer has any effect …` per invocation (also in
+  `driver.log`), the wrappers say nothing. The remedies of the two STOPs of a failed driver (`driver.py next failed`,
+  `driver.py valida failed`) now say that there is no other engine since 1.6.0, instead of `FIC_DRIVER=0`. In
+  `driver.py run`, `FIC_CYCLE_STATE` (a hook of the tests, like `FIC_RUN_PHASE`) now replaces the internal `next`
+  whenever it is set.
+- **The certificate is gone; the proof is expected outputs.** `tools/esempi-equiv/attese/` holds, for every spec of
+  the public examples, the whole output of `cycle-state.sh` in `it` and `en`, and for every counted jsonl the whole
+  output of `driver.py valida` with both validators in both languages (six files), plus `STORIA`, one line per
+  writing with its reason. They were written once with the plugin of `v1.5.1` and checked against its bash table
+  (`FIC_DRIVER=0`) and its internal validator (`run-phase.sh --valida`): no difference. So they are the outputs of
+  the bash table of 1.5.1, except the lines rewritten since, listed in `attese/STORIA`. `tools/esempi-equiv/attese.sh`
+  compares the driver with them (or rewrites them: `--scrivi --motivo "<reason>"`, refused without both validators
+  or with a `jsonschema` other than the CI's); the normalizations are a closed list (the roots of the mini-repo and of
+  the plugin in their Windows and macOS forms, the current harness fingerprint), each with a counterproof that a real
+  difference in the same line stays red. `tools/esempi-equiv.test.sh` runs the comparison; with
+  `MAAT_ATTESE_RICHIESTE=1`, set by the CI at **every** push (stricter than `MAAT_CERT_RICHIESTO`, which was on only
+  for `main`, tags and pull requests to `main`), a validator `SALTATO` is red, and so is a file of `attese/` changed
+  without a new line in `STORIA`. A change of `driver.py` or of the catalog that does not change an output no longer
+  needs a rewrite from Linux; one that does shows its diff in the pull request.
+- **Removed:** `driver.py equiv` and `certificato`, `plugins/maat/scripts/driver.equiv`, `tools/certifica.sh`,
+  `FIC_DRIVER_CERT`, `MAAT_CERT_RICHIESTO`, `run-phase.sh --valida`, `plugins/maat/scripts/rollback.test.sh` (the
+  switch to bash in the middle of a cycle is gone with bash), section 9 of `driver.test.sh` (the driver against the
+  bash table on every case of `cycle-state.test.sh`) and `DRIVER_TEST_RAPIDO` (the suite takes about 1–1.5 minutes on
+  Linux). `driver.py equiv --impronta` is now **`driver.py impronta <folder|spec.md>…`**.
+- **Oracle:** `tools/oracolo.sh --motore bash|predefinito` now chooses the engine of the **old** side only; the new
+  side always decides with its default engine. The line at the top is `oracolo: lato <side> · motore <m>`, with the
+  verdict of the certificate only for a side that still has one. `tools/suite-parallelo.sh` does not start while
+  `attese.sh --scrivi` is running (it was `tools/certifica.sh`).
+- **CI on three platforms, at every push and pull request** (and by hand, `workflow_dispatch`). Linux and macOS run
+  the three groups of `tools/suite-gruppi.list`, Windows the five of the new `tools/suite-gruppi-windows.list`, all
+  jobs at the same time; the final jobs `linux`, `macos`, `windows` succeed only if all the groups of their platform
+  do, and `ci` only if all three do: `ci` is the required check. On a branch a new push stops the run still going;
+  on `main` and on tags every commit has its own run, never cancelled. Windows runs in Git Bash with `FIC_PYTHON` = the Python 3.10 of `setup-python`,
+  complete at every push (5 jobs of about 16–22 minutes; the rule: complete if it fits in at most 8 jobs of at most
+  45 minutes). Left out on Windows, written with their reason in its groups file: `test-fast`, `counterproof`,
+  `vitest-classify`, `comandi-equivalenza` (they need `rsync` and `flock`, which on Windows run in WSL, and the runner
+  has no WSL: they run locally from WSL before each release) and `tools/oracolo.test.sh` (its logic does not depend
+  on the platform: it runs on Linux and macOS). macOS runs with bash and the GNU tools of Homebrew first in `PATH`
+  (`awk` = gawk) and is blocking. The longest job: Linux about 12 minutes, macOS about 16, Windows about 22.
+  `tools/suite.sh --gruppi <file>` reads another groups file, with lines `- <entry> <reason>` (left out, printed as
+  `ESCLUSA` in the summary) and `<group> VAR=value <entry>`.
+- **`counterproof.sh` on macOS:** without `/proc/meminfo` the free memory that limits the parallel copies comes from
+  `vm_stat` (free, inactive and speculative pages); on Linux and Windows nothing changes. The suites run on macOS too:
+  the fake commands of the tests call the `rsync`, `cp` and `mv` found in `PATH`, and the cases that need what a
+  machine lacks (step 2 in parallel with fewer than 4 CPUs; a git that does not follow junctions) are `SALTATO` with
+  the reason.
+- **`maat-doctor`:** the Python line uses the threshold of `python.sh` (`fic_py_min_ok`), so 3.10 is written in two
+  places instead of three; `FIC_DRIVER` set and not empty gives a `WARNING` («no longer has any effect … for the bash
+  engine reinstall Maat 1.5.1»); on macOS only, GNU `sed`, `grep` and `stat`, `sha256sum`, `timeout` and `flock` are
+  checked, and a missing one (or a BSD one) is `MISSING` with the `brew install` command (on Linux and Windows no
+  line about them).
+- **Fixed — found by the real cycles before the release (block Z).**
+  - A format-2 plan whose test calls an *existing* function with a parameter it does not have yet (or with more
+    positional arguments) is now stopped by `plan-check.sh lint2`, with the red to write: on the base that test fails
+    with the `TypeError` of the call, because the test-red phase writes stubs only in the files the plan declares
+    new. The plan reviewers treat it as major.
+  - A Python test id in the unittest form `file.py::Class.method` is refused in the plan, with the form that matches
+    the report (`file.py::Class::method`).
+  - A module with tests and `report` none: `maat-doctor` gives a `WARNING` with the remedy, `/maat:setup` proposes
+    `pytest --junitxml {report}` (it also runs unittest tests), `lint2` warns once per module, and the `BLOCKED`
+    reason of test-red says the remedy.
+  - The position of a red is also read from a Python traceback in the JUnit report (runners other than pytest).
+  - The «harness changed» remedy ends with «(on Windows: in Git Bash)»: there the command mixes `C:/…` and `/tmp/…`
+    paths. The note is printed on every platform, so the output of `next` does not depend on the OS; in the STOP of
+    `run-phase.sh` it is a shell comment (`# (on Windows: in Git Bash)`), so the command still runs when pasted.
+- **Proof of compatibility:** the expected outputs written from `v1.5.1` and anchored to its bash table and its
+  internal validator (six files out of six equal, both validators, `it` and `en`); the driver of 1.6.0 gives them
+  with no difference, and the fingerprint of the examples is unchanged (`6b484b23826a`). The oracle `v1.5.1` (bash
+  table, `--motore bash`) against 1.6.0 gives the same result for all 65 specs, in `it` and in `en`, and the same with
+  `--motore predefinito`. Real cycles with 1.5.1 before the work found the defects of block Z (fixed above). TODO
+  blocco H: the CI green on the three platforms on the final commit, the final real cycle through the fixes of block
+  Z, and the way back 1.6.0 → 1.5.1 on a run dir created by 1.6.0.
+- **Upgrading:** as with every release, a cycle in progress stops with «harness changed». Remedy:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp` (on Windows in Git Bash), then run the
+  cycle again. Who had `FIC_DRIVER=0` set now gets the driver, with an `AVVISO` at each `driver.py run` and a
+  `WARNING` from `maat-doctor`.
+- **Going back to 1.5.1** (README, «Going back to 1.5.1»): `claude plugin marketplace add
+  https://github.com/Diegoiorio/maat.git#v1.5.1 --scope project`, then `claude plugin update maat@maat --scope
+  project` (it accepts a lower version: proven from 1.5.1 to 1.5.0 and back), then restart Claude Code; a cycle in
+  progress stops with «harness changed», with the same remedy. With 1.5.1 the bash engine is back with `FIC_DRIVER=0`.
+
 ## 1.5.1 — the Python driver always decides; bash only on request
 
 **Why a patch:** with an intact plugin a cycle does and prints the same as 1.5.0: the certificate was VALIDO, so the

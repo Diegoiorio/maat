@@ -32,7 +32,6 @@ comandi-equivalenza
 vitest-classify
 tools/esempi-equiv.test.sh
 tools/oracolo.test.sh
-rollback
 cycle-state
 run-phase
 driver

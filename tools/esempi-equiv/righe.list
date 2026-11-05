@@ -1,7 +1,8 @@
 # righe.list — the rows of the resume table of plugins/maat/scripts/cycle-state.sh (TABLE and CHAINS, in its header)
 # and of its result.json rules, one label per distinct outcome (Maat 1.5.0). Format: <label><TAB><Next word> — <what>.
 # Every label has at least one spec in casi.tsv (tools/esempi-equiv.test.sh). A row added to the table → a label here
-# and a case in the corpus.
+# and a case in the corpus. 1.6.0: the table is driver.py `_cycle_state` (the bash one is in 1.5.1); the output of
+# every spec is recorded in attese/next-it.txt and next-en.txt (tools/esempi-equiv/attese.sh).
 1b	STOP — both «## Review implementazione» and «## Implementation review» (the same section in two languages)
 1	STOP — review section without a plan
 2-nessun-piano	PLAN — no plan

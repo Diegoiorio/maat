@@ -10,9 +10,9 @@
 #   MAAT_PARALLELO_FORZA=1: skips the check of what runs on the machine (step 1). MAAT_PARALLELO_LOCK: the lock file
 #     (default ${TMPDIR:-/tmp}/maat-suite-parallelo.lock).
 # Steps:
-#   1 machine busy → exit 3, nothing started: another parallel run (the lock), tools/certifica.sh running (the
-#     certificate never runs together with anything), a Maat cycle running on Windows (`driver.py run` in a Windows
-#     process, seen from WSL through powershell.exe; outside WSL this part is skipped).
+#   1 machine busy → exit 3, nothing started: another parallel run (the lock), tools/esempi-equiv/attese.sh --scrivi
+#     running (the expected outputs are never rewritten together with anything), a Maat cycle running on Windows
+#     (`driver.py run` in a Windows process, seen from WSL through powershell.exe; outside WSL this part is skipped).
 #   2 every clone realigned to <ref>; all at the same commit, otherwise exit 2. <results dir>/clone.txt says which.
 #   3 group k in clone k, all at the same time: <results dir>/gruppo-<k>/ (logs and riepilogo.txt of suite.sh, with
 #     its guard PLUGIN CAMBIATO on its own clone). In WSL the PATH of the suites is the pure Linux one, as giro-completo.sh.
@@ -44,8 +44,8 @@ local LOCK=${MAAT_PARALLELO_LOCK:-${TMPDIR:-/tmp}/maat-suite-parallelo.lock}
 exec 9> "$LOCK" || return 2
 flock -n 9 || { echo "suite-parallelo: OCCUPATA — another parallel run holds $LOCK" >&2; return 3; }
 if [ "${MAAT_PARALLELO_FORZA:-0}" != 1 ]; then
-  if pgrep -f 'tools/certifica\.sh' >/dev/null 2>&1; then
-    echo "suite-parallelo: OCCUPATA — tools/certifica.sh is running (never together with anything)" >&2; return 3
+  if pgrep -f 'attese\.sh.*--scrivi' >/dev/null 2>&1; then
+    echo "suite-parallelo: OCCUPATA — tools/esempi-equiv/attese.sh --scrivi is running (never together with anything)" >&2; return 3
   fi
   local PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe w
   if [ -x "$PS" ]; then

@@ -7,12 +7,10 @@
 #   run-phase.sh --harness-fp [<repo>]   prints harness.fp (three lines, below) · exit 1 if not computable
 #   run-phase.sh --harness-fp-confronta <harness.fp> [<repo>]   the decision of the three readers, one line (below)
 #   run-phase.sh --harness-paths         prints the fingerprint files (relative to MAAT_ROOT) and .claude/maat.json
-#   run-phase.sh --valida <log.jsonl> <schema> <phase> <result.json>   the internal outcome validator, on its own
-#                                        (reference for script/fic/driver.py equiv; below, VALIDA_PY)
 #
 # DRIVER (harness-pt14): phases are launched by script/fic/driver.py (`driver.py run`), always through this script.
-# Here the driver enters at a single point, the outcome validation (`driver.py valida`), and decides it (1.5.1): the
-# internal validator decides only with FIC_DRIVER=0 (WRAPPER, below VALIDA_PY). The four reads of cycle-state.sh go
+# Here the driver enters at a single point, the outcome validation (`driver.py valida`), and decides it: since 1.6.0
+# there is no internal validator (WRAPPER, at valida). The four reads of cycle-state.sh go
 # through cycle_state_read, which recognises a STOP of its wrapper (INTERNAL READERS, above cycle_state_read).
 #
 #   <run-dir>     .claude/.ai-workflow/spec-<name>.run   (gitignored by "spec-*")
@@ -30,7 +28,7 @@
 # STRUCTURED OUTCOME (harness-pt08): the subsession receives --json-schema with script/fic/schemas/
 # phase-result.schema.json (the content: the CLI wants the schema, not the file) and, IN ADDITION, here the
 # JSON block of the last result event (structured_output, otherwise the last ```json fence of the text) is revalidated with the
-# same schema: jsonschema if available, otherwise the minimal validator below; "fase" must be that
+# same schema: jsonschema if available, otherwise the minimal validator of driver.py; "fase" must be that
 # of the label. Valid -> log/<label>.result.json (read by cycle-state.sh). Missing or invalid -> no
 # result.json and .esito = "PHASE RESULT <fase>: STOP — uscita non valida: <errori>", with the result line of the text
 # kept under "originale=". The ESITO line is always written (compatibility and revert). Prose and JSON
@@ -215,7 +213,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 RS="$MAAT_SCRIPTS/review-surface.sh"
 # Messages (1.4.0): the catalog next to this script. The language is resolved once and exported (the sub-session,
 # cycle-state.sh and the gates read the same one) and it is part of the harness fingerprint (below). The embedded
-# Python (VALIDA_PY, TG_PY, LANE_PY, DIFENSIVE_PY) imports maat_msg.py from MAAT_MSG_PY, in native form (msg_py).
+# Python (TG_PY, LANE_PY, DIFENSIVE_PY) imports maat_msg.py from MAAT_MSG_PY, in native form (msg_py).
 . "$HERE/lib/maat-msg.sh"; maat_msg_carica
 maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
 # wsl.exe passes into WSL only the variables named in WSLENV: without this, whatever the sub-sessions (normal and
@@ -368,152 +366,18 @@ if [ "${1:-}" = "--harness-fp-confronta" ]; then
   exit 0
 fi
 
-# --- structured outcome: the internal validator (see STRUCTURED OUTCOME) and the driver wrapper (harness-pt14) ---
-# VALIDA_PY prints the ESITO line (or the «uscita non valida» STOP and, below it, originale=<line>) and writes result.json
-# if valid. Arguments: <log.jsonl> <schema> <phase> <result.json>. `run-phase.sh --valida …` runs it on its own
-# (always this one, never the driver): it is the reference for `driver.py equiv`.
-VALIDA_PY='
-import importlib.util, json, os, re, sys
-sys.dont_write_bytecode = True
-sys.stdout.reconfigure(encoding="utf-8")
-_s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
-_m = importlib.util.module_from_spec(_s)
-_s.loader.exec_module(_m)
-T = _m.T   # the catalog, with the same keys as driver.py valida
-log, schema_path, phase, out = sys.argv[1:5]
-res = None
-for ln in open(log, encoding="utf-8", errors="replace"):
-    try:
-        ev = json.loads(ln)
-    except ValueError:
-        continue
-    if isinstance(ev, dict) and ev.get("type") == "result":
-        res = ev
-    elif isinstance(ev, dict) and ev.get("subtype") == "fic_scartato":
-        res = None   # parallel review discarded (harness-pt09): only what follows counts
-if res is None or res.get("is_error"):
-    sys.exit(0)
-text = res.get("result") or ""
-lines = [l.strip() for l in text.splitlines()]
-# the result line: "PHASE RESULT" (1.3.0) or "ESITO FASE" (old prompts and run dirs), both read
-riga = next((l for l in reversed(lines) if l.startswith(("PHASE RESULT", "ESITO FASE"))), "")
-
-KEYS = {"type", "enum", "required", "properties", "additionalProperties", "items", "minLength", "minimum"}
-ANNOT = {"$schema", "$id", "title", "description"}
-TYPES = {"object": lambda x: isinstance(x, dict), "array": lambda x: isinstance(x, list),
-         "string": lambda x: isinstance(x, str), "null": lambda x: x is None,
-         "boolean": lambda x: isinstance(x, bool),
-         "integer": lambda x: isinstance(x, int) and not isinstance(x, bool),
-         "number": lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)}
-
-def valida(x, s, p):
-    """Minimal validator: only the keywords in KEYS; an unknown keyword is an error (fail-closed)."""
-    extra = sorted(set(s) - KEYS - ANNOT)
-    if extra:
-        return [T("run-phase.v_keyword", p=p, kw=", ".join(extra))]
-    if "type" in s:
-        ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
-        if not any(TYPES.get(t, lambda v: False)(x) for t in ts):
-            return [T("run-phase.v_type", p=p, types="|".join(ts))]
-    errs = []
-    if "enum" in s and x not in s["enum"]:
-        errs.append(T("run-phase.v_enum", p=p, x=repr(x), enum=s["enum"]))
-    if isinstance(x, dict):
-        props = s.get("properties", {})
-        errs += [T("run-phase.v_required", p=p, r=r) for r in s.get("required", []) if r not in x]
-        for k, v in x.items():
-            if k in props:
-                errs += valida(v, props[k], p + "." + k)
-            elif s.get("additionalProperties") is False:
-                errs.append(T("run-phase.v_extra", p=p, k=k))
-    if isinstance(x, list) and "items" in s:
-        for i, v in enumerate(x):
-            errs += valida(v, s["items"], "%s[%d]" % (p, i))
-    if isinstance(x, str) and len(x) < s.get("minLength", 0):
-        errs.append(T("run-phase.v_short", p=p, n=s["minLength"]))
-    if TYPES["number"](x) and "minimum" in s and x < s["minimum"]:
-        errs.append(T("run-phase.v_min", p=p, min=s["minimum"]))
-    return errs
-
-def blocco():
-    so = res.get("structured_output")
-    if isinstance(so, dict):
-        return so, ""
-    recinti = re.findall(r"```json[ \t]*\r?\n(.*?)\r?\n[ \t]*```", text, re.S)
-    if not recinti:
-        return None, T("run-phase.v_nojson")
-    try:
-        return json.loads(recinti[-1]), ""
-    except ValueError as e:
-        return None, T("run-phase.v_badjson", e=e)
-
-obj, errs = blocco()
-errs = [errs] if errs else []
-if obj is not None:
-    try:
-        schema = json.load(open(schema_path, encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        schema, errs = None, [T("run-phase.v_schema", e=e)]
-    if schema is not None:
-        try:
-            import jsonschema
-            errs = [e.message for e in jsonschema.validators.validator_for(schema)(schema).iter_errors(obj)]
-        except ImportError:
-            errs = valida(obj, schema, "$")
-        if not errs and obj.get("fase") != phase:
-            errs = [T("run-phase.v_phase", fase=repr(obj.get("fase")), phase=phase)]
-if errs:
-    for e in errs:
-        print(T("run-phase.v_invalid", msg=e), file=sys.stderr)
-    msg = "; ".join(errs[:3]).replace("\n", " ")
-    print("PHASE RESULT %s: STOP — %s" % (phase, T("run-phase.v_invalid", msg=msg)))
-    if riga:
-        print("originale=" + riga)
-    sys.exit(0)
-with open(out + ".tmp", "w", encoding="utf-8") as fh:
-    json.dump(obj, fh, ensure_ascii=False, indent=1)
-    fh.write("\n")
-os.replace(out + ".tmp", out)
-# Prose and JSON disagree: the most conservative wins (the same rules as cycle-state.sh on the JSON).
-one = lambda s: " ".join(str(s).split())
-dev = [one(x) for x in obj["deviazioni"] if str(x).strip()]
-jstop = ""
-if [x for x in dev if not x.startswith(("difensiva: ", "defensive: "))]:   # all defensive -> no STOP for deviation
-    jstop = T("run-phase.v_dev", n=len(dev), devs="; ".join(dev))
-elif one(obj["bloccato_su"]).lower() not in ("nessuno", "none"):
-    jstop = T("run-phase.v_blocked") + one(obj["bloccato_su"])
-elif obj["esito"] != "OK":
-    jstop = T("run-phase.v_esito") + one(obj["motivo"])
-jstop = jstop[:300]
-if not riga:
-    print("PHASE RESULT %s: %s" % (obj["fase"], ("STOP — " + jstop) if jstop else ("OK — " + one(obj["motivo"]))))
-elif jstop and re.match(r"(?:PHASE RESULT|ESITO FASE) [^:]*: OK", riga):
-    print("PHASE RESULT %s: STOP — JSON: %s" % (obj["fase"], T("run-phase.v_json_stop", stop=jstop)))
-    print("originale=" + riga)
-else:
-    print(riga)
-'
-# WRAPPER (1.5.1): `driver.py valida` (the same rules as VALIDA_PY, ported) decides the outcome. VALIDA_PY decides
-# only with FIC_DRIVER=0 (the fallback, on request, until 1.5.2); unset, empty or 1 -> the driver; any other value ->
-# one AVVISO on stderr, then the driver. The Python check comes first, with either engine (VALIDA_PY needs Python
-# too): FIC_PY_VER older than 3.10 -> `PHASE RESULT <phase>: STOP — <reason>`. No fallback on error: a driver that
-# exits not 0 gives `PHASE RESULT <phase>: STOP — <reason>` and its result.json, if written, is removed (a valid
-# result.json of a failed run must not decide). The certificate driver.equiv no longer switches anything here: it is
-# the proof, at each release, that VALIDA_PY and the driver are equivalent. FIC_DRIVER_PY replaces the driver (tests).
-# --valida (below) always runs VALIDA_PY, without the Python check: it is the reference of `driver.py equiv`.
+# --- structured outcome: `driver.py valida` decides (see STRUCTURED OUTCOME; harness-pt14) ---
+# WRAPPER (1.6.0): `driver.py valida`, the only engine (the internal validator VALIDA_PY, the fallback with FIC_DRIVER=0
+# in 1.5.1, is gone with `run-phase.sh --valida`; FIC_DRIVER no longer has any effect here, and this wrapper is silent
+# about it: `driver.py run` warns once). It prints the ESITO line (or the «uscita non valida» STOP and, below it,
+# originale=<line>) and writes result.json if valid. The Python check comes first: FIC_PY_VER older than 3.10 ->
+# `PHASE RESULT <phase>: STOP — <reason>`. No fallback on error: a driver that exits not 0 gives `PHASE RESULT <phase>:
+# STOP — <reason>` and its result.json, if written, is removed (a valid result.json of a failed run must not decide).
+# FIC_DRIVER_PY replaces the driver (tests).
 DRV=${FIC_DRIVER_PY:-$MAAT_SCRIPTS/driver.py}
-engine_choice() { # 0 = the driver decides, 1 = VALIDA_PY (FIC_DRIVER=0)
-  case "${FIC_DRIVER:-}" in
-    0) return 1 ;;
-    ''|1) return 0 ;;
-    *) echo "AVVISO: $(msg driver-engine.fic_driver_unknown v="$FIC_DRIVER")" >&2; return 0 ;;
-  esac
-}
-valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see VALIDA_PY)
+valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see above)
   local o vres vrc verr line
-  msg_py
   fic_py_min_ok || { echo "PHASE RESULT $3: STOP — $(msg run-phase-engine.python_old v="${FIC_PY_VER:-}" py="$FIC_PY")"; return 0; }
-  engine_choice || { "$FIC_PY" -c "$VALIDA_PY" "$@"; return; }
   # stdout of the driver in o, its stderr in verr (as in cycle-state.sh: fd 3 is the outer capture), then the
   # stderr goes on to the caller's stderr as before
   vres=$( { o=$("$FIC_PY" "$DRV" valida "$@" 2>&3 3>&-); vrc=$?; printf '\n\036%s\036%s\036' "$vrc" "$o"; } 3>&1 )
@@ -525,11 +389,6 @@ valida() { # <log> <schema> <phase> <result.json>: prints the outcome (see VALID
   line=${line:0:200}
   echo "PHASE RESULT $3: STOP — $(msg run-phase-engine.valida_failed rc="$vrc" line="${line:--}")"
 }
-if [ "${1:-}" = "--valida" ]; then
-  [ $# -eq 5 ] || { echo "$(msg run-phase.usage_valida script="$0")" >&2; exit 2; }
-  . "$HERE/python.sh" || { echo "$(msg run-phase.no_python)" >&2; exit 5; }
-  msg_py; "$FIC_PY" -c "$VALIDA_PY" "$2" "$3" "$4" "$5"; exit $?
-fi
 
 # --- attribution by name (see OTHER FLOWS): did the subsession name these paths? ---
 # NOMI_PY <repo root> <file of paths, one per line> <log.jsonl>… prints "nominato<TAB>p" or "mai<TAB>p" for
@@ -858,6 +717,10 @@ if [ -f "$hfp_file" ]; then
     hfp_since=$(date -u -r "$hfp_file" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
     hfp_root=$(maat_cygm "$MAAT_ROOT" 2>/dev/null || printf '%s' "$MAAT_ROOT")
     hfp_rimedio="bash \"$(maat_cygm "$MAAT_SCRIPTS/run-phase.sh" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS/run-phase.sh")\" --harness-fp > \"$hfp_file\""
+    # 1.6.0 (block Z): on Windows the command mixes C:/… and /tmp/… paths, so it runs in Git Bash, not in PowerShell;
+    # the note is printed on every platform (the same message everywhere, like `next` of driver.py), as a shell
+    # comment: the printed command still runs as is when pasted (spazi.test.sh runs it)
+    hfp_rimedio="$hfp_rimedio # $(msg run-phase-z.rim_git_bash)"
     case "$hfp_esito" in
       CAMBIATO) hfp_msg="STOP: $(msg run-phase.hfp_changed since="$hfp_since" a="$hfp_a" b="$hfp_b" root="$hfp_root" rim="$hfp_rimedio")" ;;
       FORMATO-PRECEDENTE) hfp_msg="STOP: $(msg run-phase.hfp_old a="$hfp_a" since="$hfp_since" b="$hfp_b" rim="$hfp_rimedio")" ;;
@@ -1371,8 +1234,8 @@ def forma(o):
             and all(isinstance(o.get(f), str) for f in ("esito", "motivo", "bloccato_su")))
 def riga(res, o):
     # With --json-schema the result field often carries ONLY the JSON, without the text line: then the line is derived
-    # from the structured object (already shape-checked), like VALIDA_PY in series. Text line present: it wins,
-    # and if it contradicts the object STOP wins (text STOP below; object STOP via m["esito"] and VALIDA_PY).
+    # from the structured object (already shape-checked), like `driver.py valida` in series. Text line present: it wins,
+    # and if it contradicts the object STOP wins (text STOP below; object STOP via m["esito"] and `driver.py valida`).
     l = next((l.strip() for l in reversed((res.get("result") or "").splitlines()) if l.strip().startswith(("PHASE RESULT", "ESITO FASE"))), "")
     if l or not forma(o):
         return l

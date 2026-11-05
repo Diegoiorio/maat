@@ -858,6 +858,12 @@ for d in "$TMPD"/m/*; do
   if [ $par = 1 ]; then PAR+=("$d"); else SER+=("$d"); fi
 done
 AVAIL=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo 2>/dev/null)
+# macOS (1.6.0): no /proc/meminfo; the nearest to MemAvailable is free + inactive + speculative pages of vm_stat
+if [ -z "$AVAIL" ] && command -v vm_stat >/dev/null 2>&1; then
+  AVAIL=$(vm_stat 2>/dev/null | awk '/page size of/ { for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) ps = $i }
+    /^Pages (free|inactive|speculative):/ { v = $NF; sub(/\.$/, "", v); n += v }
+    END { if (ps > 0) print int(n * ps / 1048576) }')
+fi
 NMEM=$(( ${AVAIL:-0} / MEM_MB )); NCPU=$(( $(nproc) / 2 ))
 [ "$NMEM" -lt "$N" ] && N=$NMEM
 [ "$NCPU" -lt "$N" ] && N=$NCPU

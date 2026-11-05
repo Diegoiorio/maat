@@ -163,6 +163,11 @@ table `ID | requirement | file | assertion | mutation`, `### Strings and data-te
   generated from the table (`plan-check.sh gen`), not written. A remark on them is `minor` at most;
 - **two sections that contradict each other are always blocking** (a decision's example vs a step, a
   step vs the test table, `after:` vs what a block needs), at any round;
+- **a red possible only with a stub in an existing file is blocking** (`major`): the test-red phase writes stubs
+  only in the files the plan declares `(new)`, so a test of a new parameter of an existing function fails on the
+  base with the `TypeError` of the call. Its `red if:` must be that error (`unexpected keyword argument '<p>'`), not
+  the value the implementation will return. `lint2` catches the calls written as Python in the backticks; you
+  catch the rest (prose assertions, methods, constructors);
 - in a **late round** (3 or 4) a product defect you find is still a blocker/major: the caller turns it
   into a test row and a `⚠️ Open risk` line instead of reopening the design. Give it a
   `Required change:` a test can check.

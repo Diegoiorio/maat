@@ -16,18 +16,23 @@
 #      seen from WSL: its .git points to a C:/ path) the cases from a ref are SALTATO and case 1 is folder against
 #      folder.
 #   3. (1.5.1, D9) --motore predefinito, HEAD (or the folder, as in case 1) against the plugin folder, on two small
-#      mini-repos in both modes → identical, exit 0, the certificate line of both sides at the top with «motore
-#      predefinito»; case 1 (no option) prints them with «motore bash». --motore with another value → exit 2.
+#      mini-repos in both modes → identical, exit 0, the line of both sides at the top, «motore predefinito» on both;
+#      case 1 (no option) prints «lato vecchio · motore bash» and «lato nuovo · motore predefinito» (1.6.0: --motore is
+#      the engine of the old side only). --motore with another value → exit 2.
 # Counterproofs (copies of the plugin or of the oracle, never the files of the repo):
 #   (i)   new side = the plugin with the it text of cycle-state.impl changed in the catalog → differences in it only on
 #         IMPLEMENT specs, en still equal (State and word), exit 1;
-#   (ii)  new side = cycle-state.sh with «chiuso;» → «closed;» in chain_state → every mother differs in BOTH languages;
+#   (ii)  new side = driver.py with «chiuso;» → «closed;» in chain_state (1.6.0: the table is the driver's) → every
+#         mother differs in BOTH languages;
 #   (iii) a copy of tools/oracolo.sh that ignores .claude/oracolo-conserva (the CONSERVA line) → the two sides are still
 #         equal to each other (exit 0), but the harness-fixture spec CAMBIATO leaves STOP: the word check is red; the
 #         same specs with the real oracle stay STOP (the check is not red by itself);
-#   (iv)  (1.5.1) new side = driver.py with the Python twin of the no-review IMPLEMENT pointing to another key of the
-#         catalog (the mutation of driver.test.sh §9) → with --motore predefinito differences in it only on IMPLEMENT
-#         specs, en equal, exit 1; with --motore bash identical, exit 0 (the option really changes the engine);
+#   (iv)  (1.6.0: both sides from the tag v1.5.1, the last plugin with the bash table; SALTATO when git cannot read
+#         the repo, red when the tag is missing) old side = v1.5.1 with the Python twin of the no-review IMPLEMENT of
+#         driver.py pointing to another key of the catalog, new side = v1.5.1 → with --motore predefinito differences
+#         in it only on IMPLEMENT specs, en equal, exit 1; with --motore bash identical, exit 0 (the option really
+#         changes the engine of the old side, and the bash table of 1.5.1 = its driver); the same mutated plugin as
+#         the NEW side with --motore bash → differences (the new side always decides with its default engine);
 #   (v)   (1.5.1) a copy of tools/oracolo.sh that ignores --motore (the MOTORE line: always FIC_DRIVER=0) → (iv) with
 #         --motore predefinito becomes identical (exit 0): red.
 set -uo pipefail
@@ -82,17 +87,16 @@ check "caso 1: ${V1##*/} contro la cartella del plugin → exit 0, spec=$NS, div
 check "  le fixture conservate (4 harness.fp × 2 lati × 2 lingue), nessuna riscritta, nessuna non UGUALE" \
   'grep -qx "oracolo: harness.fp riscritti=0 · conservati=16 · non-uguali=0" "$T/o1.out"' "$(grep '^oracolo: harness' "$T/o1.out")"
 check "  i progetti dati non sono stati scritti (percorsi, mtime e dimensioni uguali)" '[ "$(stato)" = "$s0" ]'
-# 1.5.1: the certificate line of each side, at the top, with the default engine (bash)
-righe_cert() { # $1 output, $2 engine → empty if both lines are there, before the first «oracolo: parola», with a verdict
-  local s pc pp
-  for s in vecchio nuovo; do
-    grep -qE "^oracolo: motore $2 · certificato $s (VALIDO|SCADUTO|ASSENTE) " "$1" || echo "manca la riga del certificato $s ($2)"
-  done
-  pc=$(grep -n '^oracolo: motore ' "$1" | tail -1 | cut -d: -f1); pp=$(grep -n '^oracolo: parola ' "$1" | head -1 | cut -d: -f1)
-  { [ -n "$pc" ] && [ -n "$pp" ] && [ "$pc" -lt "$pp" ]; } || echo "le righe del certificato non sono in testa ($pc, $pp)"
+# the line of each side, at the top: the engine of the old side (bash without the option), the new side predefinito
+righe_lati() { # $1 output, $2 engine of the old side → empty if both lines are there, before the first «oracolo: parola»
+  local pc pp
+  grep -qE "^oracolo: lato vecchio · motore $2( · |$)" "$1" || echo "manca la riga del lato vecchio (motore $2)"
+  grep -qE "^oracolo: lato nuovo · motore predefinito( · |$)" "$1" || echo "manca la riga del lato nuovo (motore predefinito)"
+  pc=$(grep -n '^oracolo: lato ' "$1" | tail -1 | cut -d: -f1); pp=$(grep -n '^oracolo: parola ' "$1" | head -1 | cut -d: -f1)
+  { [ -n "$pc" ] && [ -n "$pp" ] && [ "$pc" -lt "$pp" ]; } || echo "le righe dei lati non sono in testa ($pc, $pp)"
 }
-rc1=$(righe_cert "$T/o1.out" bash)
-check "  senza opzione: la riga del certificato dei due lati in testa, motore bash" '[ -z "$rc1" ]' "$rc1 $(grep '^oracolo: motore' "$T/o1.out")"
+rc1=$(righe_lati "$T/o1.out" bash)
+check "  senza opzione: la riga dei due lati in testa, lato vecchio motore bash, lato nuovo predefinito" '[ -z "$rc1" ]' "$rc1 $(grep '^oracolo: lato' "$T/o1.out")"
 F=$T/e1/nuovo-it/progetto-singoli/spec-esempio-harness-changed.txt
 check "  i record comprendono lo STOP di riga 0 sulla fixture CAMBIATO, impronta attuale normalizzata" \
   'grep -q "^Next: STOP — harness cambiato .*impronta registrata 000000000000, attuale <impronta-attuale>" "$F"' "$(grep '^Next' "$F" 2>&1)"
@@ -127,11 +131,11 @@ M3=("$T/c/progetto-catena-aperta" "$T/c/progetto-impronta-nc")
 n3=$(casi | awk -F'\t' -v l=" ${M3[*]##*/} " '$1 == "spec" && index(l, " " $2 " ")' | grep -c .)
 t0=$(date +%s)
 bash "$OR" --motore predefinito "$V1" "$PLUGIN" "${M3[@]}" > "$T/o3.out" 2>&1; rc=$?
-echo "oracolo.test: caso 3 $(( $(date +%s) - t0 ))s · ${#M3[@]} mini-repo · $(grep '^oracolo: motore' "$T/o3.out" | tr '\n' ' ')"
+echo "oracolo.test: caso 3 $(( $(date +%s) - t0 ))s · ${#M3[@]} mini-repo · $(grep '^oracolo: lato' "$T/o3.out" | tr '\n' ' ')"
 check "caso 3: --motore predefinito, ${V1##*/} contro la cartella del plugin → identico, exit 0, spec=$n3" \
   '[ $rc -eq 0 ] && [ "$(riga "$T/o3.out")" = "oracolo: spec=$n3 · it uguali=$n3 · en uguali=$n3 · diverse=0" ]' "rc=$rc $(grep -v '^oracolo: parola' "$T/o3.out")"
-rc3=$(righe_cert "$T/o3.out" predefinito)
-check "  la riga del certificato dei due lati in testa, motore predefinito" '[ -z "$rc3" ]' "$rc3 $(grep '^oracolo: motore' "$T/o3.out")"
+rc3=$(righe_lati "$T/o3.out" predefinito)
+check "  la riga dei due lati in testa, motore predefinito" '[ -z "$rc3" ]' "$rc3 $(grep '^oracolo: lato' "$T/o3.out")"
 
 # --- counterproofs ---
 copia_plugin() { mkdir -p "$T/$1" && cp -R "$PLUGIN/." "$T/$1/" && find "$T/$1" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null; return 0; }
@@ -150,10 +154,10 @@ ns_i=$(casi | awk -F'\t' '$1 == "spec" && $2 == "progetto-storico"' | grep -c .)
 check "controprova (i): diff in it solo sulle spec IMPLEMENT, en uguale, exit 1" \
   '[ $rc -eq 1 ] && [ -n "$h_i" ] && [ -z "$fuori_i" ] && riga "$T/oi.out" | grep -q " · en uguali=$ns_i · "' "rc=$rc $(riga "$T/oi.out") · $fuori_i"
 
-# (ii) «chiuso;» → «closed;» in chain_state
+# (ii) «chiuso;» → «closed;» in chain_state (driver.py: the table since 1.6.0)
 copia_plugin pii
-sed 's/chain_state="\$chain_state\$c chiuso;"/chain_state="$chain_state$c closed;"/' "$PLUGIN/scripts/cycle-state.sh" > "$T/pii/scripts/cycle-state.sh"
-check "controprova (ii): la mutazione e' applicata (chiuso; → closed; in chain_state)" 'grep -qF "\$c closed;\"" "$T/pii/scripts/cycle-state.sh"'
+sed 's/chain_state += c + " chiuso;"/chain_state += c + " closed;"/' "$PLUGIN/scripts/driver.py" > "$T/pii/scripts/driver.py"
+check "controprova (ii): la mutazione e' applicata (chiuso; → closed; in chain_state di driver.py)" 'grep -qF "chain_state += c + \" closed;\"" "$T/pii/scripts/driver.py"'
 bash "$OR" "$PLUGIN" "$T/pii" "$T/c/progetto-catene-chiuse" > "$T/oii.out" 2>&1; rc=$?
 madri=$(cd "$T/c/progetto-catene-chiuse/.claude/.ai-workflow" && grep -lE '^(Figlie|Children):' spec-*.md | sed 's/\.md$//')
 h_ii=$(intestazioni "$T/oii.out")
@@ -180,32 +184,44 @@ check "controprova (iii): con l'oracolo vero le fixture restano STOP (exit 0)" '
 check "controprova (iii): l'oracolo che ignora oracolo-conserva → lati uguali (exit 0) ma la fixture CAMBIATO non e' piu' STOP: rosso" \
   '[ $rc -eq 0 ] && printf "%s\n" "$pf" | grep -q "spec-esempio-harness-changed: STOP 0 su 4"' "rc=$rc $(grep -v '^oracolo: parola' "$T/oiii.out") · $pf"
 
-# (iv) driver.py with the Python IMPLEMENT pointing to another key: seen only when the driver decides
-copia_plugin piv
-sed 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-state.plan_draft")/' "$PLUGIN/scripts/driver.py" > "$T/piv/scripts/driver.py"
-check "controprova (iv): la mutazione e' applicata (IMPLEMENT del driver con cycle-state.plan_draft)" \
-  'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/piv/scripts/driver.py" && ! cmp -s "$PLUGIN/scripts/driver.py" "$T/piv/scripts/driver.py"'
+# (iv) both sides from v1.5.1 (the last bash table): the old side with the Python IMPLEMENT pointing to another key
 ns_iv=$(casi | awk -F'\t' '$1 == "spec" && $2 == "progetto-storico"' | grep -c .)
+identico_iv() { [ "$(riga "$1")" = "oracolo: spec=$ns_iv · it uguali=$ns_iv · en uguali=$ns_iv · diverse=0" ]; }
 solo_impl_it() { # $1 oracle output → the differences that are not «an IMPLEMENT spec, in it»
   intestazioni "$1" | grep . | while read -r s l; do
     [ "$l" = it ] || { echo "$s $l"; continue; }
     w=$(casi | awk -F'\t' -v s="$s" '$1 == "spec" && $2 "/" $3 == s { print $4 }'); [ "$w" = IMPLEMENT ] || echo "$s ($w)"; done
 }
-bash "$OR" --motore predefinito "$PLUGIN" "$T/piv" "$T/c/progetto-storico" > "$T/oiv.out" 2>&1; rc=$?
-h_iv=$(intestazioni "$T/oiv.out"); fuori_iv=$(solo_impl_it "$T/oiv.out")
-check "controprova (iv): --motore predefinito → diff in it solo sulle spec IMPLEMENT, en uguale, exit 1" \
-  '[ $rc -eq 1 ] && [ -n "$h_iv" ] && [ -z "$fuori_iv" ] && riga "$T/oiv.out" | grep -q " · en uguali=$ns_iv · "' "rc=$rc $(riga "$T/oiv.out") · $fuori_iv"
-bash "$OR" --motore bash "$PLUGIN" "$T/piv" "$T/c/progetto-storico" > "$T/oiv-b.out" 2>&1; rc=$?
-check "controprova (iv): --motore bash → identico, exit 0 (l'opzione cambia davvero il motore)" \
-  '[ $rc -eq 0 ] && [ "$(riga "$T/oiv-b.out")" = "oracolo: spec=$ns_iv · it uguali=$ns_iv · en uguali=$ns_iv · diverse=0" ]' "rc=$rc $(grep -v '^oracolo: parola' "$T/oiv-b.out")"
+V151=""
+if [ -z "$REF" ]; then
+  echo "SALTATO: controprove (iv) e (v), i lati dal tag v1.5.1 (git non legge $ROOT da qui)"
+elif ! git -C "$ROOT" rev-parse -q --verify "v1.5.1^{commit}" >/dev/null 2>&1; then
+  check "controprove (iv) e (v): il tag v1.5.1 c'e' (git fetch --tags)" 'false'
+else
+  mkdir -p "$T/v151x" && git -C "$ROOT" -c core.autocrlf=false archive v1.5.1 plugins/maat | tar -x -C "$T/v151x" && mv "$T/v151x/plugins/maat" "$T/v151" && V151=$T/v151
+  mkdir -p "$T/piv" && cp -R "$V151/." "$T/piv/"
+  sed 's/"IMPLEMENT — " + T("cycle-state.impl")/"IMPLEMENT — " + T("cycle-state.plan_draft")/' "$V151/scripts/driver.py" > "$T/piv/scripts/driver.py"
+  check "controprova (iv): la mutazione e' applicata (IMPLEMENT del driver di v1.5.1 con cycle-state.plan_draft)" \
+    'grep -qF "\"IMPLEMENT — \" + T(\"cycle-state.plan_draft\")" "$T/piv/scripts/driver.py" && ! cmp -s "$V151/scripts/driver.py" "$T/piv/scripts/driver.py"'
+  bash "$OR" --motore predefinito "$T/piv" "$V151" "$T/c/progetto-storico" > "$T/oiv.out" 2>&1; rc=$?
+  h_iv=$(intestazioni "$T/oiv.out"); fuori_iv=$(solo_impl_it "$T/oiv.out")
+  check "controprova (iv): v1.5.1 mutata contro v1.5.1, --motore predefinito → diff in it solo sulle spec IMPLEMENT, en uguale, exit 1" \
+    '[ $rc -eq 1 ] && [ -n "$h_iv" ] && [ -z "$fuori_iv" ] && riga "$T/oiv.out" | grep -q " · en uguali=$ns_iv · "' "rc=$rc $(riga "$T/oiv.out") · $fuori_iv"
+  bash "$OR" --motore bash "$T/piv" "$V151" "$T/c/progetto-storico" > "$T/oiv-b.out" 2>&1; rc=$?
+  check "controprova (iv): --motore bash → identico, exit 0 (il motore del lato vecchio cambia davvero; tabella bash 1.5.1 = suo driver)" \
+    '[ $rc -eq 0 ] && identico_iv "$T/oiv-b.out"' "rc=$rc $(grep -v '^oracolo: parola' "$T/oiv-b.out")"
+  bash "$OR" --motore bash "$V151" "$T/piv" "$T/c/progetto-storico" > "$T/oiv-n.out" 2>&1; rc=$?
+  check "controprova (iv): la v1.5.1 mutata come lato NUOVO, --motore bash → diff, exit 1 (il lato nuovo decide col suo predefinito)" \
+    '[ $rc -eq 1 ] && [ -n "$(intestazioni "$T/oiv-n.out")" ]' "rc=$rc $(riga "$T/oiv-n.out")"
 
-# (v) an oracle that ignores --motore: always FIC_DRIVER=0
-mkdir -p "$T/ov/tools"; sed 's/^\( *\)if \[ "\$MOTORE" = bash \]; then .*# MOTORE$/\1export FIC_DRIVER=0/' "$OR" > "$T/ov/tools/oracolo.sh"
-check "controprova (v): la mutazione e' applicata (la riga MOTORE → sempre FIC_DRIVER=0)" \
-  'grep -q "# MOTORE$" "$OR" && ! grep -q "# MOTORE$" "$T/ov/tools/oracolo.sh" && grep -qx " *export FIC_DRIVER=0" "$T/ov/tools/oracolo.sh"'
-bash "$T/ov/tools/oracolo.sh" --motore predefinito "$PLUGIN" "$T/piv" "$T/c/progetto-storico" > "$T/ov.out" 2>&1; rc=$?
-check "controprova (v): l'oracolo che ignora --motore → (iv) con predefinito identico (exit 0): rosso" \
-  '[ $rc -eq 0 ] && [ "$(riga "$T/ov.out")" = "oracolo: spec=$ns_iv · it uguali=$ns_iv · en uguali=$ns_iv · diverse=0" ]' "rc=$rc $(grep -v '^oracolo: parola' "$T/ov.out")"
+  # (v) an oracle that ignores --motore: always FIC_DRIVER=0
+  mkdir -p "$T/ov/tools"; sed 's/^\( *\)if \[ .*# MOTORE$/\1export FIC_DRIVER=0/' "$OR" > "$T/ov/tools/oracolo.sh"
+  check "controprova (v): la mutazione e' applicata (la riga MOTORE → sempre FIC_DRIVER=0)" \
+    'grep -q "# MOTORE$" "$OR" && ! grep -q "# MOTORE$" "$T/ov/tools/oracolo.sh" && grep -qx " *export FIC_DRIVER=0" "$T/ov/tools/oracolo.sh"'
+  bash "$T/ov/tools/oracolo.sh" --motore predefinito "$T/piv" "$V151" "$T/c/progetto-storico" > "$T/ov.out" 2>&1; rc=$?
+  check "controprova (v): l'oracolo che ignora --motore → (iv) con predefinito identico (exit 0): rosso" \
+    '[ $rc -eq 0 ] && identico_iv "$T/ov.out"' "rc=$rc $(grep -v '^oracolo: parola' "$T/ov.out")"
+fi
 
 find "$PLUGIN" -name __pycache__ -type d | grep -q . && { echo "FAIL [__pycache__ nel plugin]"; fail=$((fail + 1)); }
 echo "oracolo.test.sh: $pass passati, $fail falliti"

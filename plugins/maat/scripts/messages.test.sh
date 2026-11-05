@@ -249,10 +249,10 @@ if cmd == "catalogo":   # <maat_msg.py> <scripts dir> <scanner or "-">
     KEY = re.compile(r"^[a-z][a-z0-9-]*(\.[a-z0-9_-]+)+$")
     TOK = re.compile(r"\{\{|\}\}|\{[A-Za-z_][A-Za-z0-9_]*\}")
     # identifiers an English text keeps as they are (block B): file names and paths (chiusura.txt, *.rossi,
-    # deviazioni-difensive.txt), options (--max-fasi), sub-commands (valida, righe, certificato), the plan keywords
+    # deviazioni-difensive.txt), options (--max-fasi), sub-commands (valida, righe, impronta), the plan keywords
     # (scrive:, dopo:, Figlie:) and the frozen line prefix «Base anello»; the detector looks at what is left. Block D:
     # the sub-command after «usage: » (leggi, comando of maat-config.py) and the maat.json values listed as <a|b|c>
-    IDENT = re.compile(r"\S*[./_]\S*|--[\w-]+|\b(?:scrive|dopo|Figlie):|\bBase anello\b|\b(?:valida|righe|certificato|rossi)\b"
+    IDENT = re.compile(r"\S*[./_]\S*|--[\w-]+|\b(?:scrive|dopo|Figlie):|\bBase anello\b|\b(?:valida|righe|impronta|rossi)\b"
                        r"|\busage: \S+|\| leggi\b|<[^<>]*\|[^<>]*>")
     seen = {}
     for n, k, en, it in voci:

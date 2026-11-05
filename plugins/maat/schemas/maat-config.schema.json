@@ -87,7 +87,7 @@
             "items": { "type": "string" }
           },
           "report": {
-            "description": "Format of the test report: junit, vitest or nessuno.",
+            "description": "Format of the test report: junit (JUnit XML written to {report}: pytest --junitxml, which also runs unittest tests, or any runner whose failures carry the pytest file:line lines or a Python traceback), vitest (the output of vitest) or nessuno. The test-red phase of format-2 plans reads the outcome of each test from it: with nessuno the full cycle stops BLOCKED at test-red (maat-doctor: ATTENZIONE).",
             "enum": ["junit", "vitest", "nessuno"],
             "default": "nessuno"
           },

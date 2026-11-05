@@ -17,16 +17,19 @@
 #      the intact copy (touch -r: the mtime enters the «since» of row 0). Every rewritten file must then be UGUALE for
 #      `run-phase.sh --harness-fp-confronta` of that side: no Next is decided by a rewritten harness.fp. A rewrite that
 #      fails leaves the file as it was (an AVVISO line);
-#   2. for every spec with its run dir (the specs `driver.py equiv` sees): `cycle-state.sh` with the chosen engine,
-#      `plan-check.sh basis` and `plan-check.sh contract`: stdout (CR removed) and exit code.
-# --motore (1.5.1, D9): the engine of `cycle-state.sh` on BOTH sides. `bash` (the default, the behaviour of 1.5.0):
-#   FIC_DRIVER=0, the table in bash, never the driver — proves the bash table did not change. `predefinito`:
-#   FIC_DRIVER unset, each side decides as its users get it (1.5.1: always the Python driver; 1.5.0: the driver only
-#   with a VALIDO certificate, otherwise the bash table) — proves the real decider did not change. FIC_DRIVER_PY
-#   (a test's replacement driver) is unset on both sides. At the top, one line per side: «oracolo: motore <m> ·
-#   certificato <side> <verdict>», the verdict of `driver.py certificato` of that side (FIC_DRIVER_CERT unset, MAAT_LINGUA
-#   it): with `predefinito` an old side SCADUTO decides with bash, and that must be seen. Informative only: it never
-#   changes the exit code.
+#   2. for every spec with its run dir (the specs of the expected outputs, tools/esempi-equiv/attese.sh):
+#      `cycle-state.sh` with the engine of that side, `plan-check.sh basis` and `plan-check.sh contract`: stdout (CR
+#      removed) and exit code.
+# --motore (1.5.1, D9; 1.6.0: the OLD side only): the engine of `cycle-state.sh` of the old side. `bash` (the default):
+#   FIC_DRIVER=0, the bash table of a side that has one (up to 1.5.1) — against a new side of 1.6.0, the last proof
+#   bash table against the driver. `predefinito`: FIC_DRIVER unset, the old side decides as its users get it (1.5.1:
+#   always the Python driver; 1.5.0: the driver only with a VALIDO certificate, otherwise the bash table). The NEW side
+#   always decides with its default engine (FIC_DRIVER unset): since 1.6.0 there is no other one, and a side without
+#   the bash engine decides with the driver whatever FIC_DRIVER says. FIC_DRIVER_PY (a test's replacement driver) is
+#   unset on both sides. At the top, one line per side: «oracolo: lato <side> · motore <m>», followed by «· certificato
+#   <verdict>» for a side whose driver.py still has `certificato` (up to 1.5.1; FIC_DRIVER_CERT unset, MAAT_LINGUA it):
+#   with `predefinito` an old side SCADUTO of 1.5.0 decides with bash, and that must be seen. Informative only: it
+#   never changes the exit code.
 # One normalization, declared: the CURRENT harness fingerprint of the side (`run-phase.sh --harness-fp` of that side, in
 # that language, on that project: 64 hex and its first 12) becomes <impronta-attuale> in the records. The STOPs of row 0
 # print it («attuale <12>»), and two different plugins have two different fingerprints by construction; the recorded
@@ -112,19 +115,23 @@ estrai_en() { # the fields compared in en
     !m { print }' "$1"
 }
 
-# --- the certificate of each side (informative): the verdict of its driver.py certificato, in the same path $T/maat ---
+# --- the engine of each side; the certificate of a side that still has one (informative), in the same path $T/maat ---
+motore_di() { if [ "$MOTORE" = bash ] && [ "$1" = vecchio ]; then echo bash; else echo predefinito; fi; }
 for lato in vecchio nuovo; do
-  rm -rf "$T/maat"; cp -R "$T/lati/$lato" "$T/maat" || die "copy of the $lato side"
-  v=$(
-    unset FIC_DRIVER_ROOT FIC_DRIVER_CERT MAAT_MSG_PY
-    export MAAT_ROOT=$T/maat MAAT_LINGUA=it
-    cd "$T" || exit 0
-    [ -f "$T/maat/scripts/driver.py" ] || { echo "non verificabile (nessun driver.py)"; exit 0; }
-    FIC_PY=""; . "$T/maat/scripts/python.sh" 2>/dev/null
-    [ -n "$FIC_PY" ] || { echo "non verificabile (nessun Python)"; exit 0; }
-    "$FIC_PY" "$T/maat/scripts/driver.py" certificato 2>/dev/null | tr -d '\r' | sed -n '1s/^certificato: //p'
-  )
-  echo "oracolo: motore $MOTORE · certificato $lato ${v:-non verificabile (nessuna uscita)}"
+  c=""
+  if grep -q '^def cmd_certificato' "$T/lati/$lato/scripts/driver.py" 2>/dev/null; then
+    rm -rf "$T/maat"; cp -R "$T/lati/$lato" "$T/maat" || die "copy of the $lato side"
+    c=$(
+      unset FIC_DRIVER_ROOT FIC_DRIVER_CERT MAAT_MSG_PY
+      export MAAT_ROOT=$T/maat MAAT_LINGUA=it
+      cd "$T" || exit 0
+      FIC_PY=""; . "$T/maat/scripts/python.sh" 2>/dev/null
+      [ -n "$FIC_PY" ] || { echo "non verificabile (nessun Python)"; exit 0; }
+      "$FIC_PY" "$T/maat/scripts/driver.py" certificato 2>/dev/null | tr -d '\r' | sed -n '1s/^certificato: //p'
+    )
+    c=" · certificato ${c:-non verificabile (nessuna uscita)}"
+  fi
+  echo "oracolo: lato $lato · motore $(motore_di $lato)$c"
 done
 
 riscritti=0 conservati_n=0 non_uguali=0
@@ -139,7 +146,7 @@ for lato in vecchio nuovo; do
         cd "$P" || exit 2
         unset FIC_REPO FIC_DRIVER_ROOT FIC_DRIVER_CERT FIC_DRIVER_PY MAAT_MSG_PY
         export MAAT_ROOT=$T/maat MAAT_LINGUA=$lingua
-        if [ "$MOTORE" = bash ]; then export FIC_DRIVER=0; else unset FIC_DRIVER; fi   # MOTORE
+        if [ "$(motore_di $lato)" = bash ]; then export FIC_DRIVER=0; else unset FIC_DRIVER; fi   # MOTORE
         W=.claude/.ai-workflow
         keep=$(conservati .)
         for fp in "$W"/*.run/harness.fp; do

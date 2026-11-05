@@ -17,6 +17,10 @@ CP=${CP:-$HERE/counterproof.sh}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 n=0; fail=0
 check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
+# 1.6.0: the cases of step 2 in parallel want N >= 2, and counterproof.sh caps N at nproc/2: on a machine with fewer
+# than 4 CPUs (the macOS runner of the CI: 3) step 2 is rightly serial, and those cases are SALTATO, declared
+NPROC=$(nproc 2>/dev/null || echo 0)
+check_par() { if [ $((NPROC / 2)) -ge 2 ]; then check "$@"; else echo "SALTATO [$1]: il gradino 2 vuole almeno 4 CPU (nproc $NPROC)"; fi; }
 unset MAAT_CONFIG MAAT_ROOT FIC_REPO PROJECT_ROOT FIC_GATES_VENV_PY MAAT_MODULO
 
 # fake repo: .claude/maat.json (the example) + modules/app + modules/api
@@ -36,6 +40,9 @@ printf 'node_modules\n.nuxt\n.venv\n__pycache__\nrun/\n' > "$R/.gitignore"
 (cd "$R" && git init -q . && git config user.email t@t && git config user.name t && git add -A && git commit -qm init)
 
 BIN=$T/bin; mkdir -p "$BIN"
+# 1.6.0: the real rsync found in the PATH, not /usr/bin/rsync (on macOS that is openrsync; GNU rsync from Homebrew is in
+# the PATH). The same file on Linux.
+export FAKE_RSYNC_VERO=$(command -v rsync)
 # fake vitest (npx): reads the sources in the cwd (the mirror's apps/admin) and writes the JSON report like vitest 1.6.
 #   IMPORTROTTO in a source -> the test file does not load · ROSSO in src.ts/other.ts -> "somma vale uno"
 #   red on "expected 2 to be 1" · DIVERSO -> red with another message · "altro resta verde" always green.
@@ -56,7 +63,17 @@ if [ -n "${FAKE_SECOND:-}" ] && mkdir "$FAKE_SECOND.once" 2>/dev/null; then
 fi
 # FAKE_KILL: signal to the running counterproof.sh; the run (and one of its children) stay alive FAKE_KILL_SLEEP seconds
 if [ -n "${FAKE_KILL:-}" ]; then
-  echo $$ >> "$FAKE_LOG.pids"; pkill -TERM -f "$FAKE_KILL"
+  echo $$ >> "$FAKE_LOG.pids"
+  # 1.6.0: the pkill of macOS (BSD) leaves out its own ancestors, and counterproof.sh is one of them (exit 1, no
+  # signal; in step 2 it finds only the other worker); so the targets are what pgrep -f finds plus the ancestors whose
+  # command line holds FAKE_KILL, all signalled with one kill: on Linux (procps) the same set as pkill. Collected
+  # first, because a subshell signalled alone dies and breaks the chain up to counterproof.sh
+  p=$$ tgt=""
+  while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) tgt+=" $p" ;; esac
+  done
+  tgt=$(printf '%s\n' $tgt $(pgrep -f "$FAKE_KILL" 2>/dev/null) | sort -un)
+  [ -z "$tgt" ] || kill -TERM $tgt 2>/dev/null
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
@@ -110,7 +127,7 @@ cat > "$BIN/rsync" <<'EOF'
 [ -n "${FAKE_RSYNC_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_RSYNC_LOG"
 [ -n "${FAKE_RSYNC_FAIL:-}" ] && exit 23
 [ -n "${FAKE_RSYNC_NOOP:-}" ] && exit 0
-exec /usr/bin/rsync "$@"
+exec "$FAKE_RSYNC_VERO" "$@"
 EOF
 chmod +x "$BIN/npx" "$BIN/fakepy" "$BIN/rsync"
 export PATH="$BIN:$PATH" HOME=$T/home FAKE_LOG=$T/npx FIC_PYTEST_PY=$BIN/fakepy
@@ -152,7 +169,7 @@ export const x = 1'),
 $(entry VERDE $V/uncovered.ts 'w = 1' 'w = 2'),
 $(entry PY modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')
 ]")
-mkdir -p "$MA" && /usr/bin/rsync -a --exclude=__pycache__ "$API/" "$MA/"   # initial state of the api mirror
+mkdir -p "$MA" && "$FAKE_RSYNC_VERO" -a --exclude=__pycache__ "$API/" "$MA/"   # initial state of the api mirror
 WT0=$(wt_hash); MIR0=$(mir_hash)
 FIC_CP_PARALLEL=1 cpr "$LIST"
 check "lista con FAIL -> exit 1, ultima riga esito=FAIL" '[ "$(rc)" = 1 ] && tail -1 "$T/out" | grep -q "esito=FAIL prove=4/6 fail=2 bloccate=0"'
@@ -176,11 +193,11 @@ check "i campi dell input restano nel risultato" '[ "$(field A1 superficie)" = S
 
 # 1b. same list, step 2: private copies in parallel, same results
 FIC_CP_PARALLEL=2 cpr "$LIST"
-check "gradino 2: stessi esiti del seriale" '[ "$(rc)" = 1 ] && tail -1 "$T/out" | grep -q "esito=FAIL prove=4/6 fail=2 bloccate=0 .*luogo=copie(2)" && [ "$(field A1 esito)" = rosso_asserzione ] && [ "$(field B1 esito)" = rosso_asserzione ] && [ "$(field IMP esito)" = rosso_import ] && [ "$(field VERDE esito)" = verde ] && [ "$(field A1-DUP duplicato_di)" = A1 ] && [ "$(field PY esito)" = rosso_asserzione ]'
-check "  i run vitest girano nelle copie private, fuori dal mirror" '[ "$(grep "args=vitest" "$FAKE_LOG.all" | grep -c "^cwd=$HOME/fic-cp\.")" = 4 ]'
+check_par "gradino 2: stessi esiti del seriale" '[ "$(rc)" = 1 ] && tail -1 "$T/out" | grep -q "esito=FAIL prove=4/6 fail=2 bloccate=0 .*luogo=copie(2)" && [ "$(field A1 esito)" = rosso_asserzione ] && [ "$(field B1 esito)" = rosso_asserzione ] && [ "$(field IMP esito)" = rosso_import ] && [ "$(field VERDE esito)" = verde ] && [ "$(field A1-DUP duplicato_di)" = A1 ] && [ "$(field PY esito)" = rosso_asserzione ]'
+check_par "  i run vitest girano nelle copie private, fuori dal mirror" '[ "$(grep "args=vitest" "$FAKE_LOG.all" | grep -c "^cwd=$HOME/fic-cp\.")" = 4 ]'
 check "  il backend resta seriale nel mirror" 'grep -q "^cwd=$MA args=-B -m pytest" "$FAKE_LOG.all"'
-check "  cacheDir di vite privata per copia (2 distinte)" '[ "$(grep "^cache=$HOME/fic-cp\..*/.fic-vite-cache$" "$FAKE_LOG.all" | sort -u | wc -l)" = 2 ]'
-check "  fs.allow = radice della copia + node_modules e packages del mirror" '[ "$(grep -c "^allow=$HOME/fic-cp\.[^/]*/[12]/modules/app:$M/node_modules:$M/packages$" "$FAKE_LOG.all")" = 4 ]'
+check_par "  cacheDir di vite privata per copia (2 distinte)" '[ "$(grep "^cache=$HOME/fic-cp\..*/.fic-vite-cache$" "$FAKE_LOG.all" | sort -u | wc -l)" = 2 ]'
+check_par "  fs.allow = radice della copia + node_modules e packages del mirror" '[ "$(grep -c "^allow=$HOME/fic-cp\.[^/]*/[12]/modules/app:$M/node_modules:$M/packages$" "$FAKE_LOG.all")" = 4 ]'
 check "  lock del mirror tenuto durante i run nelle copie" '[ "$(grep -c "^lock=occupato" "$FAKE_LOG.all")" = 4 ] && ! grep -q "^lock=libero" "$FAKE_LOG.all"'
 check "  copie private cancellate alla fine" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1'
 check "  hash del working tree e del mirror invariati" '[ "$(wt_hash)" = "$WT0" ] && [ "$(mir_hash)" = "$MIR0" ]'
@@ -189,7 +206,7 @@ check "  hash del working tree e del mirror invariati" '[ "$(wt_hash)" = "$WT0" 
 FIC_CP_PARALLEL=1 cpr "$(mj gt.json "[$(entry GT $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma > vale uno')]")"
 check "nome «describe > it»: -t col fullName, rosso sull asserzione" '[ "$(rc)" = 0 ] && [ "$(field GT esito)" = rosso_asserzione ] && grep -q -- "-t somma vale uno" "$FAKE_LOG.all"'
 cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
-check "default: parallelo senza variabili" '[ "$(rc)" = 0 ] && grep -q "gradino 2" "$T/out"'
+check_par "default: parallelo senza variabili" '[ "$(rc)" = 0 ] && grep -q "gradino 2" "$T/out"'
 FIC_CP_MEM_MB=99999999 cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 check "memoria insufficiente per 2 run -> seriale nel mirror" '[ "$(rc)" = 0 ] && ! grep -q "gradino 2" "$T/out" && tail -1 "$T/out" | grep -q "luogo=mirror"'
 check "  nel seriale nessuna variabile di vite (config identica)" '[ "$(grep -c "^cache=$" "$FAKE_LOG.all")" = 2 ] && [ "$(grep -c "^allow=$" "$FAKE_LOG.all")" = 2 ]'
@@ -293,7 +310,7 @@ check "opzione al posto del path -> 64" 'PROJECT_ROOT=$R bash "$CP" --help >/dev
 # 11. death halfway through the run: the trap puts the mirror file back
 MIR1=$(mir_hash)
 FAKE_KILL="$CP" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
-check "morte durante il run: il trap ripristina il mirror" '[ "$(mir_hash)" = "$MIR1" ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts"'
+check "morte durante il run: exit 143 (SIGTERM), il trap ripristina il mirror" '[ "$(rc)" = 143 ] && [ "$(mir_hash)" = "$MIR1" ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts"'
 
 # 11b. signal during step 2: no surviving process (not even in the timeout groups), no copy
 alive() { local p s; for p in $(cat "$FAKE_LOG.pids" 2>/dev/null); do s=$(ps -o stat= -p "$p" 2>/dev/null); [ -n "$s" ] && [ "${s#Z}" = "$s" ] && echo "$p"; done; }
@@ -302,7 +319,7 @@ t0=$(date +%s)
 FAKE_KILL="$CP" FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 \
   cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 sleep 1
-check "segnale nel gradino 2: il trap non aspetta la fine dei run" '[ $(( $(date +%s) - t0 )) -lt 25 ] && [ "$(rc)" = 143 ]'
+check_par "segnale nel gradino 2: il trap non aspetta la fine dei run" '[ $(( $(date +%s) - t0 )) -lt 25 ] && [ "$(rc)" = 143 ]'
 check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ]'
 check "  nessuna copia fic-cp.* residua, mirror invariato, lock libero" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true'
 for p in $(alive); do kill -KILL "$p" 2>/dev/null; done
@@ -466,10 +483,13 @@ FIC_LOCK_WAIT=5 cpb "$PX" "$OUT/one.json"
 check "  lock orfano (pid morto) -> ripreso, prova eseguita, lock rilasciato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1" && [ ! -e "$M/.fic-lock.d" ] && [ ! -e "$M/.fic-lock.d.rec" ]'
 # step 2: private copies with the fallback, worker queue with the mkdir lock
 FIC_CP_PARALLEL=2 cpb "$PX" "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
-check "  gradino 2 senza rsync e flock: stessi esiti, ogni mutazione una volta, copie cancellate, lock rilasciato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*luogo=copie(2)" && [ "$(field PK1 esito)" = rosso_asserzione ] && [ "$(field PK2 esito)" = rosso_asserzione ] && [ "$(grep -c "args=vitest" "$FAKE_LOG.all")" = 2 ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ ! -e "$M/.fic-lock.d" ]'
+check_par "  gradino 2 senza rsync e flock: stessi esiti, ogni mutazione una volta, copie cancellate, lock rilasciato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*luogo=copie(2)" && [ "$(field PK1 esito)" = rosso_asserzione ] && [ "$(field PK2 esito)" = rosso_asserzione ] && [ "$(grep -c "args=vitest" "$FAKE_LOG.all")" = 2 ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ ! -e "$M/.fic-lock.d" ]'
 # signal halfway through the run: the trap restores the mirror and releases the fallback lock
 FAKE_KILL="$CP" cpb "$PX" "$OUT/one.json"
 check "  segnale durante il run -> exit 143, mirror ripristinato, lock di ripiego rilasciato" '[ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ]'
+[ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ] ||   # detail of a red
+  { echo "    rc=$(rc) src.ts=$(cat "$M/apps/admin/src.ts" 2>&1) lock=$(ls -la "$M/.fic-lock.d" 2>&1 | tr '\n' ' ') pid=$(cat "$M/.fic-lock.d/pid" 2>&1)"
+    sed 's/^/    out: /' "$T/out" | tail -15; sed 's/^/    npx: /' "$FAKE_LOG.all" 2>/dev/null | tail -8; }
 # tools without fallback
 for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync tar flock"; do
   cpb "$(path_senza "$T/bin-${v#*|}" ${v#*|})" "$OUT/one.json"

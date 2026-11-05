@@ -37,6 +37,9 @@ printf 'node_modules\n.nuxt\n.env\n' > "$R/.gitignore"
 
 # fake npx: records cwd, arguments and CI; optionally writes (FAKE_WRITE) and exits with FAKE_RC
 BIN=$T/bin; mkdir -p "$BIN"
+# 1.6.0: the real rsync and cp found in the PATH, not /usr/bin/rsync and /bin/cp (on macOS those are openrsync and
+# the BSD cp, without --remove-destination; the GNU ones are in the PATH from Homebrew). Same files on Linux.
+export FAKE_RSYNC_VERO=$(command -v rsync) FAKE_CP_VERO=$(command -v cp)
 cat > "$BIN/npx" <<'EOF'
 #!/usr/bin/env bash
 { echo "cwd=$PWD"; echo "args=$*"; echo "CI=${CI:-}"; echo "src=$(cat ../../apps/admin/src.ts 2>/dev/null)"; } > "$FAKE_LOG"
@@ -73,14 +76,14 @@ cat > "$BIN/rsync" <<'EOF'
 [ -n "${FAKE_RSYNC_FAIL:-}" ] && exit 23
 [ -n "${FAKE_RSYNC_NOOP:-}" ] && exit 0
 [ -n "${FAKE_RSYNC_NOOP_ONCE:-}" ] && [ -e "$FAKE_RSYNC_NOOP_ONCE" ] && { rm -f "$FAKE_RSYNC_NOOP_ONCE"; exit 0; }
-exec /usr/bin/rsync "$@"
+exec "$FAKE_RSYNC_VERO" "$@"
 EOF
 # fake cp only if FAKE_CP_NOOP: the copy of the INCREMENTAL sync (the only one with --remove-destination)
 # writes nothing, i.e. an incremental sync that did not align
 cat > "$BIN/cp" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${FAKE_CP_NOOP:-}" ]; then for a in "$@"; do [ "$a" = --remove-destination ] && exit 0; done; fi
-exec /bin/cp "$@"
+exec "$FAKE_CP_VERO" "$@"
 EOF
 # fake npm (first alternative of copia.lint, with lint-baseline.mjs): records like npx
 cat > "$BIN/npm" <<'EOF'

@@ -164,11 +164,6 @@ driver.rp_other	scripts/driver.py:1401#2	-	-	rc	sub-session exited {rc}
 driver.result_invalid	scripts/driver.py:1409#2	-	-	label errs	result.json of {label} not valid: {errs}
 driver.nv_done	scripts/driver.py:1432#2	-	-	what	cycle finished: signature NEEDS_VERIFICATION — to verify: {what}; the promotion to IMPLEMENTED belongs to a later invocation, after the verification
 driver.nv_no_detail	scripts/driver.py:1434	-	-	-	detail not found in the spec (Finalize:/Verification: lines)
-driver.equiv_not_found	scripts/driver.py:1489	equiv: 	-	t	not found: {t}
-driver.equiv_nothing	scripts/driver.py:1539	equiv: 	-	-	no run directory: nothing to certify
-driver.equiv_written	scripts/driver.py:1549	equiv: 	-	path	certificate written: {path}
-driver.cert_stale	scripts/driver.py:1561	certificato: SCADUTO — 	-	keys	different hashes: {keys} (relaunch driver.py equiv --certifica)
-driver.usage	scripts/driver.py:1568	-	-	-	usage: driver.py next <spec.md> | run <spec.md> [--max-fasi N] [--dry-run] [-- <flag>…] | valida <log.jsonl> <schema> <phase> <result.json> | equiv [--certifica] <folder|spec.md>… | certificato | righe [<cap>]
 driver.usage_next	scripts/driver.py:1582	-	-	-	usage: driver.py next <spec-<name>.md>
 
 # ---------------------------------------------------------------- run-phase.sh (and the validator twins in driver.py)
@@ -207,7 +202,6 @@ run-phase.v_esito	scripts/run-phase.sh:458!py	-	-	-	outcome STOP:
 run-phase.v_esito	scripts/driver.py:958	-	-	-	outcome STOP: 
 run-phase.v_json_stop	scripts/run-phase.sh:463!py	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
 run-phase.v_json_stop	scripts/driver.py:963	PHASE RESULT %s: STOP — JSON: 	-	stop	{stop} (the prose said OK: the most conservative wins)
-run-phase.usage_valida	scripts/run-phase.sh:490	-	-	script	usage: {script} --valida <log.jsonl> <schema> <phase> <result.json>
 run-phase.no_python	scripts/run-phase.sh:491#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
 run-phase.no_python	scripts/run-phase.sh:616#2	-	-	-	no usable Python interpreter (set FIC_PYTHON)
 run-phase.usage_nominati	scripts/run-phase.sh:615	-	-	script	usage: {script} --nominati <root> <paths-file> <log.jsonl>…

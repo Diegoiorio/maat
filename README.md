@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.5.1**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.6.0**.
 
 ## When to use Maat
 
@@ -61,8 +61,27 @@ duration, phase by phase.
 | git | 2.35 or newer | `git --version` |
 | bash (on Windows: Git Bash, included in Git for Windows) | 4 or newer | `bash --version` |
 | Python | 3.10 or newer | `python --version` (on Windows: `py -3 --version`) |
+| on a Mac: the GNU tools from Homebrew | `bash` 4 or newer, GNU `sed`, `grep` and `stat`, `sha256sum`, `timeout`, `flock` | `maat-doctor` (below) checks them |
 
 On Windows **WSL is not required**: it only speeds up JavaScript tests.
+
+On a Mac, `/bin/bash` is 3.2 and the system `sed`, `grep` and `stat` are the BSD ones, while Maat's scripts use the
+GNU options. Install the GNU tools with [Homebrew](https://brew.sh) and put their `gnubin` folders first in `PATH`
+(for example in `~/.zshrc`):
+
+```bash
+brew install bash coreutils gnu-sed grep flock
+export PATH="$(brew --prefix)/opt/coreutils/libexec/gnubin:$(brew --prefix)/opt/gnu-sed/libexec/gnubin:$(brew --prefix)/opt/grep/libexec/gnubin:$(brew --prefix)/bin:$PATH"
+```
+
+`maat-doctor` checks these tools on a Mac only, and for a missing one prints the `brew` command. The Mac is verified
+in CI: the suites of Maat run on macOS at every push with the same tools plus `findutils`, `gawk` (as `awk`) and
+`rsync` (`docs/TESTING-harness.md`, «CI»).
+
+For the full cycle the tests must leave a **report Maat can read**: JUnit XML (pytest `--junitxml`, which also runs
+`unittest` tests) or the output of vitest. Before the code, the cycle proves that each new test fails on its own
+assertion, and it reads that from the report. Without one (`"report": "nessuno"`, the default) the full cycle stops
+at the `test-red` phase; `maat-doctor` warns about it and `/maat:setup` proposes the report.
 
 ## Installation
 
@@ -72,11 +91,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.5.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.6.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.5.1` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.6.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -95,7 +114,7 @@ You can also give the same commands inside Claude Code: type `/plugin` instead o
 The setup:
 
 1. looks at the project **without changing anything** and recognizes languages, tests and lint;
-2. shows you, in a table, the modules and commands it will use: you confirm or correct them;
+2. shows you, in a table, the modules, commands and test reports it will use: you confirm or correct them;
 3. asks you only what it cannot guess, that is:
    - the production address;
    - the release script;
@@ -112,7 +131,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.5.1/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.6.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -215,27 +234,60 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.5.1`, from the project folder:
+`v1.6.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.5.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.6.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
 
+From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cycle does and prints the same, except
+the fixes found by the real cycles (`CHANGELOG.md`, block Z): `plan-check.sh lint2` refuses a plan whose red holds
+only with a signature stub in an existing file and a Python test id `file.py::Class.method`, and warns (`AVVISO`) for
+a module with `report` none; the `BLOCKED` reason of test-red for that module is longer (it says the remedy);
+`maat-doctor` gives a `WARNING` for it; the «harness changed» remedy ends with «(on Windows: in Git Bash)», a shell comment in `run-phase.sh`. The
+Python driver already decided, and it is now the only engine. The bash code that decided with `FIC_DRIVER=0` is gone:
+`FIC_DRIVER` set to any value no longer changes anything, and `driver.py run` and `maat-doctor` say so (an `AVVISO`,
+a `WARNING`). The remedies of the two STOPs of a failed driver no longer suggest `FIC_DRIVER=0`. If you need the
+bash engine, go back to 1.5.1 (below). See `CHANGELOG.md`.
+
 From 1.5.0 to 1.5.1, with the plugin as installed, a cycle does and prints the same: the Python driver already
 decided. What changes is the case where something is wrong: a driver that fails, no Python or a Python older than
-3.10 now stop the cycle with the reason and the remedy, instead of going on with the bash code; the bash code decides
-only with `FIC_DRIVER=0`, even in the middle of a cycle, with no confirmation; a plugin modified by hand is no longer
-switched to bash in silence (see `CHANGELOG.md`).
+3.10 stop the cycle with the reason and the remedy, instead of going on with the bash code (see `CHANGELOG.md`).
 
 From 1.4.x to 1.5.0 a cycle does and prints the same: the release is about how the driver is proven. The one change
 of behaviour: a `MAAT_LINGUA` set by hand now also reaches the commands a phase runs in WSL (see `CHANGELOG.md`).
 
 From 1.3.x to 1.4.0 the messages of the scripts become English; to keep them Italian, add `"lingua": "it"` to
 `.claude/maat.json` (see «Language»).
+
+## Going back to 1.5.1
+
+Going back is the same as updating, with the tag of the older version. From the project folder:
+
+```bash
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.5.1 --scope project
+claude plugin update maat@maat --scope project
+```
+
+Then restart Claude Code and run the check: the version line must say OK with version 1.5.1. `claude plugin update`
+accepts a lower version (no need to uninstall and install again). To come back to 1.6.0, the same two commands with
+`#v1.6.0`.
+
+- **A cycle in progress** stops with «harness changed», as after any change of version, with the remedy of always:
+  `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, run from the project folder (on
+  Windows in Git Bash), then the cycle again. A cycle that was already stopped on a STOP of its own shows that STOP
+  first; «harness changed» comes after it is solved.
+- **With 1.5.1 the bash engine is back on request:** `FIC_DRIVER=0` makes the bash table of `cycle-state.sh` and the
+  internal validator of `run-phase.sh` decide (in 1.5.1: `docs/TESTING-harness.md`, «Going back to the bash
+  engine»).
+- **Proven:** these commands from 1.5.1 to 1.5.0 and back, on a small example project with a cycle in progress,
+  before 1.6.0; and, before this release, from 1.6.0 to 1.5.1 and back on a run dir written by a real 1.6.0 cycle
+  (at its end, `NEEDS_VERIFICATION`): `maat-doctor` OK at 1.5.1, «harness changed» with its remedy, and after the
+  remedy, run as printed, the same `Next` with and without `FIC_DRIVER=0`.
 
 ## Uninstalling
 
@@ -255,9 +307,9 @@ yourself.
 | Platform | Status |
 |---|---|
 | Linux | verified with all tests at every push (the CI, on a Linux with no Windows tools) |
-| Windows with WSL | verified with all tests up to 1.5.0; since 1.5.1 a short proof in Git Bash before each release (the quick suites, `tools/prova-breve-windows.list`), plus the rollback and driver suites in their quick form, run by hand. The whole Windows run moves to a multi-platform CI in the next version |
-| Windows without WSL | the fallbacks without WSL (tests, checks and diagnostics) verified with all tests up to 1.5.0; since 1.5.1 only their suite in the short proof (`senza-wsl`) |
-| Mac | planned, not yet tried |
+| Windows with WSL | verified in CI at every push, in Git Bash, in 5 jobs of about 16–22 minutes; left out there, with the reason in `tools/suite-gruppi-windows.list`: the oracle (its logic does not depend on the platform; it runs on Linux and macOS) and the four suites below. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
+| Windows without WSL | verified by the same CI: the runner has no WSL, so the fallbacks without WSL are what runs there |
+| Mac | verified in CI at every push, with bash and the GNU tools from Homebrew (see «Before you start»); `counterproof` itself runs there, in its serial mode; only the tests of its parallel step need at least 4 CPUs, and on a smaller runner those tests are `SALTATO` with the reason |
 
 Paths with spaces and accented letters work. One limit only: in plans, project file names must not contain
 spaces.
@@ -267,21 +319,21 @@ spaces.
 Proven, and where to check it:
 
 - **The automated suites pass** on Linux at every push ([CI](https://github.com/Diegoiorio/maat/actions/workflows/ci.yml));
-  before each release a short proof also runs on Windows: the quick suites in Git Bash, plus the rollback and driver
-  suites in their quick form by hand. The long suites and the proof on the public examples are not run on Windows
-  since 1.5.1 (they were in 1.5.0) until the multi-platform CI (`docs/TESTING-harness.md`, «The short proof on
-  Windows»).
+  on Windows and macOS too, at every push: on Windows all but the oracle and the four suites that need WSL, which run
+  locally before each release (`tools/suite-gruppi-windows.list`, with the reasons).
 - **The guard blocks dangerous commands**: behaviour tests on production, push, state-changing git, installations and
   remote access (`plugins/maat/scripts/guard.test.sh`, `plugins/maat/tests/guard-esempio.cases`).
-- **The Python driver decides, and behaves like the original bash code**, which stays as a fallback on request
-  (`FIC_DRIVER=0`, until 1.5.2): certified on public examples, reproducible. The examples (`tools/esempi-equiv/`)
-  cover every row of the resume table and every branch of the outcome validator; `bash tools/certifica.sh` builds
-  them and repeats the proof in a few minutes on Linux, and the CI repeats it at every push (on Linux; on Windows it
-  was last proven in 1.5.0). The `corpus` line of
-  `plugins/maat/scripts/driver.equiv` names the examples it was made on (their fingerprint) and the validators proven
-  (`docs/TESTING-harness.md`, «Recertifying the driver»). Going back to bash in the middle of a cycle, and forth
-  again, is proven on a plain cycle and on a STOP with its recovery (`plugins/maat/scripts/rollback.test.sh`); not on
-  chains nor on cycles with lanes (`docs/TESTING-harness.md`, «Going back to the bash engine»).
+- **One engine, the Python driver, and it decides like the bash code of 1.5.1** (since 1.6.0 the bash code is
+  gone). The proof is a set of expected outputs on public examples (`tools/esempi-equiv/`): for every spec stdout and
+  exit of `cycle-state.sh`, for every jsonl the whole output of the outcome validator, in Italian and in English,
+  with both validators (`tools/esempi-equiv/attese/`). The examples cover every row of the resume table and every
+  branch of the outcome validator. The expected outputs come from the bash table and the internal validator of 1.5.1:
+  written once with the plugin of `v1.5.1` and checked against its bash engine, with no difference; except the lines
+  rewritten since, listed in `tools/esempi-equiv/attese/STORIA` with their reason. `bash tools/esempi-equiv/attese.sh`
+  compares the driver with them in about 2 minutes on Linux, and the CI does it at every push (on Linux, macOS and
+  Windows). An intended change of an output is a rewrite with its reason, visible in the diff of the pull request
+  (`docs/TESTING-harness.md`, «The expected outputs»). Going back to the bash engine is reinstalling 1.5.1 («Going
+  back to 1.5.1»).
 
 One example, not a measurement: on a second private project, which has no tests, a pilot cycle of an early version
 (0.3.0) went from the spec to `NEEDS_VERIFICATION` with no human step during the cycle: plan and review approved at the
@@ -295,7 +347,8 @@ Not proven yet:
 - that Maat finds, on its own, defects nobody had described: in the pilot above the defect the cycle fixed was
   already described in the spec;
 - how often a cycle completes without help, across different projects;
-- the whole Windows run for this version (only the short proof above), Mac, and very large projects.
+- on Windows, in CI, the four suites that need WSL (they run locally, by hand, before each release); on a Mac, the
+  parallel step of `counterproof` when the runner has fewer than 4 CPUs; very large projects.
 
 ## Developing Maat
 

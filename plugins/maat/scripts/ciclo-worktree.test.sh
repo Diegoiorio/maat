@@ -212,13 +212,14 @@ rm "$RD1/log/05-review.running"
 # failed run dir swap and failed restore (fake mv that fails only on *.nuova.* and *.vecchia.*):
 # the message names the old one, the new one is deleted, nothing is lost
 FMV="$T/fakemv"; mkdir -p "$FMV"
-printf '#!/bin/bash\ncase "$1" in *.nuova.*|*.vecchia.*) echo "mv finto: fallisce $1" >&2; exit 1 ;; esac\nexec /usr/bin/mv "$@"\n' > "$FMV/mv"; chmod +x "$FMV/mv"
+MV_VERO=$(command -v mv)   # 1.6.0: the mv of the PATH, not /usr/bin/mv (on macOS mv is /bin/mv); the same file on Linux
+printf '#!/bin/bash\ncase "$1" in *.nuova.*|*.vecchia.*) echo "mv finto: fallisce $1" >&2; exit 1 ;; esac\nexec "%s" "$@"\n' "$MV_VERO" > "$FMV/mv"; chmod +x "$FMV/mv"
 echo 0 > "$RD1/log/06-review.exit"
 out=$( (cd "$M" && PATH="$FMV:$PATH" bash "$CW" riporta uno) 2>&1); rc=$?
 vec=$(ls -d "$RDM".vecchia.* 2>/dev/null | head -1)
 check "riporta con scambio e ripristino falliti → errore (2) che nomina la run dir precedente" '[ $rc -eq 2 ] && [ -n "$vec" ] && printf "%s" "$out" | grep -q "NON ripristinata" && printf "%s" "$out" | grep -qF "precedente e'"'"' in " && printf "%s" "$out" | grep -qF "$(basename "$vec")"'
 check "  copia nuova cancellata, precedente conservata" '[ -z "$(ls -d "$RDM".nuova.* 2>/dev/null)" ] && [ -f "$vec/log/04-fix.exit" ]'
-[ -n "$vec" ] && /usr/bin/mv "$vec" "$RDM"
+[ -n "$vec" ] && "$MV_VERO" "$vec" "$RDM"
 out=$(cw riporta uno 2>&1); rc=$?
 check "  rimessa a mano la precedente, riporta esce 0" '[ $rc -eq 0 ] && [ -f "$RDM/log/06-review.exit" ] && diff -rq "$RD1" "$RDM" >/dev/null' || printf '%s\n' "$out"
 
@@ -323,10 +324,36 @@ c0=$(nm_count "$MM")
 (cd "$MM" && bash "$MU/scripts/ciclo-worktree.sh" crea .claude/.ai-workflow/spec-uno.md >/dev/null 2>&1)
 (cd "$MM" && bash "$MU/scripts/ciclo-worktree.sh" rimuovi uno >/dev/null 2>&1)
 c1=$(nm_count "$MM" 2>/dev/null)
+# 1.6.0: does THIS git follow a junction in git worktree remove? (the Git for Windows of the CI runner, 2.56, does not:
+# the source stays intact even with the mutant, as with the symlinks). Probe on a repo of its own; where it does not
+# follow, the counterproofs take the branch of the symlinks. A failed preparation of the probe (git init, commit,
+# worktree add, the junction not there before the remove) is a red check of its own, never a SALTATO blamed on git.
+# SONDA: segue | non-segue | guasta (Windows only) · SONDA_RIMOSSO: 1 if git removed the probe worktree
+SEGUE=0 SONDA= SONDA_RIMOSSO=0
 if [ $TWIN -eq 1 ]; then
+  PG="$T/sonda-giunzione"; sonda_prep=ok
+  { mkdir -p "$PG/fonte" && echo s > "$PG/fonte/f.txt" &&
+    (cd "$PG" && git init -q r && cd r && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m s &&
+      git worktree add -q ../w 2>/dev/null) && mkjunction "$PG/fonte" "$PG/w/nm" && [ -e "$PG/w/nm" ] &&
+    [ -f "$PG/w/nm/f.txt" ]; } > "$T/sonda.out" 2>&1 || sonda_prep=guasta
+  if [ $sonda_prep = ok ]; then
+    (cd "$PG/r" && git worktree remove --force ../w) >> "$T/sonda.out" 2>&1
+    if [ -f "$PG/fonte/f.txt" ]; then SONDA=non-segue; else SONDA=segue SEGUE=1; fi
+    [ -e "$PG/w" ] || SONDA_RIMOSSO=1
+  else
+    SONDA=guasta
+  fi
+  [ -e "$PG/w/nm" ] && rmjunction "$PG/w/nm"
+  check "sonda della giunzione: preparata (repo, worktree e giunzione presenti prima del remove)" '[ $sonda_prep = ok ]'
+  [ $sonda_prep = ok ] || sed 's/^/    /' "$T/sonda.out"
+  echo "sonda della giunzione ($(git --version)): $SONDA$([ "$SONDA" = guasta ] || { [ $SONDA_RIMOSSO = 1 ] && echo ", worktree rimosso" || echo ", worktree NON rimosso"; })"
+fi
+if [ $SEGUE -eq 1 ]; then
   check "controprova: senza lo scollegamento il node_modules della fonte NON e' intatto ($c0 → $c1 voci)" '[ "$c1" != "$c0" ]'
+elif [ "$SONDA" = guasta ]; then
+  echo "NON ESEGUITA [controprova 1]: la sonda della giunzione non si e' preparata (check rosso sopra)"
 else   # pk08: git worktree remove removes a symlink without following it, the source stays intact even with the mutant
-  echo "SALTATO [controprova 1]: con i symlink (non Windows) git worktree remove non segue il collegamento ($c0 → $c1 voci): nessun effetto da misurare"
+  echo "SALTATO [controprova 1]: ${SONDA:+sonda $SONDA: }git worktree remove non segue il collegamento ($([ $TWIN -eq 1 ] && echo giunzione || echo symlink); $c0 → $c1 voci): nessun effetto da misurare"
 fi
 
 # 11. COUNTERPROOF by mutation (only in the fake repo): links_left() { return 0; } ⇒ the unregistered link no longer
@@ -340,10 +367,15 @@ s0=$(sen_s "$SEN2")
 W2M="$(dirname "$(canon "$MM2")")/proj-fic-uno"
 mkdir -p "$W2M/modules/x" && mkjunction "$SEN2" "$W2M/modules/x/node_modules"
 (cd "$MM2" && bash "$MU/scripts/ciclo-worktree.sh" rimuovi uno >/dev/null 2>&1)
-if [ $TWIN -eq 1 ]; then
+if [ $SEGUE -eq 1 ]; then
   check "controprova 2: senza links_left la sentinella NON e' intatta" '[ "$(sen_s "$SEN2")" != "$s0" ]'
-else   # pk08: with a symlink the sentinel stays; the mutant's effect is that the removal no longer stops (case 9b)
-  check "controprova 2 (symlink): senza links_left il collegamento non registrato non ferma la rimozione" '[ ! -e "$W2M" ]'
+elif [ "$SONDA" = guasta ]; then
+  echo "NON ESEGUITA [controprova 2]: la sonda della giunzione non si e' preparata (check rosso sopra)"
+elif [ $TWIN -eq 1 ] && [ $SONDA_RIMOSSO = 0 ]; then   # 1.6.0: a junction that git does not follow nor remove
+  echo "SALTATO [controprova 2]: sonda $SONDA, worktree NON rimosso: questo git non rimuove il worktree che contiene la giunzione, nessun effetto da misurare (sentinella intatta: $([ "$(sen_s "$SEN2")" = "$s0" ] && echo si || echo no))"
+else   # pk08: with a symlink (or a junction that git removes without following) the sentinel stays; the mutant's
+  # effect is that the removal no longer stops (case 9b)
+  check "controprova 2 ($([ $TWIN -eq 1 ] && echo "giunzione non seguita" || echo symlink)): senza links_left il collegamento non registrato non ferma la rimozione" '[ ! -e "$W2M" ]'
 fi
 
 # 12. pk04b-2: links and preparati from maat.json, not from hardcoded lists. A maat.json without collega_nel_worktree
