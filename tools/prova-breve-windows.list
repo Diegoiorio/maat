@@ -1,7 +1,8 @@
 # The short proof on Windows (Maat 1.5.1): the quick suites in Git Bash, about 50 minutes in all, instead of the whole
 # Windows part of the full run (about 10 hours). `bash tools/giro-completo.sh --windows-breve …` runs these lines in this
-# order; each entry must be in tools/suite.list. A line: [VAR=value …] <entry>. The real Windows proof moves to the
-# multi-platform CI (1.5.3). Seconds measured in Git Bash in the 1.5.0 full run (machine shared with other sessions).
+# order; each entry must be in tools/suite.list. A line: [VAR=value …] <entry>. Since 1.6.0 the real Windows proof is
+# the CI (.github/workflows/ci.yml: every suite but those of the «-» lines of tools/suite-gruppi-windows.list, at every
+# push); this list stays for a quick local check. Seconds measured in Git Bash in the 1.5.0 full run (machine shared).
 tools/suite.test.sh
 stop-hook
 blocks-independent
