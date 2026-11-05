@@ -43,9 +43,6 @@ BIN=$T/bin; mkdir -p "$BIN"
 # 1.6.0: the real rsync found in the PATH, not /usr/bin/rsync (on macOS that is openrsync; GNU rsync from Homebrew is in
 # the PATH). The same file on Linux.
 export FAKE_RSYNC_VERO=$(command -v rsync)
-# and pkill/pgrep of the fake npx resolved here: the PATH without rsync and flock (path_senza) gives them as a link
-# outside /usr/bin, and on macOS that pkill finds no process (CI of 1.6.0: pkill exit 1, the signal never sent)
-export FAKE_PKILL_VERO=$(command -v pkill) FAKE_PGREP_VERO=$(command -v pgrep)
 # fake vitest (npx): reads the sources in the cwd (the mirror's apps/admin) and writes the JSON report like vitest 1.6.
 #   IMPORTROTTO in a source -> the test file does not load · ROSSO in src.ts/other.ts -> "somma vale uno"
 #   red on "expected 2 to be 1" · DIVERSO -> red with another message · "altro resta verde" always green.
@@ -66,8 +63,15 @@ if [ -n "${FAKE_SECOND:-}" ] && mkdir "$FAKE_SECOND.once" 2>/dev/null; then
 fi
 # FAKE_KILL: signal to the running counterproof.sh; the run (and one of its children) stay alive FAKE_KILL_SLEEP seconds
 if [ -n "${FAKE_KILL:-}" ]; then
-  echo "pgrep del PATH: $(command -v pgrep) [$(pgrep -f "$FAKE_KILL" 2>&1 | tr '\n' ' ')] · vero: $FAKE_PGREP_VERO [$("$FAKE_PGREP_VERO" -f "$FAKE_KILL" 2>&1 | tr '\n' ' ')]" >> "$FAKE_LOG.all"
-  echo $$ >> "$FAKE_LOG.pids"; "$FAKE_PKILL_VERO" -TERM -f "$FAKE_KILL"; echo "pkill=$?" >> "$FAKE_LOG.all"
+  echo $$ >> "$FAKE_LOG.pids"
+  # 1.6.0: the pkill of macOS (BSD) leaves out its own ancestors, and counterproof.sh is one of them (exit 1, no
+  # signal); then the ancestors whose command line holds FAKE_KILL get it, as pkill gives it on Linux (procps)
+  if ! pkill -TERM -f "$FAKE_KILL"; then
+    p=$$
+    while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
+      case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) kill -TERM "$p" 2>/dev/null ;; esac
+    done
+  fi
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
@@ -483,7 +487,6 @@ FAKE_KILL="$CP" cpb "$PX" "$OUT/one.json"
 check "  segnale durante il run -> exit 143, mirror ripristinato, lock di ripiego rilasciato" '[ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ]'
 [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ] ||   # detail of a red
   { echo "    rc=$(rc) src.ts=$(cat "$M/apps/admin/src.ts" 2>&1) lock=$(ls -la "$M/.fic-lock.d" 2>&1 | tr '\n' ' ') pid=$(cat "$M/.fic-lock.d/pid" 2>&1)"
-    echo "    pkill con PATH senza rsync e flock: $(PATH=$PX command -v pkill) · normale: $(command -v pkill)"
     sed 's/^/    out: /' "$T/out" | tail -15; sed 's/^/    npx: /' "$FAKE_LOG.all" 2>/dev/null | tail -8; }
 # tools without fallback
 for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync tar flock"; do
