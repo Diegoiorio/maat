@@ -65,15 +65,15 @@ fi
 if [ -n "${FAKE_KILL:-}" ]; then
   echo $$ >> "$FAKE_LOG.pids"
   # 1.6.0: the pkill of macOS (BSD) leaves out its own ancestors, and counterproof.sh is one of them (exit 1, no
-  # signal); then the ancestors whose command line holds FAKE_KILL get it, all with one kill as pkill gives it on Linux
-  # (procps): collected first, because a subshell signalled alone dies and breaks the chain up to counterproof.sh
-  if ! pkill -TERM -f "$FAKE_KILL"; then
-    p=$$ anc=""
-    while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
-      case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) anc+=" $p" ;; esac
-    done
-    [ -z "$anc" ] || kill -TERM $anc 2>/dev/null
-  fi
+  # signal; in step 2 it finds only the other worker); so the targets are what pgrep -f finds plus the ancestors whose
+  # command line holds FAKE_KILL, all signalled with one kill: on Linux (procps) the same set as pkill. Collected
+  # first, because a subshell signalled alone dies and breaks the chain up to counterproof.sh
+  p=$$ tgt=""
+  while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) tgt+=" $p" ;; esac
+  done
+  tgt=$(printf '%s\n' $tgt $(pgrep -f "$FAKE_KILL" 2>/dev/null) | sort -un)
+  [ -z "$tgt" ] || kill -TERM $tgt 2>/dev/null
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
