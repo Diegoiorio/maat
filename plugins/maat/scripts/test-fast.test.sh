@@ -216,13 +216,15 @@ vf tests/a.test.ts
 el=$((SECONDS - t0))
 check "copia occupata -> attende e gira nella copia" '[ "$(rc)" = 0 ] && grep -q "esito=PASS luogo=copia" "$T/out" && grep -qx "cwd=$M/apps/admin" "$FAKE_LOG" && ! grep -q ripiego "$T/out" && [ "$el" -ge 1 ]'
 wait $holder
-( flock 9; sleep 4 ) 9>"$M/.fic-lock" & holder=$!
+# the holder keeps the lock until both checks are done (exec: the subshell becomes the sleep that keeps fd 9 open), then
+# it is killed: a fixed `sleep 4` let the lock go before the second run on a slow runner (macOS CI, tag v1.6.0)
+( flock 9; exec sleep 120 ) 9>"$M/.fic-lock" & holder=$!
 sleep 1
 FIC_LOCK_WAIT=1 vf tests/a.test.ts
 check "copia occupata oltre FIC_LOCK_WAIT -> BLOCKED exit 3, nessun ripiego" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (copia non utilizzabile: copia occupata" "$T/out" && [ ! -f "$FAKE_LOG" ]'
 FIC_ALLOW_MNT_C=1 FIC_LOCK_WAIT=1 vf tests/a.test.ts
 check "  con FIC_ALLOW_MNT_C=1 -> ripiego dichiarato" 'grep -q "luogo=mnt-c (ripiego: copia occupata" "$T/out" && grep -qx "cwd=$A/apps/admin" "$FAKE_LOG" && grep -q "esito=PASS luogo=mnt-c (ripiego dichiarato: FIC_ALLOW_MNT_C=1)" "$T/out"'
-wait $holder
+kill "$holder" 2>/dev/null; wait $holder 2>/dev/null
 
 # 9. snapshot written during the run -> BLOCKED, exit 4
 FAKE_WRITE=$M/apps/admin/tests/__snapshots__/a.test.ts.snap vf tests/a.test.ts
