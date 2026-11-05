@@ -6,8 +6,9 @@ the versions of Claude Code and of the model, is [`benchmark/README.md`](benchma
 README claims nothing about Maat being better than Claude Code alone.
 
 **Protocol version 2** (2026-11-05, before any run). Version 1 planned the benchmark after Maat 1.5.3 (in the old
-roadmap, the multi-platform CI, released as part of 1.6.0). Version 2 changes only this status and the version
-references; the questions, the measures, the runs and the pre-registration are those of version 1.
+roadmap, the multi-platform CI, released as part of 1.6.0). Version 2 changes only this status, the version
+references and the «Results» section (which now points to the benchmark's README); the questions, the measures,
+the runs and the pre-registration are those of version 1.
 
 ## The two questions
 

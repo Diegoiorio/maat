@@ -2,8 +2,8 @@
 
 **Status: prepared, not frozen, no run made.** This folder applies [`../BENCHMARK-PROTOCOL.md`](../BENCHMARK-PROTOCOL.md)
 (version 2) to five tasks. It is published before the first run. The commit that freezes it changes only this
-status line; its full commit id is the seed of the schedule (Procedure, step 1), and the first run starts only after
-that commit is public. After it, nothing here changes except the «Results» section, which is filled in as the runs
+status line; its full commit id, with a public random value drawn after it, gives the seed of the schedule
+(Procedure, step 1), and the first run starts only after that commit is public. After it, nothing here changes except the «Results» section, which is filled in as the runs
 go: a flaw found later restarts the benchmark under a new version of the protocol, as the protocol says.
 
 ## What is compared
@@ -22,10 +22,13 @@ go: a flaw found later restarts the benchmark under a new version of the protoco
   as `CLAUDE_BIN`, auto-update disabled, logged in with a Claude Max subscription), model **`claude-opus-5-5`**
   (`ANTHROPIC_MODEL`), a configuration folder used only for the benchmark (no `CLAUDE.md`, plugins, hooks or MCP
   servers of the operator), the same machine and OS (Linux: Ubuntu 24.04 on WSL2; Python 3.12, Node 20, Go 1.27,
-  git 2.43, `dash`, ShellCheck 0.10.0, all in `PATH`), `--permission-mode bypassPermissions`, no web tools (`WebFetch` and `WebSearch` denied in the
-  project settings and on the command line), the spec at the same path `.claude/.ai-workflow/<spec>`, the same
-  prepared environment (dependencies installed before the run; neither side needs to install anything), the same
-  time cap of 4 hours.
+  git 2.43, `dash`, ShellCheck 0.10.0, bubblewrap, all in `PATH`; `run-bench.sh check` refuses any other version),
+  `--permission-mode bypassPermissions`, no web tools (`WebFetch` and `WebSearch` denied in the project settings
+  of the copy, which is the only way for the Maat side, whose driver passes no tool list, and also on the baseline's
+  command line), the spec at the same path `.claude/.ai-workflow/<spec>`, the same prepared environment
+  (dependencies installed before the run; neither side needs to install anything; the baseline prompt says where
+  they are, as `maat.json` tells Maat), the same isolation (each run in its own sandbox, Clarifications), one run
+  at a time, the same time cap of 4 hours.
 
 ## Tasks
 
@@ -73,19 +76,25 @@ SHA-256 of the files as committed (LF line endings, `.gitattributes` in this fol
 | `tasks/T3-minimist-split-modules/maat.json` | `2ec85c4d13fee772a58b0c1b6b379ed8a2f502cd17a83eaf5e9c09943d0d857a` |
 | `tasks/T4-git-toolbelt-stale-branches/maat.json` | `69c1c71fda0c2d91e686fa5b50f134ee2b24771362cd52b0a4196bab49743408` |
 | `tasks/T5-click-short-help-abbreviation/maat.json` | `980db7b0b5d062ca1b4148bb25ac96abacef94ced5d399fbb92e787e9087608b` |
-| `tasks/T2-go-humanize-bytes-rounding/go-junit.py` | `bceecf2133267c529a17c98269f29c821f7b26e7ed1d0284b487d3b670b32dfb` |
-| `tasks/T3-minimist-split-modules/tape-junit.py` | `720c89cc1d1b7cc794044c6f95e6516a95d3d89e6423e94a08cc054046b60330` |
-| `baseline-prompt.txt` | `6274809c45f9f189436dfd5e8cee7bd5bffd3b35df628130c25886040bb454e6` |
-| `blind-review.md` | `09b5123477f258a30a9e03542626a11cb29905313175526904497802f4660690` |
-| `run-bench.sh` | `a5543780c0c3f4bb2eb7dac5f868c724543ef903a51969a5f8fd2ecf71a11a22` |
-| `run-record.md` | `bd6cc840cdc060446f5594913b351202d5fcb01d0f82f075886a1c2d5f4cd3fd` |
-| `run-record.template.json` | `d1f9511875ae0208b6b34bb1e20708281ec217102d6ad116b2e0a960019c7819` |
-| `grafici.py` | `992f4a7f4d71a88e2ca2333f7a19925bc32c8ca7cf6c680f28618bd3af2a3f78` |
-| `grafici_test.py` | `99bbbfa458791d9a57cf3641427d044827f55fb7d91bed539c45412cb064876c` |
-| Hidden acceptance tests: SHA-256 of their `SHA256SUMS` list (published with the results) | `c134b3397d4744a8260e14bdd44091a5c1a54885231587ae74b0db3df5b037dd` |
+| `tasks/T2-go-humanize-bytes-rounding/adapter/go-junit.py` | `0da2839428f6c0266b165d8e733a49684f85b8227c0f096783aac5ba0d9ec458` |
+| `tasks/T3-minimist-split-modules/adapter/tape-junit.py` | `1531816c9afca3fc6f48903447c2d33c59e0b9c7359d784eaefc93f612d96159` |
+| `tasks/T3-minimist-split-modules/adapter/tape-objects.js` | `c7ef632cc7634342702be1a118d550664cd6823bc72affad0c79c40e4ed09028` |
+| `adapters_test.py` | `09d72227ed26c4c9ba00a875ac4100cdd833ef12d49ff3be664906aa8a4d501a` |
+| `baseline-prompt.txt` | `05d4452038f3433689933acf613e311c3e1fdcc8a5846f70f70be0e3f8735f20` |
+| `blind-review.md` | `edb9f72e6d7ce3b1151c86f10889faff4e7193ece79ea311acfac1476a5704eb` |
+| `run-bench.sh` | `e6ff329983ad7c95d173c5691613a5c15f7ba2745c44351f53ebc75e6ee44edd` |
+| `run-record.md` | `0a7fb7b508f667d6c5d12c4b5f43a6e3ee3514ae97ded10e2fe6ca9288cdffcc` |
+| `run-record.template.json` | `4c6b30c5a3d5923709ed3d2f39b09800698d63ba2726beb029845c22a9664371` |
+| `grafici.py` | `a089b21797facbb1a0be8cb93086d992715a685d70be3e8152794adfc1045a50` |
+| `grafici_test.py` | `d32fca569279d81b5eed6c622b78730b8a55f0d006b7161d17e3f6002a8a9121` |
+| Hidden acceptance tests: SHA-256 of their `SHA256SUMS` list (all their files; published with the results) | `3304b94f3bbb4bdb484388b39a305383c32799194558a6bbafe30e366e6d763d` |
 
-The `maat.json` files, the format adapters of T2 and T3, the baseline prompt, the review instructions, the run
-script, the record format and the chart script are in `SHA256SUMS` too.
+The `maat.json` files, the format adapters of T2 and T3 and their tests, the baseline prompt, the review
+instructions, the run script, the record format and the chart script are in `SHA256SUMS` too. Not in the list, on
+purpose: this README (its «Results» section changes as the runs go), `.gitattributes`, the charts in `grafici/`
+(made from the records) and `schedule.tsv` (made from the seed). The hidden tests' list covers all their files:
+the tests, their runners, their pinned `pytest`, the test → requirement map, their README and the reference
+solutions.
 
 ## Measures
 
@@ -95,8 +104,18 @@ runs; no pooled score across tasks):
 1. **Undisclosed defects** — defects in the final code that the run's own report does not mention
    ([`blind-review.md`](blind-review.md), «Adjudication»).
 2. **Hidden acceptance tests** — share passed on the final code. Written from the specs before any run, never shown
-   to either side; their counting unit and their result on the unchanged starting commit and on a reference
-   solution are fixed in their README, published with the results.
+   to either side; their text is published with the results, their unit and totals now:
+
+   | Task | Counted unit | Total (fixed) | Unchanged starting commit | Reference solution |
+   |---|---|---|---|---|
+   | T1 | pytest case (parametrized cases included) | 120 | 9 | 120 (written for the check) |
+   | T2 | hidden test or subtest, plus 3 checks on the agent's tree (`go vet`, `gofmt -l`, the project's tests) | 21 | 6 | 21 (upstream fix `2122467`) |
+   | T3 | 5 checks (original tests unchanged, project suite, lint, ES5, `npm pack`) + 16 hidden tests | 21 | 6 | 21 (written for the check) |
+   | T4 | check: 9 static, 18 behaviours × (`dash`, `bash`) | 45 | 2 | 45 (written for the check) |
+   | T5 | pytest case | 106 | 87 | 106 (upstream fix `f67c2bb`) |
+
+   A test that does not run (collection error, crash, timeout) counts as failed: the total never shrinks. Their
+   rules for errors are in Clarifications.
 3. **Defects found by a blind review** — a reviewer that sees only the spec and the final diff
    ([`blind-review.md`](blind-review.md)).
 4. **Cost and wall-clock time** — API-equivalent cost as reported by Claude Code (Maat: `phase-usage.py --summary`
@@ -110,25 +129,37 @@ For question A (does Maat complete a change on its own), the Maat runs also repo
 
 [`run-bench.sh`](run-bench.sh) is the procedure; in short:
 
-1. **Schedule.** `run-bench.sh schedule <seed>` shuffles the 30 runs (5 tasks × 2 sides × 3). The seed is the
-   full id of the commit that freezes this document, so it is fixed before anyone can see a run. The runs are
-   launched in that order, in groups of at most 6 consecutive runs (`run-bench.sh group <first> <last> [N]`, N
-   at a time), with the quota check before each group (Clarifications).
+1. **Schedule.** `run-bench.sh seed <freeze commit id>` then `run-bench.sh schedule <seed>` shuffle the 30 runs
+   (5 tasks × 2 sides × 3). The seed is the SHA-256 of `<commit id>:<round>:<randomness>`, where the commit is the
+   one that freezes this document and the round is the first round of the drand «quicknet» beacon (League of
+   Entropy, chain `52db9ba7…e971`, a public value every 3 s) whose time is at least one hour after the commit's
+   committer date. The freeze commit is pushed before that round is drawn (the push time is published with the
+   schedule); otherwise a new freeze commit is made. So nobody, the author included, can know the order before the
+   commit is fixed. The runs are launched in that order, in groups of at most 6 consecutive runs, **one at a time**
+   (`run-bench.sh group <first> <last>`), with the quota check before each group (Clarifications).
 2. **Clean copy per run.** The starting commit is exported with `git archive` into a new repository with one commit
    at a fixed date (same commit id for every copy of a task, no upstream history, no remote). The environment is
    prepared before the run: a venv with the project and its `tests` extra (T1) or the project and pytest (T5),
    `go mod download` (T2), a `node_modules` installed once with `--ignore-scripts` and copied (T3), nothing (T4);
-   the versions installed are recorded with the run. The spec is copied to `.claude/.ai-workflow/`; on the Maat
-   side the plugin and the task's `maat.json` are added, and the installed version is checked against the tag.
-3. **Run.** One command per side (above), with the 4-hour cap. Nobody intervenes during a run.
+   the versions installed are recorded with the run. The spec is copied to `.claude/.ai-workflow/` and its hash
+   checked against `SHA256SUMS`; on the Maat side the plugin and the task's `maat.json` (and adapter) are added,
+   and the installed version is checked against the tag. The prepared copy must be clean (`git status` empty).
+   Before each prepare and each run, `run-bench.sh check` verifies the exact versions; before each run,
+   `sandbox-check` verifies from inside the sandbox that the hidden tests, the mirrors, the records and the other
+   copies are not visible.
+3. **Run.** One command per side (above), inside the sandbox, with the 4-hour cap (`timeout -k`). Nobody
+   intervenes during a run.
 4. **Collect.** The final diff (`.claude/` excluded), its hash, the report (Maat: the spec with plan, review and
    evidence written by Maat, and the driver's last line; baseline: the session's final message), cost and time,
-   the versions; [`run-record.md`](run-record.md) lists every field.
+   the versions, and three checks of what the run left: the audit of paths outside the copy, the model of every
+   session (its `init` event), the signs of the usage limit; [`run-record.md`](run-record.md) lists every field
+   and maps the driver's results to the outcomes.
 5. **No run is repeated or discarded.** A run that fails, stops or hits the cap is recorded as it is. A copy or a
    record folder that already exists makes the script refuse.
 6. **Hidden tests right after each run** (`run-bench.sh hidden <run-id>`, part of `group`): they are fixed in
-   advance and involve no judgement. The record keeps only the score (`hidden: p/t`); their output stays private
-   with the tests until the end. **After all runs:** the blind review, then the adjudication; then the final
+   advance and involve no judgement. They run in a sandbox too, on a copy of the final tree, offline (their pinned
+   `pytest` comes from a local wheelhouse), after `sha256sum -c` of their list. The record keeps only the score
+   (`hidden: p/t`); their output stays private with the tests until the end. **After all runs:** the blind review, then the adjudication; then the final
    results are added below with all raw records, the hidden tests and their per-run output.
 
 ## Clarifications of the protocol
@@ -150,14 +181,31 @@ These do not change the protocol; they fix choices it leaves open.
   tests stays private until the end (only its hash is published, above). The partial tables and charts change
   nothing in the procedure: no run is repeated or discarded, and the order stays the one fixed by the seed.
 - **Hidden tests after each run**, not only at the end: they are fixed before the first run and give a number
-  without judgement, so running them early cannot depend on what was seen (step 6 of the Procedure).
+  without judgement, so running them early cannot depend on what was seen (step 6 of the Procedure). Two rules for
+  their errors: an error caused by the agent's tree (it does not build, does not import, hangs past the timeout)
+  gives what passed, down to 0/total; an error of the infrastructure (the copy, the venv, the offline install, a
+  missing tool: the runner says `infra-error`) allows **one** rerun, `run-bench.sh hidden --retry-infra <run-id>
+  "<note>"`, with the note written in the record; a second one is recorded as it is, with no score.
+- **Isolation.** Every Claude session of both sides, Maat's sub-sessions included (children of its driver), runs
+  inside bubblewrap: read-write only its own copy and the benchmark's configuration folder (whose installed plugins
+  are read-only); read-only the system (`/usr`, `/etc`) and the tools (Claude Code, Go, Node, ShellCheck); a private
+  `/tmp`, an empty `$HOME`, its own process namespace; the network is shared (the API needs it). The hidden tests,
+  the reference solutions, the mirrors with the upstream history, the records, the other copies and the rest of
+  the machine are not visible. After each run an **audit** searches the transcript, the run directory and the logs
+  for paths outside the copy (other copies, mirrors, records, the hidden tests, `docs/piani`, `/mnt`): a hit is
+  recorded and published, and the run is marked contaminated; it is not repeated, as the protocol says.
+- **ShellCheck.** T4's spec does not ask for it. The Maat side runs it as a check of `maat.json` on the scripts it
+  touches; the baseline has it in the `PATH` and is told so in its prompt.
 - **Format adapters for T2 and T3** (Maat side only). Maat 1.6.0 reads the outcome of single tests only from a
   JUnit report in the pytest form or from vitest; without it, the test-red phase of every plan stops `BLOCKED`
   («report none»). Go and tape do not write such a report, so each of the two tasks has a small converter, the
-  same thing a user of Maat with a Go or tape project would write: [`go-junit.py`](tasks/T2-go-humanize-bytes-rounding/go-junit.py)
-  runs `go test -json ./...`, [`tape-junit.py`](tasks/T3-minimist-split-modules/tape-junit.py) runs tape one file
-  at a time and reads its TAP; both write JUnit with one case per test, the test file as class name and the
-  `file:line` of each failure, using only Python 3 and the project's own `go` or `node`. They are called by the
+  same thing a user of Maat with a Go or tape project would write: [`go-junit.py`](tasks/T2-go-humanize-bytes-rounding/adapter/go-junit.py)
+  runs `go test -json ./...` (a test that does not compile, a panic: the tests that did not run are failed, not
+  missing), [`tape-junit.py`](tasks/T3-minimist-split-modules/adapter/tape-junit.py) runs tape one file at a time
+  through tape's object stream ([`tape-objects.js`](tasks/T3-minimist-split-modules/adapter/tape-objects.js), so a
+  comment is never taken for a test); both write JUnit with one case per test, the test file as class name and the
+  `file:line` of each failure, using only Python 3 and the project's own `go` or `node`. Their tests:
+  [`adapters_test.py`](adapters_test.py). They are called by the
   `test` command of the task's `maat.json` (`"report": "junit"`) and installed by `prepare` in
   `.claude/bench/` of the Maat copy: outside the project's code, so they never enter the final diff, the review
   copy or the hidden tests, and the baseline copy does not have them. In the same way the lint command of T3 ends
@@ -166,8 +214,11 @@ These do not change the protocol; they fix choices it leaves open.
   prepared copy of each task, with Maat's own `gates.sh` and `plan-check.sh rossi` (the check of the test-red
   phase): a new test red on its assertion is read as red with its `file:line`, the same test green as green, and
   without the adapter the phase is `BLOCKED` as described.
-- **Quota.** The runs go in groups of at most 6. Before each group the usage of the subscription is checked: above
-  75% of the current window, the group waits for the reset. A run slowed by the quota is recorded as it is.
+- **Quota.** The runs go in groups of at most 6 runs, one at a time. Before each group the usage of the
+  subscription is checked: above 75% of the current window, the group waits for the reset. A run stopped or slowed
+  by the usage limit is recognised by «usage limit», «limit reached», `rate_limit_error` or «out of extra usage» in
+  its transcript, stderr or logs (`quota.txt`): it is recorded as it is, with the reason «quota», reported apart,
+  and not repeated.
 
 ## Threats to validity (in addition to the protocol's)
 
@@ -177,8 +228,12 @@ These do not change the protocol; they fix choices it leaves open.
 - The adjudicator of undisclosed defects is not blind to the side (the two kinds of report look different); the
   rules are literal and every decision is published with its quote.
 - Three runs per side and task show the spread, they do not support a statistical test.
-- On a subscription, parallel runs share the usage quota: a run slowed by the quota is still recorded, and the
-  quota check before each group (Clarifications) limits how often it happens.
+- The usage limit of the subscription hits Maat harder: a full cycle makes many sessions and lasts longer, so it
+  is more likely to reach the limit in the middle. One run at a time and the check before each group limit this;
+  a run that reaches it is recorded, marked «quota» and reported apart (Clarifications), never repeated.
+- Isolation is by bubblewrap, not by a separate machine: the network is shared, and the sandbox runs as the
+  operator's user. A run cannot read the hidden tests, the mirrors or the other runs; the audit after each run
+  looks for any trace of them, and the sandbox check before each run proves they are not visible.
 - Partial results are public while the runs go on, and the operator sees them; nothing in the procedure depends
   on them (fixed order, no run repeated or discarded, review and adjudication only at the end).
 - T2 and T3 depend on the format adapters (Clarifications): a fault in one of them would hurt only the Maat side.
