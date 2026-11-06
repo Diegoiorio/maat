@@ -165,6 +165,90 @@ plan-check-161.mut_empty_quoted	(empty) is written without backticks: between ba
 worktree-cycle-161.child_missing	the ring {c} of the chain {m} is missing in {d}: a worktree without it would stop on that ring (WAIT). Create it there, or remove it from the Figlie:/Children: line	l'anello {c} della catena {m} manca in {d}: un worktree senza l'anello si fermerebbe su quell'anello (WAIT). Crealo li', o toglilo dalla riga Figlie:/Children:
 worktree-cycle-161.rp_child_resume	the ring {rel} is missing in the worktree, or the marker has no fingerprint for it (a worktree made before 1.6.1): run crea again with {spec} (the resume copies the ring and records it), or --forza to bring back what is there	l'anello {rel} manca nel worktree, o il marcatore non ha la sua impronta (un worktree creato prima della 1.6.1): rilancia crea con {spec} (la ripresa copia l'anello e lo registra), o --forza per riportare quello che c'e'
 
+# --- plan-check-170, driver-170, maat-config-170 (1.7.0, written by hand like driver-cmd: texts that v1.3.0 does not
+# have, so outside the sections of tools/lingua-conversioni/). plan-check.sh taglia, e1 and the Size request: line of
+# lint; driver.py run: the size of the cycle (taglia.txt, T2, T3, escalations E2-E5, --full/--light); maat-config.py:
+# the piano.taglia key wants "harness": ">=1.7". The keywords Taglia:, Fatti:, Escalation:, E1:, piccola and piena
+# stay as they are in every language (lib/protocol-strings.list).
+plan-check-170.unmeasurable	not measurable: {why}	non misurabile: {why}
+plan-check-170.why_fmt1	format 1 plan (no Plan format: 2 line)	piano in formato 1 (nessuna riga Plan format: 2)
+plan-check-170.why_sec	section {name} missing	sezione {name} assente
+plan-check-170.why_nosteps	no step in the steps table	nessun passo nella tabella dei passi
+plan-check-170.why_nodecl	Risk surfaces: line missing	riga Risk surfaces: assente
+plan-check-170.why_conf	.claude/maat.json unreadable or invalid	.claude/maat.json illeggibile o non valida
+plan-check-170.why_caps	invalid thresholds in piano.taglia.soglie: {keys}	soglie non valide in piano.taglia.soglie: {keys}
+plan-check-170.why_words	invalid regex in piano.taglia.parole_sicurezza	regex non valida in piano.taglia.parole_sicurezza
+plan-check-170.why_diff	diff unreadable: {p}	diff illeggibile: {p}
+plan-check-170.why_sym	no public-symbol rule for {p}	nessuna regola dei simboli pubblici per {p}
+plan-check-170.why_auto	automatic size off (piano.taglia.automatica: false in .claude/maat.json)	taglia automatica spenta (piano.taglia.automatica: false in .claude/maat.json)
+plan-check-170.why_auto_bad	piano.taglia.automatica is neither true nor false	piano.taglia.automatica non e' ne' true ne' false
+plan-check-170.f4_detail	(traceability {a}, spec {b})	(tracciabilita' {a}, spec {b})
+plan-check-170.l_f1	source files	file sorgente
+plan-check-170.l_f2	new source files	file sorgente nuovi
+plan-check-170.l_f3	steps	passi
+plan-check-170.l_f4	requirements	requisiti
+plan-check-170.l_f5	acceptance tests	test di accettazione
+plan-check-170.l_f6	plan lines	righe del piano
+plan-check-170.l_f7	critical surfaces	superfici critiche
+plan-check-170.l_f8	api-contract	api-contract
+plan-check-170.l_f9	migrations	migrazioni
+plan-check-170.l_f10	destructive words	parole distruttive
+plan-check-170.l_f11	security words	parole di sicurezza
+plan-check-170.l_f12	deleted files	file eliminati
+plan-check-170.l_f13	new public symbols	nuovi simboli pubblici
+plan-check-170.l_f14	size request	richiesta di taglia
+plan-check-170.l_oop	outside the plan	fuori dal piano
+plan-check-170.s_f1	files	file
+plan-check-170.s_f2	new	nuovi
+plan-check-170.s_f3	steps	passi
+plan-check-170.s_f4	requirements	requisiti
+plan-check-170.s_f5	tests	test
+plan-check-170.s_f6	lines	righe
+plan-check-170.s_f7	critical surfaces	superfici critiche
+plan-check-170.s_f8	api-contract	api-contract
+plan-check-170.s_f9	migrations	migrazioni
+plan-check-170.s_f10	destructive	distruttive
+plan-check-170.s_f11	security	sicurezza
+plan-check-170.s_f12	deleted	eliminati
+plan-check-170.s_f13	symbols	simboli
+plan-check-170.s_f14	request	richiesta
+plan-check-170.v_none	none	nessuna
+plan-check-170.v_declared	declared	dichiarata
+plan-check-170.v_na	- (only with --diff)	- (solo con --diff)
+plan-check-170.v_invalid	invalid: {v}	non valida: {v}
+plan-check-170.spec_line	spec line {n}	spec riga {n}
+plan-check-170.ovr_none	none	nessuno
+plan-check-170.no_plan	no plan section: nothing to measure	nessuna sezione del piano: niente da misurare
+plan-check-170.no_python	no usable Python: the facts cannot be measured	nessun Python utilizzabile: i fatti non si misurano
+plan-check-170.size_request_dup	the Size request: line appears {n} times: at most once	la riga Size request: compare {n} volte: al massimo una
+plan-check-170.size_request_bad	Size request: {v} — the only accepted value is full: the plan may ask for more weight, never less	Size request: {v} — l'unico valore ammesso e' full (o piena): il piano puo' chiedere piu' peso, mai meno
+plan-check-170.e1_stop	a reviewer asked for a human decision	un revisore ha chiesto una decisione umana
+plan-check-170.e1_no_decision	no Decision: line in the reply	nessuna riga Decision: nella risposta
+plan-check-170.e1_partial	partial reply (Blocked on:)	risposta parziale (Blocked on:)
+plan-check-170.e1_over	{nb} blocker, {nm} major (the full size from one blocker or more than 2 major)	{nb} blocker, {nm} major (taglia piena da un blocker o da piu' di 2 major)
+plan-check-170.e1_ok	{nb} blocker, {nm} major: the size stays small	{nb} blocker, {nm} major: la taglia resta piccola
+driver-170.usage_full_light	--full and --light together: choose one (no phase launched)	--full e --light insieme: scegline uno (nessuna fase lanciata)
+driver-170.taglia_failed	plan-check.sh taglia gave no Taglia: line (exit {rc}): the full size	plan-check.sh taglia non ha dato la riga Taglia: (exit {rc}): la taglia piena
+driver-170.after	after {label}	dopo {label}
+driver-170.avvio	automatic size: T1 in the plan phase, T2 on the approved plan	taglia automatica: T1 nella fase plan, T2 sul piano approvato
+driver-170.e2_cause	the approved plan is above the small size ({why})	il piano approvato e' sopra la taglia piccola ({why})
+driver-170.e2_reopen	reopen the approved plan with the reopening procedure and review it in the full branch, from Step 2	riapri il piano approvato con la procedura di riapertura e rivedilo nel ramo pieno, da Step 2
+driver-170.plan_full_branch	plan reviewed in the full branch (metric: taglia={m})	piano rivisto nel ramo pieno (metrica: taglia={m})
+driver-170.reopen_done	plan reopened and approved in the full branch	piano riaperto e approvato nel ramo pieno
+driver-170.reopen_not_full	the reopened plan was approved outside the full branch (metric: taglia={m}): reopen it with --full	il piano riaperto e' stato approvato fuori dal ramo pieno (metrica: taglia={m}): riaprilo con --full
+driver-170.diff_failed	the diff of the touched files cannot be built: {why}	il diff dei file toccati non si costruisce: {why}
+driver-170.no_base	no base.txt	nessun base.txt
+driver-170.no_touched	no touched.txt	nessun touched.txt
+driver-170.gates_bad	gates of {label}: {esito}	gate di {label}: {esito}
+driver-170.gates_missing	gates of {label}: no outcome line	gate di {label}: nessuna riga d'esito
+driver-170.review_nc	review {label} NEEDS_CHANGES: {nb} blocker, {nm} major	review {label} NEEDS_CHANGES: {nb} blocker, {nm} major
+driver-170.review_nc_unknown	review {label} NEEDS_CHANGES (blocker/major not readable)	review {label} NEEDS_CHANGES (blocker/major non leggibili)
+driver-170.review_ok	review {label}: gates green, no blocker or major	review {label}: gate verdi, nessun blocker o major
+driver-170.fix_small	FIX with the small size: its budget is one review round and taglia.txt records no escalation	FIX con la taglia piccola: il suo budget e' un giro di review e taglia.txt non registra un'escalation
+driver-170.review_line	small size: one review round; give the reviewer as focus the corrections the plan took without a second round (plan changelog, note taglia piccola)	taglia piccola: un giro di review; dai al revisore come focus le correzioni che il piano ha preso senza un secondo giro (changelog del piano, nota taglia piccola)
+driver-170.lanes_small	lanes: one (small size)	corsie: una (taglia piccola)
+maat-config-170.s11	piano.taglia needs "harness": ">=1.7" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	piano.taglia richiede "harness": ">=1.7" o successiva, cosi' una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

@@ -445,5 +445,14 @@ else
   echo "SALTATO [maiuscole fuori da Windows]: Python di Windows, il confronto piega gia' sempre (casi di equivalenza)"
 fi
 
+# 8. 1.7.0 (T3 of the benchmark): the test-red phase may create a file the plan declares new in a folder that does not
+#    exist yet (lib/ missing; FIC_SCOPE from `plan-check.sh accept`, "nuovo lib/x.py"); a file of the same new folder
+#    outside the scope stays denied (the counterproof of the case: the scope decides, not the folder).
+R3=$(nat "$T/t3repo"); mkdir -p "$T/t3repo"; printf 'lib/x.py\nlib/test_x.py\n' > "$T/scope-t3"; SC3=$(nat "$T/scope-t3")
+[ ! -e "$T/t3repo/lib" ] || { fail=$((fail + 1)); echo "FAIL: premessa T3: lib/ non deve esistere"; }
+prun 0 test-red "$R3" "$R3/lib/x.py" "" "" "$SC3"        # declared new, folder missing: allowed
+prun 0 test-red "$R3" "$R3/lib/test_x.py" "" "" "$SC3"
+prun 2 test-red "$R3" "$R3/lib/altro.py" "" "" "$SC3"    # same new folder, outside the scope: denied
+
 echo "guard.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

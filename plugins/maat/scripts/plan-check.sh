@@ -18,6 +18,32 @@
 #   plan-check.sh closed       <spec>                      is the ring closed? (fresh Finalize: IMPLEMENTED) · exit 0|1
 #   plan-check.sh basis        <spec> --write-tests        (format 2) records "tests <fp>" in the Approved basis
 #   plan-check.sh accept|tests|stubs|rossi|l2 <spec> …     test-red phase and L2 (harness-pt11, below: cmd_f2x)
+#   plan-check.sh taglia       <spec> [--diff <file>] [--override full|light]   1.7.0: the size of the cycle
+#   plan-check.sh e1           <reply>                     1.7.0: the round of the small plan review escalates?
+#
+# THE SIZE OF THE CYCLE (1.7.0). `taglia` measures facts of the plan, of the spec and of maat.json (with --diff also
+#   of the code written: a unified git diff, review-surface.sh diff) and prints one fact per line, then
+#   "Fatti: F1=<n>/<cap> …" and last "Taglia: piccola|piena — <motivi>"; exit 0 (it is an answer). piccola only if
+#   EVERY fact is under its threshold: F1 source files (Touched files minus the test files of the test table) <= 3,
+#   F2 new source files <= 1, F3 steps <= 6, F4 requirements (the MAXIMUM of the traceability ids and of the ids in
+#   the spec above the plan) <= 12, F5 rows of the test table <= 10, F6 plan lines (as skeleton) <= 250, F7 no
+#   critical surface declared or detected (piano.superfici_critiche), F8 no api-contract declared or detected, F9 no
+#   migration, F10 no destructive word (DESTR, plan and diff), F11 no security word (SIZE_SEC plus
+#   piano.taglia.parole_sicurezza; spec, plan and diff), F12 no deleted file (diff), F13 <= 2 new public symbols
+#   (diff; Python def/class, JS/TS export, Go capitalised names; a language without a rule is not measurable),
+#   F14 no "Size request: full" line; with --diff also no path outside the plan. A fact that cannot be measured
+#   (format 1, missing section, maat.json invalid, diff unreadable) is piena (fail-closed). --override full: piena;
+#   --override light: the numeric facts (F1-F6, F13) do not count, the barriers do. piano.taglia.automatica false:
+#   piena unless --override light. Thresholds in piano.taglia.soglie. Read by the plan skill (T1) and by driver.py
+#   (T2 after the plan, T3 after implement/fix). The words Taglia:, Fatti:, piccola, piena and the F-ids are the
+#   same in every language; the explanation follows the language.
+# lint (1.7.0): "Size request: <v>" (Italian "Taglia richiesta:") is optional, at most one, and <v> must be full
+#   (piena): the plan author may only ask for MORE weight (R3).
+# e1 (1.7.0): reads the reply of the ONE round of spec-plan-reviewer-light of the small size and prints
+#   "E1: STOP | piena | piccola — <motivo>": STOP for STOP_HUMAN_DECISION_REQUIRED, piena for a blocker, more than
+#   2 major, a partial reply (Blocked on: <reason>) or no Decision: line; exit 0.
+# lint2 (1.7.0, T3): a file the plan declares new (`path` (new) in Touched files) may be in a folder that does not
+#   exist yet (path_ok); a path not declared new still needs its first segment in the repo.
 #
 # Exit: 0 = ok · 1 = VIOLAZIONE (or, for delta, ERRORE DURO) · 2 = usage error.
 # AVVISO lines are printed but do not change the exit code.
@@ -415,6 +441,17 @@ cmd_lint() {
   while IFS=$'\t' read -r it en where; do
     [ -n "$it" ] && viol "$(msg plan-check.dup_lang it="$it" en="$en" where="$where")"
   done <<< "$dup"
+
+  # Size request (1.7.0, fact F14 of `taglia`): optional, at most one, and only full (piena): the plan author may
+  # ask for MORE weight, never less (R3), so any other value is a VIOLAZIONE.
+  local sr nsr srv
+  sr=$(printf '%s\n' "$ann" | awk -F'\t' '$2 == "plan" && $3 == 0 && (index($4, "Size request:") == 1 || index($4, "Taglia richiesta:") == 1) { print $4 }')
+  nsr=$(printf '%s' "$sr" | grep -c . || true)
+  if [ "${nsr:-0}" -gt 1 ]; then viol "$(msg plan-check-170.size_request_dup n="$nsr")"
+  elif [ "${nsr:-0}" -eq 1 ]; then
+    srv=$(printf '%s\n' "$sr" | sed -E 's/^(Size request|Taglia richiesta):[[:space:]]*//; s/[^A-Za-z].*$//' | tr 'A-Z' 'a-z')
+    case $srv in full|piena) ;; *) viol "$(msg plan-check-170.size_request_bad v="$srv")" ;; esac  # TAGLIA-RICHIESTA
+  fi
 
   # With baseline: the spec above the plan and the implementation review must not be touched.
   if [ -n "$base" ]; then
@@ -840,6 +877,13 @@ def in_repo(root, p):
     return rel_ok(p) and os.path.exists(os.path.join(root, p.split("/")[0]))
 
 
+def path_ok(root, p, M):
+    """1.7.0 (T3): in_repo, or a file the plan declares new ((new) in Touched files) in a folder that may not exist
+    yet: the plan phase writes only the spec, so it cannot create the folder. A path not declared new still needs
+    its first segment in the repo (a typo), and rel_ok always holds (no absolute path, .., backslash or space)."""
+    return in_repo(root, p) or (rel_ok(p) and p in M["new_files"])  # ECCEZIONE-NUOVI
+
+
 _CONF = {}
 
 
@@ -981,6 +1025,9 @@ def build(rows, root):
     plan = [(n, t) for n, z, f, t in rows if z == "plan" and not f]
     M["plan"] = plan
     M["plan_all"] = [(n, t) for n, z, f, t in rows if z == "plan"]
+    # 1.7.0 (taglia): the spec above the plan, outside the fences (F4) and whole (F11)
+    M["above"] = [(n, t) for n, z, f, t in rows if z == "above" and not f]
+    M["above_all"] = [(n, t) for n, z, f, t in rows if z == "above"]
     tg = [t for n, z, f, t in rows if z == "above" and not f and (t.startswith("Taglio:") or t.startswith("Split:"))]
     M["taglio"] = tg[0].split(":", 1)[1].strip() if tg else ""
     M["is2"] = any(re.match(r"^Plan format:[ \t]*2[ \t]*$", t) for n, t in plan)
@@ -1039,7 +1086,7 @@ def build(rows, root):
                  "asserzione": c[3].strip(), "texts": [x for x in codes(c[3]) if x.strip()]}
             if not ref:
                 G.append(_msg.T("plan-check.tp_no_backtick", n=n, id=tid))
-            elif not in_repo(root, T["path"]):
+            elif not path_ok(root, T["path"], M):
                 G.append(_msg.T("plan-check.tp_path", n=n, id=tid, path=T["path"]))
             if not c[3].strip():
                 G.append(_msg.T("plan-check.tp_no_assert", n=n, id=tid))
@@ -1047,7 +1094,7 @@ def build(rows, root):
             if why:
                 G.append(_msg.T("plan-check.tp_why", n=n, id=tid, why=why))
             elif m:
-                if not in_repo(root, m["file"]):
+                if not path_ok(root, m["file"], M):
                     G.append(_msg.T("plan-check.tp_mut_path", n=n, id=tid, path=m["file"]))
                 elif not T["name"]:
                     G.append(_msg.T("plan-check.tp_mut_noname", n=n, id=tid))
@@ -1379,7 +1426,7 @@ def lint2(M, root):
         for f in S["files"]:
             if f not in files:
                 E.append(_msg.T("plan-check.step_not_touched", n=S["n"], id=S["id"], f=f))
-            if not in_repo(root, f):
+            if not path_ok(root, f, M):
                 E.append(_msg.T("plan-check.step_path", n=S["n"], id=S["id"], f=f))
     for n, t in M["plan"]:
         if RISK.search(t) and not any(re.search(r"(?<![A-Za-z0-9._-])" + re.escape(tid) + r"(?![A-Za-z0-9._-])", t) for tid in tests):
@@ -1785,6 +1832,306 @@ def skeleton(M):
               + ": " + _msg.T("plan-check.skel_cut_proposal"))
         return 1
     print("Scheletro: SOTTO IL TETTO \u2014 " + _msg.T("plan-check.skel_under"))
+    return 0
+
+
+# ---- 1.7.0: the size of the cycle (taglia), from verifiable facts only (header of this file) ----
+SIZE_CAPS = (("file_sorgente", 3), ("file_nuovi", 1), ("passi", 6), ("requisiti", 12), ("test", 10),
+             ("righe", 250), ("simboli_pubblici", 2))
+SIZE_CRIT = ("permessi", "dati", "distruttiva")
+# F11, at word boundaries, case-insensitive (D6: a false positive costs only the full flow); a project may ADD words
+# (piano.taglia.parole_sicurezza), never remove these
+SIZE_SEC = (r"(?!author(?:s|ed|ing|ship)?\b)auth\w*", r"passwords?", r"passwd", r"secrets?", r"credential\w*",
+            r"(?:access|auth|api)[ _-]?tokens?", r"(?:en|de)?crypt\w*", r"permission\w*", r"privilege\w*", r"sudo",
+            r"chmod", r"eval\(", r"exec\(", r"shell\s*=\s*True", r"sql", r"inject\w*", r"sanitiz\w*", r"csrf",
+            r"xss", r"cookies?", r"sessions?")
+# F4: the id families always counted in the spec, plus those of the traceability table
+SIZE_REQ = ("RF", "RNF", "NFR", "FR", "CA", "AC", "REQ", "R")
+SIZE_REQUEST = re.compile(r"^(?:Size request|Taglia richiesta):[ \t]*(.*)$")
+# F13: files that define no public symbol (documents, data, styles, images) count 0; a language not listed here and
+# not ruled below (shell, for example) is not measurable (D9): piena
+SIZE_NOCODE = (".md", ".markdown", ".txt", ".rst", ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".csv", ".tsv",
+               ".lock", ".css", ".scss", ".sass", ".less", ".html", ".htm", ".svg", ".png", ".jpg", ".jpeg", ".gif",
+               ".ico", ".xml")
+SIZE_JS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte")
+GO_SYM = re.compile(r"^(?:func[ \t]+(?:\([^)]*\)[ \t]*)?|type[ \t]+|var[ \t]+|const[ \t]+)([A-Z]\w*)")
+JS_CJS = re.compile(r"^[ \t]*(?:module\.)?exports(?:\.(\w+))?[ \t]*=(?!=)")
+# the catalog keys of each fact: (label of its line, short label of the Taglia: line)
+SIZE_LAB = {
+    "F1": (lambda: _msg.T("plan-check-170.l_f1"), lambda: _msg.T("plan-check-170.s_f1")),
+    "F2": (lambda: _msg.T("plan-check-170.l_f2"), lambda: _msg.T("plan-check-170.s_f2")),
+    "F3": (lambda: _msg.T("plan-check-170.l_f3"), lambda: _msg.T("plan-check-170.s_f3")),
+    "F4": (lambda: _msg.T("plan-check-170.l_f4"), lambda: _msg.T("plan-check-170.s_f4")),
+    "F5": (lambda: _msg.T("plan-check-170.l_f5"), lambda: _msg.T("plan-check-170.s_f5")),
+    "F6": (lambda: _msg.T("plan-check-170.l_f6"), lambda: _msg.T("plan-check-170.s_f6")),
+    "F7": (lambda: _msg.T("plan-check-170.l_f7"), lambda: _msg.T("plan-check-170.s_f7")),
+    "F8": (lambda: _msg.T("plan-check-170.l_f8"), lambda: _msg.T("plan-check-170.s_f8")),
+    "F9": (lambda: _msg.T("plan-check-170.l_f9"), lambda: _msg.T("plan-check-170.s_f9")),
+    "F10": (lambda: _msg.T("plan-check-170.l_f10"), lambda: _msg.T("plan-check-170.s_f10")),
+    "F11": (lambda: _msg.T("plan-check-170.l_f11"), lambda: _msg.T("plan-check-170.s_f11")),
+    "F12": (lambda: _msg.T("plan-check-170.l_f12"), lambda: _msg.T("plan-check-170.s_f12")),
+    "F13": (lambda: _msg.T("plan-check-170.l_f13"), lambda: _msg.T("plan-check-170.s_f13")),
+    "F14": (lambda: _msg.T("plan-check-170.l_f14"), lambda: _msg.T("plan-check-170.s_f14")),
+}
+
+
+def size_clean(p):
+    return re.sub(r":[0-9]+(-[0-9]+)?$", "", p.split("::")[0].strip())
+
+
+def size_names(ext, lines):
+    out = []
+    for l in lines:
+        if ext == ".py":
+            m = PY_DEF.match(l)   # F13-PY: top level only, a method or a nested function is not public API
+            if m:
+                out.append(m.group(1))
+        elif ext in SIZE_JS:
+            m = TS_EXP.match(l)  # F13-JS
+            if m:
+                out.append(m.group(1))
+                continue
+            m = TS_EXP_LIST.match(l)
+            if m:
+                out += [x.strip().split(" as ")[-1].strip() for x in m.group(1).split(",") if x.strip()]
+                continue
+            if TS_EXP_ANON.match(l):
+                out.append("default")
+                continue
+            m = JS_CJS.match(l)
+            if m:
+                out.append(m.group(1) or "module.exports")
+        elif ext == ".go":
+            m = GO_SYM.match(l)  # F13-GO
+            if m:
+                out.append(m.group(1))
+    return out
+
+
+def size_sym(path, added, removed):
+    """F13 for one file: the public names on the added lines minus those on the removed lines (a changed signature
+    is not a new symbol); 0 for a file that defines none (SIZE_NOCODE); None = no rule for the language (D9)."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in SIZE_NOCODE:
+        return 0
+    if ext != ".py" and ext != ".go" and ext not in SIZE_JS:  # SIMBOLI-NON-MISURABILI
+        return None
+    rm = set(size_names(ext, removed))
+    return len([x for x in size_names(ext, added) if x not in rm])
+
+
+def size_diff(diff):
+    """(paths, {path: (added, removed)}, deleted, changed lines) of a unified git diff; None if unreadable"""
+    try:
+        with open(diff, encoding="utf-8", errors="replace") as fh:
+            t = fh.read().replace("\r", "")
+    except OSError:
+        return None
+    paths, files, deleted, text, cur = [], {}, [], [], None
+    for i, l in enumerate(t.split("\n")):
+        m = re.match(r"^diff --git a/(\S+) b/(\S+)", l)
+        if m:
+            cur = m.group(2)
+            for p in (m.group(1), m.group(2)):
+                if p not in paths:
+                    paths.append(p)
+            files.setdefault(cur, ([], []))
+        elif cur is None:
+            continue
+        elif l.startswith("deleted file mode"):
+            deleted.append(cur)
+        elif l.startswith("+") and not l.startswith("+++"):
+            files[cur][0].append(l[1:])
+            text.append((i + 1, l[1:]))
+        elif l.startswith("-") and not l.startswith("---"):
+            files[cur][1].append(l[1:])
+            text.append((i + 1, l[1:]))
+    return paths, files, deleted, text
+
+
+def taglia(M, root, diff, ovr):
+    nm = lambda why: _msg.T("plan-check-170.unmeasurable", why=why)
+    sec = M["sec"]
+    conf_ok = True
+    try:
+        r = conf()
+    except SystemExit:   # maat.json invalid: conf has said why on stderr; every fact from it is not measurable
+        conf_ok, r = False, {}
+    tg = ((r.get("piano") or {}).get("taglia") or {}) if conf_ok else {}
+    caps, badcap = dict(SIZE_CAPS), []
+    for k, v in (tg.get("soglie") or {}).items():
+        if k in caps and isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+            caps[k] = v
+        else:
+            badcap.append(str(k))
+    words = list(SIZE_SEC) + [w if isinstance(w, str) and w else "(" for w in (tg.get("parole_sicurezza") or [])]
+    try:
+        sec_rx = re.compile("|".join(r"\b(?:%s)%s" % (w, "" if w.endswith(r"\(") else r"\b") for w in words), re.I)
+    except re.error:
+        sec_rx = None
+    auto = tg.get("automatica", True)
+    fmt1 = not M["is2"]
+    tpaths = set(T["path"] for T in M["tests"].values() if T["path"])
+    plan_paths = []
+    for f in list(M["files"]) + [x for S in M["steps"] for x in S["files"]] + [x for b in M["blocks"] for x in b.get("files", [])]:
+        p = size_clean(f)
+        if p and p not in plan_paths:
+            plan_paths.append(p)
+    src = [p for p in plan_paths if p not in tpaths]
+    newf = set(size_clean(x) for x in M["new_files"])
+
+    def why_sec(name):   # the reason a fact of a plan section is not measurable, or ""
+        if fmt1:
+            return _msg.T("plan-check-170.why_fmt1")
+        return "" if name in sec else _msg.T("plan-check-170.why_sec", name=name)
+
+    facts = []   # (id, kind num|bar, value, cap, items, unmeasurable reason, extra text)
+
+    def num(fid, key, v, why, extra=""):
+        facts.append((fid, "num", v, caps[key], [], why, extra))
+
+    def bar(fid, items, why=""):
+        facts.append((fid, "bar", None, None, items, why, ""))
+
+    w = why_sec("File toccati")
+    num("F1", "file_sorgente", len(src), w)
+    num("F2", "file_nuovi", len([p for p in src if p in newf]), w)
+    w = why_sec("Passi") or ("" if M["steps"] else _msg.T("plan-check-170.why_nosteps"))
+    num("F3", "passi", len(M["steps"]), w)
+    w = why_sec("Tracciabilit\u00e0 requisiti")
+    tr = set(x for n, x, v in M["reqs"])
+    pref = set(SIZE_REQ)
+    for x in tr:
+        mm = re.match(r"^([A-Za-z]+)-?[0-9]", x)
+        if mm:
+            pref.add(mm.group(1))
+    idrx = re.compile(r"(?<![A-Za-z0-9_.-])((?:%s)-?[0-9]+(?:\.[0-9]+)*)(?![A-Za-z0-9_-])"
+                      % "|".join(sorted((re.escape(x) for x in pref), key=len, reverse=True)))
+    ids = set()
+    for n, t in M["above"]:
+        ids.update(idrx.findall(t))
+    num("F4", "requisiti", max(len(tr), len(ids)), w or ("" if tr else _msg.T("plan-check.trace_no_rows")),
+        _msg.T("plan-check-170.f4_detail", a=len(tr), b=len(ids)))  # F4-CONTA-LA-SPEC
+    tbls = [tb for tb in tables(sec.get("Piano di test", [])) if tb["hdr"] in TEST_HDRS]
+    w = why_sec("Piano di test") or ("" if tbls else _msg.T("plan-check.tp_no_table"))
+    num("F5", "test", sum(len(tb["rows"]) for tb in tbls), w)
+    num("F6", "righe", len(M["plan_all"]), "")
+
+    dd = size_diff(diff) if diff else None
+    dwhy = _msg.T("plan-check-170.why_diff", p=diff) if diff and dd is None else ""
+    dpaths = dd[0] if dd else []
+    every = plan_paths + [p for p in sorted(tpaths) if p not in plan_paths]
+    every += [p for p in dpaths if p not in every]
+    decl = M["declared"]
+    dwhy7 = _msg.T("plan-check-170.why_nodecl") if decl is None else ""
+    cwhy = "" if conf_ok else _msg.T("plan-check-170.why_conf")
+    f7 = [s + " (" + _msg.T("plan-check-170.v_declared") + ")" for s in SIZE_CRIT if s in (decl or [])]
+    f8 = [_msg.T("plan-check-170.v_declared")] if "contratto-api" in (decl or []) else []
+    f9 = []
+    if conf_ok:
+        for p in every:
+            ss = surf_of(p)
+            f7 += [s + " (" + p + ")" for s in SIZE_CRIT if s in ss]  # F7-RILEVATA
+            if "contratto-api" in ss:
+                f8.append(p)
+            if is_mig(p) and p not in f9:
+                f9.append(p)
+    bar("F7", f7, dwhy7 or cwhy or dwhy)
+    bar("F8", f8, dwhy7 or cwhy or dwhy)
+    bar("F9", f9, cwhy or dwhy)
+    text = [(_msg.T("plan-check.route_plan_line", n=n), t) for n, t in M["plan_all"]]
+    dtext = [(_msg.T("plan-check.route_diff_line", n=n), t) for n, t in (dd[3] if dd else [])]
+    f10 = []
+    for where, t in text + dtext:
+        m = DESTR.search(t)  # F10-DESTR
+        if m:
+            f10.append(_msg.T("plan-check.route_keyword", k=m.group(0).strip(), where=where))
+    bar("F10", f10, dwhy)
+    f11, seen = [], set()
+    # the Risk surfaces: line is the declaration itself (F7, F8), not a word of the change
+    stext = [(w_, t) for w_, t in text if not (t.startswith("Risk surfaces:") or t.startswith("Superfici a rischio:"))]
+    for where, t in [(_msg.T("plan-check-170.spec_line", n=n), t) for n, t in M["above_all"]] + stext + dtext:
+        for m in (sec_rx.finditer(t) if sec_rx else []):  # F11-SICUREZZA
+            k = m.group(0).lower()
+            if k not in seen:
+                seen.add(k)
+                f11.append("%s (%s)" % (m.group(0), where))
+    bar("F11", f11, dwhy or ("" if sec_rx else _msg.T("plan-check-170.why_words")))
+    if not diff:   # F12 and F13 are facts of the code written: only with --diff
+        facts.append(("F12", "na", None, None, [], "", ""))
+        facts.append(("F13", "na", None, None, [], "", ""))
+    else:
+        bar("F12", list(dd[2]) if dd else [], dwhy)
+        sym, nosym = 0, []
+        for p, (a, rm) in (dd[1].items() if dd else []):
+            if p in tpaths or not a:
+                continue
+            k = size_sym(p, a, rm)
+            if k is None:
+                nosym.append(p)
+            else:
+                sym += k
+        num("F13", "simboli_pubblici", sym, dwhy or (_msg.T("plan-check-170.why_sym", p=", ".join(nosym)) if nosym else ""))
+    f14, f14bad = [], []
+    for n, t in M["plan"]:
+        m = SIZE_REQUEST.match(t)
+        if m:
+            v = m.group(1).strip()
+            w0 = re.split(r"[^A-Za-z]", v, 1)[0].lower() if v else ""
+            if w0 in ("full", "piena"):
+                f14.append(v)
+            else:
+                f14bad.append(_msg.T("plan-check-170.v_invalid", v=v or "-"))
+    bar("F14", f14 + f14bad, "")
+    oop = [p for p in dpaths if p not in plan_paths and p not in tpaths] if dd else []
+
+    light = ovr == "light"
+    if badcap:
+        facts.append(("F0", "bar", None, None, [], _msg.T("plan-check-170.why_caps", keys=", ".join(badcap)), ""))
+    if not isinstance(auto, bool):
+        facts.append(("F0", "bar", None, None, [], _msg.T("plan-check-170.why_auto_bad"), ""))
+    none_ = _msg.T("plan-check-170.v_none")
+    piena, tutti, fatti = [], [], []
+    for fid, kind, v, cap, items, why, extra in facts:
+        lab = SIZE_LAB[fid][1]() if fid != "F0" else "piano.taglia"
+        if kind == "na":
+            print("%s %s: %s" % (fid, SIZE_LAB[fid][0](), _msg.T("plan-check-170.v_na")))
+            fatti.append(fid + "=-")
+            continue
+        if why:
+            val, fv = nm(why), "?"
+        elif kind == "num":
+            val, fv = "%d/%d" % (v, cap), "%d/%d" % (v, cap)
+        else:
+            val = ", ".join(items[:3]) + (" (+%d)" % (len(items) - 3) if len(items) > 3 else "") if items else none_
+            fv = str(len(items))
+        short = lab + " " + val if kind == "num" and not why else lab + ": " + val
+        if fid != "F0":
+            print("%s %s: %s%s" % (fid, SIZE_LAB[fid][0](), val, (" " + extra) if extra and not why else ""))
+            fatti.append("%s=%s" % (fid, fv))
+        tutti.append(short)
+        if why or (kind == "bar" and items) or (kind == "num" and v > cap and not light):  # SOGLIE-NUMERICHE
+            piena.append(short)
+    if diff:
+        print("%s: %s" % (_msg.T("plan-check-170.l_oop"), ", ".join(oop) if oop else none_))
+        if oop:
+            piena.append(_msg.T("plan-check-170.l_oop") + ": " + ", ".join(oop[:3]) + (" (+%d)" % (len(oop) - 3) if len(oop) > 3 else ""))
+    if ovr == "full":
+        ov = "override: --full"
+        piena.insert(0, ov)
+    elif light:
+        ov = "override: --light"
+    elif auto is False:
+        ov = "override: " + _msg.T("plan-check-170.why_auto")
+        piena.insert(0, ov)
+    else:
+        ov = "override: " + _msg.T("plan-check-170.ovr_none")
+    print(ov)
+    print("Fatti: " + " ".join(fatti))
+    if piena:
+        print("Taglia: piena \u2014 " + " \u00b7 ".join(piena))
+    else:
+        print("Taglia: piccola \u2014 " + " \u00b7 ".join(tutti + [ov]))
     return 0
 
 
@@ -2283,6 +2630,8 @@ elif cmd == "route":
     sys.exit(route(M, sys.argv[3] if len(sys.argv) > 3 else ""))
 elif cmd == "skeleton":
     sys.exit(skeleton(M))
+elif cmd == "taglia":
+    sys.exit(taglia(M, sys.argv[2], "" if sys.argv[3] == "-" else sys.argv[3], "" if sys.argv[4] == "-" else sys.argv[4]))
 sys.exit(2)
 '
 
@@ -2432,6 +2781,45 @@ cmd_s2() {
   return 0
 }
 
+# ─────────────────────────────────────────────────────────────────────────── size of the cycle (1.7.0)
+# taglia: the facts and the size (header of this file). Always exit 0 with a last line "Taglia: …": what cannot be
+# measured (no plan, no Python) is piena, said in the line.
+cmd_taglia() {
+  local spec="" diff="" ovr=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --diff) [ $# -ge 2 ] || die_usage; diff="$2"; shift 2 ;;
+      --override) [ $# -ge 2 ] || die_usage; case $2 in full|light) ovr="$2" ;; *) die_usage ;; esac; shift 2 ;;
+      -*) die_usage ;;
+      *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] || die_usage
+  local ann; ann=$(annotate "$spec")
+  has_plan_section "$ann" || { echo "Taglia: piena — $(msg plan-check-170.no_plan)"; return 0; }
+  need_py 2>/dev/null || { echo "Taglia: piena — $(msg plan-check-170.no_python)"; return 0; }
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" taglia "$(repo_root "$spec")" "${diff:--}" "${ovr:--}"
+}
+# e1 <reply>: the ONE round of spec-plan-reviewer-light of the small size (D3-A, D4). Counted on the reply as it is,
+# rejected findings included: the plan author cannot stay small by rejecting.
+E1_MAJOR=2
+cmd_e1() {
+  [ $# -eq 1 ] && [ -f "$1" ] || die_usage
+  local t d nb nm p=0
+  t=$(tr -d '\r' < "$1")
+  d=$(printf '%s\n' "$t" | sed -n 's/^[[:space:]*]*Decision:[[:space:]*]*\([A-Z_]*\).*/\1/p' | head -1)
+  nb=$(printf '%s\n' "$t" | grep -ciE '^[[:space:]*]*([0-9]+\.[[:space:]]*)?Severity:[[:space:]*]*blocker' || true)
+  nm=$(printf '%s\n' "$t" | grep -ciE '^[[:space:]*]*([0-9]+\.[[:space:]]*)?Severity:[[:space:]*]*major' || true)
+  printf '%s\n' "$t" | grep -E 'Blocked on:' | grep -qviE 'Blocked on:[[:space:]]*(none|nessuno)[[:space:].]*$' && p=1
+  case $d in STOP_HUMAN*) echo "E1: STOP — $(msg plan-check-170.e1_stop)"; return 0 ;; esac
+  if [ -z "$d" ]; then echo "E1: piena — $(msg plan-check-170.e1_no_decision)"; return 0; fi
+  if [ "$p" = 1 ]; then echo "E1: piena — $(msg plan-check-170.e1_partial)"; return 0; fi
+  if [ "${nb:-0}" -gt 0 ] || [ "${nm:-0}" -gt "$E1_MAJOR" ]; then  # SOGLIA-E1
+    echo "E1: piena — $(msg plan-check-170.e1_over nb="${nb:-0}" nm="${nm:-0}")"; return 0
+  fi
+  echo "E1: piccola — $(msg plan-check-170.e1_ok nb="${nb:-0}" nm="${nm:-0}")"
+}
+
 # ─────────────────────────────────────────────────────────────────────────── skeleton, split (harness-pt12)
 cmd_skeleton() {
   [ $# -eq 1 ] && [ -f "$1" ] || die_usage
@@ -2522,6 +2910,8 @@ case "$sub" in
   skeleton) cmd_skeleton "$@" ;;
   split) cmd_split "$@" ;;
   closed) cmd_closed "$@" ;;
+  taglia) cmd_taglia "$@" ;;
+  e1) cmd_e1 "$@" ;;
   accept|tests|stubs|rossi|l2) cmd_f2x "$sub" "$@" ;;
   *) die_usage ;;
 esac

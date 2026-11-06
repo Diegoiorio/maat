@@ -505,6 +505,20 @@ caso_s10() { printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":
 check "non valido: preparati senza preparazione (S10)" 'caso_s10 "$MC"'
 printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","preparati":[".nuxt/tsconfig.json"],"preparazione":"npx nuxi prepare"}]}' > "$T/s10ok.json"
 mc valida "$T/s10ok.json" > "$T/out" 2>&1; check "preparati con preparazione: valido" '[ $? = 0 ]'
+# 1.7.0: piano.taglia (the size of the cycle) needs "harness": ">=1.7" or newer (S11), so an older Maat refuses the file
+caso_s11() { printf '%s\n' '{"versione_schema":1,"harness":">=1.6","moduli":[{"nome":"a","radice":"."}],"piano":{"taglia":{"automatica":true}}}' > "$T/ks11.json"
+  "$FIC_PY" "$1" valida "$T/ks11.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ': harness: piano.taglia richiede "harness": ">=1.7" o successiva' "$T/out"; }
+check "non valido: piano.taglia con harness >=1.6 (S11)" 'caso_s11 "$MC"'
+printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":"."}],"piano":{"taglia":{}}}' > "$T/s11no.json"
+mc valida "$T/s11no.json" > "$T/out" 2>&1; check "non valido: piano.taglia senza harness (S11)" '[ $? = 1 ] && grep -qF ": harness: piano.taglia richiede" "$T/out"'
+for h in '>=1.7' '>=2.0' '>=1.10'; do
+  printf '{"versione_schema":1,"harness":"%s","moduli":[{"nome":"a","radice":"."}],"piano":{"taglia":{"automatica":false,"soglie":{"file_sorgente":4,"righe":300},"parole_sicurezza":["frob\\\\w*"]}}}\n' "$h" > "$T/s11ok.json"
+  mc valida "$T/s11ok.json" > "$T/out" 2>&1; check "piano.taglia completa con harness $h: valido" '[ $? = 0 ]'
+done
+printf '%s\n' '{"versione_schema":1,"harness":">=1.7","moduli":[{"nome":"a","radice":"."}],"piano":{"taglia":{"soglie":{"file":3}}}}' > "$T/s11k.json"
+mc valida "$T/s11k.json" > "$T/out" 2>&1; check "non valido: una soglia sconosciuta in piano.taglia.soglie" '[ $? = 1 ] && grep -qF "piano.taglia.soglie.file" "$T/out"'
+printf '%s\n' '{"versione_schema":1,"harness":">=1.5","moduli":[{"nome":"a","radice":"."}],"piano":{"migrazioni":["/m/"]}}' > "$T/s11c.json"
+mc valida "$T/s11c.json" > "$T/out" 2>&1; check "compatibilita: un maat.json senza piano.taglia resta valido (harness >=1.5)" '[ $? = 0 ]'
 imp() { # <reader> -> the outputs of the imported functions (MAAT_CONFIG_PY like plan-check.sh), one per line
   MAAT_CONFIG=$SS PROJECT_ROOT=$TD "$FIC_PY" -c '
 import importlib.util, sys
@@ -540,6 +554,8 @@ m=$(mutante s9 's/if NON_GENERATI.search(g.get(k, "")):/if False:/')
 check "controprova: S9 disattivato -> un golden fra i generati passa, rosso" '[ -n "$m" ] && ! caso_s9 "$m"'
 m=$(mutante s10 's/if m.get("preparati") and not m.get("preparazione"):/if False:/')
 check "controprova: S10 disattivato -> preparati senza preparazione passa, rosso" '[ -n "$m" ] && ! caso_s10 "$m"'
+m=$(mutante s11 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 7):  # HARNESS-PER-TAGLIA/if False:/')
+check "controprova: S11 disattivato -> piano.taglia con harness >=1.6 passa, rosso" '[ -n "$m" ] && ! caso_s11 "$m"'
 m=$(mutante moddi 's/^    return instrada(r, percorso)$/    return None/')
 check "controprova: modulo_di importato che non instrada -> diverso dalla CLI, rosso" '[ -n "$m" ] && [ "$(MAAT_ROOT=$PLUGIN imp "$m")" != "$IMP" ]'
 m=$(mutante corta 's/key=lambda c: -c\[0\]/key=lambda c: c[0]/g')

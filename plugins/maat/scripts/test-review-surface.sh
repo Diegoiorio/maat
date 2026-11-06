@@ -282,6 +282,19 @@ if has "$out" '^\(no differences\)$'; then ok "en: diff vuoto dichiarato in ingl
 out=$(MAAT_LINGUA=en rs diff --from "$D0" --to "$D1" --paths-file "$WORK/dempty" --out "$WORK/x.diff" 2>&1)
 if has "$out" '^review-surface: paths-file empty: no path to show$' && ! has "$out" 'nessun path'; then ok "en: errore in inglese col prefisso review-surface:"; else ko "en: errore non in inglese" "$out"; fi
 
+echo "1.7.0. una cartella nuova non tracciata: i suoi file uno per uno, mai la cartella (touched.txt, diff della taglia)"
+N0=$(rs tree)
+mkdir -p newdir; printf 'x = 1\n' > newdir/x.py; printf 'y = 2\n' > newdir/y.py
+out=$(rs snapshot); N1=$(field "$out" Tree)
+if has "$out" $'^  A\tnewdir/x.py$' && has "$out" $'^  A\tnewdir/y.py$'; then ok "snapshot: newdir/x.py e newdir/y.py, uno per uno"; else ko "snapshot: i file della cartella nuova mancano" "$out"; fi
+if has "$out" $'^  A\tnewdir/?$'; then ko "snapshot: la cartella al posto dei file" "$out"; else ok "controprova: nessuna riga per la cartella sola"; fi
+tl=$(git diff --name-only --no-renames "$N0" "$N1")
+if [ "$tl" = $'newdir/x.py\nnewdir/y.py' ]; then ok "touched (diff fra i due tree, come run-phase.sh): i due file"; else ko "touched: atteso newdir/x.py e newdir/y.py" "$tl"; fi
+printf 'newdir/x.py\n' > "$WORK/dnew"
+rs diff --from "$N0" --to "$N1" --paths-file "$WORK/dnew" --out "$WORK/n.diff" > /dev/null
+if grep -q '^diff --git a/newdir/x.py b/newdir/x.py$' "$WORK/n.diff" && grep -q '^+x = 1$' "$WORK/n.diff" && ! grep -q 'newdir/y.py' "$WORK/n.diff"; then ok "diff: il file nuovo nominato, con le sue righe"; else ko "diff del file nuovo" "$(cat "$WORK/n.diff")"; fi
+rm -rf newdir
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
