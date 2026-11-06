@@ -158,6 +158,13 @@ maat-doctor-f.mac_ok	GNU tools for macOS: {t}	strumenti GNU per macOS: {t}
 maat-doctor-f.mac_missing_gnubin	GNU {t} not found (macOS: Maat uses the GNU options) — brew install {f}, then put "$(brew --prefix)/opt/{f}/libexec/gnubin" first in PATH	{t} GNU non trovato (macOS: Maat usa le opzioni GNU) — brew install {f}, poi metti "$(brew --prefix)/opt/{f}/libexec/gnubin" in testa al PATH
 maat-doctor-f.mac_missing	{t} not found (macOS) — brew install {f}	{t} non trovato (macOS) — brew install {f}
 
+# --- plan-check-161, worktree-cycle-161 (1.6.1, written by hand like driver-cmd: texts that v1.3.0 does not have,
+# so outside the sections of tools/lingua-conversioni/). plan-check.sh lint2: (vuoto) between backticks; ciclo-worktree.sh:
+# a ring of a chain missing next to the mother, a ring of a worktree made before 1.6.1.
+plan-check-161.mut_empty_quoted	(empty) is written without backticks: between backticks it is the literal text to insert	(vuoto) va scritto senza backtick: fra backtick è il testo letterale da inserire
+worktree-cycle-161.child_missing	the ring {c} of the chain {m} is missing in {d}: a worktree without it would stop on that ring (WAIT). Create it there, or remove it from the Figlie:/Children: line	l'anello {c} della catena {m} manca in {d}: un worktree senza l'anello si fermerebbe su quell'anello (WAIT). Crealo li', o toglilo dalla riga Figlie:/Children:
+worktree-cycle-161.rp_child_resume	the ring {rel} is missing in the worktree, or the marker has no fingerprint for it (a worktree made before 1.6.1): run crea again with {spec} (the resume copies the ring and records it), or --forza to bring back what is there	l'anello {rel} manca nel worktree, o il marcatore non ha la sua impronta (un worktree creato prima della 1.6.1): rilancia crea con {spec} (la ripresa copia l'anello e lo registra), o --forza per riportare quello che c'e'
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile
@@ -334,7 +341,6 @@ plan-check.conf_regex	invalid regex under piano.*: {e}	regex non valida in piano
 plan-check.mut_bad	unreadable mutation, expected form	mutazione illeggibile, forma attesa
 plan-check.mut_bad_empty	(the replacement may be (empty))	(sostituisci puo essere (vuoto))
 plan-check.mut_empty_fields	mutation: symbol and red-if text cannot be empty	mutazione: simbolo e testo di rosso se non possono essere vuoti
-plan-check.mut_empty_quoted	(empty) is written without backticks: between backticks it is the literal text to insert	(vuoto) va scritto senza backtick: fra backtick è il testo letterale da inserire
 plan-check.mut_noop	empty mutation: search equal to replacement	mutazione vuota: cerca uguale a sostituisci
 plan-check.fmt_dup	line {n}: Plan format: appears {k} times at the start of a line in the plan, it must be ONE	riga {n}: Plan format: compare {k} volte a inizio riga nel piano, deve essere UNA
 plan-check.sec_dup	line {n}: section ### {name} repeated: it must be one	riga {n}: sezione ### {name} ripetuta: deve essere una
@@ -1344,7 +1350,6 @@ worktree-cycle.conf_unreadable	maat.json of the main tree not readable: nothing 
 worktree-cycle.spec_missing	spec missing: {spec}	spec assente: {spec}
 worktree-cycle.spec_name	the spec must be named spec-<name>.md: {spec}	la spec deve chiamarsi spec-<nome>.md: {spec}
 worktree-cycle.name_invalid	name not valid: {name}	nome non valido: {name}
-worktree-cycle.child_missing	the ring {c} of the chain {m} is missing in {d}: a worktree without it would stop on that ring (WAIT). Create it there, or remove it from the Figlie:/Children: line	l'anello {c} della catena {m} manca in {d}: un worktree senza l'anello si fermerebbe su quell'anello (WAIT). Crealo li', o toglilo dalla riga Figlie:/Children:
 worktree-cycle.not_exists	does not exist: {wt}	non esiste: {wt}
 worktree-cycle.not_wt_root	not the root of a git worktree: {c}	non e' la radice di un worktree git: {c}
 worktree-cycle.is_main	it is the main tree: {c}	e' il tree principale: {c}
@@ -1408,7 +1413,6 @@ worktree-cycle.st_no_spec	spec: missing in the worktree	spec: assente nel worktr
 worktree-cycle.st_changed	files changed: {n}	file modificati: {n}
 worktree-cycle.not_ours_stop	{wt} is not a worktree of ciclo-worktree.sh for {name} ({why})	{wt} non e' un worktree di ciclo-worktree.sh per {name} ({why})
 worktree-cycle.rp_no_spec	spec missing in the worktree: {wt}/{rel}	spec assente nel worktree: {wt}/{rel}
-worktree-cycle.rp_child_resume	the ring {rel} is missing in the worktree, or the marker has no fingerprint for it (a worktree made before 1.6.1): run crea again with {spec} (the resume copies the ring and records it), or --forza to bring back what is there	l'anello {rel} manca nel worktree, o il marcatore non ha la sua impronta (un worktree creato prima della 1.6.1): rilancia crea con {spec} (la ripresa copia l'anello e lo registra), o --forza per riportare quello che c'e'
 worktree-cycle.rp_spec_changed	the spec of the main tree ({rel}) changed after the copy into the worktree: bringing it back would delete those changes. Compare the two files; to overwrite it anyway: --forza	la spec del tree principale ({rel}) e' cambiata dopo la copia nel worktree: riportarla cancellerebbe quelle modifiche. Confronta i due file; per sovrascriverla comunque: --forza
 worktree-cycle.rp_run_changed	the run dir of the main tree ({rel}) changed after the copy into the worktree: aligning it would delete those files. Compare (diff -rq); to overwrite it anyway: --forza	la run dir del tree principale ({rel}) e' cambiata dopo la copia nel worktree: allinearla cancellerebbe quei file. Confronta (diff -rq); per sovrascriverla comunque: --forza
 worktree-cycle.rp_spec_done	spec brought back: {m}/{rel}	spec riportata: {m}/{rel}

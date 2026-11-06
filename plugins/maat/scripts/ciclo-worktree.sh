@@ -267,7 +267,7 @@ if [ "$CMD" = crea ]; then
   SDIR=$(dirname "$SPEC")
   for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
     [ -f "$WT/$AIW/spec-$c.md" ] || [ -f "$SDIR/spec-$c.md" ] ||
-      stop "$(msg worktree-cycle.child_missing c="spec-$c.md" d="$SDIR" m="spec-$NAME.md")"
+      stop "$(msg worktree-cycle-161.child_missing c="spec-$c.md" d="$SDIR" m="spec-$NAME.md")"
   done
   if [ $RESUME -eq 0 ]; then
     BASE=$(git -C "$MAIN" rev-parse --verify -q "${BASE_REF:-HEAD}^{commit}") || die "$(msg worktree-cycle.base_invalid ref="${BASE_REF:-HEAD}")"
@@ -455,7 +455,7 @@ if [ "$CMD" = riporta ]; then
     # a ring not in the worktree, or without its fingerprints (a worktree made before 1.6.1): crea again resumes,
     # copies the ring and records them; --forza brings back what is there
     if [ $i -gt 0 ] && { [ ! -f "$WT/$s" ] || [ -z "$(mk_get "$ks")" ]; } && [ $FORCE -eq 0 ]; then
-      stop "$(msg worktree-cycle.rp_child_resume rel="$s" spec="$SPEC_REL")"
+      stop "$(msg worktree-cycle-161.rp_child_resume rel="$s" spec="$SPEC_REL")"
     fi
     [ -f "$WT/$s" ] || { [ $i -gt 0 ] && continue; stop "$(msg worktree-cycle.rp_no_spec wt="$WT" rel="$s")"; }
     cur=$(sha "$MAINC/$s") exp=$(mk_get "$ks") new=$(sha "$WT/$s")
