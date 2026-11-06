@@ -1,0 +1,4 @@
+tests-humanize: PASS (eseguito) — 74 tests, 0 failed, 0 errors, 0 skipped
+controlli-humanize: PASS (eseguito) — 4 entries run, 0 failed, 0 skipped
+gates: esito=PASS chiave=bbe845a10d97010ab7fef621c13d283b8008ff250d031b431da1af13d1a7d96c evidence=/home/bench/bench-run/copies/T2-maat-2/.claude/.ai-workflow/spec-bytes-rounding-unit.run/evidence/bbe845a10d97010ab7fef621c13d283b8008ff250d031b431da1af13d1a7d96c
+exit=0 livello=std

@@ -1,0 +1,156 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1c34341..cbd6bf4 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,7 @@
+ # v1.12.0
+ 
++- New command: `git-stale-branches` to list the local branches whose last commit
++  is older than a date, oldest first, optionally only the merged or unmerged ones
+ - `git-push-current` now honors and supports a differently-named upstream
+   branch when one is set. You can also setup one with `-u <remote-branch>`
+ - `git-modified` no longer needs the `rev` utility, which does not exist in Git
+diff --git a/README.md b/README.md
+index 5d297a2..3fbf946 100644
+--- a/README.md
++++ b/README.md
+@@ -45,6 +45,7 @@ Everyday helpful commands:
+ - [git-merged / git-unmerged / git-merge-status](#git-merged--git-unmerged--git-merge-status)
+ - [git-branches-containing](#git-branches-containing)
+ - [git-recent-branches](#git-recent-branches)
++- [git-stale-branches](#git-stale-branches)
+ - [git-remote-branches](#git-local-branches--git-remote-branches--git-active-branches)
+ - [git-remote-tracking-branch](#git-remote-tracking-branch)
+ - [git-root](#git-root)
+@@ -249,6 +250,27 @@ Returns a list of local branches, ordered by recency:
+     bar
+     qux
+ 
++### git stale-branches
++
++Returns a list of local branches whose last commit is older than a date, oldest
++first, each with the date of that commit. This is the first step of a branch
++clean-up. The current branch and the main branch are never listed.
++
++    $ git stale-branches
++    2025-01-14	old-experiment
++    2025-03-02	feature/login
++
++The date defaults to 3 months ago, and can be specified using
++`git stale-branches -s <date>`, using any date format
++[supported by `git log`][gitlog]. A local branch is either "active" or "stale"
++for the same date (see `git active-branches`).
++
++Use `-m` to list only the stale branches that are merged into the main branch,
++or `-u` to list only the ones that are not:
++
++    $ git stale-branches -s 2025-02-01 -m
++    2025-01-14	old-experiment
++
+ ### git remote-tracking-branch
+ 
+ Print the name of the remote tracking branch of the current or
+diff --git a/git-stale-branches b/git-stale-branches
+new file mode 100755
+index 0000000..91004f6
+--- /dev/null
++++ b/git-stale-branches
+@@ -0,0 +1,98 @@
++#!/bin/sh
++set -eu
++
++DEFAULT_SINCE='3.months.ago'
++since=$DEFAULT_SINCE
++merged=0
++unmerged=0
++
++usage () {
++    cat <<EOF
++usage: git stale-branches [-s <date>] [-m | -u] [-h]
++
++Lists the local branches whose last commit is older than <date>, oldest first.
++The current branch and the main branch are never listed.
++
++Options:
++-s      show branches with no commit since <date> (as in 'git log --since')
++-m      show only the stale branches that are merged into the main branch
++-u      show only the stale branches that are not merged into the main branch
++-h      show this help
++<date>  any date format recognized by 'git log'
++
++Unless specified, <date> defaults to "$DEFAULT_SINCE".
++EOF
++}
++
++# The leading ':' keeps getopts quiet, so that bad usage reports the same text
++# in every shell.
++while getopts :s:muh flag; do
++    case "$flag" in
++        s)    since=$OPTARG ;;
++        m)    merged=1 ;;
++        u)    unmerged=1 ;;
++        h)    usage; exit 0 ;;
++        \?|:) usage >&2; exit 2 ;;
++    esac
++done
++shift $((OPTIND - 1))
++
++if [ $# -gt 0 ] || { [ $merged -eq 1 ] && [ $unmerged -eq 1 ]; }; then
++    usage >&2
++    exit 2
++fi
++
++# Bail early with git's own error message if not in a repo ('git is-repo' is
++# silent)
++git rev-parse --git-dir >/dev/null
++
++# Empty if not on a branch. Branches are compared by their full ref names here:
++# short names turn into 'heads/<branch>' when a tag has the same name.
++current=$(git symbolic-ref --quiet HEAD) || current=''
++
++main=$(git main-branch 2>/dev/null) || main=''
++
++if [ $merged -eq 1 ] || [ $unmerged -eq 1 ]; then
++    # 'git main-branch' can name a branch that only exists on the remote
++    if [ -n "$main" ] && git rev-parse --quiet --verify "refs/heads/$main^{commit}" >/dev/null; then
++        main_tip="refs/heads/$main"
++    elif [ -n "$main" ] && git rev-parse --quiet --verify "refs/remotes/origin/$main^{commit}" >/dev/null; then
++        main_tip="refs/remotes/origin/$main"
++    else
++        echo "git stale-branches: no main branch found, needed for -m and -u" >&2
++        exit 2
++    fi
++fi
++
++# Read into a variable, so a failure here isn't lost in a pipeline. The last
++# --sort is the primary key; refnames compare in byte order.
++branches=$(
++    git for-each-ref --sort=refname --sort=committerdate \
++        --format='%(refname)%09%(committerdate:short)' refs/heads/
++)
++
++tab=$(printf '\t')
++while IFS=$tab read -r ref date; do
++    [ -n "$ref" ] || continue  # no branches at all
++    [ "$ref" != "$current" ] || continue
++    [ "$ref" != "refs/heads/$main" ] || continue
++
++    # The same test as git-active-branches. Assigned first, so that 'set -e'
++    # catches a failing 'git log' instead of taking the branch for stale.
++    active=$(git log -1 --since="$since" --no-patch --format=%H "$ref" --)
++    [ -z "$active" ] || continue
++
++    if [ $merged -eq 1 ] || [ $unmerged -eq 1 ]; then
++        status=0
++        git merge-base --is-ancestor "$ref" "$main_tip" || status=$?
++        case "$status" in
++            0) [ $merged -eq 1 ] || continue ;;
++            1) [ $unmerged -eq 1 ] || continue ;;
++            *) exit "$status" ;;
++        esac
++    fi
++
++    printf '%s\t%s\n' "$date" "${ref#refs/heads/}"
++done <<EOF
++$branches
++EOF

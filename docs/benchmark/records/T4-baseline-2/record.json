@@ -1,0 +1,48 @@
+{
+  "run_id": "T4-baseline-2",
+  "task": "T4",
+  "side": "baseline",
+  "order": 1,
+  "spec_sha256": "487a18afd7ce77a00fea1b612caf3399880dcaf935fcbccfeb403eed86fbd91c",
+  "spec_sha256_in_copy": "487a18afd7ce77a00fea1b612caf3399880dcaf935fcbccfeb403eed86fbd91c",
+  "upstream_repo": "https://github.com/nvie/git-toolbelt.git",
+  "upstream_commit": "354262e7d595a5f42d935fdce5a3930d0b173391",
+  "base_snapshot_commit": "ffe42a6d5287aacc2389af60850f46c4f8dc8d56",
+  "maat_tag": "v1.6.0",
+  "claude_code_version": "2.1.318",
+  "model": "claude-opus-5-5",
+  "model_check": "model: ok claude-opus-5-5 (1 sessions)",
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64",
+  "started_utc": "2026-11-06T10:02:16Z",
+  "ended_utc": "2026-11-06T10:05:27Z",
+  "wall_clock_s": 191,
+  "exit_code": 0,
+  "timed_out": false,
+  "outcome": "COMPLETED",
+  "outcome_detail": "",
+  "quota": false,
+  "contaminated": false,
+  "human_interventions": [],
+  "cost_usd_api_equivalent": 0.7464,
+  "cost_breakdown": {
+    "claude-opus-5-5": {
+      "cache_creation_input_tokens": 40073,
+      "cache_read_input_tokens": 226827,
+      "calls": 7,
+      "input_tokens": 14,
+      "output_tokens": 847
+    }
+  },
+  "final_diff": "records/T4-baseline-2/final.diff",
+  "final_diff_sha256": "ad687cc2d7ca0d24b845f7d0cfd9342978cf5c776e0966df278e1f872a5d5d0b",
+  "report": "records/T4-baseline-2/report.md",
+  "hidden_tests": {
+    "passed": 45,
+    "total": 45
+  },
+  "blind_review_code": null,
+  "blind_review_entries": null,
+  "confirmed_defects": null,
+  "undisclosed_defects": null,
+  "notes": []
+}

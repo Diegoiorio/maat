@@ -1,0 +1,4 @@
+tests-humanize: FAIL (eseguito) — 74 tests, 7 failed, 0 errors, 0 skipped
+controlli-humanize: PASS (eseguito) — 2 entries run, 0 failed, 0 skipped
+gates: esito=FAIL chiave=e764b0b9606f22216c3396bcab929562a242da99ffec64db384c4d6c917ea47b evidence=/home/bench/bench-run/copies/T2-maat-2/.claude/.ai-workflow/spec-bytes-rounding-unit.run/evidence/e764b0b9606f22216c3396bcab929562a242da99ffec64db384c4d6c917ea47b
+exit=1 livello=std (test-red: the acceptance tests must be red)

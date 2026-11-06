@@ -1,0 +1,1 @@
+driver: Driver result: STOP — cycle finished: signature NEEDS_VERIFICATION — to verify: counterproof T1: NOT RUN (declared): module humanize declares no counterproof; counterproof T4: NOT RUN (declared): module humanize declares no counterproof; the promotion to IMPLEMENTED belongs to a later invocation, after the verification

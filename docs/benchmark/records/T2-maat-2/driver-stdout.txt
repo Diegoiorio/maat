@@ -1,0 +1,19 @@
+driver: Next: PLAN — no plan
+driver: context-pack: exit 0 · context-pack: .claude/.ai-workflow/spec-bytes-rounding-unit.run/context-pack.md — named files 0 (0 missing), ~262 tokens, DB: DB schema not declared
+driver: ▶ 01-plan started
+driver: ■ 01-plan finished: exit 0 · PHASE RESULT plan: OK — plan approved in 2 iterations (3 majors fixed, 0 open); IBytesN promotion (D3) recorded for human check
+driver: Next: TEST-RED — format-2 plan approved: acceptance tests and stubs to write and prove red before the implementation
+driver: context-pack: exit 0 · context-pack: .claude/.ai-workflow/spec-bytes-rounding-unit.run/context-pack.md — named files 0 (0 missing), ~304 tokens, DB: DB schema not declared
+driver: ▶ 02-test-red started
+driver: ■ 02-test-red finished: exit 0 · PHASE RESULT test-red: OK — 7 tests T1-T7 written in bytes_test.go and bigbytes_test.go, no stubs; agent reports them red on their assertions
+driver: Next: IMPLEMENT — plan approved, no review
+driver: context-pack: exit 0 · context-pack: .claude/.ai-workflow/spec-bytes-rounding-unit.run/context-pack.md — named files 0 (0 missing), ~304 tokens, DB: DB schema not declared
+driver: batches: lotto 1/1: B1,B2 (~58k token)
+driver: lanes: blocks-independent: esito=parallelo corsie=2
+driver: ▶ 03-implement started
+driver: ■ 03-implement finished: exit 0 · PHASE RESULT implement: OK — parallel lanes: lane 1: B1 (P1, P2) done in bytes.go and bigbytes.go, targeted tests pass; T6, T7 and the suites left to lane 2 and the driver · lane 2: Lane 2, block B2 (P3, P4): already fully in the tree from test-red, verified against the plan, no file written
+driver: Next: REVIEW — implementation finished (03-implement)
+driver: context-pack: exit 0 · context-pack: unchanged (sha256:4b5a098d36046f93) — .claude/.ai-workflow/spec-bytes-rounding-unit.run/context-pack.md
+driver: ▶ 04-review started
+driver: ■ 04-review finished: exit 0 · PHASE RESULT review: OK — Review status APPROVED · Feature status IMPLEMENTED · Verification VERIFIED (provisional: driver VERIFY in parallel) · Review rounds 1/3
+driver: Driver result: STOP — cycle finished: signature NEEDS_VERIFICATION — to verify: counterproof T1: NOT RUN (declared): module humanize declares no counterproof; counterproof T4: NOT RUN (declared): module humanize declares no counterproof; the promotion to IMPLEMENTED belongs to a later invocation, after the verification

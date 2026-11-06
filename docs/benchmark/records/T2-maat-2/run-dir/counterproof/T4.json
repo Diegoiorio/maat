@@ -1,0 +1,30 @@
+{
+  "id": "T4",
+  "file": "bigbytes.go",
+  "simbolo": "humanateBigBytes",
+  "mutazione": {
+    "cerca": "math.RoundToEven(val) >= float64(base.Int64())",
+    "sostituisci": "math.RoundToEven(val) > float64(base.Int64())"
+  },
+  "test": {
+    "percorso": "bigbytes_test.go"
+  },
+  "rosso_se": {
+    "test_id": "TestBigBytesUnitPromotion",
+    "asserzione": "got 1000 kB"
+  },
+  "luogo": null,
+  "comando": null,
+  "rc_runner": null,
+  "durata_s": 0.0,
+  "duplicato_di": null,
+  "messaggio": "",
+  "output_coda": [],
+  "esito": "non_eseguita",
+  "controprova": "NOT RUN",
+  "motivo": "NOT RUN (declared): module humanize declares no counterproof",
+  "runner": null,
+  "eseguita_per": [
+    "T4"
+  ]
+}

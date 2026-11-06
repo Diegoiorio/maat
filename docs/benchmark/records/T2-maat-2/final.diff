@@ -1,0 +1,453 @@
+diff --git a/bigbytes.go b/bigbytes.go
+index 3b015fd..4189228 100644
+--- a/bigbytes.go
++++ b/bigbytes.go
+@@ -2,6 +2,7 @@ package humanize
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"math/big"
+ 	"strings"
+ 	"unicode"
+@@ -115,6 +116,9 @@ func humanateBigBytes(s, base *big.Int, sizes []string) string {
+ 	}
+ 	c := (&big.Int{}).Set(s)
+ 	val, mag := oomm(c, base, len(sizes)-1)
++	if mag+1 < len(sizes) && math.RoundToEven(val) >= float64(base.Int64()) {
++		val, mag = 1, mag+1
++	}
+ 	suffix := sizes[mag]
+ 	f := "%.0f %s"
+ 	if val < 10 {
+diff --git a/bigbytes_test.go b/bigbytes_test.go
+index 59445ea..74eadfa 100644
+--- a/bigbytes_test.go
++++ b/bigbytes_test.go
+@@ -108,13 +108,13 @@ func TestBigBytes(t *testing.T) {
+ 		{"bytes(999)", bbyte(999), "999 B"},
+ 
+ 		{"bytes(1024)", bbyte(1024), "1.0 kB"},
+-		{"bytes(1MB - 1)", bbyte(MByte - Byte), "1000 kB"},
++		{"bytes(1MB - 1)", bbyte(MByte - Byte), "1.0 MB"},
+ 
+ 		{"bytes(1MB)", bbyte(1024 * 1024), "1.0 MB"},
+-		{"bytes(1GB - 1K)", bbyte(GByte - KByte), "1000 MB"},
++		{"bytes(1GB - 1K)", bbyte(GByte - KByte), "1.0 GB"},
+ 
+ 		{"bytes(1GB)", bbyte(GByte), "1.0 GB"},
+-		{"bytes(1TB - 1M)", bbyte(TByte - MByte), "1000 GB"},
++		{"bytes(1TB - 1M)", bbyte(TByte - MByte), "1.0 TB"},
+ 
+ 		{"bytes(1TB)", bbyte(TByte), "1.0 TB"},
+ 		{"bytes(1PB - 1T)", bbyte(PByte - TByte), "999 TB"},
+@@ -132,13 +132,13 @@ func TestBigBytes(t *testing.T) {
+ 		{"bytes(1023)", bibyte(1023), "1023 B"},
+ 
+ 		{"bytes(1024)", bibyte(1024), "1.0 KiB"},
+-		{"bytes(1MB - 1)", bibyte(MiByte - IByte), "1024 KiB"},
++		{"bytes(1MB - 1)", bibyte(MiByte - IByte), "1.0 MiB"},
+ 
+ 		{"bytes(1MB)", bibyte(1024 * 1024), "1.0 MiB"},
+-		{"bytes(1GB - 1K)", bibyte(GiByte - KiByte), "1024 MiB"},
++		{"bytes(1GB - 1K)", bibyte(GiByte - KiByte), "1.0 GiB"},
+ 
+ 		{"bytes(1GB)", bibyte(GiByte), "1.0 GiB"},
+-		{"bytes(1TB - 1M)", bibyte(TiByte - MiByte), "1024 GiB"},
++		{"bytes(1TB - 1M)", bibyte(TiByte - MiByte), "1.0 TiB"},
+ 
+ 		{"bytes(1TB)", bibyte(TiByte), "1.0 TiB"},
+ 		{"bytes(1PB - 1T)", bibyte(PiByte - TiByte), "1023 TiB"},
+@@ -153,7 +153,112 @@ func TestBigBytes(t *testing.T) {
+ 		{"bytes(5.5GiB)", bibyte(5.5 * GiByte), "5.5 GiB"},
+ 
+ 		{"bytes(5.5GB)", bbyte(5.5 * GByte), "5.5 GB"},
+-	}.validate(t)
++	}.check(t)
++}
++
++// bigTenths returns tenths/10 of unit.
++func bigTenths(tenths int64, unit *big.Int) *big.Int {
++	v := new(big.Int).Mul(big.NewInt(tenths), unit)
++	return v.Div(v, big.NewInt(10))
++}
++
++// bigTenthsLessOne returns one byte less than bigTenths.
++func bigTenthsLessOne(tenths int64, unit *big.Int) *big.Int {
++	v := bigTenths(tenths, unit)
++	return v.Sub(v, big.NewInt(1))
++}
++
++func TestBigBytesUnitPromotion(t *testing.T) {
++	cases := []struct {
++		in   *big.Int
++		want string
++	}{
++		{big.NewInt(0), "0 B"},
++		{big.NewInt(1), "1 B"},
++		{big.NewInt(9), "9 B"},
++		{bigTenthsLessOne(9995, BigKByte), "999 kB"},
++		{bigTenths(9995, BigKByte), "1.0 MB"},
++		{bigTenthsLessOne(9995, BigMByte), "999 MB"},
++		{bigTenths(9995, BigMByte), "1.0 GB"},
++		{bigTenthsLessOne(9995, BigGByte), "999 GB"},
++		{bigTenths(9995, BigGByte), "1.0 TB"},
++		{bigTenthsLessOne(9995, BigTByte), "999 TB"},
++		{bigTenths(9995, BigTByte), "1.0 PB"},
++		{bigTenthsLessOne(9995, BigPByte), "999 PB"},
++		{bigTenths(9995, BigPByte), "1.0 EB"},
++		{bigTenthsLessOne(9995, BigEByte), "999 EB"},
++		{bigTenths(9995, BigEByte), "1.0 ZB"},
++		{bigTenthsLessOne(9995, BigZByte), "999 ZB"},
++		{bigTenths(9995, BigZByte), "1.0 YB"},
++		{bigTenthsLessOne(9995, BigYByte), "999 YB"},
++		{bigTenths(9995, BigYByte), "1.0 RB"},
++		{bigTenthsLessOne(9995, BigRByte), "999 RB"},
++		{bigTenths(9995, BigRByte), "1.0 QB"},
++		{big.NewInt(999_999_999), "1.0 GB"},
++		// There is no unit after QB.
++		{bigTenths(9995, BigQByte), "1000 QB"},
++		{bigTenths(10000, BigQByte), "1000 QB"},
++		{bigTenths(50000, BigQByte), "5000 QB"},
++	}
++	for _, c := range cases {
++		before := new(big.Int).Set(c.in)
++		got := BigBytes(c.in)
++		if got != c.want {
++			t.Errorf("BigBytes(%v): got %s, want %s", before, got, c.want)
++		}
++		if c.in.Cmp(before) != 0 {
++			t.Errorf("BigBytes(%v): modified its input to %v", before, c.in)
++		}
++		if err := roundTripError(got, before, ParseBigBytes); err != nil {
++			t.Errorf("BigBytes(%v): %v", before, err)
++		}
++	}
++}
++
++func TestBigIBytesUnitPromotion(t *testing.T) {
++	cases := []struct {
++		in   *big.Int
++		want string
++	}{
++		{big.NewInt(0), "0 B"},
++		{big.NewInt(1), "1 B"},
++		{big.NewInt(9), "9 B"},
++		{bigTenthsLessOne(10235, BigKiByte), "1023 KiB"},
++		{bigTenths(10235, BigKiByte), "1.0 MiB"},
++		{bigTenthsLessOne(10235, BigMiByte), "1023 MiB"},
++		{bigTenths(10235, BigMiByte), "1.0 GiB"},
++		{bigTenthsLessOne(10235, BigGiByte), "1023 GiB"},
++		{bigTenths(10235, BigGiByte), "1.0 TiB"},
++		{bigTenthsLessOne(10235, BigTiByte), "1023 TiB"},
++		{bigTenths(10235, BigTiByte), "1.0 PiB"},
++		{bigTenthsLessOne(10235, BigPiByte), "1023 PiB"},
++		{bigTenths(10235, BigPiByte), "1.0 EiB"},
++		{bigTenthsLessOne(10235, BigEiByte), "1023 EiB"},
++		{bigTenths(10235, BigEiByte), "1.0 ZiB"},
++		{bigTenthsLessOne(10235, BigZiByte), "1023 ZiB"},
++		{bigTenths(10235, BigZiByte), "1.0 YiB"},
++		{bigTenthsLessOne(10235, BigYiByte), "1023 YiB"},
++		{bigTenths(10235, BigYiByte), "1.0 RiB"},
++		{bigTenthsLessOne(10235, BigRiByte), "1023 RiB"},
++		{bigTenths(10235, BigRiByte), "1.0 QiB"},
++		{bigTenthsLessOne(10, BigGiByte), "1.0 GiB"},
++		// There is no unit after QiB.
++		{bigTenths(10235, BigQiByte), "1024 QiB"},
++		{bigTenths(10240, BigQiByte), "1024 QiB"},
++	}
++	for _, c := range cases {
++		before := new(big.Int).Set(c.in)
++		got := BigIBytes(c.in)
++		if got != c.want {
++			t.Errorf("BigIBytes(%v): got %s, want %s", before, got, c.want)
++		}
++		if c.in.Cmp(before) != 0 {
++			t.Errorf("BigIBytes(%v): modified its input to %v", before, c.in)
++		}
++		if err := roundTripError(got, before, ParseBigBytes); err != nil {
++			t.Errorf("BigIBytes(%v): %v", before, err)
++		}
++	}
+ }
+ 
+ func TestVeryBigBytes(t *testing.T) {
+diff --git a/bytes.go b/bytes.go
+index e07fce8..9152b61 100644
+--- a/bytes.go
++++ b/bytes.go
+@@ -75,14 +75,7 @@ func countDigits(n int64) int {
+ 	return digits
+ }
+ 
+-func humanateBytes(s uint64, base float64, minDigits int, sizes []string) string {
+-	if s < 10 {
+-		return fmt.Sprintf("%d B", s)
+-	}
+-	e := math.Floor(logn(float64(s), base))
+-	suffix := sizes[int(e)]
+-	val := float64(s) / math.Pow(base, e)
+-
++func roundBytesValue(val float64, minDigits int) (float64, int) {
+ 	// Determine how many decimal places to keep based on the unrounded
+ 	// value's integer-digit count, then round exactly once to that
+ 	// precision. Rounding first to a fixed precision and then again when
+@@ -100,6 +93,21 @@ func humanateBytes(s uint64, base float64, minDigits int, sizes []string) string
+ 		digits = max(digits-(newIntDigits-intDigits), 0)
+ 	}
+ 
++	return val, digits
++}
++
++func humanateBytes(s uint64, base float64, minDigits int, sizes []string) string {
++	if s < 10 {
++		return fmt.Sprintf("%d B", s)
++	}
++	e := math.Floor(logn(float64(s), base))
++	val, digits := roundBytesValue(float64(s)/math.Pow(base, e), minDigits)
++	if val >= base && int(e)+1 < len(sizes) {
++		e++
++		val, digits = roundBytesValue(1, minDigits)
++	}
++	suffix := sizes[int(e)]
++
+ 	ff := "%%.%df %%s"
+ 	f := fmt.Sprintf(ff, digits)
+ 	return fmt.Sprintf(f, val, suffix)
+diff --git a/bytes_test.go b/bytes_test.go
+index b19b369..f218778 100644
+--- a/bytes_test.go
++++ b/bytes_test.go
+@@ -1,9 +1,61 @@
+ package humanize
+ 
+ import (
++	"fmt"
++	"math/big"
++	"strings"
+ 	"testing"
+ )
+ 
++// check is validate reporting from the calling test's file: same comparison,
++// same message.
++func (tl testList) check(t *testing.T) {
++	t.Helper()
++	for _, test := range tl {
++		if test.got != test.exp {
++			t.Errorf("On %v, expected '%v', but got '%v'",
++				test.name, test.exp, test.got)
++		}
++	}
++}
++
++// roundTripError reads out back with parse and returns an error unless the
++// value read is within one unit of out's last printed digit from in. That unit
++// is rounded up to a whole byte, because the parsers truncate to whole bytes.
++func roundTripError(out string, in *big.Int, parse func(string) (*big.Int, error)) error {
++	num, suffix, ok := strings.Cut(out, " ")
++	if !ok {
++		return fmt.Errorf("output %q has no unit", out)
++	}
++	read, err := parse(out)
++	if err != nil {
++		return fmt.Errorf("output %q does not parse: %v", out, err)
++	}
++	unit, err := parse("1 " + suffix)
++	if err != nil {
++		return fmt.Errorf("unit %q does not parse: %v", suffix, err)
++	}
++	_, frac, _ := strings.Cut(num, ".")
++	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(len(frac))), nil)
++	tolerance := new(big.Int).Add(unit, scale)
++	tolerance.Sub(tolerance, big.NewInt(1))
++	tolerance.Div(tolerance, scale)
++	diff := new(big.Int).Sub(read, in)
++	if diff.Abs(diff).Cmp(tolerance) > 0 {
++		return fmt.Errorf("output %q reads back as %v, more than %v from %v", out, read, tolerance, in)
++	}
++	return nil
++}
++
++// parseBytesAsBig adapts ParseBytes to roundTripError.
++func parseBytesAsBig(s string) (*big.Int, error) {
++	v, err := ParseBytes(s)
++	if err != nil {
++		return nil, err
++	}
++	return new(big.Int).SetUint64(v), nil
++}
++
+ func TestByteParsing(t *testing.T) {
+ 	tests := []struct {
+ 		in  string
+@@ -116,13 +168,13 @@ func TestBytes(t *testing.T) {
+ 
+ 		{"bytes(1024)", Bytes(1024), "1.0 kB"},
+ 		{"bytes(9999)", Bytes(9999), "10 kB"},
+-		{"bytes(1MB - 1)", Bytes(MByte - Byte), "1000 kB"},
++		{"bytes(1MB - 1)", Bytes(MByte - Byte), "1.0 MB"},
+ 
+ 		{"bytes(1MB)", Bytes(1024 * 1024), "1.0 MB"},
+-		{"bytes(1GB - 1K)", Bytes(GByte - KByte), "1000 MB"},
++		{"bytes(1GB - 1K)", Bytes(GByte - KByte), "1.0 GB"},
+ 
+ 		{"bytes(1GB)", Bytes(GByte), "1.0 GB"},
+-		{"bytes(1TB - 1M)", Bytes(TByte - MByte), "1000 GB"},
++		{"bytes(1TB - 1M)", Bytes(TByte - MByte), "1.0 TB"},
+ 		{"bytes(10MB)", Bytes(9999 * 1000), "10 MB"},
+ 
+ 		{"bytes(1TB)", Bytes(TByte), "1.0 TB"},
+@@ -148,13 +200,13 @@ func TestBytes(t *testing.T) {
+ 		{"bytes(1023)", IBytes(1023), "1023 B"},
+ 
+ 		{"bytes(1024)", IBytes(1024), "1.0 KiB"},
+-		{"bytes(1MB - 1)", IBytes(MiByte - IByte), "1024 KiB"},
++		{"bytes(1MB - 1)", IBytes(MiByte - IByte), "1.0 MiB"},
+ 
+ 		{"bytes(1MB)", IBytes(1024 * 1024), "1.0 MiB"},
+-		{"bytes(1GB - 1K)", IBytes(GiByte - KiByte), "1024 MiB"},
++		{"bytes(1GB - 1K)", IBytes(GiByte - KiByte), "1.0 GiB"},
+ 
+ 		{"bytes(1GB)", IBytes(GiByte), "1.0 GiB"},
+-		{"bytes(1TB - 1M)", IBytes(TiByte - MiByte), "1024 GiB"},
++		{"bytes(1TB - 1M)", IBytes(TiByte - MiByte), "1.0 TiB"},
+ 
+ 		{"bytes(1TB)", IBytes(TiByte), "1.0 TiB"},
+ 		{"bytes(1PB - 1T)", IBytes(PiByte - TiByte), "1023 TiB"},
+@@ -172,7 +224,135 @@ func TestBytes(t *testing.T) {
+ 
+ 		{"bytes(123456789, 3)", IBytesN(123456789, 3), "118 MiB"},
+ 		{"bytes(123456789, 6)", IBytesN(123456789, 6), "117.738 MiB"},
+-	}.validate(t)
++	}.check(t)
++}
++
++func TestBytesUnitPromotion(t *testing.T) {
++	cases := []struct {
++		in   uint64
++		want string
++	}{
++		{9, "9 B"},
++		{999, "999 B"},
++		{1000, "1.0 kB"},
++		{999_499, "999 kB"},
++		{999_500, "1.0 MB"},
++		{999_999, "1.0 MB"},
++		{1_000_000, "1.0 MB"},
++		{999_499_999, "999 MB"},
++		{999_500_000, "1.0 GB"},
++		{999_499_999_999, "999 GB"},
++		{999_500_000_000, "1.0 TB"},
++		{999_499_999_999_999, "999 TB"},
++		{999_500_000_000_000, "1.0 PB"},
++		// Above 2^53 float64(s) rounds: this threshold is measured.
++		{999_499_999_999_999_935, "999 PB"},
++		{999_499_999_999_999_936, "1.0 EB"},
++	}
++	for _, c := range cases {
++		got := Bytes(c.in)
++		if got != c.want {
++			t.Errorf("Bytes(%d): got %s, want %s", c.in, got, c.want)
++		}
++		if err := roundTripError(got, new(big.Int).SetUint64(c.in), parseBytesAsBig); err != nil {
++			t.Errorf("Bytes(%d): %v", c.in, err)
++		}
++	}
++}
++
++func TestIBytesUnitPromotion(t *testing.T) {
++	cases := []struct {
++		in   uint64
++		n    int // 0: IBytes, otherwise IBytesN with this n
++		want string
++	}{
++		{9, 0, "9 B"},
++		{1023, 0, "1023 B"},
++		{1024, 0, "1.0 KiB"},
++		{1000 * 1024, 0, "1000 KiB"},
++		{1023 * 1024, 0, "1023 KiB"},
++		{1023.5*KiByte - 1, 0, "1023 KiB"},
++		{1023.5 * KiByte, 0, "1.0 MiB"},
++		{1_048_575, 0, "1.0 MiB"},
++		{1023.5*MiByte - 1, 0, "1023 MiB"},
++		{1023.5 * MiByte, 0, "1.0 GiB"},
++		{1023.5*GiByte - 1, 0, "1023 GiB"},
++		{1023.5 * GiByte, 0, "1.0 TiB"},
++		{1023.5*TiByte - 1, 0, "1023 TiB"},
++		{1023.5 * TiByte, 0, "1.0 PiB"},
++		// Above 2^53 float64(s) rounds: this threshold is measured.
++		{1_152_358_554_653_425_599, 0, "1023 PiB"},
++		{1_152_358_554_653_425_600, 0, "1.0 EiB"},
++		{1_048_575, 3, "1.00 MiB"},
++	}
++	for _, c := range cases {
++		got := IBytes(c.in)
++		if c.n != 0 {
++			got = IBytesN(c.in, c.n)
++		}
++		if got != c.want {
++			t.Errorf("IBytes(%d) n=%d: got %s, want %s", c.in, c.n, got, c.want)
++		}
++		if err := roundTripError(got, new(big.Int).SetUint64(c.in), parseBytesAsBig); err != nil {
++			t.Errorf("IBytes(%d) n=%d: %v", c.in, c.n, err)
++		}
++	}
++}
++
++func TestBytesNUnitPromotion(t *testing.T) {
++	cases := []struct {
++		in   uint64
++		n    int
++		next uint64 // the larger unit the input is promoted to, 0 if it is not
++		want string
++	}{
++		{999_499, 3, 0, "999 kB"},
++		{999_500, 3, MByte, "1.00 MB"},
++		{999_999, 3, MByte, "1.00 MB"},
++		{999_499_999, 3, 0, "999 MB"},
++		{999_500_000, 3, GByte, "1.00 GB"},
++		{999_499_999_999, 3, 0, "999 GB"},
++		{999_500_000_000, 3, TByte, "1.00 TB"},
++		{999_499_999_999_999, 3, 0, "999 TB"},
++		{999_500_000_000_000, 3, PByte, "1.00 PB"},
++		// Above 2^53 float64(s) rounds: this threshold is measured.
++		{999_499_999_999_999_935, 3, 0, "999 PB"},
++		{999_499_999_999_999_936, 3, EByte, "1.00 EB"},
++
++		{999_949, 4, 0, "999.9 kB"},
++		{999_950, 4, MByte, "1.000 MB"},
++		{999_949_999, 4, 0, "999.9 MB"},
++		{999_950_000, 4, GByte, "1.000 GB"},
++		{999_949_999_999, 4, 0, "999.9 GB"},
++		{999_950_000_000, 4, TByte, "1.000 TB"},
++		{999_949_999_999_999, 4, 0, "999.9 TB"},
++		{999_950_000_000_000, 4, PByte, "1.000 PB"},
++		// Above 2^53 float64(s) rounds: this threshold is measured.
++		{999_949_999_999_999_935, 4, 0, "999.9 PB"},
++		{999_949_999_999_999_936, 4, EByte, "1.000 EB"},
++
++		{999_500, 0, MByte, "1 MB"},
++		{999_500, 1, MByte, "1 MB"},
++		{999_500, 2, MByte, "1.0 MB"},
++		{999_500, -1, MByte, "1 MB"},
++		{999_999, 0, MByte, "1 MB"},
++		{999_999, 8, 0, "999.99900 kB"},
++		{9, 3, 0, "9 B"},
++	}
++	for _, c := range cases {
++		got := BytesN(c.in, c.n)
++		if got != c.want {
++			t.Errorf("BytesN(%d, %d): got %s, want %s", c.in, c.n, got, c.want)
++		}
++		if c.next != 0 {
++			if unit := BytesN(c.next, c.n); got != unit {
++				t.Errorf("BytesN(%d, %d): got %s, want %s as BytesN(%d, %d)", c.in, c.n, got, unit, c.next, c.n)
++			}
++		}
++		if err := roundTripError(got, new(big.Int).SetUint64(c.in), parseBytesAsBig); err != nil {
++			t.Errorf("BytesN(%d, %d): %v", c.in, c.n, err)
++		}
++	}
+ }
+ 
+ func BenchmarkParseBytes(b *testing.B) {

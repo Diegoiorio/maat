@@ -1,0 +1,16 @@
+{
+ "gate": "tests-humanize",
+ "esito": "FAIL",
+ "comando": "cd '/home/bench/bench-run/copies/T2-maat-2' && python3 .claude/bench/go-junit.py '<report>' && go vet ./... && : 'bigbytes_test.go' 'bytes_test.go'",
+ "exit": 1,
+ "durata_s": 0.3,
+ "report": "tests-humanize.junit.xml",
+ "riepilogo": "74 tests, 7 failed, 0 errors, 0 skipped",
+ "motivo": "",
+ "file": [
+  "bigbytes_test.go",
+  "bytes_test.go"
+ ],
+ "chiave": "e764b0b9606f22216c3396bcab929562a242da99ffec64db384c4d6c917ea47b",
+ "eseguito_il": "2026-11-06T10:31:24Z"
+}

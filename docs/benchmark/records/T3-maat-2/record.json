@@ -1,0 +1,47 @@
+{
+  "run_id": "T3-maat-2",
+  "task": "T3",
+  "side": "maat",
+  "order": 6,
+  "spec_sha256": "960d23d26f10b1c28a057f3e6033eaf6c77b05635d9bddc5e4ba650031fafcd7",
+  "spec_sha256_in_copy": "960d23d26f10b1c28a057f3e6033eaf6c77b05635d9bddc5e4ba650031fafcd7",
+  "upstream_repo": "https://github.com/minimistjs/minimist.git",
+  "upstream_commit": "ecfdaea23e7931c0d529c52b743c711c3278a8ce",
+  "base_snapshot_commit": "90c530491343c45499e8a0fd538a83134639d212",
+  "maat_tag": "v1.6.0",
+  "claude_code_version": "2.1.318",
+  "model": "claude-opus-5-5",
+  "model_check": "model: ok claude-opus-5-5 (1 sessions)",
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64",
+  "started_utc": "2026-11-06T10:46:07Z",
+  "ended_utc": "2026-11-06T10:51:20Z",
+  "wall_clock_s": 313,
+  "exit_code": 1,
+  "timed_out": false,
+  "outcome": "STOP",
+  "outcome_detail": "STOP — PHASE RESULT plan: STOP — blocked on: lint2 VIOLAZIONE on the 6 rows naming lib paths (P1-P4, T3, T5): the cycle may write only the spec, so it cannot create the lib folder. Decision needed: create empty lib folder and re-run (recommended), or change the in_repo rule of plan-check.sh for files declared new",
+  "quota": false,
+  "contaminated": true,
+  "human_interventions": [],
+  "cost_usd_api_equivalent": 1.61,
+  "cost_breakdown": {
+    "01-plan": {
+      "cost_usd": 1.61,
+      "minutes": 5.2
+    }
+  },
+  "final_diff": "records/T3-maat-2/final.diff",
+  "final_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "report": "records/T3-maat-2/spec-with-plan-and-review.md + records/T3-maat-2/outcome.txt",
+  "hidden_tests": {
+    "passed": 6,
+    "total": 21
+  },
+  "blind_review_code": null,
+  "blind_review_entries": null,
+  "confirmed_defects": null,
+  "undisclosed_defects": null,
+  "notes": [
+    "2026-11-06 audit: the 2 hits are the text «/mnt/c/…» inside the Maat plugin's own file agents/acceptance-test-writer.md (line 53, an example of a WSL path), which the plan phase read from the benchmark configuration (tool_use Read of $CLAUDE_CONFIG_DIR/plugins/cache/maat/maat/1.6.0/agents/acceptance-test-writer.md, run-dir/log/01-plan.jsonl line 137). No access outside the copy; recorded as contaminated anyway, as the frozen rule says."
+  ]
+}

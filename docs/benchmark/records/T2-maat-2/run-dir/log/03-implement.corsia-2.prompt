@@ -1,0 +1,4 @@
+/maat:full-implementation-cycle --worker=implement bytes-rounding-unit
+LOTTI (driver): lotto 1/1: B1,B2 (~58k token). One plan-implementer for each batch, in this order: the batch is the unit of work of the agent (estimate of its context below the cap of 150k).
+
+CORSIA 2/2 (driver, run-phase.sh): ONLY the blocks B2 of the plan are yours, in their dopo: order; your files are those of their scrive: (bytes_test.go,bigbytes_test.go). The other lane implements NOW, in parallel, the blocks B1: its files are do-not-touch, and the guard denies Edit/Write outside yours (FIC_WRITE_SCOPE). base.txt is written only by lane 1; the preflight lists go into do-not-touch.2.txt and mixed.2.txt. The suites of the level are run by the driver on the whole tree once the lanes are done: keep only the targeted inner loop. In the JSON, in file, ONLY the files you wrote.

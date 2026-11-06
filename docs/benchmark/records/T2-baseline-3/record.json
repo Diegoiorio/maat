@@ -1,0 +1,48 @@
+{
+  "run_id": "T2-baseline-3",
+  "task": "T2",
+  "side": "baseline",
+  "order": 2,
+  "spec_sha256": "4591679fe95692413c00832423638ddd8ebca422f34784cb0d8fd81ac222684b",
+  "spec_sha256_in_copy": "4591679fe95692413c00832423638ddd8ebca422f34784cb0d8fd81ac222684b",
+  "upstream_repo": "https://github.com/dustin/go-humanize.git",
+  "upstream_commit": "a1b4e66b9a6d890e9e15e7091cf16c8032367d6e",
+  "base_snapshot_commit": "37bea5e96b1a0bfe7a8b6e1e26b39e73b9e17469",
+  "maat_tag": "v1.6.0",
+  "claude_code_version": "2.1.318",
+  "model": "claude-opus-5-5",
+  "model_check": "model: ok claude-opus-5-5 (1 sessions)",
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64",
+  "started_utc": "2026-11-06T10:05:31Z",
+  "ended_utc": "2026-11-06T10:13:16Z",
+  "wall_clock_s": 465,
+  "exit_code": 0,
+  "timed_out": false,
+  "outcome": "COMPLETED",
+  "outcome_detail": "",
+  "quota": false,
+  "contaminated": false,
+  "human_interventions": [],
+  "cost_usd_api_equivalent": 1.0665,
+  "cost_breakdown": {
+    "claude-opus-5-5": {
+      "cache_creation_input_tokens": 57127,
+      "cache_read_input_tokens": 281187,
+      "calls": 7,
+      "input_tokens": 14,
+      "output_tokens": 74
+    }
+  },
+  "final_diff": "records/T2-baseline-3/final.diff",
+  "final_diff_sha256": "5b1a5f32692a6ecf186d9bbc058a4677774f5b0ab9f1a5bbef56d286794d6e95",
+  "report": "records/T2-baseline-3/report.md",
+  "hidden_tests": {
+    "passed": 21,
+    "total": 21
+  },
+  "blind_review_code": null,
+  "blind_review_entries": null,
+  "confirmed_defects": null,
+  "undisclosed_defects": null,
+  "notes": []
+}

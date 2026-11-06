@@ -1,0 +1,29 @@
+{
+ "fase": "test-red",
+ "esito": "OK",
+ "motivo": "7 tests T1-T7 written in bytes_test.go and bigbytes_test.go, no stubs; agent reports them red on their assertions",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  "bytes_test.go",
+  "bigbytes_test.go"
+ ],
+ "gate_interni": [
+  {
+   "comando": "python3 .claude/bench/go-junit.py report.xml && go vet ./...",
+   "esito": "FAIL",
+   "dettaglio": "expected red, reported by the agent: go-junit 74 cases, 7 failed (T1-T7), go test exit 1; go vet not reached by this command"
+  },
+  {
+   "comando": "go vet .",
+   "esito": "PASS",
+   "dettaglio": "reported by the agent: exit 0, root package only, english package not vetted"
+  },
+  {
+   "comando": "gofmt -l .",
+   "esito": "PASS",
+   "dettaglio": "reported by the agent: no output"
+  }
+ ],
+ "finding": []
+}

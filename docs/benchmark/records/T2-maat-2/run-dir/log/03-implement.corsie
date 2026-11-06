@@ -1,0 +1,5 @@
+blocks-independent: esito=parallelo corsie=2
+corsia 1: B1
+corsia 2: B2
+scope 1: bytes.go,bigbytes.go
+scope 2: bytes_test.go,bigbytes_test.go

@@ -1,0 +1,48 @@
+{
+  "run_id": "T3-baseline-2",
+  "task": "T3",
+  "side": "baseline",
+  "order": 4,
+  "spec_sha256": "960d23d26f10b1c28a057f3e6033eaf6c77b05635d9bddc5e4ba650031fafcd7",
+  "spec_sha256_in_copy": "960d23d26f10b1c28a057f3e6033eaf6c77b05635d9bddc5e4ba650031fafcd7",
+  "upstream_repo": "https://github.com/minimistjs/minimist.git",
+  "upstream_commit": "ecfdaea23e7931c0d529c52b743c711c3278a8ce",
+  "base_snapshot_commit": "90c530491343c45499e8a0fd538a83134639d212",
+  "maat_tag": "v1.6.0",
+  "claude_code_version": "2.1.318",
+  "model": "claude-opus-5-5",
+  "model_check": "model: ok claude-opus-5-5 (1 sessions)",
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64",
+  "started_utc": "2026-11-06T10:38:02Z",
+  "ended_utc": "2026-11-06T10:43:00Z",
+  "wall_clock_s": 298,
+  "exit_code": 0,
+  "timed_out": false,
+  "outcome": "COMPLETED",
+  "outcome_detail": "",
+  "quota": false,
+  "contaminated": false,
+  "human_interventions": [],
+  "cost_usd_api_equivalent": 0.8466,
+  "cost_breakdown": {
+    "claude-opus-5-5": {
+      "cache_creation_input_tokens": 44591,
+      "cache_read_input_tokens": 182179,
+      "calls": 6,
+      "input_tokens": 12,
+      "output_tokens": 48
+    }
+  },
+  "final_diff": "records/T3-baseline-2/final.diff",
+  "final_diff_sha256": "d259c64b26ba3ab265f31af4638369877de972e982c8cbbc8039092ef22744ca",
+  "report": "records/T3-baseline-2/report.md",
+  "hidden_tests": {
+    "passed": 21,
+    "total": 21
+  },
+  "blind_review_code": null,
+  "blind_review_entries": null,
+  "confirmed_defects": null,
+  "undisclosed_defects": null,
+  "notes": []
+}

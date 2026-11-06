@@ -12,13 +12,13 @@
 <line x1="74" y1="328" x2="760" y2="328" stroke="#8a8984" stroke-width="1"/>
 <text x="66" y="332" font-size="11" fill="#52514e" text-anchor="end">0</text>
 <line x1="74" y1="273" x2="760" y2="273" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="277" font-size="11" fill="#52514e" text-anchor="end">0.25</text>
+<text x="66" y="277" font-size="11" fill="#52514e" text-anchor="end">2.5</text>
 <line x1="74" y1="218" x2="760" y2="218" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="222" font-size="11" fill="#52514e" text-anchor="end">0.5</text>
+<text x="66" y="222" font-size="11" fill="#52514e" text-anchor="end">5</text>
 <line x1="74" y1="163" x2="760" y2="163" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="167" font-size="11" fill="#52514e" text-anchor="end">0.75</text>
+<text x="66" y="167" font-size="11" fill="#52514e" text-anchor="end">7.5</text>
 <line x1="74" y1="108" x2="760" y2="108" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="112" font-size="11" fill="#52514e" text-anchor="end">1</text>
+<text x="66" y="112" font-size="11" fill="#52514e" text-anchor="end">10</text>
 <text x="16" y="218" font-size="11" fill="#52514e" text-anchor="middle" transform="rotate(-90 16 218)">USD</text>
 <text x="115.6" y="343" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="115.6" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
@@ -30,31 +30,32 @@
 <text x="173.6" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 173.6 218)">not yet available</text>
 <text x="142.6" y="382" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T1</text>
 <text x="252.8" y="343" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
-<text x="252.8" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="233.8" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="256.8" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 256.8 218)">not yet available</text>
+<text x="252.8" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M233.8 328V133.8Q233.8 129.8 237.8 129.8H267.8Q271.8 129.8 271.8 133.8V328z" fill="#2a78d6"/>
+<text x="252.8" y="124.8" font-size="10" fill="#0b0b0b" text-anchor="middle">9.01</text>
 <text x="306.8" y="343" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="306.8" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="287.8" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="310.8" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 310.8 218)">not yet available</text>
+<text x="306.8" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M287.8 328V308.5Q287.8 304.5 291.8 304.5H321.8Q325.8 304.5 325.8 308.5V328z" fill="url(#hatch)"/>
+<text x="306.8" y="299.5" font-size="10" fill="#0b0b0b" text-anchor="middle">1.07</text>
 <text x="279.8" y="382" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T2</text>
 <text x="390" y="343" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
-<text x="390" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="371" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="394" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 394 218)">not yet available</text>
+<text x="390" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M371 328V296.6Q371 292.6 375 292.6H405Q409 292.6 409 296.6V328z" fill="#2a78d6"/>
+<text x="390" y="287.6" font-size="10" fill="#0b0b0b" text-anchor="middle">1.61</text>
 <text x="444" y="343" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="444" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="425" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="448" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 448 218)">not yet available</text>
+<text x="444" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M425 328V313.4Q425 309.4 429 309.4H459Q463 309.4 463 313.4V328z" fill="url(#hatch)"/>
+<text x="444" y="304.4" font-size="10" fill="#0b0b0b" text-anchor="middle">0.85</text>
 <text x="417" y="382" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T3</text>
 <text x="527.2" y="343" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="527.2" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
 <rect x="508.2" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
 <text x="531.2" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 531.2 218)">not yet available</text>
 <text x="581.2" y="343" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="581.2" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="562.2" y="108" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="585.2" y="218" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 585.2 218)">not yet available</text>
+<text x="581.2" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=2 of 3</text>
+<path d="M562.2 328V315.7Q562.2 311.7 566.2 311.7H596.2Q600.2 311.7 600.2 315.7V328z" fill="url(#hatch)"/>
+<path d="M581.2 311.9V311.6M575.2 311.9H587.2M575.2 311.6H587.2" stroke="#0b0b0b" stroke-width="1.5" fill="none"/>
+<text x="581.2" y="306.6" font-size="10" fill="#0b0b0b" text-anchor="middle">0.74</text>
 <text x="554.2" y="382" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T4</text>
 <text x="664.4" y="343" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="664.4" y="356" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
@@ -69,13 +70,13 @@
 <line x1="74" y1="634" x2="760" y2="634" stroke="#8a8984" stroke-width="1"/>
 <text x="66" y="638" font-size="11" fill="#52514e" text-anchor="end">0</text>
 <line x1="74" y1="579" x2="760" y2="579" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="583" font-size="11" fill="#52514e" text-anchor="end">0.25</text>
+<text x="66" y="583" font-size="11" fill="#52514e" text-anchor="end">6.25</text>
 <line x1="74" y1="524" x2="760" y2="524" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="528" font-size="11" fill="#52514e" text-anchor="end">0.5</text>
+<text x="66" y="528" font-size="11" fill="#52514e" text-anchor="end">12.5</text>
 <line x1="74" y1="469" x2="760" y2="469" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="473" font-size="11" fill="#52514e" text-anchor="end">0.75</text>
+<text x="66" y="473" font-size="11" fill="#52514e" text-anchor="end">18.75</text>
 <line x1="74" y1="414" x2="760" y2="414" stroke="#e6e5e0" stroke-width="1"/>
-<text x="66" y="418" font-size="11" fill="#52514e" text-anchor="end">1</text>
+<text x="66" y="418" font-size="11" fill="#52514e" text-anchor="end">25</text>
 <text x="16" y="524" font-size="11" fill="#52514e" text-anchor="middle" transform="rotate(-90 16 524)">minutes</text>
 <text x="115.6" y="649" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="115.6" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
@@ -87,31 +88,32 @@
 <text x="173.6" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 173.6 524)">not yet available</text>
 <text x="142.6" y="688" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T1</text>
 <text x="252.8" y="649" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
-<text x="252.8" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="233.8" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="256.8" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 256.8 524)">not yet available</text>
+<text x="252.8" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M233.8 634V426.4Q233.8 422.4 237.8 422.4H267.8Q271.8 422.4 271.8 426.4V634z" fill="#2a78d6"/>
+<text x="252.8" y="417.4" font-size="10" fill="#0b0b0b" text-anchor="middle">24</text>
 <text x="306.8" y="649" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="306.8" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="287.8" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="310.8" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 310.8 524)">not yet available</text>
+<text x="306.8" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M287.8 634V569.8Q287.8 565.8 291.8 565.8H321.8Q325.8 565.8 325.8 569.8V634z" fill="url(#hatch)"/>
+<text x="306.8" y="560.8" font-size="10" fill="#0b0b0b" text-anchor="middle">8</text>
 <text x="279.8" y="688" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T2</text>
 <text x="390" y="649" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
-<text x="390" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="371" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="394" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 394 524)">not yet available</text>
+<text x="390" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M371 634V592.1Q371 588.1 375 588.1H405Q409 588.1 409 592.1V634z" fill="#2a78d6"/>
+<text x="390" y="583.1" font-size="10" fill="#0b0b0b" text-anchor="middle">5</text>
 <text x="444" y="649" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="444" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="425" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="448" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 448 524)">not yet available</text>
+<text x="444" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=1 of 3</text>
+<path d="M425 634V594.3Q425 590.3 429 590.3H459Q463 590.3 463 594.3V634z" fill="url(#hatch)"/>
+<text x="444" y="585.3" font-size="10" fill="#0b0b0b" text-anchor="middle">5</text>
 <text x="417" y="688" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T3</text>
 <text x="527.2" y="649" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="527.2" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
 <rect x="508.2" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
 <text x="531.2" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 531.2 524)">not yet available</text>
 <text x="581.2" y="649" font-size="11" fill="#52514e" text-anchor="middle">Base</text>
-<text x="581.2" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>
-<rect x="562.2" y="414" width="38" height="220" rx="4" fill="none" stroke="#d9d8d3" stroke-dasharray="3 3"/>
-<text x="585.2" y="524" font-size="10" fill="#8a8984" text-anchor="middle" transform="rotate(-90 585.2 524)">not yet available</text>
+<text x="581.2" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=2 of 3</text>
+<path d="M562.2 634V611Q562.2 607 566.2 607H596.2Q600.2 607 600.2 611V634z" fill="url(#hatch)"/>
+<path d="M581.2 608V606M575.2 608H587.2M575.2 606H587.2" stroke="#0b0b0b" stroke-width="1.5" fill="none"/>
+<text x="581.2" y="601" font-size="10" fill="#0b0b0b" text-anchor="middle">3</text>
 <text x="554.2" y="688" font-size="13" fill="#0b0b0b" text-anchor="middle" font-weight="600">T4</text>
 <text x="664.4" y="649" font-size="11" fill="#52514e" text-anchor="middle">Maat</text>
 <text x="664.4" y="662" font-size="10" fill="#8a8984" text-anchor="middle">n=0 of 3</text>

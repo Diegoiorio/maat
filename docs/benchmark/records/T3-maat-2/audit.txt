@@ -1,0 +1,3 @@
+audit: CONTAMINATED (2 hits)
+../records/T3-maat-2/run-dir/log/01-plan.jsonl:137: /mnt/c/
+../records/T3-maat-2/run-dir/log/01-plan.jsonl:137: /mnt/c/

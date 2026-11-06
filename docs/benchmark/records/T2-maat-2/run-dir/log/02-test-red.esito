@@ -1,0 +1,2 @@
+PHASE RESULT test-red: OK — 7 tests T1-T7 written in bytes_test.go and bigbytes_test.go, no stubs; agent reports them red on their assertions
+state=5407d0c3c16b
