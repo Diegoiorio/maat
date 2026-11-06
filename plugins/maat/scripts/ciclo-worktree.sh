@@ -164,12 +164,12 @@ figlie_of() { # $1 spec file → the children's names (without spec- and .md), o
     grep -oE 'spec-[A-Za-z0-9._-]*' | sed -e 's/\.md$//' -e 's/\.$//' -e 's/^spec-//' | awk '!seen[$0]++'
 }
 FIGLIE=()   # filled by each subcommand: from the main tree's mother (crea) or the worktree's (the others)
-carica_figlie() { # $1 mother spec file → FIGLIE; a name that is not a valid spec name stops (never a path outside $AIW)
+carica_figlie() { # $1 mother spec file → FIGLIE: the names driver.py accepts ([A-Za-z0-9._-], never a /: always a
+  # file spec-<name>.md inside $AIW); the mother itself and an empty name (a bare spec-) are skipped
   local c
   FIGLIE=()
   while IFS= read -r c; do
     [ -n "$c" ] && [ "$c" != "$NAME" ] || continue
-    printf '%s' "$c" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$' || die "$(msg worktree-cycle.name_invalid name="$c")"
     FIGLIE+=("$c")
   done < <(figlie_of "$1")
 }
@@ -253,14 +253,6 @@ scollega_e_verifica() { # $1 worktree: 0 = no link left; 1 = something left, or 
 # ============================================================================================ crea
 if [ "$CMD" = crea ]; then
   . "$MAAT_SCRIPTS/python.sh" || die "$(msg worktree-cycle.no_python)"
-  # the chain's rings (1.6.1): from the worktree's mother on resume (it wins), otherwise from the given one; each ring
-  # must be next to the mother (in the worktree on resume, or where the mother is): none missing, BEFORE creating anything
-  if [ -f "$WT/$SPEC_REL" ]; then carica_figlie "$WT/$SPEC_REL"; else carica_figlie "$SPEC"; fi
-  SDIR=$(dirname "$SPEC")
-  for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
-    [ -f "$WT/$AIW/spec-$c.md" ] || [ -f "$SDIR/spec-$c.md" ] ||
-      stop "$(msg worktree-cycle.child_missing c="spec-$c.md" d="$SDIR" m="spec-$NAME.md")"
-  done
   RESUME=0
   if [ -e "$WT" ] || [ -L "$WT" ]; then
     why=$(ours 2>&1) || stop "$(msg worktree-cycle.not_ours wt="$WT" name="$NAME" why="$why")"
@@ -269,6 +261,14 @@ if [ "$CMD" = crea ]; then
   elif git -C "$MAIN" show-ref --verify -q "refs/heads/$BRANCH"; then
     stop "$(msg worktree-cycle.branch_exists b="$BRANCH" wt="$WT" b="$BRANCH")"
   fi
+  # the chain's rings (1.6.1): from the worktree's mother on resume (it wins), otherwise from the given one; each ring
+  # must be next to the mother (in the worktree on resume, or where the mother is): none missing, BEFORE creating anything
+  if [ $RESUME -eq 1 ] && [ -f "$WT/$SPEC_REL" ]; then carica_figlie "$WT/$SPEC_REL"; else carica_figlie "$SPEC"; fi
+  SDIR=$(dirname "$SPEC")
+  for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
+    [ -f "$WT/$AIW/spec-$c.md" ] || [ -f "$SDIR/spec-$c.md" ] ||
+      stop "$(msg worktree-cycle.child_missing c="spec-$c.md" d="$SDIR" m="spec-$NAME.md")"
+  done
   if [ $RESUME -eq 0 ]; then
     BASE=$(git -C "$MAIN" rev-parse --verify -q "${BASE_REF:-HEAD}^{commit}") || die "$(msg worktree-cycle.base_invalid ref="${BASE_REF:-HEAD}")"
     # dependencies: do the main tree's ones hold for the base? (before creating anything)
@@ -323,6 +323,8 @@ if [ "$CMD" = crea ]; then
     crel=$AIW/spec-$c.md rrel=$AIW/spec-$c.run
     if [ -f "$WT/$crel" ]; then
       say "$(msg worktree-cycle.spec_kept rel="$crel")"
+      k=$(mk_get "figlia.$c")
+      [ -z "$k" ] || [ "$(sha "$MAINC/$crel")" = "$k" ] || say "$(msg worktree-cycle.spec_changed)"
     else
       cp "$SDIR/spec-$c.md" "$WT/$crel" || die "$(msg worktree-cycle.spec_copy_failed)"
       say "$(msg worktree-cycle.spec_copied rel="$crel")"
@@ -450,7 +452,12 @@ if [ "$CMD" = riporta ]; then
   # every check first, file by file: nothing is copied if one of them changed in the main tree after the copy
   for ((i = 0; i < ${#UNITS[@]}; i += 4)); do
     s=${UNITS[i]} r=${UNITS[i+1]} ks=${UNITS[i+2]} kr=${UNITS[i+3]}
-    [ -f "$WT/$s" ] || stop "$(msg worktree-cycle.rp_no_spec wt="$WT" rel="$s")"
+    # a ring not in the worktree, or without its fingerprints (a worktree made before 1.6.1): crea again resumes,
+    # copies the ring and records them; --forza brings back what is there
+    if [ $i -gt 0 ] && { [ ! -f "$WT/$s" ] || [ -z "$(mk_get "$ks")" ]; } && [ $FORCE -eq 0 ]; then
+      stop "$(msg worktree-cycle.rp_child_resume rel="$s" spec="$SPEC_REL")"
+    fi
+    [ -f "$WT/$s" ] || { [ $i -gt 0 ] && continue; stop "$(msg worktree-cycle.rp_no_spec wt="$WT" rel="$s")"; }
     cur=$(sha "$MAINC/$s") exp=$(mk_get "$ks") new=$(sha "$WT/$s")
     if [ "$cur" != "$exp" ] && [ "$cur" != "$new" ] && [ $FORCE -eq 0 ]; then
       stop "$(msg worktree-cycle.rp_spec_changed rel="$s")"
@@ -484,6 +491,7 @@ if [ "$CMD" = riporta ]; then
   mkdir -p "$MAINC/$AIW" || die "$(msg worktree-cycle.spec_copy_failed)"
   for ((i = 0; i < ${#UNITS[@]}; i += 4)); do
     s=${UNITS[i]} r=${UNITS[i+1]} ks=${UNITS[i+2]} kr=${UNITS[i+3]}
+    [ -f "$WT/$s" ] || continue   # a ring missing in the worktree, with --forza: nothing of it to bring back
     cp "$WT/$s" "$MAINC/$s" || die "$(msg worktree-cycle.spec_copy_failed)"
     say "$(msg worktree-cycle.rp_spec_done m="$MAINC" rel="$s")"
     [ ! -d "$WT/$r" ] || sync_run "$r"

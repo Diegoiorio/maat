@@ -469,6 +469,13 @@ caso_catena() { # $1 ciclo-worktree script, $2 repo folder → 0 if the rings tr
   [ $rc -eq 0 ] || { echo "riporta: rc $rc"; printf '%s\n' "$out"; return 1; }
   cmp -s "$W/$AIWR/spec-f1.md" "$MC/$AIWR/spec-f1.md" && cmp -s "$W/$AIWR/spec-f2.md" "$MC/$AIWR/spec-f2.md" &&
     [ -f "$MC/$AIWR/spec-f1.run/log/02-impl.exit" ] || { echo "riporta: anelli non tornati"; return 1; }
+  # a worktree made before 1.6.1 (marker without the rings' fingerprints): STOP with the remedy, crea again fixes it
+  grep -v '^figlia' "$W/$AIWR/spec-madre.worktree" > "$W/$AIWR/mk.tmp" && mv "$W/$AIWR/mk.tmp" "$W/$AIWR/spec-madre.worktree"
+  echo '## Piano f2 bis' >> "$W/$AIWR/spec-f2.md"
+  out=$( (cd "$MC" && bash "$S" riporta madre) 2>&1); rc=$?
+  [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "prima della 1.6.1" || { echo "marcatore vecchio: rc $rc"; printf '%s\n' "$out"; return 1; }
+  out=$( (cd "$MC" && bash "$S" crea "$AIWR/spec-madre.md") 2>&1) && out=$( (cd "$MC" && bash "$S" riporta madre) 2>&1) &&
+    grep -q 'Piano f2 bis' "$MC/$AIWR/spec-f2.md" || { echo "marcatore vecchio, dopo crea: riporta fallito"; printf '%s\n' "$out"; return 1; }
   # a ring changed in the main tree after the copy: STOP, and nothing copied (not even the mother)
   echo 'nota a mano' >> "$MC/$AIWR/spec-f2.md"; echo '## Review madre' >> "$W/$AIWR/spec-madre.md"
   out=$( (cd "$MC" && bash "$S" riporta madre) 2>&1); rc=$?

@@ -903,9 +903,11 @@ if [ ${#PAR[@]} -gt 0 ]; then
   CPD=$(mktemp -d "$HOME/fic-cp.XXXXXX") || blocked "$(msg counterproof.private_mkdir home="$HOME")"
   excl_of "$CM"
   # The nested node_modules OUTSIDE the copy's exclusions only (1.6.1): one under .output/.nuxt/coverage… (a build
-  # left in the mirror) has no parent in the copy and the second sync would fail. Same list as the copy (EX minus
-  # node_modules itself, which is what we look for), read with rsync semantics by fic__escludi: the two cannot drift.
-  ex_nm=(); for x in "${EX[@]}"; do [ "$x" = --exclude=node_modules ] || ex_nm+=("${x#--exclude=}"); done
+  # left in the mirror) has no parent in the copy and the second sync would fail. Same list as the copy, read with
+  # rsync semantics by fic__escludi, so the two cannot drift — minus every entry that IS a node_modules (the core's
+  # `node_modules` and the module's collega_nel_worktree ones such as /apps/*/node_modules): those are what this step
+  # copies back. Limit: in find a * also matches /, so a wildcard entry may prune one level deeper than rsync would.
+  ex_nm=(); for x in "${EX[@]}"; do x=${x#--exclude=}; x=${x%/}; [ "${x##*/}" = node_modules ] || ex_nm+=("$x"); done
   fic__escludi ${ex_nm[@]+"${ex_nm[@]}"}
   NESTED=$(cd "$DSTC" && find . -path ./node_modules -prune -o \( "${FIC__FX[@]}" \) -prune -o -name node_modules -type d -prune -print | sed 's|^\./||')
   for i in $(seq 1 "$N"); do

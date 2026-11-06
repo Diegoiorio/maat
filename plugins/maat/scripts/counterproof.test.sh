@@ -58,6 +58,7 @@ if flock -n "$FAKE_LOCKFILE" true; then echo "lock=libero" >> "$FAKE_LOG.all"; e
 [ -z "${FAKE_LOCKDIR:-}" ] || { if [ -d "$FAKE_LOCKDIR" ]; then echo lockdir=presente; else echo lockdir=assente; fi; } >> "$FAKE_LOG.all"
 echo "seen=$(cat src.ts other.ts uncovered.ts 2>/dev/null | tr '\n' ' ')" >> "$FAKE_LOG.all"
 if [ -e .output ]; then echo output=presente; else echo output=assente; fi >> "$FAKE_LOG.all"   # 1.6.1: a build in the copy?
+if [ -f node_modules/annidata/x ]; then echo annidata=presente; else echo annidata=assente; fi >> "$FAKE_LOG.all"   # nested deps
 # FAKE_SECOND: only once, a second counterproof.sh (lock wait cap 1 s) tries to take the mirror
 if [ -n "${FAKE_SECOND:-}" ] && mkdir "$FAKE_SECOND.once" 2>/dev/null; then
   FIC_LOCK_WAIT=1 bash "$FAKE_SECOND_SCRIPT" "$FAKE_SECOND" > "$FAKE_SECOND.out" 2>&1; echo "second=$?" >> "$FAKE_LOG.all"
@@ -206,10 +207,26 @@ check "  hash del working tree e del mirror invariati" '[ "$(wt_hash)" = "$WT0" 
 #   the nested node_modules under an excluded folder is not copied (before: the second sync wrote into a .output the
 #   copy does not have -> BLOCKED «non copiato»). Counterproof: the find without the exclusions -> BLOCKED.
 mkdir -p "$M/apps/admin/.output/server/node_modules/dep" && echo 'module.exports = 1' > "$M/apps/admin/.output/server/node_modules/dep/index.js"
+mkdir -p "$M/apps/admin/node_modules/annidata" && echo a > "$M/apps/admin/node_modules/annidata/x"   # a legit nested dependency
 L_OUT=$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")
 FIC_CP_PARALLEL=2 cpr "$L_OUT"
 check_par "build nel mirror (.output/server/node_modules): gradino 2 non BLOCKED, stessi esiti" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*luogo=copie(2)" && ! grep -q "BLOCKED" "$T/out"'
 check_par "  la copia privata non contiene .output" '[ "$(grep -c "^output=assente" "$FAKE_LOG.all")" = 2 ] && ! grep -q "^output=presente" "$FAKE_LOG.all"'
+check_par "  e contiene la node_modules annidata dichiarata in collega_nel_worktree (apps/*/node_modules)" '[ "$(grep -c "^annidata=presente" "$FAKE_LOG.all")" = 2 ]'
+# counterproof (review of 1.6.1): the collega_nel_worktree entries among the pruned ones -> the nested deps are lost
+CPNM="$(dirname "$CP")/.cp-nested-nm.$$.sh"
+python3 - "$CP" "$CPNM" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+old = '[ "${x##*/}" = node_modules ] || ex_nm+=("$x")'
+assert s.count(old) == 1, "the filter of ex_nm changed: update the counterproof"
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(old, '[ "$x" = node_modules ] || ex_nm+=("$x")'))
+PY
+if [ -f "$CPNM" ]; then
+  FIC_CP_PARALLEL=2 CPX="$CPNM" cpr "$L_OUT"
+  check_par "  controprova: con le voci di collega_nel_worktree fra le potate la node_modules annidata manca" '[ "$(grep -c "^annidata=assente" "$FAKE_LOG.all")" = 2 ]'
+  rm -f "$CPNM"
+else echo "FAIL [controprova annidata: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 CPOLD="$(dirname "$CP")/.cp-nested-old.$$.sh"
 python3 - "$CP" "$CPOLD" <<'PY'
 import sys
@@ -223,7 +240,7 @@ if [ -f "$CPOLD" ]; then
   check_par "  controprova: il find senza le esclusioni -> BLOCKED «non copiato»" '[ "$(rc)" != 0 ] && grep -q "esito=BLOCKED" "$T/out"'
   rm -f "$CPOLD"
 else echo "FAIL [controprova .output: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
-rm -rf "$M/apps/admin/.output"
+rm -rf "$M/apps/admin/.output" "$M/apps/admin/node_modules/annidata"
 
 # 1c. goals-ux-12: test named "describe > it", as vitest prints it in FAILs. Counterproof: without the
 # " > " form in pattern() -t does not match (all skipped -> rosso_raccolta); without vitest_ids the red is not its own.
