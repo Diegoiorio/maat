@@ -57,6 +57,8 @@ if flock -n "$FAKE_LOCKFILE" true; then echo "lock=libero" >> "$FAKE_LOG.all"; e
 # FAKE_LOCKDIR: is the fallback lock (mkdir, without flock) present during the run?
 [ -z "${FAKE_LOCKDIR:-}" ] || { if [ -d "$FAKE_LOCKDIR" ]; then echo lockdir=presente; else echo lockdir=assente; fi; } >> "$FAKE_LOG.all"
 echo "seen=$(cat src.ts other.ts uncovered.ts 2>/dev/null | tr '\n' ' ')" >> "$FAKE_LOG.all"
+if [ -e .output ]; then echo output=presente; else echo output=assente; fi >> "$FAKE_LOG.all"   # 1.6.1: a build in the copy?
+if [ -f node_modules/annidata/x ]; then echo annidata=presente; else echo annidata=assente; fi >> "$FAKE_LOG.all"   # nested deps
 # FAKE_SECOND: only once, a second counterproof.sh (lock wait cap 1 s) tries to take the mirror
 if [ -n "${FAKE_SECOND:-}" ] && mkdir "$FAKE_SECOND.once" 2>/dev/null; then
   FIC_LOCK_WAIT=1 bash "$FAKE_SECOND_SCRIPT" "$FAKE_SECOND" > "$FAKE_SECOND.out" 2>&1; echo "second=$?" >> "$FAKE_LOG.all"
@@ -201,6 +203,45 @@ check_par "  fs.allow = radice della copia + node_modules e packages del mirror"
 check "  lock del mirror tenuto durante i run nelle copie" '[ "$(grep -c "^lock=occupato" "$FAKE_LOG.all")" = 4 ] && ! grep -q "^lock=libero" "$FAKE_LOG.all"'
 check "  copie private cancellate alla fine" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1'
 check "  hash del working tree e del mirror invariati" '[ "$(wt_hash)" = "$WT0" ] && [ "$(mir_hash)" = "$MIR0" ]'
+# 1b-bis (1.6.1). A build left in the mirror (apps/admin/.output/server/node_modules, from the driver's build gate):
+#   the nested node_modules under an excluded folder is not copied (before: the second sync wrote into a .output the
+#   copy does not have -> BLOCKED «non copiato»). Counterproof: the find without the exclusions -> BLOCKED.
+mkdir -p "$M/apps/admin/.output/server/node_modules/dep" && echo 'module.exports = 1' > "$M/apps/admin/.output/server/node_modules/dep/index.js"
+mkdir -p "$M/apps/admin/node_modules/annidata" && echo a > "$M/apps/admin/node_modules/annidata/x"   # a legit nested dependency
+L_OUT=$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")
+FIC_CP_PARALLEL=2 cpr "$L_OUT"
+check_par "build nel mirror (.output/server/node_modules): gradino 2 non BLOCKED, stessi esiti" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*luogo=copie(2)" && ! grep -q "BLOCKED" "$T/out"'
+check_par "  la copia privata non contiene .output" '[ "$(grep -c "^output=assente" "$FAKE_LOG.all")" = 2 ] && ! grep -q "^output=presente" "$FAKE_LOG.all"'
+check_par "  e contiene la node_modules annidata dichiarata in collega_nel_worktree (apps/*/node_modules)" '[ "$(grep -c "^annidata=presente" "$FAKE_LOG.all")" = 2 ]'
+# counterproof (review of 1.6.1): the collega_nel_worktree entries among the pruned ones -> the nested deps are lost
+CPNM="$(dirname "$CP")/.cp-nested-nm.$$.sh"
+python3 - "$CP" "$CPNM" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+old = '[ "${x##*/}" = node_modules ] || ex_nm+=("$x")'
+assert s.count(old) == 1, "the filter of ex_nm changed: update the counterproof"
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(old, '[ "$x" = node_modules ] || ex_nm+=("$x")'))
+PY
+if [ -f "$CPNM" ]; then
+  FIC_CP_PARALLEL=2 CPX="$CPNM" cpr "$L_OUT"
+  check_par "  controprova: con le voci di collega_nel_worktree fra le potate la node_modules annidata manca" '[ "$(grep -c "^annidata=assente" "$FAKE_LOG.all")" = 2 ]'
+  rm -f "$CPNM"
+else echo "FAIL [controprova annidata: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
+CPOLD="$(dirname "$CP")/.cp-nested-old.$$.sh"
+python3 - "$CP" "$CPOLD" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+old = ' -o \\( "${FIC__FX[@]}" \\) -prune -o -name node_modules'
+assert s.count(old) == 1, "the find of NESTED changed: update the counterproof"
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(old, " -o -name node_modules"))
+PY
+if [ -f "$CPOLD" ]; then
+  FIC_CP_PARALLEL=2 CPX="$CPOLD" cpr "$L_OUT"
+  check_par "  controprova: il find senza le esclusioni -> BLOCKED «non copiato»" '[ "$(rc)" != 0 ] && grep -q "esito=BLOCKED" "$T/out"'
+  rm -f "$CPOLD"
+else echo "FAIL [controprova .output: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
+rm -rf "$M/apps/admin/.output" "$M/apps/admin/node_modules/annidata"
+
 # 1c. goals-ux-12: test named "describe > it", as vitest prints it in FAILs. Counterproof: without the
 # " > " form in pattern() -t does not match (all skipped -> rosso_raccolta); without vitest_ids the red is not its own.
 FIC_CP_PARALLEL=1 cpr "$(mj gt.json "[$(entry GT $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma > vale uno')]")"
@@ -320,9 +361,13 @@ FAKE_KILL="$CP" FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 \
   cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 sleep 1
 check_par "segnale nel gradino 2: il trap non aspetta la fine dei run" '[ $(( $(date +%s) - t0 )) -lt 25 ] && [ "$(rc)" = 143 ]'
+# 1.6.1: the trap's kills and cleanup finish a moment after counterproof exits; on a loaded runner one second was not
+# enough (CI of 2026-11-06, Linux). Wait up to 15 s for them; a process that really survives still fails the check.
+for _ in $(seq 1 30); do [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && flock -n "$M/.fic-lock" true && break; sleep 0.5; done
 check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ]'
 check "  nessuna copia fic-cp.* residua, mirror invariato, lock libero" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true'
 for p in $(alive); do kill -KILL "$p" 2>/dev/null; done
+rm -rf "$HOME"/fic-cp.*   # 1.6.1: a failure here stays here (it used to fail the «nessuna copia» checks of later cases too)
 
 # 12. from a worktree (pt03): same rule as test-fast.sh — copy ~/fic-mirror-<hash> (seeded from
 #     ~/fic-mirror) and ITS lock; the worktree code never enters the main tree's copy.

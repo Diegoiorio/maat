@@ -158,6 +158,13 @@ maat-doctor-f.mac_ok	GNU tools for macOS: {t}	strumenti GNU per macOS: {t}
 maat-doctor-f.mac_missing_gnubin	GNU {t} not found (macOS: Maat uses the GNU options) — brew install {f}, then put "$(brew --prefix)/opt/{f}/libexec/gnubin" first in PATH	{t} GNU non trovato (macOS: Maat usa le opzioni GNU) — brew install {f}, poi metti "$(brew --prefix)/opt/{f}/libexec/gnubin" in testa al PATH
 maat-doctor-f.mac_missing	{t} not found (macOS) — brew install {f}	{t} non trovato (macOS) — brew install {f}
 
+# --- plan-check-161, worktree-cycle-161 (1.6.1, written by hand like driver-cmd: texts that v1.3.0 does not have,
+# so outside the sections of tools/lingua-conversioni/). plan-check.sh lint2: (vuoto) between backticks; ciclo-worktree.sh:
+# a ring of a chain missing next to the mother, a ring of a worktree made before 1.6.1.
+plan-check-161.mut_empty_quoted	(empty) is written without backticks: between backticks it is the literal text to insert	(vuoto) va scritto senza backtick: fra backtick è il testo letterale da inserire
+worktree-cycle-161.child_missing	the ring {c} of the chain {m} is missing in {d}: a worktree without it would stop on that ring (WAIT). Create it there, or remove it from the Figlie:/Children: line	l'anello {c} della catena {m} manca in {d}: un worktree senza l'anello si fermerebbe su quell'anello (WAIT). Crealo li', o toglilo dalla riga Figlie:/Children:
+worktree-cycle-161.rp_child_resume	the ring {rel} is missing in the worktree, or the marker has no fingerprint for it (a worktree made before 1.6.1): run crea again with {spec} (the resume copies the ring and records it), or --forza to bring back what is there	l'anello {rel} manca nel worktree, o il marcatore non ha la sua impronta (un worktree creato prima della 1.6.1): rilancia crea con {spec} (la ripresa copia l'anello e lo registra), o --forza per riportare quello che c'e'
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

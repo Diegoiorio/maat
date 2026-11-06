@@ -945,7 +945,9 @@ def cmd_aggancio():
     home = (os.environ.get("HOME") or os.environ.get("USERPROFILE") or "").replace("\\", "/")
     progetto = posixpath.join(ROOT, ".claude", "settings.json")
     locale = posixpath.join(ROOT, ".claude", "settings.local.json")
-    utente = posixpath.join(home, ".claude", "settings.json")
+    # the user's configuration folder: CLAUDE_CONFIG_DIR when set, as Claude Code reads it (1.6.1), otherwise ~/.claude
+    cfg = (os.environ.get("CLAUDE_CONFIG_DIR") or "").replace("\\", "/").rstrip("/") or posixpath.join(home, ".claude")
+    utente = posixpath.join(cfg, "settings.json")
     abilitato, mk, dove = None, "", ""
     for f in (locale, progetto, utente):          # precedence: local > project > user
         ep = leggi_json(f).get("enabledPlugins", {})
@@ -972,7 +974,7 @@ def cmd_aggancio():
     else:
         riga("MANCA", T("maat-doctor.hook_none"), T("maat-doctor.hook_none_fix"))
     if abilitato and mk:
-        km = leggi_json(posixpath.join(home, ".claude", "plugins", "known_marketplaces.json")).get(mk, {})
+        km = leggi_json(posixpath.join(cfg, "plugins", "known_marketplaces.json")).get(mk, {})
         ex = leggi_json(progetto).get("extraKnownMarketplaces", {})
         ex = ex.get(mk, {}) if isinstance(ex, dict) else {}
         fonti = [x.get("source") for x in (km, ex) if isinstance(x, dict)]

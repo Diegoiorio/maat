@@ -932,6 +932,9 @@ def parse_mut(cell):
         return None, bad
     kinds = [k for k, v in cs]
     if kinds == ["c", "t", "c"] and re.match(r"^(\u2192|->)$", cs[1][1]):
+        if cs[2][1].strip() in ("(vuoto)", "(empty)"):
+            # `x` -> `(vuoto)` would insert the literal text: forbidden, the form is `x` -> (vuoto) (1.6.1)
+            return None, _msg.T("plan-check-161.mut_empty_quoted")
         sost = cs[2][1]
     elif kinds == ["c", "t"] and re.match(r"^(\u2192|->)[ \t]*\((?:vuoto|empty)\)$", cs[1][1]):
         sost = ""

@@ -423,6 +423,13 @@ refute "deroga verificato inutilizzata" "lint2: controprova, la deroga usata non
 # malformed mutation, and across different modules
 sed 's/ · rosso se: `assert 200 == 403` |$/ |/' "$T/f2.md" > "$T/f2-badmut.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T1: mutazione illeggibile" "lint2: mutazione senza rosso se = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-badmut.md"
+# 1.6.1: `cerca` -> `(vuoto)` between backticks would insert the literal text: VIOLAZIONE; without backticks = empty, as before
+sed 's/`if not can_edit:` → `if False:`/`if not can_edit:` → `(vuoto)`/' "$T/f2.md" > "$T/f2-vuoto-bt.md"
+sed 's/`if not can_edit:` → `if False:`/`if not can_edit:` → (vuoto)/' "$T/f2.md" > "$T/f2-vuoto.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: test T1: \(vuoto\) va scritto senza backtick: fra backtick è il testo letterale da inserire" "lint2: \`(vuoto)\` fra backtick = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-vuoto-bt.md"
+expect 0 - "lint2: (vuoto) senza backtick = ok (sostituzione vuota)" -- bash "$PC" lint2 "$T/f2-vuoto.md"
+refute "mutazione|vuoto" "lint2: (vuoto) senza backtick, nessun rilievo sulla mutazione" -- bash "$PC" lint2 "$T/f2-vuoto.md"
+expect 1 "VIOLAZIONE: line [0-9]+: test T1: \(empty\) is written without backticks" "en: \`(empty)\` fra backtick = VIOLAZIONE in inglese" -- env MAAT_LINGUA=en bash "$PC" lint2 "$T/f2-vuoto-bt.md"
 sed 's/^| T2 | RF2 | \(.*\) | — |$/| T2 | RF2 | \1 | `modules\/api\/app\/routers\/goals.py` · `update_goal` · `raise Forbidden()` → (vuoto) · rosso se: `expected` |/' "$T/f2.md" > "$T/f2-cross.md"
 expect 1 "VIOLAZIONE: riga [0-9]+: test T2: file e test in moduli diversi" "lint2: mutazione backend osservata da un test frontend = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-cross.md"
 # pk04b-2: the Python of plan-check.sh REALLY uses the reader (MAAT_CONFIG_PY), not a copy of the rules: with a
