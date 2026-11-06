@@ -270,15 +270,21 @@ for more weight (`Size request: full`, any other value is a `lint` `VIOLAZIONE`)
 `spec-plan-reviewer-light`, `plan-check.sh e1` on its reply (a blocker, more than 2 major, a partial reply → the full
 branch from Step 2; `STOP_HUMAN_DECISION_REQUIRED` stays a stop), the verified majors applied without a second round;
 the metric line ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan (again whenever the plan
-gets a new metric line): a plan approved small whose facts are above, or a full size with no proof that the full branch
-ran (no `spec-plan-reviewer` call, `-light` does not count, in the log of a plan phase: the metric line is the
-model's word) → **E2**, the plan phase again with `--full` and the line `RIAPERTURA (driver): …` (the re-opening,
-which needs that proof too). T3 after every implement/fix, with `--diff` and `--touched` of the `touched.txt` paths: a
+gets a new metric line): a plan approved small whose facts are above, or a full size whose last plan phase has no
+proof of the full branch → **E2**, the plan phase again with `--full` and the line `RIAPERTURA (driver): …` (the
+re-opening, which needs a proof after it). The proof is read by the driver right after each plan phase from THAT
+label's log only (`log/<label>.jsonl`), parsed as JSON: at least 3 `tool_use` blocks Task/Agent with `subagent_type`
+`spec-plan-reviewer` (never `-light`; text naming it does not count; a missing log = no proof), recorded as `P <label> ·
+prova=sì|no`. Only a run dir with no `P` line at all (a plan approved outside the cycle) is exempt. T3 after every implement/fix, with `--diff` and `--touched` of the `touched.txt` paths: a
 path outside the plan (spaces included), a diff header that cannot be read, or a fact above → **E3**. After every
 review: `.gates` not green or a required gate `NOT RUN` → **E4**; any `Review status` other than `APPROVED` → **E5**.
-Only the driver writes `taglia.txt`: the guard denies it to every phase and the driver compares its sha256 before and
-after each phase (a change → **E0**). The facts do not trust the plan's own labels: a file of the test table counts
-as a test only by the test convention; a source path not in the repo, or `new file mode`, is new; a plan `lint2`
+Only the driver writes `taglia.txt`: the guard denies it, `taglia.sha`, `log/` and `prompts/` of a run dir to every
+phase (case-insensitive, normalised path); the driver writes the expected sha256 in `taglia.sha` after each of its
+lines and checks it at every start of its loop and after every phase (a change by a phase, between phases or between
+invocations → **E0**). Limit: a Bash append to a phase's live log is not seen by the guard (like every Bash write);
+the JSON parse and the three calls make a forged proof costlier, not impossible. The facts do not trust the plan's own
+labels: a file of the test table counts as a test only by the test convention (limit: a source module named like a
+test, `test_x.py`, is still subtracted); a source path not in the repo, or `new file mode`, is new; a plan `lint2`
 refuses is not measurable.
 
 **What changes with `piccola`.** One plan-review round; the implement in one lane (`FIC_LANES=0`); one code-review

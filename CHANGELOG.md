@@ -44,14 +44,21 @@ in the full flow. `--full` gives the flow of 1.6.
 - **`lint2`: a file declared new in a new folder.** A path `` `lib/x.js` (new) `` in a step, a test or a mutation
   passed only if `lib/` existed, and the plan phase cannot create it (a run of the benchmark stopped there). Now a
   path declared new needs only to be a valid relative path; a path not declared new still needs its first folder.
-- **What the agent writes cannot keep the small size** (independent review before the release). Only the driver
-  writes `taglia.txt`: the guard denies it to every phase, and the driver compares its sha256 before and after each
-  phase (a change is an escalation, `E0`). A full size after the plan needs a proof that the full branch ran (a call of
-  `spec-plan-reviewer`, not `-light`, in the log of a plan phase), not only the metric line; otherwise the plan is
-  reopened. T2 runs again when the plan gets a new metric line. `e1` reads the severity in any markdown form, and a
+- **What the agent writes cannot keep the small size** (two independent reviews before the release). Only the driver
+  writes `taglia.txt`: the guard denies it, `taglia.sha` and the phase logs and prompts (`log/`, `prompts/`) to every
+  phase, case-insensitive on the normalised path; the driver keeps the sha256 it expects in `taglia.sha` after each
+  of its writes and checks it at every start of its loop and after every phase (a change by a phase, between two
+  phases or between two invocations is an escalation, `E0`). A full size after the plan needs a proof that the full
+  branch ran, read right after each plan phase from THAT label's log only, as JSON: at least 3 `tool_use` calls
+  (Task/Agent) of `spec-plan-reviewer` (never `-light`; a text naming it does not count; a missing log is no proof),
+  recorded as `P <label> · prova=sì|no`; T2 reads the last `P` line, never the metric line or the folder, and the
+  reopening needs a `prova=sì` after it. Only a run dir with no `P` line at all (a plan approved outside the cycle) is
+  exempt. Limit: a Bash append to the live log of a phase is not seen by the guard (as every Bash write it documents);
+  the JSON parse and the three-call minimum make a forgery costlier, not impossible. T2 runs again when the plan gets a new metric line. `e1` reads the severity in any markdown form (`**Severity**: major` too), and a
   `NEEDS_CHANGES` with nothing counted is full. `taglia`: the out-of-plan check also reads `touched.txt` (paths with
   spaces), a diff header it cannot read is not measurable, a rename counts as the deletion of the old path; a file of
-  the test table that does not follow the test convention counts as a source file; a source path not in the repo or
+  the test table that does not follow the test convention counts as a source file (limit: a source module whose name
+  looks like a test, `test_x.py`, is still subtracted); a source path not in the repo or
   `new file mode` is new even without `(new)`; a plan that `lint2` refuses, or with no backticked path in Touched
   files, is not measurable. A review counts as passed only with `APPROVED`. A cycle started with 1.6 gets
   `FIC_TAGLIA=off` and its flags unchanged: `taglia` answers «off» and the plan skill applies the 1.6 rule, identical.

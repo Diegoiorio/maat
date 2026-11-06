@@ -120,6 +120,7 @@ scripts/gates.sh	^"node=wsl non raggiungibile"$|echo assente|<non impostata>|'es
 
 # --- 11. the size of the cycle (1.7.0): keys of maat.json and lines the skills write
 scripts/plan-check.sh	^"(file_sorgente|file_nuovi|passi|requisiti|test|righe|simboli_pubblici)"$	1.7.0: chiavi di piano.taglia.soglie di maat.json (taglia)
+scripts/driver.py	prova=%s|prova=sì|^"sì"$	1.7.0: token della riga P <label> · prova=sì|no di taglia.txt (la prova del ramo pieno, scritta e letta dal driver)
 scripts/driver.py	Metrica ciclo:	1.7.0: prefisso della riga di metrica del changelog del piano, scritta dalla skill plan-review-cycle, letta per taglia=
 
 # --- exemptions: text that is not Maat's

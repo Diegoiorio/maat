@@ -983,7 +983,11 @@ def check_write(path, data):
     phase = os.environ.get("FIC_PHASE", "")
     # 1.7.0: <run-dir>/taglia.txt (the size of the cycle) is written by driver.py only, never by a phase; the driver
     # also checks its sha256 around every phase, for the writes the guard does not see (Bash)
-    if phase and path and re.search(r"\.run/taglia\.txt$", path.replace("\\", "/")):  # TAGLIA-DEL-DRIVER
+    # also the expected sha (taglia.sha) and the phase logs and prompts (log/, prompts/: the proof of the full plan
+    # branch is read from the log). Case-insensitive, on the normalised path. A Bash append to the live log is the class
+    # of writes the guard does not see (docstring): the JSON parse and the three reviewer calls make it costlier only.
+    pn = os.path.normpath(path).replace("\\", "/").lower() if path else ""
+    if phase and re.search(r"\.run/(taglia\.txt|taglia\.sha)$|\.run/(log|prompts)/", pn):  # TAGLIA-DEL-DRIVER
         deny("taglia_fase", what=path.replace("\\", "/"), fase=phase)
     phase = os.environ.get("FIC_PHASE", "")
     if (phase not in READONLY_PHASES and phase not in SCOPED_PHASES) or not path:

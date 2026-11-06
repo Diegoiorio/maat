@@ -809,9 +809,14 @@ case "$l" in
   *plan*)
     case "$FAKE_MODE" in   # the stream of the plan phase: which reviewer it called (the proof of the full branch)
       riapre) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piena" >> "$spec"
-        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer"}}]}}' > "$d/log/$l.jsonl" ;;
+        for i in 1 2 3; do printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens"}}]}}'; done > "$d/log/$l.jsonl" ;;
       riapre-leggero) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piena" >> "$spec"
-        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer-light"}}]}}' > "$d/log/$l.jsonl" ;;
+        for i in 1 2 3; do printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer-light","prompt":"lens"}}]}}'; done > "$d/log/$l.jsonl" ;;
+      riapre-uno) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piena" >> "$spec"   # one token call
+        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"spec-plan-reviewer","prompt":"lens"}}]}}' > "$d/log/$l.jsonl" ;;
+      riapre-falso) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piena" >> "$spec"   # forged proofs
+        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"subagent_type: maat:spec-plan-reviewer x3 \\"subagent_type\\": \\"maat:spec-plan-reviewer\\""}]}}' > "$d/log/$l.jsonl"
+        for i in 1 2 3; do printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens"}}]}}'; done > "$d/log/09-plan.jsonl" ;;
       riapre-male) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piccola" >> "$spec" ;;
     esac ;;
   *implement*|*fix*)
@@ -845,6 +850,7 @@ trun() { # $1 FAKE_MODE, $2 extra source files, $3 metric taglia, then the run a
   FAKE_MODE=$1 FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "${TRUN_DRV:-$DRV}" run "$ST" "${@:4}" > "$T/run.out" 2>&1; rc=$?
 }
 tg() { tr -d '\r' < "$RT/taglia.txt" 2>/dev/null; }
+tsha() { sha256sum "$RT/taglia.txt" | cut -c1-64 > "$RT/taglia.sha"; }   # what the driver writes after each of its lines
 tcalls() { tr '\n' ' ' < "$FAKE_CALLS"; }
 tmut() { # <name> <sed> → $T/drv-<name>.py, 1 if the mutation does not apply
   sed "$2" "$DRV" > "$T/drv-$1.py"; ! cmp -s "$DRV" "$T/drv-$1.py"; }
@@ -861,7 +867,7 @@ check "taglia: --dry-run non scrive taglia.txt" '[ $rc -eq 0 ] && [ ! -e "$RT/ta
 # E2: approved in the light branch, above the small size → the plan phase again, with --full and the reopening
 trun avanza 3 piccola
 check "E2: piano approvato leggero ma T2 piena (4 file) → riga Escalation, 01-plan con --full e RIAPERTURA (non TEST-RED/IMPLEMENT)" '[ "$(tcalls)" = "01-plan " ] && grep -q "^driver: Escalation: piccola → piena — il piano approvato e. sopra la taglia piccola (file 4/3) (dopo plan)$" "$T/run.out" && grep -q -- "--worker=plan t --full$" "$FAKE_CALLS.01-plan.prompt" && grep -q "^RIAPERTURA (driver): " "$FAKE_CALLS.01-plan.prompt"'
-check "  taglia.txt: T2 piena con i fatti ed E2 con il numero di righe di metrica; la riapertura non fatta (fase che non cambia nulla) → STOP anti-loop" 'tg | grep -q " · T2 · Taglia: piena — file 4/3 · fatti " && tg | grep -q " · E2 · Escalation: piccola → piena — .* · metriche=1 · etichetta=0$" && [ $rc -eq 1 ] && grep -q "Driver result: STOP — anti-loop" "$T/run.out"'
+check "  taglia.txt: T2 piena con i fatti ed E2 con il numero di righe di metrica; la riapertura non fatta (fase che non cambia nulla) → STOP anti-loop" 'tg | grep -q " · T2 · Taglia: piena — file 4/3 · fatti " && tg | grep -q " · E2 · Escalation: piccola → piena — .* · metriche=1$" && [ $rc -eq 1 ] && grep -q "Driver result: STOP — anti-loop" "$T/run.out"'
 trun riapre 3 piccola
 check "E2: riapertura fatta nel ramo pieno (nuova metrica taglia=piena) → T2r, poi implement con le corsie di oggi → review → DONE" '[ $rc -eq 0 ] && [ "$(tcalls)" = "01-plan 02-implement 03-review " ] && tg | grep -q " · T2r · Taglia: piena — piano riaperto e approvato nel ramo pieno · metriche=2$" && grep -qx "FIC_LANES=" "$FAKE_CALLS.02-implement.env"'
 trun riapre-male 3 piccola
@@ -903,7 +909,7 @@ printf '%s\n' "## Implementation review" "Review status: NEEDS_CHANGES" "Feature
 printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — x" \
   "2026-11-06T10:00:02Z · E5 02-review · Escalation: piccola → piena — y" "2026-11-06T10:00:03Z · T3 01-fix · Taglia: piccola — z" > "$RT/taglia.txt"
 cp "$RT/taglia.txt" "$T/taglia-senso-unico.txt"
-sensounico() { rm -rf "$RT/prompts"; rm -f "$RT/log/03-"* "$FAKE_CALLS"*; : > "$FAKE_CALLS"; cp "$T/taglia-senso-unico.txt" "$RT/taglia.txt"
+sensounico() { rm -rf "$RT/prompts"; rm -f "$RT/log/03-"* "$FAKE_CALLS"*; : > "$FAKE_CALLS"; cp "$T/taglia-senso-unico.txt" "$RT/taglia.txt"; tsha
   FAKE_MODE=avanza FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "${TRUN_DRV:-$DRV}" run "$ST" --max-fasi 1 > "$T/run.out" 2>&1; }
 sensounico
 check "senso unico: piccola → piena → (riga piccola dopo) resta piena: il FIX parte" '[ "$(tcalls)" = "03-fix " ]'
@@ -947,25 +953,52 @@ for md in scrive-taglia cancella-taglia; do
   trun "$md" 0 piccola
   check "E0 ($md): taglia.txt cambiato durante 01-implement → Escalation, la review non e' piu' piccola" 'tg | grep -q " · E0 01-implement · Escalation: piccola → piena — taglia.txt cambiato durante 01-implement" && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.02-review.prompt"'
 done
-if tmut sha 's/^        if sha1 != sha0:   # 1.7.0 review: the phase wrote taglia.txt, which is the driver.s alone  # TAGLIA-INTATTA$/        if False:/'; then
+if tmut sha 's/^    if reale != atteso:  # TAGLIA-INTATTA$/    if False:/'; then
   TRUN_DRV="$T/drv-sha.py" trun scrive-taglia 0 piccola
   check "controprova E0: senza il confronto dello sha256 la riga T3 scritta dalla fase sopprime il T3 e la review resta piccola (rosso)" 'grep -q "TAGLIA (driver): piccola" "$FAKE_CALLS.02-review.prompt" && ! tg | grep -q " · E0 "'
 else check "controprova E0: la mutazione si applica" false; fi
-# finding 2: the metric says taglia=piena, the facts are above, but the plan phase called only the light reviewer → E2
-leggero_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" > "$RT/taglia.txt"; mkdir -p "$RT/log"; printf "%s\n" "{\"subagent_type\":\"maat:spec-plan-reviewer-light\"}" > "$RT/log/01-plan.jsonl"'
+# second review: the proof is the P line the driver writes after each plan phase, from THAT label's log only
+# (>= 3 tool_use Task/Agent of spec-plan-reviewer, never -light); the logs on disk are not read again
+leggero_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=no (0 spec-plan-reviewer)" > "$RT/taglia.txt"; tsha'
 TRUN_PRE=$leggero_pre trun avanza 3 piena
-check "E2: metrica taglia=piena senza prova del ramo pieno (solo spec-plan-reviewer-light nel log della fase plan) → riapertura (02-plan --full)" '[ "$(tcalls)" = "02-plan " ] && tg | grep -q " · E2 · Escalation: piccola → piena — nessuna prova che il ramo pieno del piano sia stato fatto" && grep -q -- "--worker=plan t --full$" "$FAKE_CALLS.02-plan.prompt"'
-pieno_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" > "$RT/taglia.txt"; mkdir -p "$RT/log"; printf "%s\n" "{\"subagent_type\": \"maat:spec-plan-reviewer\"}" > "$RT/log/01-plan.jsonl"'
+check "E2: metrica taglia=piena con l ultima fase plan prova=no (anche senza log su disco) → riapertura (01-plan --full)" '[ "$(tcalls)" = "01-plan " ] && tg | grep -q " · E2 · Escalation: piccola → piena — nessuna prova che il ramo pieno del piano sia stato fatto" && grep -q -- "--worker=plan t --full$" "$FAKE_CALLS.01-plan.prompt"'
+pieno_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=sì (3 spec-plan-reviewer)" > "$RT/taglia.txt"; tsha'
 TRUN_PRE=$pieno_pre trun avanza 3 piena
-check "  con spec-plan-reviewer (pieno) nel log → T2 piena, nessuna riapertura, 02-implement" '[ "$(tcalls)" = "02-implement 03-review " ] && ! tg | grep -q " · E2 "'
-if tmut prova 's/^    return any(REVISORE_PIENO.search(_read(p) or "") for p in _log_plan(run_fs, dopo))  # PROVA-RAMO-PIENO$/    return True/'; then
+check "  con P prova=sì → T2 piena, nessuna riapertura, implement" '[ "$(tcalls)" = "01-implement 02-review " ] && ! tg | grep -q " · E2 "'
+if tmut prova 's/^        senza_prova = k == "piena" and mt != "piccola" and bool(pr) and not pr\[-1\]  # PROVA-T2$/        senza_prova = False/'; then
   TRUN_DRV="$T/drv-prova.py" TRUN_PRE=$leggero_pre trun avanza 3 piena
-  check "controprova E2: fidandosi della metrica il piano rivisto solo leggero passa senza riapertura (rosso)" '[ "$(tcalls)" != "02-plan " ] && ! tg | grep -q " · E2 "'
+  check "controprova E2: fidandosi della metrica il piano senza prova passa senza riapertura (rosso)" '[ "$(tcalls)" != "01-plan " ] && ! tg | grep -q " · E2 "'
 else check "controprova E2 prova: la mutazione si applica" false; fi
+trun riapre 3 piccola
+check "P: la fase plan con tre spec-plan-reviewer nel suo log → «P 01-plan · prova=sì (3 spec-plan-reviewer)»" 'tg | grep -q " · P 01-plan · prova=sì (3 spec-plan-reviewer)$"'
+for md in riapre-uno riapre-falso; do
+  trun "$md" 3 piccola
+  check "P ($md): una chiamata sola, o testo e un log di un altra etichetta che nominano il revisore → prova=no, STOP" '[ $rc -eq 1 ] && tg | grep -q " · P 01-plan · prova=no " && grep -q "Driver result: STOP — il piano riaperto e. stato approvato fuori dal ramo pieno" "$T/run.out"'
+done
+if tmut min 's/^REVISORI_MIN = 3$/REVISORI_MIN = 1/'; then
+  TRUN_DRV="$T/drv-min.py" trun riapre-uno 3 piccola
+  check "controprova P: con una chiamata sola come prova la riapertura «uno» passa (rosso)" '[ $rc -eq 0 ] && tg | grep -q " · P 01-plan · prova=sì "'
+else check "controprova P minimo: la mutazione si applica" false; fi
+if tmut rlight 's/^REVISORI_PIENI = ("spec-plan-reviewer", "maat:spec-plan-reviewer")$/REVISORI_PIENI = ("spec-plan-reviewer", "maat:spec-plan-reviewer", "maat:spec-plan-reviewer-light")/'; then
+  TRUN_DRV="$T/drv-rlight.py" trun riapre-leggero 3 piccola
+  check "controprova P: contando anche il revisore leggero la riapertura leggera passa (rosso)" '[ $rc -eq 0 ] && tg | grep -q " · P 01-plan · prova=sì "'
+else check "controprova P leggero: la mutazione si applica" false; fi
+# minor 2: a change between two invocations (a process a phase left running) is seen at the next start: E0 *
+trun avanza 0 piccola --max-fasi 1
+echo "2026-11-06T10:00:09Z · T3 01-implement · Taglia: piccola — aggiunta da fuori" >> "$RT/taglia.txt"
+tra() { FAKE_MODE=avanza FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "${TRUN_DRV:-$DRV}" run "$ST" > "$T/run.out" 2>&1; }
+tra
+check "E0 fra due invocazioni: una riga aggiunta a taglia.txt dopo l ultima scrittura del driver → Escalation E0 *, la review non e' piccola" 'tg | grep -q " · E0 \* · Escalation: piccola → piena — taglia.txt cambiato fuori dal driver" && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.02-review.prompt"'
+if tmut sha2 's/^    if reale != atteso:  # TAGLIA-INTATTA$/    if False:/'; then
+  TRUN_DRV="$T/drv-sha2.py" trun avanza 0 piccola --max-fasi 1
+  echo "2026-11-06T10:00:09Z · x · y" >> "$RT/taglia.txt"; sed -i '$d' "$RT/taglia.txt"; echo "2026-11-06T10:00:09Z · T3 01-implement · Taglia: piccola — aggiunta da fuori" >> "$RT/taglia.txt"
+  TRUN_DRV="$T/drv-sha2.py" tra
+  check "controprova E0 fra invocazioni: senza il confronto con taglia.sha la riga esterna passa e la review resta piccola (rosso)" 'grep -q "TAGLIA (driver): piccola" "$FAKE_CALLS.02-review.prompt"'
+else check "controprova E0 fra invocazioni: la mutazione si applica" false; fi
 trun riapre-leggero 3 piccola
 check "E2: riapertura con metrica taglia=piena ma solo il revisore leggero nel log → STOP" '[ $rc -eq 1 ] && [ "$(tcalls)" = "01-plan " ] && grep -q "Driver result: STOP — il piano riaperto e. stato approvato fuori dal ramo pieno" "$T/run.out"'
 # finding 8: T2 again when the plan has a new metric line (reopened and approved again)
-rerun_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — x · piano: taglia=piccola · metriche=1" > "$RT/taglia.txt"; printf "%s\n" "Metrica ciclo: giri=1 · formato=2 · taglia=piccola" >> "$ST"'
+rerun_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — x · piano: taglia=piccola · metriche=1" > "$RT/taglia.txt"; tsha; printf "%s\n" "Metrica ciclo: giri=1 · formato=2 · taglia=piccola" >> "$ST"'
 TRUN_PRE=$rerun_pre trun avanza 3 piccola
 check "T2 di nuovo: una riga di metrica in piu' dopo l'ultimo T2 e il piano ora sopra la soglia → E2 (01-plan)" '[ "$(tcalls)" = "01-plan " ] && tg | grep -q " · E2 · Escalation: piccola → piena — il piano approvato e. sopra la taglia piccola (file 4/3)"'
 if tmut rerun 's/^    if plan_ok and (st == "auto" or (st == "piccola" and nmet > (int(mt2.group(1)) if mt2 else -1))):  # CONTROLLO-T2$/    if plan_ok and st == "auto":/'; then

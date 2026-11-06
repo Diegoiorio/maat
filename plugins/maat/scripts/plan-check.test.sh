@@ -1778,16 +1778,22 @@ if mutpc e1 's/if \[ "${nb:-0}" -gt 0 \] || \[ "${nm:-0}" -gt "$E1_MAJOR" \]; th
 else echo "FAIL [controprova E1: la mutazione non si applica]"; fail=$((fail+1)); fi
 # ── 1.7.0 review: what the agent writes must not keep the small size on a large or risky change ──
 # e1: every markdown form of the severity, and NEEDS_CHANGES with nothing counted
-for frm in '1. **Severity:** major' '- Severity: major' '### 1. Severity: major' 'Severity: major'; do
+for frm in '1. **Severity:** major' '- Severity: major' '### 1. Severity: major' 'Severity: major' '1. **Severity**: major'; do
   { echo "Decision: NEEDS_CHANGES"; for i in 1 2 3; do printf '%s\n' "$frm" "   Claim: x"; done; } > "$K/e1-form"
   expect 0 "^E1: piena — 0 blocker, 3 major" "e1: tre major scritti «$frm» = piena" -- bash "$PC" e1 "$K/e1-form"
 done
 { echo "**Decision:** NEEDS_CHANGES"; printf '%s\n' "1. **Severity:** blocker"; } > "$K/e1-bold"
 expect 0 "^E1: piena — 1 blocker, 0 major" "e1: Decision e Severity in grassetto = un blocker, piena" -- bash "$PC" e1 "$K/e1-bold"
+# «**Severity**: major» (the colon after the bold) mixed with well-formed findings: all three counted
+{ echo "Decision: NEEDS_CHANGES"; printf '%s\n' "1. **Severity**: major" "2. Severity: major" "3. - **Severity:** major" "4. Severity: minor"; } > "$K/e1-mix"
+expect 0 "^E1: piena — 0 blocker, 3 major" "e1: **Severity**: major mescolato a righe ben formate = 3 major, piena" -- bash "$PC" e1 "$K/e1-mix"
+if mutpc e1col "s/grep -ciE 'Severity\[\*\]\*:\[\*\[:space:\]\]\*major' || true)/grep -ciE 'Severity:[*[:space:]]*major' || true)/"; then
+  expect 0 "^E1: piccola — 0 blocker, 2 major" "controprova e1: senza Severity\\** il major in grassetto prima dei due punti sparisce (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1col/plan-check.sh" e1 "$K/e1-mix"
+else echo "FAIL [controprova e1 Severity**:: la mutazione non si applica]"; fail=$((fail+1)); fi
 ke1 NEEDS_CHANGES minor nit > "$K/e1-incoer"
 expect 0 "^E1: piena — Decision: NEEDS_CHANGES senza blocker o major contati" "e1: NEEDS_CHANGES senza blocker/major contati = piena (incoerente)" -- bash "$PC" e1 "$K/e1-incoer"
 { echo "Decision: NEEDS_CHANGES"; for i in 1 2 3; do printf '%s\n' "1. **Severity:** major"; done; } > "$K/e1-form"
-if mutpc e1sev "s/grep -ciE 'Severity:\[\*\[:space:\]\]\*major' || true)/grep -ciE '^[[:space:]]*Severity:[[:space:]]*major' || true)/"; then
+if mutpc e1sev "s/grep -ciE 'Severity\[\*\]\*:\[\*\[:space:\]\]\*major' || true)/grep -ciE '^[[:space:]]*Severity:[[:space:]]*major' || true)/"; then
   expect 0 "^E1: (piccola|piena — Decision: NEEDS_CHANGES senza)" "controprova e1: col conteggio ancorato a inizio riga i major in grassetto spariscono (rosso: non piu' «3 major»)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1sev/plan-check.sh" e1 "$K/e1-form"
 else echo "FAIL [controprova e1 severita: la mutazione non si applica]"; fail=$((fail+1)); fi
 if mutpc e1inc 's/if \[ "$d" = NEEDS_CHANGES \] && \[ "${nb:-0}" -eq 0 \] && \[ "${nm:-0}" -eq 0 \]; then  # E1-INCOERENTE/if false; then/'; then

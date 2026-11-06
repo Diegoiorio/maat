@@ -2910,8 +2910,8 @@ cmd_e1() {
   d=$(printf '%s\n' "$t" | sed -n 's/^[[:space:]*]*Decision:[[:space:]*]*\([A-Z_]*\).*/\1/p' | head -1)
   # anywhere on the line, any markdown around it (1.7.0 review: «1. **Severity:** major», «- Severity: major»,
   # «### 1. Severity: major»)
-  nb=$(printf '%s\n' "$t" | grep -ciE 'Severity:[*[:space:]]*blocker' || true)  # SEVERITA-OVUNQUE
-  nm=$(printf '%s\n' "$t" | grep -ciE 'Severity:[*[:space:]]*major' || true)
+  nb=$(printf '%s\n' "$t" | grep -ciE 'Severity[*]*:[*[:space:]]*blocker' || true)  # SEVERITA-OVUNQUE
+  nm=$(printf '%s\n' "$t" | grep -ciE 'Severity[*]*:[*[:space:]]*major' || true)
   printf '%s\n' "$t" | grep -E 'Blocked on:' | grep -qviE 'Blocked on:[[:space:]]*(none|nessuno)[[:space:].]*$' && p=1
   case $d in STOP_HUMAN*) echo "E1: STOP — $(msg plan-check-170.e1_stop)"; return 0 ;; esac
   if [ -z "$d" ]; then echo "E1: piena — $(msg plan-check-170.e1_no_decision)"; return 0; fi
