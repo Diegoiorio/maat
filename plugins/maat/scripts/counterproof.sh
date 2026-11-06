@@ -901,8 +901,13 @@ INTEG=0; DEPS_CHANGED=0; LUOGO=mirror
 if [ ${#PAR[@]} -gt 0 ]; then
   DEPS0=$(cat "$DSTC/.fic-deps")
   CPD=$(mktemp -d "$HOME/fic-cp.XXXXXX") || blocked "$(msg counterproof.private_mkdir home="$HOME")"
-  NESTED=$(cd "$DSTC" && find . -path ./node_modules -prune -o -name node_modules -type d -prune -print | sed 's|^\./||')
   excl_of "$CM"
+  # The nested node_modules OUTSIDE the copy's exclusions only (1.6.1): one under .output/.nuxt/coverage… (a build
+  # left in the mirror) has no parent in the copy and the second sync would fail. Same list as the copy (EX minus
+  # node_modules itself, which is what we look for), read with rsync semantics by fic__escludi: the two cannot drift.
+  ex_nm=(); for x in "${EX[@]}"; do [ "$x" = --exclude=node_modules ] || ex_nm+=("${x#--exclude=}"); done
+  fic__escludi ${ex_nm[@]+"${ex_nm[@]}"}
+  NESTED=$(cd "$DSTC" && find . -path ./node_modules -prune -o \( "${FIC__FX[@]}" \) -prune -o -name node_modules -type d -prune -print | sed 's|^\./||')
   for i in $(seq 1 "$N"); do
     c="$CPD/$i/${M_PAC[$CM]}"; mkdir -p "$c"
     fic_sync "${EX[@]}" "$DSTC/" "$c/" || blocked "$(msg counterproof.private_failed i="$i")"

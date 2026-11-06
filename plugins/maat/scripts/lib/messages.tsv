@@ -334,6 +334,7 @@ plan-check.conf_regex	invalid regex under piano.*: {e}	regex non valida in piano
 plan-check.mut_bad	unreadable mutation, expected form	mutazione illeggibile, forma attesa
 plan-check.mut_bad_empty	(the replacement may be (empty))	(sostituisci puo essere (vuoto))
 plan-check.mut_empty_fields	mutation: symbol and red-if text cannot be empty	mutazione: simbolo e testo di rosso se non possono essere vuoti
+plan-check.mut_empty_quoted	(empty) is written without backticks: between backticks it is the literal text to insert	(vuoto) va scritto senza backtick: fra backtick è il testo letterale da inserire
 plan-check.mut_noop	empty mutation: search equal to replacement	mutazione vuota: cerca uguale a sostituisci
 plan-check.fmt_dup	line {n}: Plan format: appears {k} times at the start of a line in the plan, it must be ONE	riga {n}: Plan format: compare {k} volte a inizio riga nel piano, deve essere UNA
 plan-check.sec_dup	line {n}: section ### {name} repeated: it must be one	riga {n}: sezione ### {name} ripetuta: deve essere una
@@ -1343,6 +1344,7 @@ worktree-cycle.conf_unreadable	maat.json of the main tree not readable: nothing 
 worktree-cycle.spec_missing	spec missing: {spec}	spec assente: {spec}
 worktree-cycle.spec_name	the spec must be named spec-<name>.md: {spec}	la spec deve chiamarsi spec-<nome>.md: {spec}
 worktree-cycle.name_invalid	name not valid: {name}	nome non valido: {name}
+worktree-cycle.child_missing	the ring {c} of the chain {m} is missing in {d}: a worktree without it would stop on that ring (WAIT). Create it there, or remove it from the Figlie:/Children: line	l'anello {c} della catena {m} manca in {d}: un worktree senza di lui si fermerebbe su quell'anello (WAIT). Crealo li', o toglilo dalla riga Figlie:/Children:
 worktree-cycle.not_exists	does not exist: {wt}	non esiste: {wt}
 worktree-cycle.not_wt_root	not the root of a git worktree: {c}	non e' la radice di un worktree git: {c}
 worktree-cycle.is_main	it is the main tree: {c}	e' il tree principale: {c}

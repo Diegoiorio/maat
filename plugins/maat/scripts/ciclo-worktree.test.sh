@@ -438,5 +438,57 @@ check "premessa: mutazione 5 applicata" 'grep -q "# MUTANTE" "$MU/scripts/worktr
 check "controprova 5: senza il segnaposto dei campi vuoti il caso «jolly» e' rosso" 'caso_jolly "$MU/scripts/ciclo-worktree.sh" "$T/v6/proj"; [ $? -eq 1 ]'
 cp "$HERE/worktree-lib.sh" "$MU/scripts/worktree-lib.sh"
 
+# 14. 1.6.1: a mother spec (Figlie:) brings its rings. crea copies every spec-<figlia>.md and its run dir; riporta brings
+# them back, each checked on its own and all checks before any copy; rimuovi stops on a ring not brought back; a ring
+# missing in the main tree is a STOP before anything is created. A "Figlie:" inside a fence is not the line (as driver.py).
+# Counterproof: the 1.6.0 script (origin/main before the fix, or the mutant without the rings) leaves the rings out.
+AIWR=.claude/.ai-workflow
+mkmadre() { # $1 repo: mother + 2 rings (f1 with a run dir), and a mother with a missing ring
+  printf '# madre\n```\nFiglie: spec-finta\n```\nFiglie: spec-f1, spec-f2.\n## Requisiti\n' > "$1/$AIWR/spec-madre.md"
+  printf '# f1\n' > "$1/$AIWR/spec-f1.md"; printf '# f2\n' > "$1/$AIWR/spec-f2.md"; printf '# finta\n' > "$1/$AIWR/spec-finta.md"
+  mkdir -p "$1/$AIWR/spec-f1.run/log" && echo 0 > "$1/$AIWR/spec-f1.run/log/01-plan.exit"
+  printf '# madre2\nChildren: spec-f1 spec-manca\n' > "$1/$AIWR/spec-madre2.md"
+}
+caso_catena() { # $1 ciclo-worktree script, $2 repo folder → 0 if the rings travel with the mother; the reason on stdout
+  local MC=$2 S=$1 out rc W
+  mkrepo "$MC" >/dev/null 2>&1 && mkmadre "$MC" || { echo "repo finto non creato"; return 2; }
+  out=$( (cd "$MC" && bash "$S" crea "$AIWR/spec-madre.md") 2>&1); rc=$?
+  W="$(dirname "$(canon "$MC")")/proj-fic-madre"
+  [ $rc -eq 0 ] && [ -d "$W" ] || { echo "crea: rc $rc"; printf '%s\n' "$out"; return 2; }
+  [ -f "$W/$AIWR/spec-f1.md" ] && [ -f "$W/$AIWR/spec-f2.md" ] || { echo "crea: anelli non copiati"; return 1; }
+  [ -f "$W/$AIWR/spec-f1.run/log/01-plan.exit" ] && [ ! -e "$W/$AIWR/spec-f2.run" ] || { echo "crea: run dir dell'anello"; return 1; }
+  [ ! -e "$W/$AIWR/spec-finta.md" ] || { echo "crea: la riga Figlie: dentro il blocco di codice è stata letta"; return 1; }
+  # the cycle works on the rings in the worktree; resume keeps them (worktree wins)
+  echo '## Piano f1' >> "$W/$AIWR/spec-f1.md"; echo 0 > "$W/$AIWR/spec-f1.run/log/02-impl.exit"
+  echo '## Piano f2' >> "$W/$AIWR/spec-f2.md"
+  out=$( (cd "$MC" && bash "$S" crea "$AIWR/spec-madre.md") 2>&1) && grep -q 'Piano f1' "$W/$AIWR/spec-f1.md" ||
+    { echo "ripresa: l'anello del worktree sovrascritto"; printf '%s\n' "$out"; return 1; }
+  out=$( (cd "$MC" && bash "$S" rimuovi madre) 2>&1); rc=$?
+  [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "spec-f1" || { echo "rimuovi con gli anelli non riportati: rc $rc"; printf '%s\n' "$out"; return 1; }
+  out=$( (cd "$MC" && bash "$S" riporta madre) 2>&1); rc=$?
+  [ $rc -eq 0 ] || { echo "riporta: rc $rc"; printf '%s\n' "$out"; return 1; }
+  cmp -s "$W/$AIWR/spec-f1.md" "$MC/$AIWR/spec-f1.md" && cmp -s "$W/$AIWR/spec-f2.md" "$MC/$AIWR/spec-f2.md" &&
+    [ -f "$MC/$AIWR/spec-f1.run/log/02-impl.exit" ] || { echo "riporta: anelli non tornati"; return 1; }
+  # a ring changed in the main tree after the copy: STOP, and nothing copied (not even the mother)
+  echo 'nota a mano' >> "$MC/$AIWR/spec-f2.md"; echo '## Review madre' >> "$W/$AIWR/spec-madre.md"
+  out=$( (cd "$MC" && bash "$S" riporta madre) 2>&1); rc=$?
+  [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "spec-f2.md" && ! grep -q 'Review madre' "$MC/$AIWR/spec-madre.md" ||
+    { echo "riporta con un anello cambiato nel principale: rc $rc"; printf '%s\n' "$out"; return 1; }
+  # a ring missing in the main tree: STOP before creating anything
+  out=$( (cd "$MC" && bash "$S" crea "$AIWR/spec-madre2.md") 2>&1); rc=$?
+  [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "spec-manca.md" && [ ! -e "$(dirname "$(canon "$MC")")/proj-fic-madre2" ] &&
+    ! git -C "$MC" show-ref -q --verify refs/heads/fic/madre2 || { echo "anello mancante: rc $rc"; printf '%s\n' "$out"; return 1; }
+  return 0
+}
+r=$(caso_catena "$CW" "$T/cat/proj"); rc=$?
+check "catena: crea copia gli anelli (e la loro run dir), riporta li riporta, rimuovi e l'anello mancante fanno STOP" '[ $rc -eq 0 ]' || printf '  %s\n' "$r"
+# counterproof 6: the mutant without the rings (carica_figlie that loads nothing) is red at the first check
+cp "$CW" "$MU/scripts/ciclo-worktree.sh" && cp "$HERE/worktree-lib.sh" "$MU/scripts/worktree-lib.sh"
+sed -i 's/^  FIGLIE=()$/  FIGLIE=(); return 0   # MUTANTE/' "$MU/scripts/ciclo-worktree.sh"
+check "premessa: mutazione 6 applicata" 'grep -q "# MUTANTE" "$MU/scripts/ciclo-worktree.sh"'
+r=$(caso_catena "$MU/scripts/ciclo-worktree.sh" "$T/cat2/proj"); rc=$?
+check "controprova 6: senza gli anelli il caso «catena» è rosso (crea non li copia)" '[ $rc -eq 1 ] && printf "%s" "$r" | grep -q "anelli non copiati"' || printf '  %s\n' "$r"
+cp "$CW" "$MU/scripts/ciclo-worktree.sh"
+
 echo "ciclo-worktree.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

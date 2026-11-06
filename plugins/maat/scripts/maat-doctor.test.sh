@@ -256,7 +256,15 @@ mkdir -p "$T/home/.claude/plugins"
 echo '{"prova": {"source": {"source": "directory", "path": "x"}}}' > "$T/home/.claude/plugins/known_marketplaces.json"
 doc
 check "plugin da un marketplace da cartella -> ATTENZIONE «installa da git con un ref»" 'ha "^ATTENZIONE plugin installato da un marketplace da cartella .* — installa da git con un ref"'
-rm "$T/home/.claude/plugins/known_marketplaces.json"
+# 1.6.1: with CLAUDE_CONFIG_DIR the doctor reads ITS known_marketplaces.json, as Claude Code does (before: always ~/.claude,
+# a false ATTENZIONE in a dedicated configuration, and a real one missed)
+mkdir -p "$T/cfg-vuota"
+doc CLAUDE_CONFIG_DIR="$T/cfg-vuota"
+check "CLAUDE_CONFIG_DIR senza marketplace da cartella -> nessuna ATTENZIONE da ~/.claude" '! ha "marketplace da cartella"'
+mkdir -p "$T/cfg-dir/plugins"; mv "$T/home/.claude/plugins/known_marketplaces.json" "$T/cfg-dir/plugins/"
+doc CLAUDE_CONFIG_DIR="$T/cfg-dir"
+check "CLAUDE_CONFIG_DIR con il marketplace da cartella -> ATTENZIONE" 'ha "^ATTENZIONE plugin installato da un marketplace da cartella"'
+rm -f "$T/cfg-dir/plugins/known_marketplaces.json" "$T/home/.claude/plugins/known_marketplaces.json"
 
 # --- 14. --prova-test and --help -------------------------------------------------------------------------------------------
 doc -- --prova-test

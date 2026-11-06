@@ -24,7 +24,9 @@
 #      tree: junctions on Windows, symlinks elsewhere (worktree-lib.sh, shared with corpus/replay.sh); .git with a
 #      relative gitdir (WSL's git can read it);
 #   4. copies the spec and, if present, its run dir `spec-<nome>.run/` (gitignored: the checkout does not bring
-#      them); on resume the worktree's ones win and are not overwritten;
+#      them); on resume the worktree's ones win and are not overwritten. A mother spec (a `Figlie:`/`Children:`
+#      line, read as driver.py reads it) brings its rings too, `spec-<figlia>.md` and `spec-<figlia>.run/` from the
+#      mother's folder, with the same rules (1.6.1); a ring missing there is a STOP before anything is created;
 #   5. copies the module's `preparati` from the main tree (same dependencies, verified at step 2), if the guide
 #      file (the first glob without wildcards) is there and missing in the worktree: the copy's lint and tests
 #      read them; if it is missing in the main tree, warns to run the module's `preparazione` there. A module
@@ -38,7 +40,8 @@
 #   place (.claude/.ai-workflow/), for cycle-report.py and for the user: the run dir is copied into a temporary
 #   folder next to it and replaces the old one (no merging: a file removed in the worktree disappears there
 #   too). Does not touch the code. STOP if the main tree's spec or run dir changed after the copy (fingerprints
-#   in the marker: someone worked on them there), unless --forza.
+#   in the marker: someone worked on them there), unless --forza. A chain's rings come back with the mother, each
+#   checked on its own, all checks before any copy (1.6.1); rimuovi and stato look at the rings too.
 # rimuovi, in order: STOP if a worktree phase is alive — code phase lock (run-phase.sh --lock-status),
 #   <run-dir>/plan.lock with a live pid (never forceable) — or if a phase shows as running (log/*.running without
 #   .exit: alive, or dead without closing; --forza to proceed); STOP if the worktree has uncommitted changes, or if
@@ -141,10 +144,34 @@ WT="$(dirname "$MAINC")/$(basename "$MAINC")-fic-$NAME"
 MK_REL=$AIW/spec-$NAME.worktree
 SPEC_REL=$AIW/spec-$NAME.md RUN_REL=$AIW/spec-$NAME.run
 
-mk_get() { sed -n "s/^$1=//p" "$WT/$MK_REL" 2>/dev/null | tr -d '\r' | head -1; }
+mk_re() { printf '%s' "$1" | sed 's/[.]/\\./g'; }   # a key as a literal regex (children's names may have dots)
+mk_get() { sed -n "s/^$(mk_re "$1")=//p" "$WT/$MK_REL" 2>/dev/null | tr -d '\r' | head -1; }
 mk_set() { # $1 key, $2 value: rewrites the line in the marker
   local f=$WT/$MK_REL
-  grep -v "^$1=" "$f" > "$f.tmp" && printf '%s=%s\n' "$1" "$2" >> "$f.tmp" && mv "$f.tmp" "$f"
+  { grep -v "^$(mk_re "$1")=" "$f"; printf '%s=%s\n' "$1" "$2"; } > "$f.tmp" && mv "$f.tmp" "$f"
+}
+
+# --- the children of a mother spec (1.6.1): its "Figlie:"/"Children:" line, read as driver.py's _cfiglie does
+#     (outside the fences, above the plan; the first line with either literal wins; .md and a final dot dropped).
+#     The chain's rings live next to the mother: crea copies them with it, riporta brings them back, rimuovi checks them.
+figlie_of() { # $1 spec file → the children's names (without spec- and .md), one per line, in order, no repeats
+  [ -f "$1" ] || return 0
+  awk '{ sub(/\r$/, "") }
+       /^[ \t]*(```|~~~)/ { f = !f; next }
+       f { next }
+       /^## (Piano di implementazione|Review implementazione|Implementation plan|Implementation review)/ { exit }
+       /^(Figlie|Children):/ { sub(/^(Figlie|Children):/, ""); print; exit }' "$1" |
+    grep -oE 'spec-[A-Za-z0-9._-]*' | sed -e 's/\.md$//' -e 's/\.$//' -e 's/^spec-//' | awk '!seen[$0]++'
+}
+FIGLIE=()   # filled by each subcommand: from the main tree's mother (crea) or the worktree's (the others)
+carica_figlie() { # $1 mother spec file → FIGLIE; a name that is not a valid spec name stops (never a path outside $AIW)
+  local c
+  FIGLIE=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && [ "$c" != "$NAME" ] || continue
+    printf '%s' "$c" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$' || die "$(msg worktree-cycle.name_invalid name="$c")"
+    FIGLIE+=("$c")
+  done < <(figlie_of "$1")
 }
 
 # --- is the path the worktree created by this script for <nome>? (0 = yes; otherwise the reason on stderr) ---
@@ -226,6 +253,14 @@ scollega_e_verifica() { # $1 worktree: 0 = no link left; 1 = something left, or 
 # ============================================================================================ crea
 if [ "$CMD" = crea ]; then
   . "$MAAT_SCRIPTS/python.sh" || die "$(msg worktree-cycle.no_python)"
+  # the chain's rings (1.6.1): from the worktree's mother on resume (it wins), otherwise from the given one; each ring
+  # must be next to the mother (in the worktree on resume, or where the mother is): none missing, BEFORE creating anything
+  if [ -f "$WT/$SPEC_REL" ]; then carica_figlie "$WT/$SPEC_REL"; else carica_figlie "$SPEC"; fi
+  SDIR=$(dirname "$SPEC")
+  for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
+    [ -f "$WT/$AIW/spec-$c.md" ] || [ -f "$SDIR/spec-$c.md" ] ||
+      stop "$(msg worktree-cycle.child_missing c="spec-$c.md" d="$SDIR" m="spec-$NAME.md")"
+  done
   RESUME=0
   if [ -e "$WT" ] || [ -L "$WT" ]; then
     why=$(ours 2>&1) || stop "$(msg worktree-cycle.not_ours wt="$WT" name="$NAME" why="$why")"
@@ -283,6 +318,22 @@ if [ "$CMD" = crea ]; then
     cp -R "$RUN_SRC" "$WT/$RUN_REL" || die "$(msg worktree-cycle.run_copy_failed)"
     say "$(msg worktree-cycle.run_copied rel="$RUN_REL")"
   fi
+  # the rings, with the same rules (1.6.1); their main-tree fingerprints go in the marker, as the mother's, for riporta
+  for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
+    crel=$AIW/spec-$c.md rrel=$AIW/spec-$c.run
+    if [ -f "$WT/$crel" ]; then
+      say "$(msg worktree-cycle.spec_kept rel="$crel")"
+    else
+      cp "$SDIR/spec-$c.md" "$WT/$crel" || die "$(msg worktree-cycle.spec_copy_failed)"
+      say "$(msg worktree-cycle.spec_copied rel="$crel")"
+    fi
+    if [ -d "$SDIR/spec-$c.run" ] && [ ! -e "$WT/$rrel" ]; then
+      cp -R "$SDIR/spec-$c.run" "$WT/$rrel" || die "$(msg worktree-cycle.run_copy_failed)"
+      say "$(msg worktree-cycle.run_copied rel="$rrel")"
+    fi
+    [ -n "$(mk_get "figlia.$c")" ] || mk_set "figlia.$c" "$(sha "$MAINC/$crel")"
+    [ -n "$(mk_get "figlia_run.$c")" ] || mk_set "figlia_run.$c" "$(dir_fp "$MAINC/$rrel")"
+  done
 
   # module preparati (e.g. generated tsconfig and declarations), same dependencies: copied if the guide file is
   # in the main tree and missing in the worktree; if missing in the main tree, the warning names the preparazione
@@ -368,6 +419,14 @@ if [ "$CMD" = stato ]; then
     echo "$(msg worktree-cycle.st_spec wt="$(canon "$WT")" rel="$SPEC_REL" r="$r")"
     CS=$MAAT_SCRIPTS/cycle-state.sh   # the session's plugin, not the harness of the worktree's commit
     echo "$(msg worktree-cycle.st_cycle c="$( (cd "$WT" && bash "$CS" "$SPEC_REL" 2>&1) | tr -d '\r' | grep -E '^(State|Next):' | tr '\n' ' ')")"
+    carica_figlie "$WT/$SPEC_REL"   # the chain's rings (1.6.1), same line each
+    for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do
+      crel=$AIW/spec-$c.md
+      if [ -f "$WT/$crel" ]; then
+        if cmp -s "$WT/$crel" "$MAINC/$crel"; then r=si; else r=no; fi
+        echo "$(msg worktree-cycle.st_spec wt="$(canon "$WT")" rel="$crel" r="$r")"
+      else echo "$(msg worktree-cycle.rp_no_spec wt="$(canon "$WT")" rel="$crel")"; fi
+    done
   else
     echo "$(msg worktree-cycle.st_no_spec)"
   fi
@@ -384,37 +443,53 @@ why=$(ours 2>&1) || stop "$(msg worktree-cycle.not_ours_stop wt="$WT" name="$NAM
 # ============================================================================================ riporta
 if [ "$CMD" = riporta ]; then
   [ -f "$WT/$SPEC_REL" ] || stop "$(msg worktree-cycle.rp_no_spec wt="$WT" rel="$SPEC_REL")"
-  cur=$(sha "$MAINC/$SPEC_REL") exp=$(mk_get principale) new=$(sha "$WT/$SPEC_REL")
-  if [ "$cur" != "$exp" ] && [ "$cur" != "$new" ] && [ $FORCE -eq 0 ]; then
-    stop "$(msg worktree-cycle.rp_spec_changed rel="$SPEC_REL")"
-  fi
-  rcur=$(dir_fp "$MAINC/$RUN_REL") rexp=$(mk_get principale_run) rnew=$(dir_fp "$WT/$RUN_REL")
-  if [ -d "$WT/$RUN_REL" ] && [ "$rcur" != "$rexp" ] && [ "$rcur" != "$rnew" ] && [ $FORCE -eq 0 ]; then
-    stop "$(msg worktree-cycle.rp_run_changed rel="$RUN_REL")"
-  fi
-  mkdir -p "$MAINC/$AIW" && cp "$WT/$SPEC_REL" "$MAINC/$SPEC_REL" || die "$(msg worktree-cycle.spec_copy_failed)"
-  say "$(msg worktree-cycle.rp_spec_done m="$MAINC" rel="$SPEC_REL")"
-  if [ -d "$WT/$RUN_REL" ]; then
+  carica_figlie "$WT/$SPEC_REL"
+  # units: the mother, then each ring (1.6.1) — <spec rel> <run rel> <marker key of the spec> <marker key of the run>
+  UNITS=("$SPEC_REL" "$RUN_REL" principale principale_run)
+  for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do UNITS+=("$AIW/spec-$c.md" "$AIW/spec-$c.run" "figlia.$c" "figlia_run.$c"); done
+  # every check first, file by file: nothing is copied if one of them changed in the main tree after the copy
+  for ((i = 0; i < ${#UNITS[@]}; i += 4)); do
+    s=${UNITS[i]} r=${UNITS[i+1]} ks=${UNITS[i+2]} kr=${UNITS[i+3]}
+    [ -f "$WT/$s" ] || stop "$(msg worktree-cycle.rp_no_spec wt="$WT" rel="$s")"
+    cur=$(sha "$MAINC/$s") exp=$(mk_get "$ks") new=$(sha "$WT/$s")
+    if [ "$cur" != "$exp" ] && [ "$cur" != "$new" ] && [ $FORCE -eq 0 ]; then
+      stop "$(msg worktree-cycle.rp_spec_changed rel="$s")"
+    fi
+    rcur=$(dir_fp "$MAINC/$r") rexp=$(mk_get "$kr") rnew=$(dir_fp "$WT/$r")
+    if [ -d "$WT/$r" ] && [ "$rcur" != "$rexp" ] && [ "$rcur" != "$rnew" ] && [ $FORCE -eq 0 ]; then
+      stop "$(msg worktree-cycle.rp_run_changed rel="$r")"
+    fi
+  done
+  sync_run() { # $1 run dir rel: worktree → main tree
     # sync, not merge: full copy next to it (name spec-*: gitignored), then it replaces the old one
-    new_run="$MAINC/$RUN_REL.nuova.$$" old_run="$MAINC/$RUN_REL.vecchia.$$"
+    local rel=$1 rnew
+    rnew=$(dir_fp "$WT/$rel")
+    new_run="$MAINC/$rel.nuova.$$" old_run="$MAINC/$rel.vecchia.$$" RREL=$rel
     # interrupted mid-swap: drop the new copy, and the old one goes back in place if the run dir is missing
-    restore_old() { [ -e "$MAINC/$RUN_REL" ] || [ ! -d "$old_run" ] || mv "$old_run" "$MAINC/$RUN_REL"; }
+    restore_old() { [ -e "$MAINC/$RREL" ] || [ ! -d "$old_run" ] || mv "$old_run" "$MAINC/$RREL"; }
     trap 'rm -rf "$new_run"; restore_old || echo "$TAG: $(msg worktree-cycle.rp_prev_kept old="$old_run")" >&2; exit 130' INT TERM HUP
-    cp -R "$WT/$RUN_REL" "$new_run" || { rm -rf "$new_run"; die "$(msg worktree-cycle.rp_copy_failed)"; }
-    if [ -d "$MAINC/$RUN_REL" ]; then mv "$MAINC/$RUN_REL" "$old_run" || { rm -rf "$new_run"; die "$(msg worktree-cycle.rp_not_movable)"; }; fi
-    if ! mv "$new_run" "$MAINC/$RUN_REL"; then
+    cp -R "$WT/$rel" "$new_run" || { rm -rf "$new_run"; die "$(msg worktree-cycle.rp_copy_failed)"; }
+    if [ -d "$MAINC/$rel" ]; then mv "$MAINC/$rel" "$old_run" || { rm -rf "$new_run"; die "$(msg worktree-cycle.rp_not_movable)"; }; fi
+    if ! mv "$new_run" "$MAINC/$rel"; then
       rm -rf "$new_run"
       [ -d "$old_run" ] || die "$(msg worktree-cycle.rp_none_prev)"
-      mv "$old_run" "$MAINC/$RUN_REL" && die "$(msg worktree-cycle.rp_restored)"
-      die "$(msg worktree-cycle.rp_not_restored old="$old_run" m="$MAINC" rel="$RUN_REL")"
+      mv "$old_run" "$MAINC/$rel" && die "$(msg worktree-cycle.rp_restored)"
+      die "$(msg worktree-cycle.rp_not_restored old="$old_run" m="$MAINC" rel="$rel")"
     fi
     trap - INT TERM HUP
     rm -rf "$old_run"
-    [ "$(dir_fp "$MAINC/$RUN_REL")" = "$rnew" ] || die "$(msg worktree-cycle.rp_differs)"
-    say "$(msg worktree-cycle.rp_run_done m="$MAINC" rel="$RUN_REL")"
-  fi
-  mk_set principale "$new"
-  mk_set principale_run "$(dir_fp "$MAINC/$RUN_REL")"
+    [ "$(dir_fp "$MAINC/$rel")" = "$rnew" ] || die "$(msg worktree-cycle.rp_differs)"
+    say "$(msg worktree-cycle.rp_run_done m="$MAINC" rel="$rel")"
+  }
+  mkdir -p "$MAINC/$AIW" || die "$(msg worktree-cycle.spec_copy_failed)"
+  for ((i = 0; i < ${#UNITS[@]}; i += 4)); do
+    s=${UNITS[i]} r=${UNITS[i+1]} ks=${UNITS[i+2]} kr=${UNITS[i+3]}
+    cp "$WT/$s" "$MAINC/$s" || die "$(msg worktree-cycle.spec_copy_failed)"
+    say "$(msg worktree-cycle.rp_spec_done m="$MAINC" rel="$s")"
+    [ ! -d "$WT/$r" ] || sync_run "$r"
+    mk_set "$ks" "$(sha "$WT/$s")"
+    mk_set "$kr" "$(dir_fp "$MAINC/$r")"
+  done
   say "$(msg worktree-cycle.rp_code_left b="$BRANCH" wt="$(canon "$WT")")"
   exit 0
 fi
@@ -425,22 +500,29 @@ if [ -f "$RP" ]; then
   ls_out=$( (cd "$WT" && env -u FIC_LOCK -u FIC_PHASE -u FIC_REPO bash "$RP" --lock-status 2>&1) ); ls_rc=$?
   [ $ls_rc -eq 0 ] || stop "$(msg worktree-cycle.rm_lock out="$(printf '%s' "$ls_out" | tr -d '\r')")"
 fi
+# the mother's run dir and the rings' (1.6.1: the driver runs a ring's phases in the ring's run dir)
+carica_figlie "$WT/$SPEC_REL"
+RUNS=("$RUN_REL"); SPECS=("$SPEC_REL")
+for c in ${FIGLIE[@]+"${FIGLIE[@]}"}; do RUNS+=("$AIW/spec-$c.run"); SPECS+=("$AIW/spec-$c.md"); done
 # plan lock (<run-dir>/plan.lock): alive if one of its pids exists, or if just created without owner (as run-phase.sh)
-PL=$WT/$RUN_REL/plan.lock
-if [ -d "$PL" ]; then
+for rr in "${RUNS[@]}"; do
+  PL=$WT/$rr/plan.lock
+  [ -d "$PL" ] || continue
   if [ -f "$PL/owner" ]; then
     for k in pid cpid; do
       p=$(sed -n "s/^$k=//p" "$PL/owner" | tr -d '\r' | head -1)
-      [ -n "$p" ] && kill -0 "$p" 2>/dev/null && stop "$(msg worktree-cycle.rm_plan_alive rel="$RUN_REL" k="$k" p="$p")"
+      [ -n "$p" ] && kill -0 "$p" 2>/dev/null && stop "$(msg worktree-cycle.rm_plan_alive rel="$rr" k="$k" p="$p")"
     done
   elif [ -z "$(find "$PL" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
-    stop "$(msg worktree-cycle.rm_plan_new rel="$RUN_REL")"
+    stop "$(msg worktree-cycle.rm_plan_new rel="$rr")"
   fi
-fi
+done
 # running phase: log/<label>.running without .exit (the driver reads it as RUNNING): alive, or dead without closing
 running=""
-for f in "$WT/$RUN_REL"/log/*.running; do
-  [ -e "$f" ] && [ ! -e "${f%.running}.exit" ] && running="$running $(basename "${f%.running}")"
+for rr in "${RUNS[@]}"; do
+  for f in "$WT/$rr"/log/*.running; do
+    [ -e "$f" ] && [ ! -e "${f%.running}.exit" ] && running="$running $(basename "${f%.running}")"
+  done
 done
 if [ -n "$running" ] && [ $FORCE -eq 0 ]; then
   stop "$(msg worktree-cycle.rm_running running="$running")"
@@ -452,8 +534,15 @@ if [ -n "$st" ] && [ $FORCE -eq 0 ]; then
 fi
 # the cycle's spec and run dir: they would go away with the worktree; they must already be in the main tree
 nr=""
-[ -f "$WT/$SPEC_REL" ] && ! cmp -s "$WT/$SPEC_REL" "$MAINC/$SPEC_REL" && nr="$(msg worktree-cycle.rm_nr_spec rel="$SPEC_REL")"
-if [ -d "$WT/$RUN_REL" ] && ! diff -rq "$WT/$RUN_REL" "$MAINC/$RUN_REL" >/dev/null 2>&1; then nr="$(msg worktree-cycle.rm_nr_run joined="${nr:+$(msg worktree-cycle.rm_nr_and nr="$nr")}" rel="$RUN_REL")"; fi
+for ((i = 0; i < ${#SPECS[@]}; i++)); do
+  s=${SPECS[i]} r=${RUNS[i]}
+  if [ -f "$WT/$s" ] && ! cmp -s "$WT/$s" "$MAINC/$s"; then
+    nr="${nr:+$(msg worktree-cycle.rm_nr_and nr="$nr")}$(msg worktree-cycle.rm_nr_spec rel="$s")"
+  fi
+  if [ -d "$WT/$r" ] && ! diff -rq "$WT/$r" "$MAINC/$r" >/dev/null 2>&1; then
+    nr="$(msg worktree-cycle.rm_nr_run joined="${nr:+$(msg worktree-cycle.rm_nr_and nr="$nr")}" rel="$r")"
+  fi
+done
 if [ -n "$nr" ]; then
   [ $FORCE -eq 1 ] || stop "$(msg worktree-cycle.rm_not_back nr="$nr" name="$NAME")"
   say "$(msg worktree-cycle.rm_not_back_forced nr="$nr")"

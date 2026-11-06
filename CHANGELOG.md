@@ -2,6 +2,35 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.6.1 — chains in a worktree, a build left in the copy, `(empty)` between backticks
+
+A patch: fixes found on a real chain of nine rings and in the CI; no format Maat reads changes.
+
+- **`ciclo-worktree.sh` takes a chain's rings with the mother.** `crea` copied only the given spec and its run dir;
+  the rings of a mother spec (its `Figlie:`/`Children:` line) are gitignored, so the checkout did not bring them and
+  the driver stopped in `WAIT` on the first ring. Now `crea` reads that line as `driver.py` does (outside the
+  fences, above the plan) and copies every `spec-<ring>.md` and its `spec-<ring>.run/`, if any, from the mother's
+  folder, with the mother's rules (on resume the worktree's copies win). A ring listed but missing there is a `STOP`
+  before anything is created. `riporta` brings back the mother and every ring, each with its run dir; the check
+  «changed in the main tree after the copy» is made for each file, all of them before any copy. `rimuovi` also stops
+  on a ring not brought back, or on a live or unclosed phase in a ring's run dir; `stato` prints a line per ring.
+- **`counterproof.sh` no longer stops on a build left in the mirror.** At step 2 (private copies) the nested
+  `node_modules` were listed without the copy's exclusions, so one under `apps/admin/.output/server/` (from a build
+  gate) was synced into a `.output` the copy does not have: `esito=BLOCKED (… non copiato)`, and an intermittent
+  `NEEDS_VERIFICATION` on the final verification. The list now skips the folders the copy excludes, read from the
+  same list (`FIC_MIRROR_EXCL` plus the module's `collega_nel_worktree`) with the rsync rules of `fic__escludi`.
+- **`plan-check.sh lint2`: `(vuoto)`/`(empty)` between backticks is a `VIOLAZIONE`.** The form to delete a line is
+  `` `search` → (vuoto) ``; written `` `search` → `(vuoto)` `` the mutation inserted the literal text `(vuoto)` in
+  the source (a red of collection, a `FAIL` of the final verification). Now `lint2` says so before the reviewers
+  see the plan: «(vuoto) va scritto senza backtick: fra backtick è il testo letterale da inserire».
+- **`maat-doctor` reads `CLAUDE_CONFIG_DIR`.** The user settings and `known_marketplaces.json` come from
+  `CLAUDE_CONFIG_DIR` when it is set, as Claude Code reads them, not always from `~/.claude` (a false `WARNING` on a
+  dedicated configuration, and a real one missed).
+- **Tests.** `counterproof.test.sh` case 11b waits up to 15 s for the killed runs to go away instead of one second
+  (a red of the CI on a loaded Linux runner), and its cleanup no longer makes the later cases fail; new cases, each
+  with its counterproof: the chain in `ciclo-worktree.test.sh`, the build in the mirror in `counterproof.test.sh`,
+  `(vuoto)` between backticks in `plan-check.test.sh`, `CLAUDE_CONFIG_DIR` in `maat-doctor.test.sh`.
+
 ## 1.6.0 — one engine, proven on expected outputs; CI on Linux, Windows and macOS
 
 **Why 1.6.0 and not a patch:** with an intact plugin and `FIC_DRIVER` not set, a cycle does and prints the same as
