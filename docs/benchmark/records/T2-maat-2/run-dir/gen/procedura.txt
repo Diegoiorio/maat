@@ -1,0 +1,10 @@
+Plan format: 2
+Impronta piano: d5afb10c3bb9
+Test level: std
+vitest: (nessuno)
+pytest: (nessuno)
+altri: bytes_test.go bigbytes_test.go
+cmd counterproof: PROJECT_ROOT=/home/bench/bench-run/copies/T2-maat-2 MAAT_CONFIG=/home/bench/bench-run/copies/T2-maat-2/.claude/maat.json bash /home/bench/bench-run-config/plugins/cache/maat/maat/1.6.0/scripts/counterproof.sh /home/bench/bench-run/copies/T2-maat-2/.claude/.ai-workflow/spec-bytes-rounding-unit.run/counterproof/mutations.json
+mutazioni: 2
+blocco B1: scrive=bytes.go,bigbytes.go · dopo=nessuno
+blocco B2: scrive=bytes_test.go,bigbytes_test.go · dopo=nessuno

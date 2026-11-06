@@ -1,0 +1,44 @@
+{
+ "gate": "controlli-humanize",
+ "esito": "PASS",
+ "comando": "cd '/home/bench/bench-run/copies/T2-maat-2' && test -z \"$(gofmt -l 'bigbytes.go')\" ; cd '/home/bench/bench-run/copies/T2-maat-2' && test -z \"$(gofmt -l 'bigbytes_test.go')\" ; cd '/home/bench/bench-run/copies/T2-maat-2' && test -z \"$(gofmt -l 'bytes.go')\" ; cd '/home/bench/bench-run/copies/T2-maat-2' && test -z \"$(gofmt -l 'bytes_test.go')\"",
+ "exit": 0,
+ "durata_s": 0.0,
+ "report": "controlli-humanize.log",
+ "riepilogo": "4 entries run, 0 failed, 0 skipped",
+ "motivo": "",
+ "file": [
+  "bigbytes.go",
+  "bigbytes_test.go",
+  "bytes.go",
+  "bytes_test.go"
+ ],
+ "chiave": "bbe845a10d97010ab7fef621c13d283b8008ff250d031b431da1af13d1a7d96c",
+ "eseguito_il": "2026-11-06T10:32:39Z",
+ "voci": [
+  {
+   "comando": "test -z \"$(gofmt -l 'bigbytes.go')\"",
+   "esito": "PASS",
+   "exit": 0,
+   "motivo": ""
+  },
+  {
+   "comando": "test -z \"$(gofmt -l 'bigbytes_test.go')\"",
+   "esito": "PASS",
+   "exit": 0,
+   "motivo": ""
+  },
+  {
+   "comando": "test -z \"$(gofmt -l 'bytes.go')\"",
+   "esito": "PASS",
+   "exit": 0,
+   "motivo": ""
+  },
+  {
+   "comando": "test -z \"$(gofmt -l 'bytes_test.go')\"",
+   "esito": "PASS",
+   "exit": 0,
+   "motivo": ""
+  }
+ ]
+}

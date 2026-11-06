@@ -1,0 +1,50 @@
+{
+ "fase": "plan",
+ "esito": "STOP",
+ "motivo": "Plan written but not reviewed: plan-check lint2 rejects paths under lib, a folder FR2 creates and that does not exist yet; a human must create the folder or fix the check",
+ "deviazioni": [],
+ "bloccato_su": "lint2 VIOLAZIONE on the 6 rows naming lib paths (P1-P4, T3, T5): the cycle may write only the spec, so it cannot create the lib folder. Decision needed: create empty lib folder and re-run (recommended), or change the in_repo rule of plan-check.sh for files declared new",
+ "file": [
+  ".claude/.ai-workflow/spec-split-parser-modules.md"
+ ],
+ "gate_interni": [
+  {
+   "comando": "plan-check.sh skeleton",
+   "esito": "PASS",
+   "dettaglio": "Scheletro: SOTTO IL TETTO, 5 steps, 11 files, 126 plan lines"
+  },
+  {
+   "comando": "plan-check.sh lint --baseline",
+   "esito": "PASS",
+   "dettaglio": "lint: OK"
+  },
+  {
+   "comando": "plan-check.sh lint2",
+   "esito": "FAIL",
+   "dettaglio": "6 VIOLAZIONE: path not relative to the repository, all lib paths"
+  },
+  {
+   "comando": "plan-check.sh lint2 on a scratch copy with an empty lib folder",
+   "esito": "PASS",
+   "dettaglio": "lint2: OK; simulation only, not the real gate"
+  },
+  {
+   "comando": "plan-check.sh route",
+   "esito": "PASS",
+   "dettaglio": "Percorso: pieno"
+  },
+  {
+   "comando": "spec-plan-reviewer rounds",
+   "esito": "NOT RUN",
+   "dettaglio": "a VIOLAZIONE must be fixed before a reviewer sees the plan"
+  }
+ ],
+ "finding": [
+  {
+   "severita": "major",
+   "file": ".claude/.ai-workflow/spec-split-parser-modules.md",
+   "riga": 167,
+   "testo": "lint2 rejects step paths under lib because the folder does not exist yet (in_repo, plan-check.sh:839-840); rows P1-P4 and the mutations of T3 and T5"
+  }
+ ]
+}

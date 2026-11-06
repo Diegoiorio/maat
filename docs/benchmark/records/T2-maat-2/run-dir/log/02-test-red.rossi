@@ -1,0 +1,22 @@
+rosso T1: dimostrato bytes_test.go:255 — red on the declared assertion — FAIL: TestBytesUnitPromotion === RUN TestBytesUnitPromotion bytes_test.go:255: Bytes(999500): got 1000 kB, want 1.0 MB bytes_test.go:255: Bytes(999999): got 1000 kB, want 1.0 MB bytes_test.go:255: Byt
+rosso T2: dimostrato bytes_test.go:294 — red on the declared assertion — FAIL: TestIBytesUnitPromotion === RUN TestIBytesUnitPromotion bytes_test.go:294: IBytes(1048064) n=0: got 1024 KiB, want 1.0 MiB bytes_test.go:294: IBytes(1048575) n=0: got 1024 KiB, want 1.0 MiB byte
+rosso T3: dimostrato bytes_test.go:345 — red on the declared assertion — FAIL: TestBytesNUnitPromotion === RUN TestBytesNUnitPromotion bytes_test.go:345: BytesN(999500, 3): got 1000 kB, want 1.00 MB bytes_test.go:349: BytesN(999500, 3): got 1000 kB, want 1.00 MB as BytesN(
+rosso T4: dimostrato bigbytes_test.go:207 — red on the declared assertion — FAIL: TestBigBytesUnitPromotion === RUN TestBigBytesUnitPromotion bigbytes_test.go:207: BigBytes(999500): got 1000 kB, want 1.0 MB bigbytes_test.go:207: BigBytes(999500000): got 1000 MB, want 1.0 GB b
+rosso T5: dimostrato bigbytes_test.go:253 — red on the declared assertion — FAIL: TestBigIBytesUnitPromotion === RUN TestBigIBytesUnitPromotion bigbytes_test.go:253: BigIBytes(1048064): got 1024 KiB, want 1.0 MiB bigbytes_test.go:253: BigIBytes(1073217536): got 1024 MiB, want
+rosso T6: dimostrato bytes_test.go:227 — red on the declared assertion — FAIL: TestBytes === RUN TestBytes bytes_test.go:227: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB' bytes_test.go:227: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB' bytes_test.go:2
+rosso T7: dimostrato bigbytes_test.go:156 — red on the declared assertion — FAIL: TestBigBytes === RUN TestBigBytes bigbytes_test.go:156: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB' bigbytes_test.go:156: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB' big
+rossi: esito=OK — 7/7 acceptance tests red on their assertion
+Tests: 5abfb3443bcb registrata in Approved basis
+AVVISO: mutation T1: search appears 0 times in bytes.go (after the implementation exactly 1 is needed)
+AVVISO: mutation T4: search appears 0 times in bigbytes.go (after the implementation exactly 1 is needed)
+Plan format: 2
+Impronta piano: d5afb10c3bb9
+Test level: std
+vitest: (nessuno)
+pytest: (nessuno)
+altri: bytes_test.go bigbytes_test.go
+cmd counterproof: PROJECT_ROOT=/home/bench/bench-run/copies/T2-maat-2 MAAT_CONFIG=/home/bench/bench-run/copies/T2-maat-2/.claude/maat.json bash /home/bench/bench-run-config/plugins/cache/maat/maat/1.6.0/scripts/counterproof.sh /home/bench/bench-run/copies/T2-maat-2/.claude/.ai-workflow/spec-bytes-rounding-unit.run/counterproof/mutations.json
+mutazioni: 2
+blocco B1: scrive=bytes.go,bigbytes.go · dopo=nessuno
+blocco B2: scrive=bytes_test.go,bigbytes_test.go · dopo=nessuno
+gen: written .claude/.ai-workflow/spec-bytes-rounding-unit.run/gen/procedura.txt and counterproof/mutations.json

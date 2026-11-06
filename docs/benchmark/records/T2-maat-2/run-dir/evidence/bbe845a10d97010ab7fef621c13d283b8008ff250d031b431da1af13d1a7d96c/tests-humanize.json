@@ -1,0 +1,27 @@
+{
+ "gate": "tests-humanize",
+ "esito": "PASS",
+ "comando": "cd '/home/bench/bench-run/copies/T2-maat-2' && python3 .claude/bench/go-junit.py '<report>' && go vet ./... && : 'bigbytes_test.go' 'bytes_test.go' 'comma_fuzz_test.go' 'comma_test.go' 'commaf_fuzz_test.go' 'commaf_test.go' 'common_test.go' 'ftoa_precision_test.go' 'ftoa_test.go' 'number_test.go' 'ordinals_test.go' 'si_test.go' 'times_test.go'",
+ "exit": 0,
+ "durata_s": 0.7,
+ "report": "tests-humanize.junit.xml",
+ "riepilogo": "74 tests, 0 failed, 0 errors, 0 skipped",
+ "motivo": "",
+ "file": [
+  "bigbytes_test.go",
+  "bytes_test.go",
+  "comma_fuzz_test.go",
+  "comma_test.go",
+  "commaf_fuzz_test.go",
+  "commaf_test.go",
+  "common_test.go",
+  "ftoa_precision_test.go",
+  "ftoa_test.go",
+  "number_test.go",
+  "ordinals_test.go",
+  "si_test.go",
+  "times_test.go"
+ ],
+ "chiave": "bbe845a10d97010ab7fef621c13d283b8008ff250d031b431da1af13d1a7d96c",
+ "eseguito_il": "2026-11-06T10:32:39Z"
+}

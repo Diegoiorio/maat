@@ -245,20 +245,50 @@ These do not change the protocol; they fix choices it leaves open.
 
 ## Results
 
-Not available yet. The tables, the charts and the raw records are added here after each group of runs.
+Partial: the runs go in groups, and this section grows after each one. Nothing below is a conclusion yet: the blind
+review and the adjudication of the defects (measures 1 and 3) come only after all 30 runs.
+
+- **Schedule.** Freeze commit `b72ff0755d0d5cc7f2339e2b9bb1e20936152530`, drand quicknet round 33717017: seed and
+  draw in [`seed.txt`](seed.txt), the order of the 30 runs in [`schedule.tsv`](schedule.tsv).
+- **Records.** One folder per run in [`records/`](records/): `record.json` and the raw files of
+  [`run-record.md`](run-record.md). `record.json` is filled in from the raw files by
+  [`records/compila_record.py`](records/compila_record.py), written with the first group (it applies the table of
+  `run-record.md` and decides nothing else). In the published raw files the home folder of the machine's user is
+  written `/home/bench` (the only change; `final.diff` is untouched and matches its `final.diff.sha256`).
+
+### Groups
+
+| Group | Orders | Date (UTC) | Quota before (5 h · week) | Runs |
+|---|---|---|---|---|
+| 1 | 1–6 | 2026-11-06 10:02–10:51 | 21% · 79% | T4-baseline-2, T2-baseline-3, T2-maat-2, T3-baseline-2, T4-baseline-1, T3-maat-2 |
+
+| Run | Outcome | Hidden tests | Cost (API-eq.) | Time | Notes |
+|---|---|---|---|---|---|
+| T4-baseline-2 | COMPLETED | 45/45 | $0.75 | 3.2 min | |
+| T2-baseline-3 | COMPLETED | 21/21 | $1.07 | 7.8 min | |
+| T2-maat-2 | NEEDS_VERIFICATION | 21/21 | $9.01 | 24.1 min | the cycle ended with the counterproofs of T1 and T4 not run (the module declares no counterproof) |
+| T3-baseline-2 | COMPLETED | 21/21 | $0.85 | 5.0 min | |
+| T4-baseline-1 | COMPLETED | 45/45 | $0.73 | 3.0 min | |
+| T3-maat-2 | STOP | 6/21 | $1.61 | 5.2 min | stopped in the plan phase: `lint2` refused the rows naming files in a new `lib/` folder, which the cycle cannot create; no code written (6/21 is the starting score). **Contaminated** by the audit rule: see below |
+
+**T3-maat-2, contaminated.** The audit found `/mnt/c/` twice in the log of the plan phase. Both hits are the text of
+an example path inside Maat's own file `agents/acceptance-test-writer.md` (line 53), which the phase read from the
+benchmark's configuration folder (`run-dir/log/01-plan.jsonl`, line 137); the session did not reach anything outside
+its copy. The frozen rule marks the run contaminated all the same, and so it stays, with this note in its
+`notes`. Any Maat run that reads that file will have the same two hits.
 
 ### Progress
 
-Status: **not started: 0 of 30**
+Status: **partial: 6 of 30**
 
 | Task | Maat | Baseline |
 |---|---|---|
 | T1 | 0 of 3 | 0 of 3 |
-| T2 | 0 of 3 | 0 of 3 |
-| T3 | 0 of 3 | 0 of 3 |
-| T4 | 0 of 3 | 0 of 3 |
+| T2 | 1 of 3 | 1 of 3 |
+| T3 | 1 of 3 | 1 of 3 |
+| T4 | 0 of 3 | 2 of 3 |
 | T5 | 0 of 3 | 0 of 3 |
-| **All** | 0 of 15 | 0 of 15 |
+| **All** | 2 of 15 | 4 of 15 |
 
 The charts and this table are made by [`grafici.py`](grafici.py) from the records in `records/`
 (`python3 grafici.py --progress` prints the table; `python3 grafici_test.py` tests the script). Each bar is the

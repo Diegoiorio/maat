@@ -1,0 +1,64 @@
+{
+ "esito": "OK",
+ "riassunto": "7/7 acceptance tests red on their assertion",
+ "evidence": "/home/bench/bench-run/copies/T2-maat-2/.claude/.ai-workflow/spec-bytes-rounding-unit.run/evidence/e764b0b9606f22216c3396bcab929562a242da99ffec64db384c4d6c917ea47b",
+ "conflitti": [],
+ "test": {
+  "T1": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBytesUnitPromotion === RUN TestBytesUnitPromotion bytes_test.go:255: Bytes(999500): got 1000 kB, want 1.0 MB bytes_test.go:255: Bytes(999999): got 1000 kB, want 1.0 MB bytes_test.go:255: Bytes(999500000): got 1000 MB, want 1.0 GB bytes_test.go:255: Bytes(999500000000): got 1000 GB, want 1.0 TB bytes_test.go:255: Bytes(999500000000000): got 1000 TB, want 1.0 PB bytes_test.go:255: Bytes(999499999999999936): got 1000 PB, want 1.0 EB --- FAIL: TestBytesUnitPromotion (0.00s)",
+   "posizione": "bytes_test.go:255",
+   "file": "bytes_test.go",
+   "nome": "TestBytesUnitPromotion"
+  },
+  "T2": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestIBytesUnitPromotion === RUN TestIBytesUnitPromotion bytes_test.go:294: IBytes(1048064) n=0: got 1024 KiB, want 1.0 MiB bytes_test.go:294: IBytes(1048575) n=0: got 1024 KiB, want 1.0 MiB bytes_test.go:294: IBytes(1073217536) n=0: got 1024 MiB, want 1.0 GiB bytes_test.go:294: IBytes(1098974756864) n=0: got 1024 GiB, want 1.0 TiB bytes_test.go:294: IBytes(1125350151028736) n=0: got 1024 TiB, want 1.0 PiB bytes_test.go:294: IBytes(1152358554653425600) n=0: got 1024 PiB, want 1.0 EiB bytes_test.go:294: IBytes(1048575) n=3: got 1024 KiB, want 1.00 MiB --- FAIL: TestIBytesUnitPromotion (0.00s)",
+   "posizione": "bytes_test.go:294",
+   "file": "bytes_test.go",
+   "nome": "TestIBytesUnitPromotion"
+  },
+  "T3": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBytesNUnitPromotion === RUN TestBytesNUnitPromotion bytes_test.go:345: BytesN(999500, 3): got 1000 kB, want 1.00 MB bytes_test.go:349: BytesN(999500, 3): got 1000 kB, want 1.00 MB as BytesN(1000000, 3) bytes_test.go:345: BytesN(999999, 3): got 1000 kB, want 1.00 MB bytes_test.go:349: BytesN(999999, 3): got 1000 kB, want 1.00 MB as BytesN(1000000, 3) bytes_test.go:345: BytesN(999500000, 3): got 1000 MB, want 1.00 GB bytes_test.go:349: BytesN(999500000, 3): got 1000 MB, want 1.00 GB as BytesN(1000000000, 3) bytes_test.go:345: BytesN(999500000000, 3): got 1000 GB, want 1.00 TB bytes_test.go:349: BytesN(999500000000, 3): got 1000 GB, want 1.00 TB as BytesN(1000000000000, 3) bytes_test.go:345: BytesN(999500000000000, 3): got 1000 TB, want 1.00 PB bytes_test.go:349: BytesN(999500000000000, 3): got 1000 TB, want 1.00 PB as BytesN(1000000000000000, 3) bytes_test.go:345: BytesN(999499999999999936, 3): got 1000 PB, want 1.00 EB bytes_test.go:349: BytesN(999499999999999936, 3): got 1000 PB, want 1.00 EB as BytesN(1000000000000000000, 3) bytes_test.go:345: BytesN(999950, 4): got 1000 kB, want 1.000 MB bytes_test.go:349: BytesN(999950, 4): got 1000 kB, want 1.000 MB as BytesN(1000000, 4) bytes_test.go:345: BytesN(999950000, 4): got 1000 MB, want 1.000 GB bytes_test.go:349: BytesN(999950000, 4): got 1000 MB, want 1.000 GB as BytesN(1000000000, 4) bytes_test.go:345: BytesN(999950000000, 4): got 1000 GB, want 1.000 TB bytes_test.go:349: BytesN(999950000000, 4): got 1000 GB, want 1.000 TB as BytesN(1000000000000, 4) bytes_test.go:345: BytesN(999950000000000, 4): got 1000 TB, want 1.000 PB bytes_test.go:349: BytesN(999950000000000, 4): got 1000 TB, want 1.000 PB as BytesN(1000000000000000, 4) bytes_test.go:345: BytesN(999949999999999936, 4): got 1000 PB, want 1.000 EB bytes_test.go:349: BytesN(999949999999999936, 4): got 1000 PB, want 1.000 EB as BytesN(1000000000000000000, 4) bytes_test.go:345: BytesN(999500, 0): got 1000 kB, want 1 MB bytes_test.go:349: BytesN(999500, 0): got 1000 kB, want 1 MB as BytesN(1000000, 0) bytes_test.go:345: BytesN(999500, 1): got 1000 kB, want 1 MB bytes_test.go:349: BytesN(999500, 1): got 1000 kB, want 1 MB as BytesN(1000000, 1) bytes_test.go:345: BytesN(999500, 2): got 1000 kB, want 1.0 MB bytes_test.go:349: BytesN(999500, 2): got 1000 kB, want 1.0 MB as BytesN(1000000, 2) bytes_test.go:345: BytesN(999500, -1): got 1000 kB, want 1 MB bytes_test.go:349: BytesN(999500, -1): got 1000 kB, want 1 MB as BytesN(1000000, -1) bytes_test.go:345: BytesN(999999, 0): got 1000 kB, want 1 MB bytes_test.go:349: BytesN(999999, 0): got 1000 kB, want 1 MB as BytesN(1000000, 0) --- FAIL: TestBytesNUnitPromotion (0.00s)",
+   "posizione": "bytes_test.go:345",
+   "file": "bytes_test.go",
+   "nome": "TestBytesNUnitPromotion"
+  },
+  "T4": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBigBytesUnitPromotion === RUN TestBigBytesUnitPromotion bigbytes_test.go:207: BigBytes(999500): got 1000 kB, want 1.0 MB bigbytes_test.go:207: BigBytes(999500000): got 1000 MB, want 1.0 GB bigbytes_test.go:207: BigBytes(999500000000): got 1000 GB, want 1.0 TB bigbytes_test.go:207: BigBytes(999500000000000): got 1000 TB, want 1.0 PB bigbytes_test.go:207: BigBytes(999500000000000000): got 1000 PB, want 1.0 EB bigbytes_test.go:207: BigBytes(999500000000000000000): got 1000 EB, want 1.0 ZB bigbytes_test.go:207: BigBytes(999500000000000000000000): got 1000 ZB, want 1.0 YB bigbytes_test.go:207: BigBytes(999500000000000000000000000): got 1000 YB, want 1.0 RB bigbytes_test.go:207: BigBytes(999500000000000000000000000000): got 1000 RB, want 1.0 QB bigbytes_test.go:207: BigBytes(999999999): got 1000 MB, want 1.0 GB --- FAIL: TestBigBytesUnitPromotion (0.00s)",
+   "posizione": "bigbytes_test.go:207",
+   "file": "bigbytes_test.go",
+   "nome": "TestBigBytesUnitPromotion"
+  },
+  "T5": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBigIBytesUnitPromotion === RUN TestBigIBytesUnitPromotion bigbytes_test.go:253: BigIBytes(1048064): got 1024 KiB, want 1.0 MiB bigbytes_test.go:253: BigIBytes(1073217536): got 1024 MiB, want 1.0 GiB bigbytes_test.go:253: BigIBytes(1098974756864): got 1024 GiB, want 1.0 TiB bigbytes_test.go:253: BigIBytes(1125350151028736): got 1024 TiB, want 1.0 PiB bigbytes_test.go:253: BigIBytes(1152358554653425664): got 1024 PiB, want 1.0 EiB bigbytes_test.go:253: BigIBytes(1180015159965107879936): got 1024 EiB, want 1.0 ZiB bigbytes_test.go:253: BigIBytes(1208335523804270469054464): got 1024 ZiB, want 1.0 YiB bigbytes_test.go:253: BigIBytes(1237335576375572960311771136): got 1024 YiB, want 1.0 RiB bigbytes_test.go:253: BigIBytes(1267031630208586711359253643264): got 1024 RiB, want 1.0 QiB bigbytes_test.go:253: BigIBytes(1073741823): got 1024 MiB, want 1.0 GiB --- FAIL: TestBigIBytesUnitPromotion (0.00s)",
+   "posizione": "bigbytes_test.go:253",
+   "file": "bigbytes_test.go",
+   "nome": "TestBigIBytesUnitPromotion"
+  },
+  "T6": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBytes === RUN TestBytes bytes_test.go:227: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB' bytes_test.go:227: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB' bytes_test.go:227: On bytes(1TB - 1M), expected '1.0 TB', but got '1000 GB' bytes_test.go:227: On bytes(1MB - 1), expected '1.0 MiB', but got '1024 KiB' bytes_test.go:227: On bytes(1GB - 1K), expected '1.0 GiB', but got '1024 MiB' bytes_test.go:227: On bytes(1TB - 1M), expected '1.0 TiB', but got '1024 GiB' --- FAIL: TestBytes (0.00s)",
+   "posizione": "bytes_test.go:227",
+   "file": "bytes_test.go",
+   "nome": "TestBytes"
+  },
+  "T7": {
+   "esito": "dimostrato",
+   "motivo": "red on the declared assertion",
+   "messaggio": "FAIL: TestBigBytes === RUN TestBigBytes bigbytes_test.go:156: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB' bigbytes_test.go:156: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB' bigbytes_test.go:156: On bytes(1TB - 1M), expected '1.0 TB', but got '1000 GB' bigbytes_test.go:156: On bytes(1MB - 1), expected '1.0 MiB', but got '1024 KiB' bigbytes_test.go:156: On bytes(1GB - 1K), expected '1.0 GiB', but got '1024 MiB' bigbytes_test.go:156: On bytes(1TB - 1M), expected '1.0 TiB', but got '1024 GiB' --- FAIL: TestBigBytes (0.00s)",
+   "posizione": "bigbytes_test.go:156",
+   "file": "bigbytes_test.go",
+   "nome": "TestBigBytes"
+  }
+ }
+}

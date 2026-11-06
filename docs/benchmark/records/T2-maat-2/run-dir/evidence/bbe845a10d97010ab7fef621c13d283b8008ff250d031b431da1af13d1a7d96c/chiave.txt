@@ -1,0 +1,7 @@
+schema=gates-1
+tree=05a4f8bc5e877130b859c6e78c062c0c1b7f0995
+livello=std
+cmd.tests-humanize=cd '<repo>' && python3 .claude/bench/go-junit.py '<report>' && go vet ./... && : 'bigbytes_test.go' 'bytes_test.go' 'comma_fuzz_test.go' 'comma_test.go' 'commaf_fuzz_test.go' 'commaf_test.go' 'common_test.go' 'ftoa_precision_test.go' 'ftoa_test.go' 'number_test.go' 'ordinals_test.go' 'si_test.go' 'times_test.go'
+cmd.controlli-humanize=cd '<repo>' && test -z "$(gofmt -l 'bigbytes.go')" ; cd '<repo>' && test -z "$(gofmt -l 'bigbytes_test.go')" ; cd '<repo>' && test -z "$(gofmt -l 'bytes.go')" ; cd '<repo>' && test -z "$(gofmt -l 'bytes_test.go')"
+TZ=<non impostata>
+CI=<non impostata>

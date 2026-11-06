@@ -1,0 +1,3 @@
+Cost: $1.61 API-equivalent · 5.2 min · 1 phase · 5h quota 45% -> 47%
+  01-plan                        $1.61     5.2 min
+Note: API-equivalent cost as reported by Claude Code; on a subscription it is not billed, the 5h quota is the measure. A phase relaunched with the same label overwrites its log: earlier attempts are not counted.

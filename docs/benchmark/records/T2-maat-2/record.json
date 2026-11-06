@@ -1,0 +1,57 @@
+{
+  "run_id": "T2-maat-2",
+  "task": "T2",
+  "side": "maat",
+  "order": 3,
+  "spec_sha256": "4591679fe95692413c00832423638ddd8ebca422f34784cb0d8fd81ac222684b",
+  "spec_sha256_in_copy": "4591679fe95692413c00832423638ddd8ebca422f34784cb0d8fd81ac222684b",
+  "upstream_repo": "https://github.com/dustin/go-humanize.git",
+  "upstream_commit": "a1b4e66b9a6d890e9e15e7091cf16c8032367d6e",
+  "base_snapshot_commit": "37bea5e96b1a0bfe7a8b6e1e26b39e73b9e17469",
+  "maat_tag": "v1.6.0",
+  "claude_code_version": "2.1.318",
+  "model": "claude-opus-5-5",
+  "model_check": "model: ok claude-opus-5-5 (5 sessions)",
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2 x86_64",
+  "started_utc": "2026-11-06T10:13:32Z",
+  "ended_utc": "2026-11-06T10:37:35Z",
+  "wall_clock_s": 1443,
+  "exit_code": 1,
+  "timed_out": false,
+  "outcome": "NEEDS_VERIFICATION",
+  "outcome_detail": "STOP — cycle finished: signature NEEDS_VERIFICATION — to verify: counterproof T1: NOT RUN (declared): module humanize declares no counterproof; counterproof T4: NOT RUN (declared): module humanize declares no counterproof; the promotion to IMPLEMENTED belongs to a later invocation, after the verification",
+  "quota": false,
+  "contaminated": false,
+  "human_interventions": [],
+  "cost_usd_api_equivalent": 9.01,
+  "cost_breakdown": {
+    "01-plan": {
+      "cost_usd": 5.23,
+      "minutes": 14.0
+    },
+    "02-test-red": {
+      "cost_usd": 1.13,
+      "minutes": 3.7
+    },
+    "03-implement": {
+      "cost_usd": 1.2,
+      "minutes": 1.1
+    },
+    "04-review": {
+      "cost_usd": 1.45,
+      "minutes": 4.9
+    }
+  },
+  "final_diff": "records/T2-maat-2/final.diff",
+  "final_diff_sha256": "e89caf69d1ef464dd35c2d72ef55d94f9b924f25954fbcd09ad99e33655b20db",
+  "report": "records/T2-maat-2/spec-with-plan-and-review.md + records/T2-maat-2/outcome.txt",
+  "hidden_tests": {
+    "passed": 21,
+    "total": 21
+  },
+  "blind_review_code": null,
+  "blind_review_entries": null,
+  "confirmed_defects": null,
+  "undisclosed_defects": null,
+  "notes": []
+}

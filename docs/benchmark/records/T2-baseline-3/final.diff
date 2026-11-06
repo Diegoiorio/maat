@@ -1,0 +1,557 @@
+diff --git a/bigbytes.go b/bigbytes.go
+index 3b015fd..b5b0308 100644
+--- a/bigbytes.go
++++ b/bigbytes.go
+@@ -2,6 +2,7 @@ package humanize
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"math/big"
+ 	"strings"
+ 	"unicode"
+@@ -115,6 +116,11 @@ func humanateBigBytes(s, base *big.Int, sizes []string) string {
+ 	}
+ 	c := (&big.Int{}).Set(s)
+ 	val, mag := oomm(c, base, len(sizes)-1)
++	// %.0f rounds half to even; if that would carry the number up to the base
++	// (e.g. 999.9 kB -> 1000 kB), print exactly one of the next unit instead.
++	if mag < len(sizes)-1 && math.RoundToEven(val) >= float64(base.Int64()) {
++		val, mag = 1, mag+1
++	}
+ 	suffix := sizes[mag]
+ 	f := "%.0f %s"
+ 	if val < 10 {
+@@ -130,6 +136,7 @@ func humanateBigBytes(s, base *big.Int, sizes []string) string {
+ // See also: ParseBigBytes.
+ //
+ // BigBytes(82854982) -> 83 MB
++// BigBytes(999999) -> 1.0 MB
+ func BigBytes(s *big.Int) string {
+ 	sizes := []string{"B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "RB", "QB"}
+ 	return humanateBigBytes(s, bigSIExp, sizes)
+@@ -140,6 +147,7 @@ func BigBytes(s *big.Int) string {
+ // See also: ParseBigBytes.
+ //
+ // BigIBytes(82854982) -> 79 MiB
++// BigIBytes(1048575) -> 1.0 MiB
+ func BigIBytes(s *big.Int) string {
+ 	sizes := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB"}
+ 	return humanateBigBytes(s, bigIECExp, sizes)
+diff --git a/bigbytes_test.go b/bigbytes_test.go
+index 59445ea..ffb050b 100644
+--- a/bigbytes_test.go
++++ b/bigbytes_test.go
+@@ -1,6 +1,7 @@
+ package humanize
+ 
+ import (
++	"fmt"
+ 	"math/big"
+ 	"testing"
+ )
+@@ -108,13 +109,13 @@ func TestBigBytes(t *testing.T) {
+ 		{"bytes(999)", bbyte(999), "999 B"},
+ 
+ 		{"bytes(1024)", bbyte(1024), "1.0 kB"},
+-		{"bytes(1MB - 1)", bbyte(MByte - Byte), "1000 kB"},
++		{"bytes(1MB - 1)", bbyte(MByte - Byte), "1.0 MB"},
+ 
+ 		{"bytes(1MB)", bbyte(1024 * 1024), "1.0 MB"},
+-		{"bytes(1GB - 1K)", bbyte(GByte - KByte), "1000 MB"},
++		{"bytes(1GB - 1K)", bbyte(GByte - KByte), "1.0 GB"},
+ 
+ 		{"bytes(1GB)", bbyte(GByte), "1.0 GB"},
+-		{"bytes(1TB - 1M)", bbyte(TByte - MByte), "1000 GB"},
++		{"bytes(1TB - 1M)", bbyte(TByte - MByte), "1.0 TB"},
+ 
+ 		{"bytes(1TB)", bbyte(TByte), "1.0 TB"},
+ 		{"bytes(1PB - 1T)", bbyte(PByte - TByte), "999 TB"},
+@@ -132,13 +133,13 @@ func TestBigBytes(t *testing.T) {
+ 		{"bytes(1023)", bibyte(1023), "1023 B"},
+ 
+ 		{"bytes(1024)", bibyte(1024), "1.0 KiB"},
+-		{"bytes(1MB - 1)", bibyte(MiByte - IByte), "1024 KiB"},
++		{"bytes(1MB - 1)", bibyte(MiByte - IByte), "1.0 MiB"},
+ 
+ 		{"bytes(1MB)", bibyte(1024 * 1024), "1.0 MiB"},
+-		{"bytes(1GB - 1K)", bibyte(GiByte - KiByte), "1024 MiB"},
++		{"bytes(1GB - 1K)", bibyte(GiByte - KiByte), "1.0 GiB"},
+ 
+ 		{"bytes(1GB)", bibyte(GiByte), "1.0 GiB"},
+-		{"bytes(1TB - 1M)", bibyte(TiByte - MiByte), "1024 GiB"},
++		{"bytes(1TB - 1M)", bibyte(TiByte - MiByte), "1.0 TiB"},
+ 
+ 		{"bytes(1TB)", bibyte(TiByte), "1.0 TiB"},
+ 		{"bytes(1PB - 1T)", bibyte(PiByte - TiByte), "1023 TiB"},
+@@ -156,6 +157,140 @@ func TestBigBytes(t *testing.T) {
+ 	}.validate(t)
+ }
+ 
++// Every boundary a Big function can reach: the largest input that stays in its
++// unit and the smallest one that is promoted, which is halfway to the next whole
++// number at the top of the unit.
++func TestBigBytesPromotion(t *testing.T) {
++	tests := []struct {
++		name  string
++		f     func(*big.Int) string
++		top   string
++		sizes []string
++		units []*big.Int
++		twice int64 // twice the number at which the rounding reaches the base
++	}{
++		{
++			"BigBytes", BigBytes, "999",
++			[]string{"kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "RB", "QB"},
++			[]*big.Int{BigKByte, BigMByte, BigGByte, BigTByte, BigPByte, BigEByte, BigZByte, BigYByte, BigRByte, BigQByte},
++			1999,
++		},
++		{
++			"BigIBytes", BigIBytes, "1023",
++			[]string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB"},
++			[]*big.Int{BigKiByte, BigMiByte, BigGiByte, BigTiByte, BigPiByte, BigEiByte, BigZiByte, BigYiByte, BigRiByte, BigQiByte},
++			2047,
++		},
++	}
++	for _, tt := range tests {
++		for i := 0; i < len(tt.units)-1; i++ {
++			promote := new(big.Int).Mul(tt.units[i], big.NewInt(tt.twice))
++			promote.Rsh(promote, 1)
++			stay := new(big.Int).Sub(promote, BigByte)
++			almost := new(big.Int).Sub(tt.units[i+1], BigByte)
++
++			testList{
++				{tt.name + " stay", tt.f(stay), tt.top + " " + tt.sizes[i]},
++				{tt.name + " promote", tt.f(promote), "1.0 " + tt.sizes[i+1]},
++				{tt.name + " one below", tt.f(almost), "1.0 " + tt.sizes[i+1]},
++				{tt.name + " one", tt.f(tt.units[i+1]), "1.0 " + tt.sizes[i+1]},
++			}.validate(t)
++		}
++	}
++
++	testList{
++		{"BigBytes(1GB - 1)", BigBytes(big.NewInt(GByte - 1)), "1.0 GB"},
++		{"BigIBytes(1GiB - 1)", BigIBytes(big.NewInt(GiByte - 1)), "1.0 GiB"},
++
++		// Bytes are never rounded, so this boundary has no promoted input.
++		{"bbyte(999)", bbyte(999), "999 B"},
++		{"bbyte(1000)", bbyte(1000), "1.0 kB"},
++		{"bibyte(1023)", bibyte(1023), "1023 B"},
++		{"bibyte(1024)", bibyte(1024), "1.0 KiB"},
++	}.validate(t)
++}
++
++func TestBigBytesUnchanged(t *testing.T) {
++	testList{
++		{"bbyte(999499)", bbyte(999_499), "999 kB"},
++		{"bibyte(1000KiB)", bibyte(1000 * 1024), "1000 KiB"},
++		{"bibyte(1023KiB)", bibyte(1023 * 1024), "1023 KiB"},
++		{"bibyte(999.5KiB)", bibyte(999.5 * KiByte), "1000 KiB"},
++		// Carrying to 10.0 in the "%.1f" range is not a carry to the base.
++		{"bbyte(9999)", bbyte(9999), "10.0 kB"},
++		{"bibyte(10239)", bibyte(10239), "10.0 KiB"},
++	}.validate(t)
++
++	for s := uint64(0); s < 10; s++ {
++		exp := fmt.Sprintf("%d B", s)
++		testList{
++			{"bbyte", bbyte(s), exp},
++			{"bibyte", bibyte(s), exp},
++		}.validate(t)
++	}
++}
++
++// There is no unit after QB and QiB, so their number can reach the base.
++func TestBigBytesLastUnit(t *testing.T) {
++	mul := func(u *big.Int, n int64) *big.Int {
++		return new(big.Int).Mul(u, big.NewInt(n))
++	}
++	half := func(u *big.Int, twice int64) *big.Int {
++		return new(big.Int).Rsh(mul(u, twice), 1)
++	}
++	testList{
++		{"999 QB", BigBytes(mul(BigQByte, 999)), "999 QB"},
++		{"999.5 QB - 1", BigBytes(new(big.Int).Sub(half(BigQByte, 1999), BigByte)), "999 QB"},
++		{"999.5 QB", BigBytes(half(BigQByte, 1999)), "1000 QB"},
++		{"1000 QB - 1", BigBytes(new(big.Int).Sub(mul(BigQByte, 1000), BigByte)), "1000 QB"},
++		{"1000 QB", BigBytes(mul(BigQByte, 1000)), "1000 QB"},
++		{"12345 QB", BigBytes(mul(BigQByte, 12345)), "12345 QB"},
++
++		{"1023 QiB", BigIBytes(mul(BigQiByte, 1023)), "1023 QiB"},
++		{"1023.5 QiB - 1", BigIBytes(new(big.Int).Sub(half(BigQiByte, 2047), BigByte)), "1023 QiB"},
++		{"1023.5 QiB", BigIBytes(half(BigQiByte, 2047)), "1024 QiB"},
++		{"1024 QiB - 1", BigIBytes(new(big.Int).Sub(mul(BigQiByte, 1024), BigByte)), "1024 QiB"},
++		{"1024 QiB", BigIBytes(mul(BigQiByte, 1024)), "1024 QiB"},
++		{"12345 QiB", BigIBytes(mul(BigQiByte, 12345)), "12345 QiB"},
++	}.validate(t)
++}
++
++func TestBigBytesDoesNotModifyInput(t *testing.T) {
++	for _, in := range []int64{0, 9, 999, 999_499, 999_500, 999_999, MiByte - 1, GiByte - 1, GByte} {
++		for name, f := range map[string]func(*big.Int) string{"BigBytes": BigBytes, "BigIBytes": BigIBytes} {
++			s := big.NewInt(in)
++			f(s)
++			if s.Int64() != in {
++				t.Errorf("%s changed its input from %d to %v", name, in, s)
++			}
++		}
++	}
++}
++
++func TestBigBytesOutputsParseBack(t *testing.T) {
++	limit := new(big.Int).Mul(BigQByte, big.NewInt(2000))
++	for _, s := range byteSizeSamples(limit) {
++		before := new(big.Int).Set(s)
++		for _, c := range []struct {
++			out, last string
++			base      float64
++		}{
++			{BigBytes(s), "QB", 1000},
++			{BigIBytes(s), "QiB", 1024},
++		} {
++			parsed, err := ParseBigBytes(c.out)
++			if err != nil {
++				t.Errorf("%v: couldn't parse %q: %v", s, c.out, err)
++				continue
++			}
++			checkParsedOutput(t, s, c.out, parsed, c.base, c.last)
++		}
++		if s.Cmp(before) != 0 {
++			t.Errorf("input changed from %v to %v", before, s)
++		}
++	}
++}
++
+ func TestVeryBigBytes(t *testing.T) {
+ 	b, _ := (&big.Int{}).SetString("15347691069326346944512", 10)
+ 	s := BigBytes(b)
+diff --git a/bytes.go b/bytes.go
+index e07fce8..a5824f9 100644
+--- a/bytes.go
++++ b/bytes.go
+@@ -93,10 +93,17 @@ func humanateBytes(s uint64, base float64, minDigits int, sizes []string) string
+ 	rounding := math.Pow10(digits)
+ 	val = math.Floor(val*rounding+0.5) / rounding
+ 
+-	// Rounding may have carried into an additional integer digit (e.g.
+-	// 9.996 -> 10.0), which means fewer decimal places should be shown
+-	// than originally computed.
+-	if newIntDigits := countDigits(int64(val)); newIntDigits > intDigits {
++	if val >= base && !math.IsInf(val, 1) && int(e) < len(sizes)-1 {
++		// Rounding carried the number up to the base (e.g. 999.9 kB -> 1000
++		// kB), so print exactly one of the next unit instead. An infinite
++		// val is an overflow of the rounding at absurdly large minDigits,
++		// not a carry.
++		val, suffix = 1, sizes[int(e)+1]
++		digits = max(minDigits-1, 0)
++	} else if newIntDigits := countDigits(int64(val)); newIntDigits > intDigits {
++		// Rounding may have carried into an additional integer digit (e.g.
++		// 9.996 -> 10.0), which means fewer decimal places should be shown
++		// than originally computed.
+ 		digits = max(digits-(newIntDigits-intDigits), 0)
+ 	}
+ 
+@@ -110,6 +117,7 @@ func humanateBytes(s uint64, base float64, minDigits int, sizes []string) string
+ // See also: ParseBytes.
+ //
+ // Bytes(82854982) -> 83 MB
++// Bytes(999999) -> 1.0 MB
+ func Bytes(s uint64) string {
+ 	sizes := []string{"B", "kB", "MB", "GB", "TB", "PB", "EB"}
+ 	return humanateBytes(s, 1000, 2, sizes)
+@@ -123,6 +131,7 @@ func Bytes(s uint64) string {
+ //
+ // BytesN(82854982, 3) -> 82.9 MB
+ // BytesN(82854982, 4) -> 82.85 MB
++// BytesN(999999, 3) -> 1.00 MB
+ func BytesN(s uint64, n int) string {
+ 	sizes := []string{"B", "kB", "MB", "GB", "TB", "PB", "EB"}
+ 	return humanateBytes(s, 1000, n, sizes)
+@@ -133,6 +142,7 @@ func BytesN(s uint64, n int) string {
+ // See also: ParseBytes.
+ //
+ // IBytes(82854982) -> 79 MiB
++// IBytes(1048575) -> 1.0 MiB
+ func IBytes(s uint64) string {
+ 	sizes := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+ 	return humanateBytes(s, 1024, 2, sizes)
+diff --git a/bytes_test.go b/bytes_test.go
+index b19b369..2743475 100644
+--- a/bytes_test.go
++++ b/bytes_test.go
+@@ -1,6 +1,11 @@
+ package humanize
+ 
+ import (
++	"fmt"
++	"math/big"
++	"math/rand"
++	"strconv"
++	"strings"
+ 	"testing"
+ )
+ 
+@@ -116,13 +121,13 @@ func TestBytes(t *testing.T) {
+ 
+ 		{"bytes(1024)", Bytes(1024), "1.0 kB"},
+ 		{"bytes(9999)", Bytes(9999), "10 kB"},
+-		{"bytes(1MB - 1)", Bytes(MByte - Byte), "1000 kB"},
++		{"bytes(1MB - 1)", Bytes(MByte - Byte), "1.0 MB"},
+ 
+ 		{"bytes(1MB)", Bytes(1024 * 1024), "1.0 MB"},
+-		{"bytes(1GB - 1K)", Bytes(GByte - KByte), "1000 MB"},
++		{"bytes(1GB - 1K)", Bytes(GByte - KByte), "1.0 GB"},
+ 
+ 		{"bytes(1GB)", Bytes(GByte), "1.0 GB"},
+-		{"bytes(1TB - 1M)", Bytes(TByte - MByte), "1000 GB"},
++		{"bytes(1TB - 1M)", Bytes(TByte - MByte), "1.0 TB"},
+ 		{"bytes(10MB)", Bytes(9999 * 1000), "10 MB"},
+ 
+ 		{"bytes(1TB)", Bytes(TByte), "1.0 TB"},
+@@ -148,13 +153,13 @@ func TestBytes(t *testing.T) {
+ 		{"bytes(1023)", IBytes(1023), "1023 B"},
+ 
+ 		{"bytes(1024)", IBytes(1024), "1.0 KiB"},
+-		{"bytes(1MB - 1)", IBytes(MiByte - IByte), "1024 KiB"},
++		{"bytes(1MB - 1)", IBytes(MiByte - IByte), "1.0 MiB"},
+ 
+ 		{"bytes(1MB)", IBytes(1024 * 1024), "1.0 MiB"},
+-		{"bytes(1GB - 1K)", IBytes(GiByte - KiByte), "1024 MiB"},
++		{"bytes(1GB - 1K)", IBytes(GiByte - KiByte), "1.0 GiB"},
+ 
+ 		{"bytes(1GB)", IBytes(GiByte), "1.0 GiB"},
+-		{"bytes(1TB - 1M)", IBytes(TiByte - MiByte), "1024 GiB"},
++		{"bytes(1TB - 1M)", IBytes(TiByte - MiByte), "1.0 TiB"},
+ 
+ 		{"bytes(1TB)", IBytes(TiByte), "1.0 TiB"},
+ 		{"bytes(1PB - 1T)", IBytes(PiByte - TiByte), "1023 TiB"},
+@@ -175,6 +180,229 @@ func TestBytes(t *testing.T) {
+ 	}.validate(t)
+ }
+ 
++// The rounded number reaching the base moves the output to the next unit. Each
++// pair of cases is the largest input that stays in its unit and the smallest
++// one that is promoted.
++func TestBytesPromotion(t *testing.T) {
++	testList{
++		// Bytes are never rounded, so this boundary has no promoted input.
++		{"bytes(999)", Bytes(999), "999 B"},
++		{"bytes(1000)", Bytes(1000), "1.0 kB"},
++
++		{"bytes(999.5kB - 1)", Bytes(999_499), "999 kB"},
++		{"bytes(999.5kB)", Bytes(999_500), "1.0 MB"},
++		{"bytes(1MB - 1)", Bytes(999_999), "1.0 MB"},
++
++		{"bytes(999.5MB - 1)", Bytes(999_499_999), "999 MB"},
++		{"bytes(999.5MB)", Bytes(999_500_000), "1.0 GB"},
++
++		{"bytes(999.5GB - 1)", Bytes(999_499_999_999), "999 GB"},
++		{"bytes(999.5GB)", Bytes(999_500_000_000), "1.0 TB"},
++
++		{"bytes(999.5TB - 1)", Bytes(999_499_999_999_999), "999 TB"},
++		{"bytes(999.5TB)", Bytes(999_500_000_000_000), "1.0 PB"},
++
++		// These inputs go through a float64 with a spacing of 128 here, so
++		// everything within 64 of the boundary already rounds onto it.
++		{"bytes(999.5PB - 65)", Bytes(999_500_000_000_000_000 - 65), "999 PB"},
++		{"bytes(999.5PB - 64)", Bytes(999_500_000_000_000_000 - 64), "1.0 EB"},
++		{"bytes(999.5PB)", Bytes(999_500_000_000_000_000), "1.0 EB"},
++
++		{"ibytes(1023)", IBytes(1023), "1023 B"},
++		{"ibytes(1024)", IBytes(1024), "1.0 KiB"},
++
++		{"ibytes(1023.5KiB - 1)", IBytes(1023.5*KiByte - 1), "1023 KiB"},
++		{"ibytes(1023.5KiB)", IBytes(1023.5 * KiByte), "1.0 MiB"},
++		{"ibytes(1MiB - 1)", IBytes(1_048_575), "1.0 MiB"},
++
++		{"ibytes(1023.5MiB - 1)", IBytes(1023.5*MiByte - 1), "1023 MiB"},
++		{"ibytes(1023.5MiB)", IBytes(1023.5 * MiByte), "1.0 GiB"},
++
++		{"ibytes(1023.5GiB - 1)", IBytes(1023.5*GiByte - 1), "1023 GiB"},
++		{"ibytes(1023.5GiB)", IBytes(1023.5 * GiByte), "1.0 TiB"},
++
++		{"ibytes(1023.5TiB - 1)", IBytes(1023.5*TiByte - 1), "1023 TiB"},
++		{"ibytes(1023.5TiB)", IBytes(1023.5 * TiByte), "1.0 PiB"},
++
++		// Same float64 spacing as for 999.5 PB.
++		{"ibytes(1023.5PiB - 65)", IBytes(1023.5*PiByte - 65), "1023 PiB"},
++		{"ibytes(1023.5PiB - 64)", IBytes(1023.5*PiByte - 64), "1.0 EiB"},
++		{"ibytes(1023.5PiB)", IBytes(1023.5 * PiByte), "1.0 EiB"},
++
++		// Numbers below the base stay in their unit, even with four digits.
++		{"ibytes(1000KiB)", IBytes(1000 * 1024), "1000 KiB"},
++		{"ibytes(1023KiB)", IBytes(1023 * 1024), "1023 KiB"},
++		{"ibytes(999.5KiB)", IBytes(999.5 * KiByte), "1000 KiB"},
++
++		// The largest values of a uint64 stay in the last unit.
++		{"bytes(max)", Bytes(1<<64 - 1), "18 EB"},
++		{"ibytes(max)", IBytes(1<<64 - 1), "16 EiB"},
++	}.validate(t)
++}
++
++func TestBytesSmallValuesUnchanged(t *testing.T) {
++	for s := uint64(0); s < 10; s++ {
++		exp := fmt.Sprintf("%d B", s)
++		testList{
++			{"bytes", Bytes(s), exp},
++			{"ibytes", IBytes(s), exp},
++			{"bytesN", BytesN(s, 3), exp},
++			{"ibytesN", IBytesN(s, 3), exp},
++		}.validate(t)
++	}
++}
++
++func TestBytesNPromotion(t *testing.T) {
++	// With no decimals to show, the boundary is the same as for Bytes.
++	boundaries := []struct {
++		stay, promote, unit uint64
++		from, to            string
++	}{
++		{999_499, 999_500, MByte, "kB", "MB"},
++		{999_499_999, 999_500_000, GByte, "MB", "GB"},
++		{999_499_999_999, 999_500_000_000, TByte, "GB", "TB"},
++		{999_499_999_999_999, 999_500_000_000_000, PByte, "TB", "PB"},
++		{999_500_000_000_000_000 - 65, 999_500_000_000_000_000, EByte, "PB", "EB"},
++	}
++	ones := map[int]string{-1: "1", 0: "1", 1: "1", 2: "1.0", 3: "1.00"}
++	for n, one := range ones {
++		for _, b := range boundaries {
++			name := fmt.Sprintf("bytesN(%d, %d)", b.promote, n)
++			testList{
++				{name, BytesN(b.stay, n), "999 " + b.from},
++				{name, BytesN(b.promote, n), one + " " + b.to},
++				{name, BytesN(b.promote, n), BytesN(b.unit, n)},
++			}.validate(t)
++		}
++	}
++
++	testList{
++		{"bytesN(1MB - 1, 3)", BytesN(999_999, 3), "1.00 MB"},
++		{"bytesN(1MB - 1, 0)", BytesN(999_999, 0), BytesN(1_000_000, 0)},
++
++		// More digits move the boundary closer to the next unit.
++		{"bytesN(999949, 4)", BytesN(999_949, 4), "999.9 kB"},
++		{"bytesN(999950, 4)", BytesN(999_950, 4), "1.000 MB"},
++		{"bytesN(999994, 5)", BytesN(999_994, 5), "999.99 kB"},
++		{"bytesN(999995, 5)", BytesN(999_995, 5), "1.0000 MB"},
++		{"bytesN(999999, 6)", BytesN(999_999, 6), "999.999 kB"},
++		{"bytesN(1MB, 6)", BytesN(1_000_000, 6), "1.00000 MB"},
++		{"bytesN(999999499, 6)", BytesN(999_999_499, 6), "999.999 MB"},
++		{"bytesN(999999500, 6)", BytesN(999_999_500, 6), "1.00000 GB"},
++
++		// Too many digits for a float64: the rounding overflows, which must
++		// not be mistaken for a carry to the next unit.
++		{"bytesN(500kB, 309)", BytesN(500_000, 309), "+Inf kB"},
++
++		{"ibytesN(1MiB - 1, 3)", IBytesN(1_048_575, 3), "1.00 MiB"},
++		{"ibytesN(1023.5KiB - 1, 4)", IBytesN(1023.5*KiByte-1, 4), "1023 KiB"},
++		{"ibytesN(1023.5KiB, 4)", IBytesN(1023.5*KiByte, 4), "1.000 MiB"},
++		{"ibytesN(1048524, 5)", IBytesN(1_048_524, 5), "1023.9 KiB"},
++		{"ibytesN(1048525, 5)", IBytesN(1_048_525, 5), "1.0000 MiB"},
++		{"ibytesN(1MiB - 1, 5)", IBytesN(1_048_575, 5), "1.0000 MiB"},
++	}.validate(t)
++}
++
++// checkParsedOutput verifies that out, the formatting of in, shows a number
++// below base unless its unit is the last one, and that parsed, the value read
++// back from it, is within one unit of its last printed digit.
++func checkParsedOutput(t *testing.T, in *big.Int, out string, parsed *big.Int, base float64, last string) {
++	t.Helper()
++	num, unit, ok := strings.Cut(out, " ")
++	if !ok {
++		t.Errorf("%v: malformed output %q", in, out)
++		return
++	}
++	v, err := strconv.ParseFloat(num, 64)
++	if err != nil {
++		t.Errorf("%v: malformed output %q: %v", in, out, err)
++		return
++	}
++	if v >= base && unit != last {
++		t.Errorf("%v: %q should have moved to the next unit", in, out)
++	}
++
++	one, err := ParseBigBytes("1 " + unit)
++	if err != nil {
++		t.Errorf("%v: unknown unit in %q: %v", in, out, err)
++		return
++	}
++	digit := new(big.Rat).SetInt(one)
++	if _, frac, ok := strings.Cut(num, "."); ok {
++		digit.Quo(digit, new(big.Rat).SetInt(new(big.Int).Exp(ten, big.NewInt(int64(len(frac))), nil)))
++	}
++	// The parsers return whole bytes, truncating, so nothing tighter than one
++	// byte can hold when the last digit is worth less than that.
++	if digit.Cmp(new(big.Rat).SetInt(BigByte)) < 0 {
++		digit.SetInt(BigByte)
++	}
++	diff := new(big.Rat).SetInt(new(big.Int).Sub(parsed, in))
++	if diff.Abs(diff).Cmp(digit) > 0 {
++		t.Errorf("%v: %q reads back as %v, more than %v away", in, out, parsed, digit.FloatString(1))
++	}
++}
++
++// byteSizeSamples returns inputs around every boundary between units, around
++// the points where the rounding carries to the next unit, and spread over the
++// whole range up to limit.
++func byteSizeSamples(limit *big.Int) []*big.Int {
++	var samples []*big.Int
++	add := func(s *big.Int) {
++		if s.Sign() >= 0 && s.Cmp(limit) <= 0 {
++			samples = append(samples, s)
++		}
++	}
++	for _, base := range []int64{1000, 1024} {
++		b := big.NewInt(base)
++		for u := big.NewInt(1); u.Cmp(limit) <= 0; u = new(big.Int).Mul(u, b) {
++			// One unit, and half a unit below it in the next smaller unit.
++			half := new(big.Int).Div(u, big.NewInt(2*base))
++			for _, c := range []*big.Int{u, new(big.Int).Sub(u, half)} {
++				for d := int64(-130); d <= 130; d++ {
++					add(new(big.Int).Add(c, big.NewInt(d)))
++				}
++			}
++		}
++	}
++	r := rand.New(rand.NewSource(1))
++	for i := 0; i < 2000; i++ {
++		add(new(big.Int).Rsh(new(big.Int).Rand(r, limit), uint(r.Intn(limit.BitLen()))))
++	}
++	return samples
++}
++
++func TestBytesOutputsParseBack(t *testing.T) {
++	limit := new(big.Int).SetUint64(1<<64 - 1)
++	for _, s := range byteSizeSamples(limit) {
++		u := s.Uint64()
++		for _, c := range []struct {
++			out, last string
++			base      float64
++		}{
++			{Bytes(u), "EB", 1000},
++			{IBytes(u), "EiB", 1024},
++			{BytesN(u, 0), "EB", 1000},
++			{BytesN(u, 1), "EB", 1000},
++			{BytesN(u, 2), "EB", 1000},
++			{BytesN(u, 3), "EB", 1000},
++			{BytesN(u, 4), "EB", 1000},
++			{BytesN(u, 6), "EB", 1000},
++		} {
++			// Near the top of the range the rounded output can exceed a uint64,
++			// which ParseBytes rejects by design (see TestByteErrors).
++			if exact, err := ParseBigBytes(c.out); err == nil && exact.Cmp(limit) > 0 {
++				continue
++			}
++			parsed, err := ParseBytes(c.out)
++			if err != nil {
++				t.Errorf("%d: couldn't parse %q: %v", u, c.out, err)
++				continue
++			}
++			checkParsedOutput(t, s, c.out, new(big.Int).SetUint64(parsed), c.base, c.last)
++		}
++	}
++}
++
+ func BenchmarkParseBytes(b *testing.B) {
+ 	for i := 0; i < b.N; i++ {
+ 		ParseBytes("16.5 GB")

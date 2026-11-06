@@ -1,0 +1,649 @@
+diff --git a/index.js b/index.js
+index 78cafa8..0d909fa 100644
+--- a/index.js
++++ b/index.js
+@@ -1,47 +1,15 @@
+ 'use strict';
+ 
+-function hasKey(obj, keys) {
+-	var o = obj;
+-	keys.slice(0, -1).forEach(function (key) {
+-		o = o[key] || {};
+-	});
+-
+-	var key = keys[keys.length - 1];
+-	return key in o;
+-}
+-
+-function isNumber(x) {
+-	if (typeof x === 'number') { return true; }
+-	if ((/^0x[0-9a-f]+$/i).test(x)) { return true; }
+-	return (/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?$/).test(x);
+-}
+-
+-function isConstructorOrProto(obj, key) {
+-	return (key === 'constructor' && typeof obj[key] === 'function') || key === '__proto__';
+-}
++var buildFlags = require('./lib/build-flags');
++var createSetKey = require('./lib/set-key');
++var hasKey = require('./lib/has-key');
++var isNumber = require('./lib/is-number');
+ 
+ module.exports = function (args, opts) {
+ 	if (!opts) { opts = {}; }
+ 
+-	var flags = {
+-		bools: {},
+-		strings: {},
+-		unknownFn: null,
+-	};
+-
+-	if (typeof opts.unknown === 'function') {
+-		flags.unknownFn = opts.unknown;
+-	}
+-
+-	if (typeof opts.boolean === 'boolean' && opts.boolean) {
+-		flags.allBools = true;
+-	} else {
+-		[].concat(opts.boolean).filter(Boolean).forEach(function (key) {
+-			flags.bools[key] = true;
+-		});
+-	}
+-
+-	var aliases = {};
++	var flags = buildFlags(opts);
++	var aliases = flags.aliases;
+ 
+ 	function isBooleanKey(key) {
+ 		if (flags.bools[key]) {
+@@ -55,24 +23,6 @@ module.exports = function (args, opts) {
+ 		});
+ 	}
+ 
+-	Object.keys(opts.alias || {}).forEach(function (key) {
+-		aliases[key] = [].concat(opts.alias[key]);
+-		aliases[key].forEach(function (x) {
+-			aliases[x] = [key].concat(aliases[key].filter(function (y) {
+-				return x !== y;
+-			}));
+-		});
+-	});
+-
+-	[].concat(opts.string).filter(Boolean).forEach(function (key) {
+-		flags.strings[key] = true;
+-		if (aliases[key]) {
+-			[].concat(aliases[key]).forEach(function (k) {
+-				flags.strings[k] = true;
+-			});
+-		}
+-	});
+-
+ 	var defaults = opts.default || {};
+ 
+ 	var argv = { _: [] };
+@@ -84,41 +34,7 @@ module.exports = function (args, opts) {
+ 			|| aliases[key];
+ 	}
+ 
+-	function setKey(obj, keys, value) {
+-		var o = obj;
+-		for (var i = 0; i < keys.length - 1; i++) {
+-			var key = keys[i];
+-			if (isConstructorOrProto(o, key)) { return; }
+-			if (o[key] === undefined) { o[key] = {}; }
+-			if (
+-				o[key] === Object.prototype
+-				|| o[key] === Number.prototype
+-				|| o[key] === String.prototype
+-			) {
+-				o[key] = {};
+-			}
+-			if (o[key] === Array.prototype) { o[key] = []; }
+-			o = o[key];
+-		}
+-
+-		var lastKey = keys[keys.length - 1];
+-		if (isConstructorOrProto(o, lastKey)) { return; }
+-		if (
+-			o === Object.prototype
+-			|| o === Number.prototype
+-			|| o === String.prototype
+-		) {
+-			o = {};
+-		}
+-		if (o === Array.prototype) { o = []; }
+-		if (o[lastKey] === undefined || isBooleanKey(lastKey) || typeof o[lastKey] === 'boolean') {
+-			o[lastKey] = value;
+-		} else if (Array.isArray(o[lastKey])) {
+-			o[lastKey].push(value);
+-		} else {
+-			o[lastKey] = [o[lastKey], value];
+-		}
+-	}
++	var setKey = createSetKey(isBooleanKey);
+ 
+ 	function setArg(key, val, arg) {
+ 		if (arg && flags.unknownFn && !argDefined(key, arg)) {
+diff --git a/lib/build-flags.js b/lib/build-flags.js
+new file mode 100644
+index 0000000..de0465f
+--- /dev/null
++++ b/lib/build-flags.js
+@@ -0,0 +1,47 @@
++'use strict';
++
++module.exports = function buildFlags(opts) {
++	var options = opts || {};
++
++	var flags = {
++		aliases: {},
++		allBools: false,
++		bools: {},
++		strings: {},
++		unknownFn: null,
++	};
++
++	if (typeof options.unknown === 'function') {
++		flags.unknownFn = options.unknown;
++	}
++
++	if (typeof options.boolean === 'boolean' && options.boolean) {
++		flags.allBools = true;
++	} else {
++		[].concat(options.boolean).filter(Boolean).forEach(function (key) {
++			flags.bools[key] = true;
++		});
++	}
++
++	var aliases = flags.aliases;
++
++	Object.keys(options.alias || {}).forEach(function (key) {
++		aliases[key] = [].concat(options.alias[key]);
++		aliases[key].forEach(function (x) {
++			aliases[x] = [key].concat(aliases[key].filter(function (y) {
++				return x !== y;
++			}));
++		});
++	});
++
++	[].concat(options.string).filter(Boolean).forEach(function (key) {
++		flags.strings[key] = true;
++		if (aliases[key]) {
++			[].concat(aliases[key]).forEach(function (k) {
++				flags.strings[k] = true;
++			});
++		}
++	});
++
++	return flags;
++};
+diff --git a/lib/has-key.js b/lib/has-key.js
+new file mode 100644
+index 0000000..8d99451
+--- /dev/null
++++ b/lib/has-key.js
+@@ -0,0 +1,11 @@
++'use strict';
++
++module.exports = function hasKey(obj, keys) {
++	var o = obj;
++	keys.slice(0, -1).forEach(function (key) {
++		o = o[key] || {};
++	});
++
++	var key = keys[keys.length - 1];
++	return key in o;
++};
+diff --git a/lib/is-number.js b/lib/is-number.js
+new file mode 100644
+index 0000000..133e503
+--- /dev/null
++++ b/lib/is-number.js
+@@ -0,0 +1,7 @@
++'use strict';
++
++module.exports = function isNumber(x) {
++	if (typeof x === 'number') { return true; }
++	if ((/^0x[0-9a-f]+$/i).test(x)) { return true; }
++	return (/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?$/).test(x);
++};
+diff --git a/lib/set-key.js b/lib/set-key.js
+new file mode 100644
+index 0000000..8b32fd8
+--- /dev/null
++++ b/lib/set-key.js
+@@ -0,0 +1,43 @@
++'use strict';
++
++function isConstructorOrProto(obj, key) {
++	return (key === 'constructor' && typeof obj[key] === 'function') || key === '__proto__';
++}
++
++module.exports = function createSetKey(isBooleanKey) {
++	return function setKey(obj, keys, value) {
++		var o = obj;
++		for (var i = 0; i < keys.length - 1; i++) {
++			var key = keys[i];
++			if (isConstructorOrProto(o, key)) { return; }
++			if (o[key] === undefined) { o[key] = {}; }
++			if (
++				o[key] === Object.prototype
++				|| o[key] === Number.prototype
++				|| o[key] === String.prototype
++			) {
++				o[key] = {};
++			}
++			if (o[key] === Array.prototype) { o[key] = []; }
++			o = o[key];
++		}
++
++		var lastKey = keys[keys.length - 1];
++		if (isConstructorOrProto(o, lastKey)) { return; }
++		if (
++			o === Object.prototype
++			|| o === Number.prototype
++			|| o === String.prototype
++		) {
++			o = {};
++		}
++		if (o === Array.prototype) { o = []; }
++		if (o[lastKey] === undefined || isBooleanKey(lastKey) || typeof o[lastKey] === 'boolean') {
++			o[lastKey] = value;
++		} else if (Array.isArray(o[lastKey])) {
++			o[lastKey].push(value);
++		} else {
++			o[lastKey] = [o[lastKey], value];
++		}
++	};
++};
+diff --git a/test/lib-build-flags.js b/test/lib-build-flags.js
+new file mode 100644
+index 0000000..c45253b
+--- /dev/null
++++ b/test/lib-build-flags.js
+@@ -0,0 +1,107 @@
++'use strict';
++
++var test = require('tape');
++var buildFlags = require('../lib/build-flags');
++
++var empty = {
++	aliases: {},
++	allBools: false,
++	bools: {},
++	strings: {},
++	unknownFn: null,
++};
++
++test('buildFlags: no options', function (t) {
++	t.deepEqual(buildFlags({}), empty);
++	t.deepEqual(buildFlags(), empty);
++	t.deepEqual(buildFlags(undefined), empty);
++	t.deepEqual(buildFlags(null), empty);
++	t.end();
++});
++
++test('buildFlags: returns a new object at each call', function (t) {
++	var opts = { boolean: 'a' };
++	var first = buildFlags(opts);
++	var second = buildFlags(opts);
++	t.notEqual(first, second);
++	t.notEqual(first.bools, second.bools);
++	t.notEqual(first.strings, second.strings);
++	t.notEqual(first.aliases, second.aliases);
++	t.end();
++});
++
++test('buildFlags: boolean', function (t) {
++	var all = buildFlags({ boolean: true });
++	t.equal(all.allBools, true);
++	t.deepEqual(all.bools, {});
++
++	var none = buildFlags({ boolean: false });
++	t.equal(none.allBools, false);
++	t.deepEqual(none.bools, {});
++
++	var one = buildFlags({ boolean: 'a' });
++	t.equal(one.allBools, false);
++	t.deepEqual(one.bools, { a: true });
++
++	t.deepEqual(buildFlags({ boolean: ['a', 'b', '', 0, null] }).bools, { a: true, b: true }, 'falsy names dropped');
++	t.equal(buildFlags({ boolean: 'true' }).allBools, false, 'only the value true enables allBools');
++	t.end();
++});
++
++test('buildFlags: bools does not include aliases', function (t) {
++	var flags = buildFlags({ alias: { a: 'b' }, boolean: 'a' });
++	t.deepEqual(flags.bools, { a: true });
++	t.end();
++});
++
++test('buildFlags: string', function (t) {
++	t.deepEqual(buildFlags({ string: 'a' }).strings, { a: true });
++	t.deepEqual(buildFlags({ string: ['a', 'b', '', null] }).strings, { a: true, b: true }, 'falsy names dropped');
++	t.end();
++});
++
++test('buildFlags: strings includes aliases, from either side', function (t) {
++	var alias = { a: ['b', 'c'] };
++	t.deepEqual(buildFlags({ alias: alias, string: 'a' }).strings, { a: true, b: true, c: true });
++	t.deepEqual(buildFlags({ alias: alias, string: 'b' }).strings, { a: true, b: true, c: true });
++	t.end();
++});
++
++test('buildFlags: unknown', function (t) {
++	function unknown() {}
++	t.equal(buildFlags({ unknown: unknown }).unknownFn, unknown);
++	t.equal(buildFlags({ unknown: 'not a function' }).unknownFn, null);
++	t.end();
++});
++
++test('buildFlags: aliases map each name to its other names', function (t) {
++	t.deepEqual(buildFlags({ alias: { a: 'b' } }).aliases, { a: ['b'], b: ['a'] });
++	t.deepEqual(
++		buildFlags({ alias: { a: ['b', 'c'] } }).aliases,
++		{ a: ['b', 'c'], b: ['a', 'c'], c: ['a', 'b'] }
++	);
++	t.end();
++});
++
++test('buildFlags: a later alias entry overwrites an earlier one', function (t) {
++	t.deepEqual(
++		buildFlags({ alias: { a: 'b', b: 'c' } }).aliases,
++		{ a: ['b'], b: ['c'], c: ['b'] }
++	);
++	t.end();
++});
++
++test('buildFlags: does not modify the options', function (t) {
++	var opts = { alias: { a: ['b'] }, boolean: ['c'], string: ['d'] };
++	buildFlags(opts);
++	t.deepEqual(opts, { alias: { a: ['b'] }, boolean: ['c'], string: ['d'] });
++	t.end();
++});
++
++test('buildFlags: the result objects inherit from Object.prototype', function (t) {
++	var flags = buildFlags({});
++	t.equal(flags.bools.constructor, Object);
++	t.equal(flags.strings.constructor, Object);
++	t.equal(flags.aliases.constructor, Object);
++	t.end();
++});
+diff --git a/test/lib-has-key.js b/test/lib-has-key.js
+new file mode 100644
+index 0000000..dbcccf1
+--- /dev/null
++++ b/test/lib-has-key.js
+@@ -0,0 +1,59 @@
++'use strict';
++
++var test = require('tape');
++var hasKey = require('../lib/has-key');
++
++test('hasKey: top-level keys', function (t) {
++	t.equal(hasKey({ a: 1 }, ['a']), true);
++	t.equal(hasKey({ a: 1 }, ['b']), false);
++	t.equal(hasKey({ a: undefined }, ['a']), true);
++	t.end();
++});
++
++test('hasKey: nested keys', function (t) {
++	var obj = { a: { b: { c: 1 } } };
++	t.equal(hasKey(obj, ['a', 'b']), true);
++	t.equal(hasKey(obj, ['a', 'b', 'c']), true);
++	t.equal(hasKey(obj, ['a', 'x']), false);
++	t.equal(hasKey(obj, ['x', 'y', 'z']), false, 'a missing path is not an error');
++	t.end();
++});
++
++test('hasKey: falsy intermediate values count as missing', function (t) {
++	t.equal(hasKey({ a: 0 }, ['a', 'b']), false);
++	t.equal(hasKey({ a: '' }, ['a', 'b']), false);
++	t.equal(hasKey({ a: null }, ['a', 'b']), false);
++	t.end();
++});
++
++test('hasKey: inherited keys are found', function (t) {
++	t.equal(hasKey({}, ['toString']), true);
++	t.equal(hasKey({ a: {} }, ['a', 'constructor']), true);
++	t.equal(hasKey(Object.create(null), ['toString']), false);
++	t.end();
++});
++
++test('hasKey: throws when the parent of the last key is a truthy primitive', function (t) {
++	t.throws(function () {
++		hasKey({ a: 1 }, ['a', 'b']);
++	}, TypeError);
++	t.throws(function () {
++		hasKey({ a: 'x' }, ['a', 'b']);
++	}, TypeError);
++	t.end();
++});
++
++test('hasKey: an empty key list looks up the key "undefined"', function (t) {
++	t.equal(hasKey({}, []), false);
++	t.equal(hasKey({ undefined: 1 }, []), true);
++	t.end();
++});
++
++test('hasKey: does not modify the object or the keys', function (t) {
++	var obj = { a: {} };
++	var keys = ['a', 'b', 'c'];
++	hasKey(obj, keys);
++	t.deepEqual(obj, { a: {} });
++	t.deepEqual(keys, ['a', 'b', 'c']);
++	t.end();
++});
+diff --git a/test/lib-is-number.js b/test/lib-is-number.js
+new file mode 100644
+index 0000000..3174b41
+--- /dev/null
++++ b/test/lib-is-number.js
+@@ -0,0 +1,44 @@
++'use strict';
++
++var test = require('tape');
++var isNumber = require('../lib/is-number');
++
++test('isNumber: every value of type number, whatever its value', function (t) {
++	t.equal(isNumber(0), true);
++	t.equal(isNumber(-1.5), true);
++	t.equal(isNumber(NaN), true);
++	t.equal(isNumber(Infinity), true);
++	t.end();
++});
++
++test('isNumber: hexadecimal strings', function (t) {
++	t.equal(isNumber('0x10'), true);
++	t.equal(isNumber('0XaF'), true);
++	t.equal(isNumber('0x'), false);
++	t.equal(isNumber('0xg'), false);
++	t.equal(isNumber('-0x10'), false);
++	t.end();
++});
++
++test('isNumber: decimal and exponent strings', function (t) {
++	var numbers = ['0', '5', '-5', '+5', '1.5', '1.', '.5', '-.5', '1e5', '1e+5', '1e-5', '1.5e3', '007'];
++	numbers.forEach(function (x) {
++		t.equal(isNumber(x), true, JSON.stringify(x) + ' is a number');
++	});
++
++	var notNumbers = ['', '.', '-', 'e5', '1e', '1E5', '1.2.3', ' 1', '1 ', '1\n', 'abc', '1a', 'Infinity', 'NaN'];
++	notNumbers.forEach(function (x) {
++		t.equal(isNumber(x), false, JSON.stringify(x) + ' is not a number');
++	});
++	t.end();
++});
++
++test('isNumber: other types are tested through their string form', function (t) {
++	t.equal(isNumber(['1']), true);
++	t.equal(isNumber([1, 2]), false);
++	t.equal(isNumber(undefined), false);
++	t.equal(isNumber(null), false);
++	t.equal(isNumber(true), false);
++	t.equal(isNumber({}), false);
++	t.end();
++});
+diff --git a/test/lib-set-key.js b/test/lib-set-key.js
+new file mode 100644
+index 0000000..9e8a378
+--- /dev/null
++++ b/test/lib-set-key.js
+@@ -0,0 +1,157 @@
++'use strict';
++
++/* eslint no-proto: 0 */
++
++var test = require('tape');
++var createSetKey = require('../lib/set-key');
++
++function never() {
++	return false;
++}
++
++function always() {
++	return true;
++}
++
++test('createSetKey: returns a function', function (t) {
++	t.equal(typeof createSetKey(never), 'function');
++	t.end();
++});
++
++test('setKey: sets top-level and nested keys, creating the path', function (t) {
++	var setKey = createSetKey(never);
++	var obj = {};
++	setKey(obj, ['a'], 1);
++	setKey(obj, ['b', 'c', 'd'], 2);
++	t.deepEqual(obj, { a: 1, b: { c: { d: 2 } } });
++	t.end();
++});
++
++test('setKey: repeated values accumulate in an array', function (t) {
++	var setKey = createSetKey(never);
++	var obj = {};
++	setKey(obj, ['a'], 1);
++	setKey(obj, ['a'], 2);
++	t.deepEqual(obj.a, [1, 2]);
++	setKey(obj, ['a'], 3);
++	t.deepEqual(obj.a, [1, 2, 3]);
++	t.end();
++});
++
++test('setKey: boolean keys and existing boolean values are overwritten', function (t) {
++	var obj = { a: 1, b: true };
++	createSetKey(always)(obj, ['a'], 2);
++	t.equal(obj.a, 2, 'isBooleanKey true: overwritten');
++	createSetKey(never)(obj, ['b'], 3);
++	t.equal(obj.b, 3, 'existing boolean value: overwritten');
++	t.end();
++});
++
++test('setKey: isBooleanKey receives the last key, only when a value already exists', function (t) {
++	var calls = [];
++	var setKey = createSetKey(function (key) {
++		calls.push([].slice.call(arguments));
++		return key === 'nothing';
++	});
++	var obj = {};
++
++	setKey(obj, ['a', 'b'], 1);
++	t.deepEqual(calls, [], 'not called for a new key');
++
++	setKey(obj, ['a', 'b'], 2);
++	t.deepEqual(calls, [['b']], 'called once, with the last key alone');
++	t.deepEqual(obj.a.b, [1, 2]);
++	t.end();
++});
++
++test('setKey: throws when the parent of the last key is a primitive', function (t) {
++	var setKey = createSetKey(never);
++	var obj = { a: 1 };
++	t.throws(function () {
++		setKey(obj, ['a', 'b'], 2);
++	}, TypeError);
++	t.deepEqual(obj, { a: 1 });
++	t.end();
++});
++
++test('setKey: __proto__ is ignored at every position', function (t) {
++	var setKey = createSetKey(never);
++	var obj = {};
++
++	setKey(obj, ['__proto__'], { polluted: 1 });
++	setKey(obj, ['__proto__', 'polluted'], 1);
++	setKey(obj, ['a', '__proto__'], { polluted: 1 });
++	setKey(obj, ['a', '__proto__', 'polluted'], 1);
++
++	t.equal({}.polluted, undefined);
++	t.equal(obj.polluted, undefined);
++	t.equal(obj.__proto__, Object.prototype);
++	t.deepEqual(Object.keys(obj), ['a']);
++	t.deepEqual(obj.a, {});
++	t.end();
++});
++
++test('setKey: constructor is ignored when it is a function', function (t) {
++	var setKey = createSetKey(never);
++	var obj = {};
++
++	setKey(obj, ['constructor'], 1);
++	setKey(obj, ['constructor', 'prototype', 'polluted'], 1);
++	setKey(obj, ['a', 'constructor', 'prototype', 'polluted'], 1);
++
++	t.equal({}.polluted, undefined);
++	t.equal(obj.constructor, Object);
++	t.deepEqual(obj, { a: {} });
++	t.end();
++});
++
++test('setKey: constructor is an ordinary key when it is not a function', function (t) {
++	var setKey = createSetKey(never);
++	var obj = Object.create(null);
++
++	setKey(obj, ['constructor'], 1);
++	t.equal(obj.constructor, 1);
++
++	var nested = { constructor: {} };
++	setKey(nested, ['constructor', 'x'], 2);
++	t.equal(nested.constructor.x, 2);
++	t.end();
++});
++
++test('setKey: built-in prototypes on the path are replaced, not written to', function (t) {
++	var setKey = createSetKey(never);
++	var obj = {
++		arr: Array.prototype,
++		num: Number.prototype,
++		obj: Object.prototype,
++		str: String.prototype,
++	};
++
++	setKey(obj, ['arr', 'polluted'], 1);
++	setKey(obj, ['num', 'polluted'], 1);
++	setKey(obj, ['obj', 'polluted'], 1);
++	setKey(obj, ['str', 'polluted'], 1);
++
++	t.equal(Array.isArray(obj.arr), true);
++	t.notEqual(obj.arr, Array.prototype);
++	t.equal(obj.arr.polluted, 1);
++	t.deepEqual(obj.num, { polluted: 1 });
++	t.deepEqual(obj.obj, { polluted: 1 });
++	t.deepEqual(obj.str, { polluted: 1 });
++
++	t.equal([].polluted, undefined);
++	t.equal((0).polluted, undefined);
++	t.equal({}.polluted, undefined);
++	t.equal(''.polluted, undefined);
++	t.end();
++});
++
++test('setKey: a built-in prototype as target loses the write', function (t) {
++	var setKey = createSetKey(never);
++
++	[Object.prototype, Number.prototype, String.prototype, Array.prototype].forEach(function (proto) {
++		setKey(proto, ['polluted'], 1);
++		t.equal(Object.prototype.hasOwnProperty.call(proto, 'polluted'), false);
++	});
++	t.end();
++});
