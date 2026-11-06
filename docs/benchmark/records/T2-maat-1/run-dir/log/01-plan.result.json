@@ -1,0 +1,38 @@
+{
+ "fase": "plan",
+ "esito": "OK",
+ "motivo": "plan APPROVED after 3 iterations, basis FRESH; human to confirm D1 (IBytesN not promoted)",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  ".claude/.ai-workflow/spec-bytes-rounding-unit.md"
+ ],
+ "gate_interni": [
+  {
+   "comando": "plan-check.sh lint",
+   "esito": "PASS",
+   "dettaglio": "lint: OK"
+  },
+  {
+   "comando": "plan-check.sh lint2",
+   "esito": "PASS",
+   "dettaglio": "lint2: OK"
+  },
+  {
+   "comando": "plan-check.sh s2",
+   "esito": "PASS",
+   "dettaglio": "S2: APPROVA — delta and fresh eyes clean on fingerprint d1e24b314207"
+  },
+  {
+   "comando": "plan-check.sh basis",
+   "esito": "PASS",
+   "dettaglio": "Status: FRESH"
+  },
+  {
+   "comando": "plan-check.sh gen",
+   "esito": "PASS",
+   "dettaglio": "exit 0"
+  }
+ ],
+ "finding": []
+}

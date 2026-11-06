@@ -1,0 +1,5 @@
+std
+CHANGES.md
+src/click/utils.py
+tests/test_commands.py
+tests/test_utils/test_make_default_short_help.py

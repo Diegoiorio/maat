@@ -1,0 +1,16 @@
+{
+ "gate": "tests-click",
+ "esito": "FAIL",
+ "comando": "cd '/home/bench/bench-run/copies/T5-maat-2' && /home/bench/bench-run/copies/T5-maat-2/.venv/bin/python -m pytest -q -p no:cacheprovider --junitxml='<report>' tests && : 'tests/test_commands.py' 'tests/test_utils/test_make_default_short_help.py'",
+ "exit": 1,
+ "durata_s": 15.3,
+ "report": "tests-click.junit.xml",
+ "riepilogo": "2144 tests, 19 failed, 0 errors, 25 skipped",
+ "motivo": "",
+ "file": [
+  "tests/test_commands.py",
+  "tests/test_utils/test_make_default_short_help.py"
+ ],
+ "chiave": "97eac88fce8edffdb9d4e69d2b690caaf339e3d91aca5d92f39e11103e20813d",
+ "eseguito_il": "2026-11-06T14:02:27Z"
+}

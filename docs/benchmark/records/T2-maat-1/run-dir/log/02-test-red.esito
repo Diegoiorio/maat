@@ -1,0 +1,2 @@
+PHASE RESULT test-red: OK — 7 tests written (T1-T7) in bytes_test.go and bigbytes_test.go, all red on the planned assertion per the writer; no stubs needed
+state=d273f05a8129

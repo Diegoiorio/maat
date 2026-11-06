@@ -1,0 +1,5 @@
+counterproof T3: NOT RUN (declared): module humanize declares no counterproof
+counterproof T6: NOT RUN (declared): module humanize declares no counterproof
+finalize: Evidence composed — 10 requirements, 10 not covered
+finalize: esito=NEEDS_VERIFICATION — counterproof T3: NOT RUN (declared): module humanize declares no counterproof; counterproof T6: NOT RUN (declared): module humanize declares no counterproof
+exit=1

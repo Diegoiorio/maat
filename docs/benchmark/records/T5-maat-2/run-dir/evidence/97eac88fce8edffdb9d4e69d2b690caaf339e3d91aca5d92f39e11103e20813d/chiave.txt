@@ -1,0 +1,7 @@
+schema=gates-1
+tree=6965c3160b7bb313404b3917ca2c5366c0f1f657
+livello=std
+cmd.tests-click=cd '<repo>' && <repo>/.venv/bin/python -m pytest -q -p no:cacheprovider --junitxml='<report>' tests && : 'tests/test_commands.py' 'tests/test_utils/test_make_default_short_help.py'
+python=Python 3.12.3
+TZ=<non impostata>
+CI=<non impostata>
