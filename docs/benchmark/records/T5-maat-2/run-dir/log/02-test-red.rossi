@@ -1,0 +1,20 @@
+rosso T1: dimostrato tests/test_utils/test_make_default_short_help.py:97 — red on the declared assertion — AssertionError: assert 'Weigh apples vs.' == 'Weigh apples vs. pears.' - Weigh apples vs. pears. ? ------- + Weigh apples vs. value = 'Weigh apples vs. pears.', max_length = 30, prefix = '' expect = '
+rosso T2: dimostrato tests/test_utils/test_make_default_short_help.py:124 — red on the declared assertion — AssertionError: assert 'Weigh apples vs.' == 'Weigh apples vs....' - Weigh apples vs.... ? --- + Weigh apples vs. value = 'Weigh apples vs. pears and plums.', max_length = 20, prefix = '' expect = 'We
+rosso T3: dimostrato tests/test_utils/test_make_default_short_help.py:143 — red on the declared assertion — AssertionError: assert 'a.' == '...' - ... + a. value = 'a. b', max_length = 2, prefix = '', expect = '...' @pytest.mark.parametrize( ("value", "max_length", "expect"), [ pytest.param("a. b", 2, "..."
+rosso T4: dimostrato tests/test_utils/test_make_default_short_help.py:167 — red on the declared assertion — AssertionError: assert 'Weigh apples vs.' == 'Weigh apples vs. pears.' - Weigh apples vs. pears. ? ------- + Weigh apples vs. value = 'Weigh apples vs. pears.\n\nThen more.', max_length = 45, prefix =
+rosso T5: dimostrato tests/test_commands.py:106 — red on the declared assertion — AssertionError: assert 'Weigh apples vs. pears.' in 'Usage: root [OPTIONS] COMMAND [ARGS]...\n\nOptions:\n --help Show this message and exit.\n\nCommands:\n weigh Weigh apples vs.\n' + where 'Usage: r
+rosso T6: dimostrato tests/test_utils/test_make_default_short_help.py:41 — red on the declared assertion — AssertionError: assert '123 567 9.' == '123 567...' - 123 567... ? -- + 123 567 9. ? ++ value = '123 567 9. aaaa bbb', max_length = 10, alter = None expect = '123 567...' @pytest.mark.parametrize( ("v
+rossi: esito=OK — 6/6 acceptance tests red on their assertion
+Tests: 384fef382ef8 registrata in Approved basis
+AVVISO: mutation T1: search appears 0 times in src/click/utils.py (after the implementation exactly 1 is needed)
+Plan format: 2
+Impronta piano: a8dbb15b7e36
+Test level: std
+vitest: (nessuno)
+pytest: tests/test_utils/test_make_default_short_help.py tests/test_commands.py
+altri: (nessuno)
+cmd pytest: /home/bench/bench-run/copies/T5-maat-2/.venv/bin/python -m pytest -q -p no:cacheprovider --junitxml=/home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/gen/tests-click.junit.xml tests && : 'tests/test_utils/test_make_default_short_help.py' 'tests/test_commands.py'
+cmd counterproof: PROJECT_ROOT=/home/bench/bench-run/copies/T5-maat-2 MAAT_CONFIG=/home/bench/bench-run/copies/T5-maat-2/.claude/maat.json bash /home/bench/bench-run-config/plugins/cache/maat/maat/1.6.0/scripts/counterproof.sh /home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/counterproof/mutations.json
+mutazioni: 1
+blocco B1: scrive=src/click/utils.py,tests/test_utils/test_make_default_short_help.py,tests/test_commands.py,CHANGES.md · dopo=nessuno
+gen: written .claude/.ai-workflow/spec-short-help-abbreviation.run/gen/procedura.txt and counterproof/mutations.json

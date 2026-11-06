@@ -1,0 +1,232 @@
+# Spec: a command's short help must not stop at an abbreviation
+
+## Context
+
+When a command has no explicit `short_help`, Click derives one from its help text, for the list of commands shown
+by a group's `--help` (`Command.get_short_help_str()` in `src/click/core.py`, which calls
+`_make_default_short_help(help, max_length)` in `src/click/utils.py`). The rule today: take the first paragraph,
+collapse whitespace, stop at the first word that ends with a period (the end of the first sentence), and truncate
+with `...` if the result is longer than `max_length` (45 by default in that call path).
+
+Any word ending with a period is taken as the end of the sentence, so an abbreviation cuts the short help:
+
+```python
+@cli.command()
+def weigh():
+    """Weigh apples vs. pears."""
+```
+
+is listed as `weigh  Weigh apples vs.` instead of `weigh  Weigh apples vs. pears.`; the same happens with `e.g.`,
+`i.e.`, `etc.` followed by more words.
+
+The tests of the function are in `tests/test_utils/test_make_default_short_help.py`.
+
+## Goal
+
+The first sentence ends at a period only when that period really ends a sentence, and the short help keeps the
+rest of its current rules.
+
+## Functional requirements
+
+FR1. In the first paragraph, after whitespace is collapsed, a word that ends with `.` ends the first sentence only
+if it is the last word of the paragraph, or the next word does not start with a lowercase character (as defined by
+Python's `str.islower()` on that first character). Otherwise the period belongs to an abbreviation and the sentence
+goes on. So `"Weigh apples vs. pears."` is one sentence; `"Pick a fruit. 3 remain."` ends after `fruit.`;
+`"Read e.g. the docs. Then go."` ends after `docs.`.
+
+FR2. The short help is the first sentence (or the whole first paragraph if no word ends a sentence). If it is not
+longer than `max_length`, it is returned as it is.
+
+FR3. Otherwise it is truncated: as many whole leading words as fit, joined by single spaces, immediately followed
+by `...`, so that the total length is at most `max_length`. A word is never split, hyphenated words included. If not
+even the first word fits with the `...`, the result is `...`.
+
+FR4. Narrow widths: if `max_length` is smaller than 3 (zero and negative values included) and the text does not
+fit, the result is `...` (the only case where the result may be longer than `max_length`). A text that fits is
+still returned as it is (`"ab"` with `max_length` 2 gives `"ab"`).
+
+FR5. Unchanged: only the first paragraph is considered (text up to the first blank line); a leading `\b` no-rewrap
+marker is ignored; empty help gives `""`; a period inside a word (`~/.netrc`) is not a sentence end.
+
+FR6. The existing test case that relies on the old rule (`"123 567 9. aaaa bbb"` with width 10, which today gives
+`"123 567 9."`) is updated to the new rule (`"123 567..."`, since `aaaa` is lowercase), and new cases cover FR1 to
+FR5. An end-to-end test checks the command list of a group's `--help`.
+
+FR7. `CHANGES.md` gains an entry in the unreleased section at the top describing the change.
+
+## Codebase areas involved (indicative)
+
+- `src/click/utils.py`: `_make_default_short_help`.
+- `src/click/core.py`: `Command.get_short_help_str` (caller, unchanged).
+- `tests/test_utils/test_make_default_short_help.py`.
+- `CHANGES.md`.
+
+## Acceptance criteria
+
+AC1. `_make_default_short_help("Weigh apples vs. pears.", 30) == "Weigh apples vs. pears."` and
+`_make_default_short_help("Weigh apples vs. pears and plums.", 20) == "Weigh apples vs...."`.
+
+AC2. Every example of FR1 to FR5 gives the stated result, with and without a leading `\b` marker paragraph.
+
+AC3. The result is never longer than `max(max_length, 3)`.
+
+AC4. A group whose subcommand has the help `"Weigh apples vs. pears."` lists it in `--help` as
+`Weigh apples vs. pears.`.
+
+AC5. The whole test suite passes (`python -m pytest`).
+
+## Assumptions
+
+- An abbreviation followed by a capitalised word (`U.S. Army`) is taken as a sentence end: this limit is accepted.
+
+## Out of scope
+
+- The explicit `short_help` argument, the help of options and arguments, the formatting of the help page.
+- New dependencies.
+
+## Constraints
+
+- The Python versions supported by the project (`requires-python` in `pyproject.toml`).
+- The function stays private (`_make_default_short_help`), with the same signature.
+
+## Implementation plan
+Plan format: 2
+Plan status: APPROVED
+Test level: std
+Risk surfaces: shared-logic
+Approved basis: spec 2c0ebc44b4cf · plan a8dbb15b7e36 · tests 384fef382ef8
+
+### Decisions
+**Objective.** `_make_default_short_help` (`src/click/utils.py:62`) stops treating every word ending with a period as a sentence end, and takes the first sentence before it decides on truncation. Signature and privacy unchanged.
+
+**Current behaviour.** One loop measures and looks for the period at once: the first fitting word ending with `.` returns immediately, so `Weigh apples vs. pears.` gives `Weigh apples vs.`.
+
+**D1 — two passes.** The loop becomes two steps, in this order: (1) cut `words` at the first sentence end; (2) join and, if longer than `max_length`, truncate. The sentence test is exactly `word[-1] == "." and not words[i + 1][0].islower()`, looping over every word but the last, so the last word never needs a test: with no sentence end the whole paragraph is the sentence (FR2). The expression `not words[i + 1][0].islower()` appears once in the file (the T1 mutation searches for it). The first-paragraph cut and `help.split()` stay as they are.
+
+**D2 — truncation.** A new forward count replaces the `while i > 0` loop: start from `len("...")`, add each word plus one space after the first word, stop at the first total above `max_length`; the result is the kept words joined by one space, plus `...`. No kept words gives `...`, which also covers every `max_length` below 3 (FR4). The result is never longer than `max(max_length, 3)` (AC3).
+
+**D3 — empty after the marker.** The `\b` marker is removed before the empty check: `if words and words[0] == "\b"`, then `if not words: return ""`. Otherwise a marker alone with a negative `max_length` would fail the fit test and return `...` instead of `""` (FR5; today it returns `""`, because the old loop never runs).
+
+**D4 — accepted edge cases, literal from FR1.** A next word starting with an uncased character (`(see`, `3`) does not start with a lowercase character, so the period ends the sentence. `U.S. Army` ends at `U.S.` (spec Assumptions).
+
+| input | `max_length` | output |
+|---|---|---|
+| `Weigh apples vs. pears.` | 30 | `Weigh apples vs. pears.` |
+| `Weigh apples vs. pears and plums.` | 20 | `Weigh apples vs....` |
+| `Pick a fruit. 3 remain.` | 45 | `Pick a fruit.` |
+| `Read e.g. the docs. Then go.` | 45 | `Read e.g. the docs.` |
+| `123 567 9. aaaa bbb` | 10 | `123 567...` |
+| `123 567 9. Aaaa bbb` | 10 | `123 567 9.` |
+| `a. b` | 2 | `...` (today `a.`) |
+| `ab` | 2 | `ab` |
+| empty, or the marker alone | -1 | empty |
+
+**Consumers.** `Command.get_short_help_str` (`src/click/core.py:1247`) is unchanged; its callers (`core.py:1462`, `core.py:2005`, `core.py:2133`) therefore also get the new text in shell completion, not only in the group command list: this is the declared shared-logic surface. `tests/test_deprecations.py:38` only checks the alias. `docs/documentation.md:34` («the first sentence of the docstring») stays true.
+
+Data flow, UI, backend, validation, permissions, migration and persistence: no implication. Rollback: revert the changed files; nothing is persisted.
+
+**Out of scope.** As in the spec: the explicit `short_help`, option and argument help, the help page formatting, new dependencies.
+
+### Touched files
+- `src/click/utils.py`
+- `tests/test_utils/test_make_default_short_help.py`
+- `tests/test_commands.py`
+- `CHANGES.md`
+
+### Steps
+#### Block B1 — short help
+writes: `src/click/utils.py`, `tests/test_utils/test_make_default_short_help.py`, `tests/test_commands.py`, `CHANGES.md`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | `src/click/utils.py` | `_make_default_short_help`: marker before the empty check (D3), first-sentence cut (D1) | T1, T4 |
+| P2 | `src/click/utils.py` | `_make_default_short_help`: fit test, then forward truncation (D2), replacing the old loops | T2, T3 |
+| P3 | `tests/test_utils/test_make_default_short_help.py` | no implementation edit: the test-red phase, together with T6, updates the `123 567 9. aaaa bbb` case of the existing `test_make_default_short_help` table: expected `123 567...`, id `abbreviation, truncate` (FR6). This is the plan's explicit update and the only existing case changed, so the implementer does not touch that function afterwards; its `len(expect) <= max_length` assert stays | T6 |
+| P4 | `tests/test_commands.py` | no implementation edit: T5 is added here by the test-red phase | T5 |
+| P5 | `CHANGES.md` | one entry at the end of `Version 8.5.1` (Unreleased): the default short help no longer stops at an abbreviation; a word ending with a period ends the first sentence only if it is the last word of the paragraph or the next word does not start with a lowercase character | — |
+
+### Requirement traceability
+| Req | Plan steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+| FR2 | P1, P2 | T1 |
+| FR3 | P2 | T2 |
+| FR4 | P2 | T3 |
+| FR5 | P1 | T4 |
+| FR6 | P3, P4 | T5, T6 |
+| FR7 | P5 | not verifiable by a test: changelog text, checked by reading the diff |
+
+### Test plan
+Every new test calls `click.utils._make_default_short_help` and asserts `out == expect`, then `len(out) <= max(max_length, 3)` (AC3). T1 to T4 are parametrized with their cases below, each case run both plain and with the marker `"\n\b\n" + value` (AC2); they live outside the existing test because its `len(expect) <= max_length` assert excludes FR4. A row is red through its first case, the others guard the rule.
+
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1, FR2 | `tests/test_utils/test_make_default_short_help.py::test_first_sentence_end` (new) | red if: an abbreviation ends the sentence, `'Weigh apples vs.' == 'Weigh apples vs. pears.'` | `src/click/utils.py` · `_make_default_short_help` · `not words[i + 1][0].islower()` → `True` · red if: `'Weigh apples vs.' == 'Weigh apples vs. pears.'` |
+| T2 | FR3 | `tests/test_utils/test_make_default_short_help.py::test_truncate_whole_words` (new) | red if: truncation applies to the wrong sentence, `'Weigh apples vs.' == 'Weigh apples vs....'` | — |
+| T3 | FR4 | `tests/test_utils/test_make_default_short_help.py::test_narrow_width` (new) | red if: a period still returns text that does not fit, `'a.' == '...'` | — |
+| T4 | FR5 | `tests/test_utils/test_make_default_short_help.py::test_unchanged_rules` (new) | red if: the paragraph rule is lost with the new sentence rule, `'Weigh apples vs.' == 'Weigh apples vs. pears.'` | — |
+| T5 | FR6 | `tests/test_commands.py::test_short_help_keeps_abbreviation` (new) | red if: a group's `--help` lists the cut text; a subcommand with the help below, `assert` on `Weigh apples vs. pears.` in the output | — |
+| T6 | FR6 | `tests/test_utils/test_make_default_short_help.py::test_make_default_short_help` | red if: the old rule still stops at the period, `'123 567 9.' == '123 567...'` | — |
+
+Cases, in this order (value, `max_length`, expected):
+- T1: `Weigh apples vs. pears.`, 30, itself · `Weigh apples vs. pears.`, 23, itself (exact fit) · `Pick a fruit. 3 remain.`, 45, `Pick a fruit.` · `Read e.g. the docs. Then go.`, 45, `Read e.g. the docs.` · `Mix etc. and more`, 45, itself · `See the U.S. Army now.`, 45, `See the U.S.` · `Stop here. (see below)`, 45, `Stop here.` · `Eat etc. étude now.`, 45, itself.
+- T2: `Weigh apples vs. pears and plums.`, 20, `Weigh apples vs....` · `123 567 9. Aaaa bbb`, 10, `123 567 9.` · `well-known-hyphenated word`, 10, `...` · `abcd efg`, 7, `abcd...` · `abcd efg`, 6, `...` · `aaa bbb. Ccc`, 8, `aaa bbb.`.
+- T3: `a. b`, 2, `...` · `a. B`, 2, `a.` · `ab`, 2, `ab` · `abc`, 2, `...` · `ab`, 0, `...` · `ab`, -1, `...` · empty, -1, empty.
+- T4: `"Weigh apples vs. pears.\n\nThen more."`, 45, `Weigh apples vs. pears.` · `"Weigh vs.\n\nmore text"`, 45, `Weigh vs.` · `Set ~/.netrc. Then go.`, 45, `Set ~/.netrc.`.
+- T5: a `click.Group` with one command whose help is `Weigh apples vs. pears.`, invoked through the `runner` fixture with `--help`.
+
+EXISTING non-regression tests (not rows of the Test plan: they cannot be proven red on the base with stubs):
+- `tests/test_commands.py::test_auto_shorthelp`: truncation and `~/.netrc` in the command list stay as they are (FR5).
+
+### Plan review changelog
+- R1 L3 major test-plan/updated test without row (test_make_default_short_help) → row T6, P3 assigned to test-red, duplicate case removed from T2.
+- R1 L3 major test-plan/T4 duplicates existing coverage → three T4 cases removed.
+- Note for the implementer (optional findings, not applied): T4 prose names the abbreviation cut, while its second case guards the paragraph rule · two T2 values are near-duplicates (`abcd efg` 7, `aaa bbb. Ccc` 8) · the level's cap of 5 is counted per row, not per parametrized value · T3 `empty, -1` with the marker also exercises D3 (FR5) · the separate test functions are needed for the row mapping and for FR4, not for all of T1 to T4 · AC5 (whole suite) is outside the std gate of the plan and left to the downstream verification · `CHANGES.md` entry has no issue or PR number because the spec gives none · in T3, `abc` 2 takes the same path as `a. b` 2.
+- Note for test-red: P3 is the plan's explicit update of one existing case through row T6, the single exception to adding cases only.
+Metrica ciclo: giri=2 · R1=2/3 · delta=0/1 · gate=0/1 · rifiutati=0 · ricorrenze=0 · reintrodotti=0 · esito=approvato · livello=std · superfici=logica-condivisa · formato=2
+
+## Implementation review
+Review status: APPROVED
+Feature status: NEEDS_VERIFICATION
+Finalize: NEEDS_VERIFICATION — snapshot 1ba3243e0ee0 — counterproof T1: result missing (counterproof.sh not run or incomplete) · 2026-11-06T14:06:36Z
+Requirement evidence (finalize.sh: requirement → test ID → result of VERIFY, evidence/4f954ab6fd0b)
+| Requirement | Test IDs | Evidence |
+|---|---|---|
+| FR1 | tests/test_utils/test_make_default_short_help.py::test_first_sentence_end; T1 | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_first_sentence_end; T1) |
+| FR2 | tests/test_utils/test_make_default_short_help.py::test_first_sentence_end; T1 | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_first_sentence_end; T1) |
+| FR3 | tests/test_utils/test_make_default_short_help.py::test_truncate_whole_words | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_truncate_whole_words) |
+| FR4 | tests/test_utils/test_make_default_short_help.py::test_narrow_width | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_narrow_width) |
+| FR5 | tests/test_utils/test_make_default_short_help.py::test_unchanged_rules; tests/test_utils/test_make_default_short_help.py::test_narrow_width; tests/test_commands.py::test_auto_shorthelp | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_unchanged_rules; tests/test_utils/test_make_default_short_help.py::test_narrow_width) |
+| FR6 | tests/test_utils/test_make_default_short_help.py::test_make_default_short_help; tests/test_commands.py::test_short_help_keeps_abbreviation | not covered (no result: tests/test_utils/test_make_default_short_help.py::test_make_default_short_help) |
+| FR7 | — | not covered (no test ID) |
+Verification: PARTIAL (finalize.sh: counterproof T1: result missing (counterproof.sh not run or incomplete))
+Review basis: SPEC+PLAN
+Reviewed snapshot: base 84062d8b88957fb1563150da6b3fd2b3aa1be8d8 · tree 592a9a61ed4b2f08947fa075e80f06c004cb376d · fingerprint ec43d11ab062 · 4 paths
+<details><summary>Manifest (4 paths)</summary>
+
+Scope:
+CHANGES.md
+src/click/utils.py
+tests/test_commands.py
+tests/test_utils/test_make_default_short_help.py
+Excluded:
+
+</details>
+
+Reviewed contract: spec 2c0ebc44b4cf · plan a8dbb15b7e36
+Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1
+
+| Gate | Req. | Command / check | Result | Evidence |
+|---|---|---|---|---|
+| tests of the touched modules (std) | yes | gates.sh (driver) | VERIFY (driver, in parallelo) | composed by finalize.sh |
+| plan: counterproof T1 on `_make_default_short_help` | yes | counterproof/T1 (driver) | VERIFY (driver, in parallelo) | composed by finalize.sh |
+
+| Finding key | Severity | State |
+|---|---|---|
+
+Blocking findings: none.
+
+Optional findings (suggestions, not applied):
+- nit `test-commands/no-exit-code@test_short_help_keeps_abbreviation` (`tests/test_commands.py:106`): T5 asserts only on the output, not the exit code. The plan asks only for the output assertion, and the test still goes red on the old rule.
+- nit `utils/shared-loop-variable-read-after@_make_default_short_help` (`src/click/utils.py:105`): both loops share `i` and `word`, and `i` is read after the second loop. Safe because that loop always breaks, as the comment at line 96 documents.

@@ -1,0 +1,6 @@
+Cost: $6.71 API-equivalent · 17.2 min · 4 phases · 5h quota 7% -> 22%
+  01-plan                        $4.52    11.6 min
+  02-test-red                    $0.61     1.8 min
+  03-implement                   $0.58     1.1 min
+  04-review                      $1.00     2.7 min
+Note: API-equivalent cost as reported by Claude Code; on a subscription it is not billed, the 5h quota is the measure. A phase relaunched with the same label overwrites its log: earlier attempts are not counted.

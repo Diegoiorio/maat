@@ -1,0 +1,4 @@
+counterproof: 0 mutations, 0 to run (exact duplicates once only), luogo=mirror
+counterproof: 2 NOT RUN (declared): modules without a counterproof, <id>.json with esito=non_eseguita
+counterproof: esito=NOT RUN prove=0/0 fail=0 bloccate=0 tempo=0s luogo=- non_eseguite=2
+exit=0

@@ -1,0 +1,10 @@
+Plan format: 2
+Impronta piano: a8dbb15b7e36
+Test level: std
+vitest: (nessuno)
+pytest: tests/test_utils/test_make_default_short_help.py tests/test_commands.py
+altri: (nessuno)
+cmd pytest: /home/bench/bench-run/copies/T5-maat-2/.venv/bin/python -m pytest -q -p no:cacheprovider --junitxml=/home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/gen/tests-click.junit.xml tests && : 'tests/test_utils/test_make_default_short_help.py' 'tests/test_commands.py'
+cmd counterproof: PROJECT_ROOT=/home/bench/bench-run/copies/T5-maat-2 MAAT_CONFIG=/home/bench/bench-run/copies/T5-maat-2/.claude/maat.json bash /home/bench/bench-run-config/plugins/cache/maat/maat/1.6.0/scripts/counterproof.sh /home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/counterproof/mutations.json
+mutazioni: 1
+blocco B1: scrive=src/click/utils.py,tests/test_utils/test_make_default_short_help.py,tests/test_commands.py,CHANGES.md · dopo=nessuno

@@ -1,0 +1,3 @@
+tests-click: FAIL (eseguito) — 2144 tests, 19 failed, 0 errors, 25 skipped
+gates: esito=FAIL chiave=97eac88fce8edffdb9d4e69d2b690caaf339e3d91aca5d92f39e11103e20813d evidence=/home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/evidence/97eac88fce8edffdb9d4e69d2b690caaf339e3d91aca5d92f39e11103e20813d
+exit=1 livello=std (test-red: the acceptance tests must be red)

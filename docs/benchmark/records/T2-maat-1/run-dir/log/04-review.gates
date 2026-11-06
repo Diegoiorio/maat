@@ -1,0 +1,4 @@
+tests-humanize: PASS (riuso) — 74 tests, 0 failed, 0 errors, 0 skipped
+controlli-humanize: PASS (riuso) — 4 entries run, 0 failed, 0 skipped
+gates: esito=PASS chiave=d86fc4e3133993914e007caa2318169609b27f5c3fa91e790d45243a7a5574d1 evidence=/home/bench/bench-run/copies/T2-maat-1/.claude/.ai-workflow/spec-bytes-rounding-unit.run/evidence/d86fc4e3133993914e007caa2318169609b27f5c3fa91e790d45243a7a5574d1
+exit=0 livello=std

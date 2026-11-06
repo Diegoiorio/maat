@@ -1,0 +1,4 @@
+== test -z "$(gofmt -l 'bigbytes_test.go')"
+== exit 0
+== test -z "$(gofmt -l 'bytes_test.go')"
+== exit 0

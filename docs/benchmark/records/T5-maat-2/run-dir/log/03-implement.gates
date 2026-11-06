@@ -1,0 +1,3 @@
+tests-click: PASS (eseguito) — 2144 tests, 0 failed, 0 errors, 25 skipped
+gates: esito=PASS chiave=4f954ab6fd0b3230ee887ed11642aa6d7f2f35087f13ea5cb69117e87b7b3c49 evidence=/home/bench/bench-run/copies/T5-maat-2/.claude/.ai-workflow/spec-short-help-abbreviation.run/evidence/4f954ab6fd0b3230ee887ed11642aa6d7f2f35087f13ea5cb69117e87b7b3c49
+exit=0 livello=std

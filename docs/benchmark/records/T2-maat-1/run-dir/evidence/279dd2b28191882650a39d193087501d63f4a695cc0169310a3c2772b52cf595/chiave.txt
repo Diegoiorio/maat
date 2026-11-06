@@ -1,0 +1,7 @@
+schema=gates-1
+tree=6a5ff644a15bd35702c0b7ce3670b10691fe22c7
+livello=std
+cmd.tests-humanize=cd '<repo>' && python3 .claude/bench/go-junit.py '<report>' && go vet ./... && : 'bigbytes_test.go' 'bytes_test.go'
+cmd.controlli-humanize=cd '<repo>' && test -z "$(gofmt -l 'bigbytes_test.go')" ; cd '<repo>' && test -z "$(gofmt -l 'bytes_test.go')"
+TZ=<non impostata>
+CI=<non impostata>

@@ -1,6 +1,6 @@
 # Maat benchmark — pre-registration
 
-**Status: frozen, no run made.** This folder applies [`../BENCHMARK-PROTOCOL.md`](../BENCHMARK-PROTOCOL.md)
+**Status: frozen; stopped by the author after 8 of 30 runs (see Results).** This folder applies [`../BENCHMARK-PROTOCOL.md`](../BENCHMARK-PROTOCOL.md)
 (version 2) to five tasks. It is published before the first run. The commit that freezes it changes only this
 status line; its full commit id, with a public random value drawn after it, gives the seed of the schedule
 (Procedure, step 1), and the first run starts only after that commit is public. After it, nothing here changes except the «Results» section, which is filled in as the runs
@@ -245,8 +245,16 @@ These do not change the protocol; they fix choices it leaves open.
 
 ## Results
 
-Partial: the runs go in groups, and this section grows after each one. Nothing below is a conclusion yet: the blind
-review and the adjudication of the defects (measures 1 and 3) come only after all 30 runs.
+**Stopped by the author after 8 of 30 runs (2026-11-06). Version 2 of the benchmark ends here, without a result.**
+The reason is in the data below and in nothing else: on these five tasks the baseline reached the full hidden score
+in every run it finished (4 of 4, in 3 to 8 minutes), so the tasks are too easy for the comparison to tell the two
+sides apart on quality, while the Maat side cost 2 to 10 times more where both sides ran the same task. The runs made stay here as they are, with their
+records; none is removed or repeated, the blind review and the adjudication are not made, and no conclusion is
+drawn from 8 runs. A version 3 of the protocol, with harder tasks chosen by criteria written before the runs, will be
+published as a new pre-registration in its own folder; it does not reuse these runs.
+
+The runs went in groups, and this section grew after each one; the blind review and the adjudication of the defects
+(measures 1 and 3) were to come only after all 30 runs.
 
 - **Schedule.** Freeze commit `b72ff0755d0d5cc7f2339e2b9bb1e20936152530`, drand quicknet round 33717017: seed and
   draw in [`seed.txt`](seed.txt), the order of the 30 runs in [`schedule.tsv`](schedule.tsv).
@@ -261,6 +269,7 @@ review and the adjudication of the defects (measures 1 and 3) come only after al
 | Group | Orders | Date (UTC) | Quota before (5 h · week) | Runs |
 |---|---|---|---|---|
 | 1 | 1–6 | 2026-11-06 10:02–10:51 | 21% · 79% | T4-baseline-2, T2-baseline-3, T2-maat-2, T3-baseline-2, T4-baseline-1, T3-maat-2 |
+| 2 (not finished) | 7–8 | 2026-11-06 13:18–14:07 | 68% · 84% | T2-maat-1, T5-maat-2; paused by the author after order 8, before the session of order 9 started (its copy, being prepared and never used by a session, was discarded); then the benchmark was stopped |
 
 | Run | Outcome | Hidden tests | Cost (API-eq.) | Time | Notes |
 |---|---|---|---|---|---|
@@ -269,6 +278,8 @@ review and the adjudication of the defects (measures 1 and 3) come only after al
 | T2-maat-2 | NEEDS_VERIFICATION | 21/21 | $9.01 | 24.1 min | the cycle ended with the counterproofs of T1 and T4 not run (the module declares no counterproof) |
 | T3-baseline-2 | COMPLETED | 21/21 | $0.85 | 5.0 min | |
 | T4-baseline-1 | COMPLETED | 45/45 | $0.73 | 3.0 min | |
+| T2-maat-1 | NEEDS_VERIFICATION | 21/21 | $11.03 | 29.7 min | as T2-maat-2: counterproofs not run (the module declares none) |
+| T5-maat-2 | NEEDS_VERIFICATION | 106/106 | $6.71 | 17.9 min | **contaminated** by the audit rule, the same two hits as T3-maat-2 (see below; plan log line 74) |
 | T3-maat-2 | STOP | 6/21 | $1.61 | 5.2 min | stopped in the plan phase: `lint2` refused the rows naming files in a new `lib/` folder, which the cycle cannot create; no code written (6/21 is the starting score). **Contaminated** by the audit rule: see below |
 
 **T3-maat-2, contaminated.** The audit found `/mnt/c/` twice in the log of the plan phase. Both hits are the text of
@@ -279,16 +290,16 @@ its copy. The frozen rule marks the run contaminated all the same, and so it sta
 
 ### Progress
 
-Status: **partial: 6 of 30**
+Status: **stopped: 8 of 30**
 
 | Task | Maat | Baseline |
 |---|---|---|
 | T1 | 0 of 3 | 0 of 3 |
-| T2 | 1 of 3 | 1 of 3 |
+| T2 | 2 of 3 | 1 of 3 |
 | T3 | 1 of 3 | 1 of 3 |
 | T4 | 0 of 3 | 2 of 3 |
-| T5 | 0 of 3 | 0 of 3 |
-| **All** | 2 of 15 | 4 of 15 |
+| T5 | 1 of 3 | 0 of 3 |
+| **All** | 4 of 15 | 4 of 15 |
 
 The charts and this table are made by [`grafici.py`](grafici.py) from the records in `records/`
 (`python3 grafici.py --progress` prints the table; `python3 grafici_test.py` tests the script). Each bar is the

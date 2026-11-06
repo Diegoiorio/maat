@@ -1,0 +1,246 @@
+diff --git a/CHANGES.md b/CHANGES.md
+index 1b8a5fb..87b933a 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -16,6 +16,9 @@ Unreleased
+ - {class}`Parameter` accepts a new `help` argument and {class}`Option` and {class}`Argument`
+   inherits it. {meth}`Parameter.to_info_dict` now reports `help` for every kind of parameter.
+   {pr}`3861`
++- The default short help of a command no longer stops at an abbreviation. A word
++  ending with a period ends the first sentence only if it is the last word of the
++  paragraph or the next word does not start with a lowercase character.
+ 
+ ## Version 8.5.0
+ 
+diff --git a/src/click/utils.py b/src/click/utils.py
+index b529eb0..6ac7d98 100644
+--- a/src/click/utils.py
++++ b/src/click/utils.py
+@@ -73,42 +73,35 @@ def _make_default_short_help(help: str, max_length: int = 45) -> str:
+     # Collapse newlines, tabs, and spaces.
+     words = help.split()
+ 
+-    if not words:
+-        return ""
+-
+     # The first paragraph started with a "no rewrap" marker, ignore it.
+-    if words[0] == "\b":
++    if words and words[0] == "\b":
+         words = words[1:]
+ 
+-    total_length = 0
+-    last_index = len(words) - 1
+-
+-    for i, word in enumerate(words):
+-        total_length += len(word) + (i > 0)
++    if not words:
++        return ""
+ 
+-        if total_length > max_length:  # too long, truncate
++    # A period ends the first sentence only if the next word does not start
++    # with a lowercase character, otherwise it belongs to an abbreviation.
++    for i, word in enumerate(words[:-1]):
++        if word[-1] == "." and not words[i + 1][0].islower():
++            words = words[: i + 1]
+             break
+ 
+-        if word[-1] == ".":  # sentence end, truncate without "..."
+-            return " ".join(words[: i + 1])
++    text = " ".join(words)
+ 
+-        if total_length == max_length and i != last_index:
+-            break  # not at sentence end, truncate with "..."
+-    else:
+-        return " ".join(words)  # no truncation needed
++    if len(text) <= max_length:
++        return text
+ 
+-    # Account for the length of the suffix.
+-    total_length += len("...")
++    # Keep the whole leading words that fit along with the suffix. The full
++    # text does not fit, so the loop always stops at the first word to drop.
++    total_length = len("...")
+ 
+-    # remove words until the length is short enough
+-    while i > 0:
+-        total_length -= len(words[i]) + (i > 0)
++    for i, word in enumerate(words):
++        total_length += len(word) + (i > 0)
+ 
+-        if total_length <= max_length:
++        if total_length > max_length:
+             break
+ 
+-        i -= 1
+-
+     return " ".join(words[:i]) + "..."
+ 
+ 
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index c2de826..d47f338 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -95,6 +95,17 @@ def test_auto_shorthelp(runner):
+     )
+ 
+ 
++def test_short_help_keeps_abbreviation(runner):
++    cli = click.Group()
++
++    @cli.command()
++    def weigh():
++        """Weigh apples vs. pears."""
++
++    result = runner.invoke(cli, ["--help"])
++    assert "Weigh apples vs. pears." in result.output
++
++
+ def test_command_no_args_is_help(runner):
+     result = runner.invoke(click.Command("test", no_args_is_help=True))
+     assert result.exit_code == 2
+diff --git a/tests/test_utils/test_make_default_short_help.py b/tests/test_utils/test_make_default_short_help.py
+index c2a1f8e..5b218f1 100644
+--- a/tests/test_utils/test_make_default_short_help.py
++++ b/tests/test_utils/test_make_default_short_help.py
+@@ -8,7 +8,9 @@ import click
+     [
+         pytest.param("", 10, "", id="empty"),
+         pytest.param("123 567 90", 10, "123 567 90", id="equal length, no dot"),
+-        pytest.param("123 567 9. aaaa bbb", 10, "123 567 9.", id="sentence < max"),
++        pytest.param(
++            "123 567 9. aaaa bbb", 10, "123 567...", id="abbreviation, truncate"
++        ),
+         pytest.param("123 567\n\n 9. aaaa bbb", 10, "123 567", id="paragraph < max"),
+         pytest.param("123 567 90123.", 10, "123 567...", id="truncate"),
+         pytest.param("123 5678 xxxxxx", 10, "123...", id="length includes suffix"),
+@@ -37,3 +39,130 @@ def test_make_default_short_help(value, max_length, alter, expect):
+ 
+     out = click.utils._make_default_short_help(value, max_length)
+     assert out == expect
++
++
++marker_prefix = pytest.mark.parametrize(
++    "prefix",
++    [
++        pytest.param("", id="plain"),
++        pytest.param("\n\b\n", id="no-wrap mark"),
++    ],
++)
++
++
++@pytest.mark.parametrize(
++    ("value", "max_length", "expect"),
++    [
++        pytest.param(
++            "Weigh apples vs. pears.",
++            30,
++            "Weigh apples vs. pears.",
++            id="abbreviation, next lowercase",
++        ),
++        pytest.param(
++            "Weigh apples vs. pears.",
++            23,
++            "Weigh apples vs. pears.",
++            id="exact fit",
++        ),
++        pytest.param(
++            "Pick a fruit. 3 remain.", 45, "Pick a fruit.", id="next starts with digit"
++        ),
++        pytest.param(
++            "Read e.g. the docs. Then go.",
++            45,
++            "Read e.g. the docs.",
++            id="abbreviation, then sentence end",
++        ),
++        pytest.param(
++            "Mix etc. and more", 45, "Mix etc. and more", id="no sentence end"
++        ),
++        pytest.param(
++            "See the U.S. Army now.", 45, "See the U.S.", id="next is capitalized"
++        ),
++        pytest.param(
++            "Stop here. (see below)", 45, "Stop here.", id="next starts uncased"
++        ),
++        pytest.param(
++            "Eat etc. \u00e9tude now.",
++            45,
++            "Eat etc. \u00e9tude now.",
++            id="next is non-ascii lowercase",
++        ),
++    ],
++)
++@marker_prefix
++def test_first_sentence_end(value, max_length, prefix, expect):
++    out = click.utils._make_default_short_help(prefix + value, max_length)
++    assert out == expect
++    assert len(out) <= max(max_length, 3)
++
++
++@pytest.mark.parametrize(
++    ("value", "max_length", "expect"),
++    [
++        pytest.param(
++            "Weigh apples vs. pears and plums.",
++            20,
++            "Weigh apples vs....",
++            id="truncate after abbreviation",
++        ),
++        pytest.param(
++            "123 567 9. Aaaa bbb", 10, "123 567 9.", id="sentence fits, next upper"
++        ),
++        pytest.param(
++            "well-known-hyphenated word", 10, "...", id="hyphenated word not split"
++        ),
++        pytest.param("abcd efg", 7, "abcd...", id="word and suffix fit"),
++        pytest.param("abcd efg", 6, "...", id="word and suffix do not fit"),
++        pytest.param("aaa bbb. Ccc", 8, "aaa bbb.", id="sentence exact fit"),
++    ],
++)
++@marker_prefix
++def test_truncate_whole_words(value, max_length, prefix, expect):
++    out = click.utils._make_default_short_help(prefix + value, max_length)
++    assert out == expect
++    assert len(out) <= max(max_length, 3)
++
++
++@pytest.mark.parametrize(
++    ("value", "max_length", "expect"),
++    [
++        pytest.param("a. b", 2, "...", id="abbreviation does not fit"),
++        pytest.param("a. B", 2, "a.", id="sentence fits"),
++        pytest.param("ab", 2, "ab", id="text fits"),
++        pytest.param("abc", 2, "...", id="text does not fit"),
++        pytest.param("ab", 0, "...", id="zero"),
++        pytest.param("ab", -1, "...", id="negative"),
++        pytest.param("", -1, "", id="empty, negative"),
++    ],
++)
++@marker_prefix
++def test_narrow_width(value, max_length, prefix, expect):
++    out = click.utils._make_default_short_help(prefix + value, max_length)
++    assert out == expect
++    assert len(out) <= max(max_length, 3)
++
++
++@pytest.mark.parametrize(
++    ("value", "max_length", "expect"),
++    [
++        pytest.param(
++            "Weigh apples vs. pears.\n\nThen more.",
++            45,
++            "Weigh apples vs. pears.",
++            id="first paragraph, abbreviation",
++        ),
++        pytest.param(
++            "Weigh vs.\n\nmore text", 45, "Weigh vs.", id="paragraph end is last word"
++        ),
++        pytest.param(
++            "Set ~/.netrc. Then go.", 45, "Set ~/.netrc.", id="dot inside a word"
++        ),
++    ],
++)
++@marker_prefix
++def test_unchanged_rules(value, max_length, prefix, expect):
++    out = click.utils._make_default_short_help(prefix + value, max_length)
++    assert out == expect
++    assert len(out) <= max(max_length, 3)

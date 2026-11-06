@@ -1,0 +1,34 @@
+{
+ "fase": "implement",
+ "esito": "OK",
+ "motivo": "lot 1/1 (B1,B2) implemented: P1 in bytes.go and P4 in bigbytes.go, P2, P3 and P5 already present from test-red and unchanged; targeted tests green, no deviations",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  "bytes.go",
+  "bigbytes.go"
+ ],
+ "gate_interni": [
+  {
+   "comando": "go test -count=1 -run 'TestBytes|TestBigBytes|TestIBytesPromotion|TestBytesNPromotion|TestBigBytesPromotion|TestBigIBytesPromotion|TestOommLimit|TestVeryBigBytes|TestVeryVeryBigBytes' .",
+   "esito": "PASS",
+   "dettaglio": "ok github.com/dustin/go-humanize 0.003s"
+  },
+  {
+   "comando": "gofmt -l .",
+   "esito": "PASS",
+   "dettaglio": "no output"
+  },
+  {
+   "comando": "go vet ./...",
+   "esito": "PASS",
+   "dettaglio": "no output"
+  },
+  {
+   "comando": "sha256sum -c test-red/tests.txt",
+   "esito": "PASS",
+   "dettaglio": "bigbytes_test.go: OK, bytes_test.go: OK"
+  }
+ ],
+ "finding": []
+}
