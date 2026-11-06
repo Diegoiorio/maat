@@ -29,7 +29,8 @@ detected, `Risk surfaces: none`) keeps the plan here; `Percorso: pieno` — any 
 continues in `plan-review-cycle` from its Step 2, on the plan already written, and says so in one line.
 In format 2 this branch also takes `lint2` before every round, `gen` at approval and the budget of **4**
 iterations ("Plan format 2" in `plan-review-cycle`); every round stays full scope, with no S2. A
-format-1 plan keeps this file as it is.
+format-1 plan keeps this file as it is. Since 1.7.0 the **small size** of `plan-review-cycle` (`Taglia: piccola`:
+one round, then `plan-check.sh e1`) borrows only §"The reviewer" below; with the full size this file applies as before.
 
 The user input is:
 

@@ -2,6 +2,55 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.7.0 — the size of the cycle, decided by a script
+
+**Why 1.7.0 and not a patch:** the default behaviour changes. On a small plan a new cycle now takes a lighter flow by
+itself, with no flag: one plan-review round instead of the fan-out and the S2 loop, one implement lane, one
+code-review round. Measured on the benchmark v2 (frozen at 8 runs of 30): the plan phase was 58–73% of the cost of a
+cycle, and the review was always approved in one round. The guarantees do not change: the red tests before the code,
+the gates outside the sub-session, the counterproofs, an independent review and the signature of `finalize.sh`;
+`IMPLEMENTED` needs the same evidence. No format Maat reads changes incompatibly, and a cycle started with 1.6 goes on
+in the full flow. `--full` gives the flow of 1.6.
+
+- **`plan-check.sh taglia <spec> [--diff <file>] [--override full|light]`.** One fact per line, the line `Fatti: F1=…`
+  and last `Taglia: piccola | piena — <reasons>` (exit 0). `piccola` only if every fact is under its threshold: F1
+  source files ≤ 3 (Touched files minus the tests of the test table), F2 new ≤ 1, F3 steps ≤ 6, F4 requirements ≤ 12
+  (the maximum of the traceability ids and of the ids in the spec above the plan, which the plan phase cannot touch),
+  F5 tests ≤ 10, F6 plan lines ≤ 250, F7 no critical surface declared or detected, F8 no `api-contract`, F9 no
+  migration, F10 no destructive word, F11 no security word, F12 no deleted file and F13 at most 2 new public symbols
+  (with `--diff`: Python, JS/TS, Go; another language is not measurable), F14 no `Size request: full`; with `--diff`
+  also no path outside the plan. A fact that cannot be measured is `piena` (fail-closed). `shared-logic` and `import`
+  alone do not make it `piena`. `route` and `skeleton` print as before.
+- **The flow.** T1 in the plan phase (`plan-review-cycle`, after `route`): small → one round of
+  `spec-plan-reviewer-light`, then `plan-check.sh e1` on its reply (a blocker, more than 2 majors or a partial reply →
+  the full branch from Step 2; a human-decision request stays a stop), the verified majors applied without a second
+  round. The metric line of the plan ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan: a
+  plan approved small whose facts are above the thresholds is reopened in the full branch (E2, the plan phase with
+  `--full` and `RIAPERTURA (driver):`). T3 after every implement/fix, on the diff of `touched.txt`: a file outside the
+  plan or a fact above → full (E3). After every review: gates not green (E4) or `NEEDS_CHANGES` (E5) → full. A `FIX`
+  with the small size and no escalation is a STOP: its budget is one round.
+- **`<run-dir>/taglia.txt`**, new, append-only: one line per decision, from full it never goes back. Absent = full:
+  a run dir of 1.6 goes on as before, and its plan phases get `--full`. The driver prints `driver: Taglia: …` and
+  `driver: Escalation: piccola → piena — <cause> (after <label>)`; `cycle-report.py` prints `Size: …`; the final
+  response of the orchestrator has a `Size:` line.
+- **Overrides.** `--full`: always full. `--light` (it contains the `--light` of 1.6): small above the numeric
+  thresholds (F1–F6, F13), never above the barriers (F7–F12, F14, a file outside the plan). Both together: usage error
+  (exit 2) before any phase. The model has no flag: a `Size request: full — <reason>` line in the plan, and `lint`
+  refuses any other value.
+- **`maat.json`:** optional key `piano.taglia` (`automatica`, default `true`; `soglie`; `parole_sicurezza`, added to
+  the built-in list). A file that uses it must declare `"harness": ">=1.7"` (new semantic check S11), so that an older
+  Maat refuses it with a clear error. The defaults are written in the schema descriptions and in `plan-check.sh`, not
+  as `default` keywords: the resolved configuration of an existing `maat.json` stays byte for byte the same.
+- **`lint2`: a file declared new in a new folder.** A path `` `lib/x.js` (new) `` in a step, a test or a mutation
+  passed only if `lib/` existed, and the plan phase cannot create it (a run of the benchmark stopped there). Now a
+  path declared new needs only to be a valid relative path; a path not declared new still needs its first folder.
+- **Tests.** `plan-check.test.sh` (a section for the size: each fact at the threshold and above it, `e1`, `Size
+  request:`, fail-closed, overrides, `piano.taglia`, the new folder), `driver.test.sh` §13 (T2/E2 and the reopening,
+  E3, E4, E5, one way, append-only, one lane, `--full`/`--light`, a run dir of 1.6), `maat-config.test.sh` (S11),
+  `guard.test.sh` (the scope of test-red in a folder that does not exist), `test-review-surface.sh` (the files of a
+  new untracked folder one by one), `cycle-report.test.sh` (`Size:`): each rule with a counterproof on a mutated copy
+  that must turn it red. The expected outputs of the public examples do not change (`next` and `valida` are the same).
+
 ## 1.6.1 — chains in a worktree, a build left in the copy, `(empty)` between backticks
 
 A patch: fixes found on a real chain of nine rings and in the CI; no format Maat reads changes.

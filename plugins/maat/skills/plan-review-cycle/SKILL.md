@@ -50,6 +50,8 @@ the explanation after them follows `lingua` of `.claude/maat.json` (Maat 1.4.0).
 | `skeleton <spec>` | the size gate (skeleton and full plan); `Split: rejected` (or `Taglio: rifiutato`) in the spec → exit 0 |
 | `split <mother> <child…>` | a cut: every requirement in exactly one child, `Depends on:` / `Interface for:` (or `Dipende da:` / `Interfaccia per:`) present |
 | `route <spec>` | format 2 branch: `Percorso: leggero \| pieno — <motivo>` |
+| `taglia <spec> [--override full\|light]` | the size of the cycle (1.7.0): facts F1–F14, last line `Taglia: piccola \| piena — <motivi>` |
+| `e1 <reply>` | the one round of the small size: `E1: piccola \| piena \| STOP — <motivo>` |
 | `delta <copy> <spec>` | the `range:` lines rewritten since the copy, plus `xref:` lines; empty or whole-file → exit 1: that round runs at full scope |
 | `s2 <spec> --delta <f> --gate <f> [--respinti <n>]` | `S2: APPROVA \| CORREGGI \| RILANCIA \| IMPRONTA DIVERSA \| STOP` |
 | `basis <spec>` · `gen <spec>` | the fingerprint to record at approval · the downstream procedure (format 2) |
@@ -111,8 +113,18 @@ follow it. Copy the spec to the scratchpad (the `lint` baseline), write the **sk
   The user decides once; a rejection is recorded above the plan by `spec-author` (`Split: rejected —
   <date>`; `Taglio: rifiutato` in an older spec), and from then on `skeleton` lets the single plan go on.
 
-**Branch.** `--full` always wins. Otherwise `route`: `Percorso: leggero` → the rounds of
-`plan-review-cycle-light`; `pieno` → Step 2 (`--light` is honoured only with `leggero`). Say it in one line.
+**Size, then branch (1.7.0).** Right after `route`, `taglia <spec>` (`--override full` with `--full`, `--override
+light` with `--light`); its last line is `Taglia: piccola | piena — <motivi>`, decided by the script, never by you
+(you may only ask for more: a `Size request: full — <reason>` line in the plan). Say it in one line.
+- `piena` → the branch as before: `--full` always wins; otherwise `route`: `Percorso: leggero` → the rounds of
+  `plan-review-cycle-light`; `pieno` → Step 2 (`--light` is honoured only with `leggero`).
+- `piccola` → **one** round of `maat:spec-plan-reviewer-light` at full scope, with the prompt of
+  `plan-review-cycle-light` («The reviewer»). Save its reply to the scratchpad and run `e1 <reply>`: `E1: STOP` →
+  `NEEDS HUMAN DECISION`; `E1: piena` (a blocker, more than 2 major, a partial reply) → one line `Escalation: piccola
+  → piena — <cause>`, then Step 2 on the same plan (the full branch from here); `E1: piccola` → verify each major
+  (Findings), apply the verified ones with a fresh author sub-agent («How to revise» of `autore.md`), `lint
+  --baseline`, `lint2`, then Step 3 with **no second round**, after the changelog note `taglia piccola: corrected
+  without a second round: <keys>` (the code review takes it as focus).
 
 ## Step 2: round 1 — three lenses in one message
 
@@ -147,8 +159,9 @@ alone when a critical surface (`permissions`, `data`, `destructive` — `permess
 
 The **metric line**, last line of the changelog (no backticks, never the status prefixes; one per run of the
 cycle): `Metrica ciclo: giri=5 · R1=2/3 · delta=1/2 · gate=0/1 · rifiutati=1 · ricorrenze=0 · reintrodotti=1 ·
-esito=approvato · livello=std · superfici=permessi,dati · formato=2` (`R1`/`delta`/`gate` = blocker/major found
-in that phase over its runs; `giri` = iterations).
+esito=approvato · livello=std · superfici=permessi,dati · formato=2 · taglia=piena` (`R1`/`delta`/`gate` =
+blocker/major found in that phase over its runs; `giri` = iterations; `taglia=piccola` only for a plan approved on the
+small path, otherwise `taglia=piena`: the driver reads it, 1.7.0).
 
 ## Final response
 

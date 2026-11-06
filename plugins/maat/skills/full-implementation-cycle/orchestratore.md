@@ -69,6 +69,7 @@ Outcome: IMPLEMENTED | NEEDS_VERIFICATION | STOP (<phase>: <reason>)
 Cost:            <the block printed by phase-usage.py --summary, as it is>
 Phases:          <label → PHASE RESULT line> one per line (driver.log)
 Plan:            Plan status <…> · <metric line of the plan changelog>
+Size:            <piccola | piena> (<reason> · escalation: <n>)
 Review:          Review status <…> · Feature status <…> · Verification <…> · Review rounds <n>/3
 Evidence:        <the review's evidence table, as written in the spec>
 Artefacts to accept or remove: <paths | none>
@@ -79,5 +80,9 @@ Full logs: .claude/.ai-workflow/spec-<name>.run/log/
 Worktree:        <none | <wt> · branch fic/<name> · integration and removal (step 7)>
 No commit made: review the diff (git status / git diff) and commit it yourself.
 ```
+
+`Size:` (1.7.0) is copied, never judged: the size and the reason of the line `Size:` that
+`. "${CLAUDE_PLUGIN_ROOT}/scripts/python.sh" && "$FIC_PY" "${CLAUDE_PLUGIN_ROOT}/scripts/cycle-report.py" <run-dir>` prints (from `<run-dir>/taglia.txt`); no such
+line → `Size: piena (taglia.txt absent: a cycle started before 1.7 · escalation: 0)`.
 
 On a STOP say exactly what the user must decide or run, and that re-invoking resumes from the right phase.

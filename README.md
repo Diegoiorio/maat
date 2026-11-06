@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.6.1**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.7.0**.
 
 ## When to use Maat
 
@@ -91,11 +91,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.6.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.7.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.6.1` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.7.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -131,7 +131,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.6.1/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.7.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -189,12 +189,35 @@ hours.
 | `NEEDS_VERIFICATION` | The review is approved, but a required check was not run, for example because the module has no tests. The message says which one. | Run that check yourself, then commit. |
 | `STOP` | Maat stopped because a person is needed. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. |
 
+### The size of the cycle (since 1.7.0)
+
+On a small change Maat chooses a lighter flow **by itself**. A script measures the plan once it is written: source
+files (at most 3), new source files (at most 1), steps (6), requirements (12, counted in the plan and in the spec),
+acceptance tests (10), plan lines (250), and no critical surface (permissions, data, destructive), no `api-contract`,
+no migration, no destructive word, no security word (`password`, `token`, `sql`, `session`, …). If **every** fact is
+under its threshold the size is **small** (`piccola`), otherwise **full** (`piena`, the flow of 1.6). A fact the
+script cannot measure counts as full. The model never decides it: at most it can ask for the full size.
+
+- **Small:** the plan is reviewed in **one** round by one reviewer, the code is written in one lane and reviewed in
+  **one** round. What does not change: the tests red before the code, the gates, the counterproofs, the signature.
+  `IMPLEMENTED` needs exactly the same evidence.
+- **Escalation**, always small → full, never back: a plan-review round with a blocker or more than 2 majors, an
+  approved plan that grew above the thresholds, code that touches a file the plan does not name (or adds a migration,
+  deletes a file, adds more than 2 public symbols), a gate not green, a review that asks for changes. From there the
+  cycle goes on as the full flow, without redoing what is done.
+- You see the size in the progress lines (`driver: Taglia: piccola — file 2/3 · …`, `driver: Escalation: piccola →
+  piena — …`) and in the final response (`Size: …`); the record is `<run-dir>/taglia.txt`.
+- Thresholds, extra security words, or the automatic size off: the optional key `piano.taglia` of `.claude/maat.json`
+  (`docs/GUIDA-FLUSSI.html`); a file that uses it declares `"harness": ">=1.7"`.
+
 ### Useful options
 
 - `--worktree`: the cycle works in a separate copy of the repo, on its own branch, so you can keep working in the
   main folder. Run it from the main folder of the repo.
 - `--tests=min|std|full`: how many tests to run, from a few to all of them.
-- `--light`: the plan is reviewed by a single reviewer. Fine for small changes.
+- `--full`: always the full size (the flow of 1.6), whatever the size of the plan.
+- `--light`: the small size even above the numeric thresholds (files, steps, tests…), never above a critical
+  surface, a migration, a destructive or security word. Not together with `--full`.
 - **Large specs:** they are split into smaller specs, which Maat runs in order. `maat:spec-author` prepares them.
 - **Without the full cycle:** `/maat:plan-review-cycle <spec>` only makes the plan; then
   `/maat:implementation-review-cycle <name>` reviews the code you wrote yourself.
@@ -234,15 +257,20 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.6.1`, from the project folder:
+`v1.7.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.6.1 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.7.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.6.x to 1.7.0 the default changes: a **new** cycle on a small plan takes the small size by itself (above, «The
+size of the cycle»); `--full` gives the flow of 1.6. A cycle started with 1.6 goes on in the full flow after the
+usual «harness changed» confirmation (its run dir has no `taglia.txt`). Specs, approved plans, `maat.json` and the
+run dirs are read as before. See `CHANGELOG.md`.
 
 From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cycle does and prints the same, except
 the fixes found by the real cycles (`CHANGELOG.md`, block Z): `plan-check.sh lint2` refuses a plan whose red holds
@@ -274,8 +302,8 @@ claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK with version 1.5.1. `claude plugin update`
-accepts a lower version (no need to uninstall and install again). To come back to 1.6.1, the same two commands with
-`#v1.6.1`.
+accepts a lower version (no need to uninstall and install again). To come back to 1.7.0, the same two commands with
+`#v1.7.0`.
 
 - **A cycle in progress** stops with «harness changed», as after any change of version, with the remedy of always:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, run from the project folder (on

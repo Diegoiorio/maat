@@ -244,6 +244,50 @@ review and `finalize.sh` — no ring closes without its `Finalize: IMPLEMENTED`.
   mother changes, ring k−1's plan is re-opened, its real interface differs, or any file the plan cites is in
   ring k−1's `touched.txt` while the plan was approved before k−1 closed.
 
+## The size of the cycle (1.7.0)
+
+Two sizes: **`piccola`** (small: a lighter flow) and **`piena`** (full: the flow of 1.6, unchanged). A script decides,
+never a model: `plan-check.sh taglia <spec> [--diff <file>] [--override full|light]` prints one fact per line, the
+`Fatti:` line and last `Taglia: piccola | piena — <reasons>`. `piccola` only if **every** fact is under its threshold
+(defaults; a project changes them in `piano.taglia.soglie` of `.claude/maat.json`):
+
+| fact | measured on | small if |
+|---|---|---|
+| F1 source files | `Touched files` minus the test files of the test table | ≤ 3 |
+| F2 new source files | `` `path` (new) `` among F1 | ≤ 1 |
+| F3 steps · F4 requirements · F5 tests | rows of `Steps` · the **maximum** of the traceability ids and of the ids in the spec above the plan · rows of `Test plan` | ≤ 6 · ≤ 12 · ≤ 10 |
+| F6 plan lines | as `skeleton` | ≤ 250 |
+| F7 critical surfaces · F8 api-contract | declared, or detected by `piano.superfici_critiche` on a path | none |
+| F9 migrations · F10 destructive words · F11 security words | `piano.migrazioni` on a path · `DESTR` · a fixed list plus `piano.taglia.parole_sicurezza` (spec, plan, diff) | none |
+| F12 deleted files · F13 new public symbols (with `--diff`) | `deleted file mode` · Python def/class, JS/TS export, Go capitalised names at top level | none · ≤ 2 |
+| F14 size request | the optional plan line `Size request: full — <reason>` | absent |
+
+A fact that cannot be measured (format 1, a missing section, `maat.json` invalid, a diff unreadable, a language with
+no symbol rule) is `piena`. `shared-logic` and `import` declared alone do not make it `piena`. The model can only ask
+for more weight (`Size request: full`, any other value is a `lint` `VIOLAZIONE`).
+
+**When.** T1 in the plan phase (`plan-review-cycle`, after `route`): `piccola` → one round of
+`spec-plan-reviewer-light`, `plan-check.sh e1` on its reply (a blocker, more than 2 major, a partial reply → the full
+branch from Step 2; `STOP_HUMAN_DECISION_REQUIRED` stays a stop), the verified majors applied without a second round;
+the metric line ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan: a plan approved small
+whose facts are above → **E2**, the plan phase again with `--full` and the line `RIAPERTURA (driver): …` (the
+re-opening). T3 after every implement/fix, with `--diff` of the `touched.txt` paths: a path outside the plan or a fact
+above → **E3**. After every review: `.gates` not green or a required gate `NOT RUN` → **E4**; `NEEDS_CHANGES` → **E5**.
+
+**What changes with `piccola`.** One plan-review round; the implement in one lane (`FIC_LANES=0`); one code-review
+round (the full `implementation-review-cycle`, never `light.md`, with the line `TAGLIA (driver): piccola`); a `FIX`
+without an escalation is a STOP. Gates, the level of the tests (`--tests` or `std`), test-red, the counterproofs and
+`finalize.sh` do not change: `IMPLEMENTED` needs the same proofs.
+
+**`<run-dir>/taglia.txt`**: append-only, one line per decision (`<utc> · <moment> · Taglia: … · fatti F1=… …` or
+`<utc> · <moment> · Escalation: piccola → piena — <cause>`); from `piena` it never goes back. Absent = `piena`: a
+cycle started before 1.7 goes on in the full flow (its plan phases with `--full`). The driver prints the same lines
+(`driver: Taglia: …`, `driver: Escalation: …`); `cycle-report.py` prints `Size: <size> (<reason> · escalation: <n>)`.
+**Overrides:** `--full` (always `piena`), `--light` (`piccola` above the numeric thresholds F1–F6 and F13, never
+above F7–F12, F14 or a file outside the plan); both together: usage error before any phase. `piano.taglia.automatica:
+false` turns the automatic size off (`piena` unless `--light`); a `maat.json` with `piano.taglia` declares `"harness":
+">=1.7"` (S11). Tests: `plan-check.test.sh` (1.7.0 section), `driver.test.sh` §13, `maat-config.test.sh`.
+
 ## Termination
 
 No counter of this skill's own: the review's counters (rounds, post-approval budget, recurrence) are
@@ -297,6 +341,12 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Chain: on a mother in WAIT, work on the ring it names; a closed ring leads back to the mother (FIC «Chains», «On the mother») | `driver.py run` | `driver.test.sh` §4 |
 | One engine (1.6.0): `FIC_DRIVER` set → one `AVVISO`, nothing else changes; `FIC_CYCLE_STATE` (tests only) → `run` takes Next/State from that script | `driver.py run` | `driver.test.sh` §4 |
 | Phase budget per invocation | `driver.py run --max-fasi` | `driver.test.sh` §4 |
+| The size of the cycle (1.7.0): facts F1–F14 with thresholds, fail-closed to `piena`, `--override`, `piano.taglia` («The size of the cycle») | `plan-check.sh taglia` | `plan-check.test.sh` (1.7.0 section, a counterproof per rule) |
+| One round of the small plan review and its escalation E1 (a blocker, more than 2 major, a partial reply) | `plan-check.sh e1` | `plan-check.test.sh` |
+| `Size request:` only `full` (the model may only ask for more weight, R3) | `plan-check.sh lint` | `plan-check.test.sh` |
+| T2 on the approved plan and the reopening E2; T3 after implement/fix (E3); gates and review (E4, E5); `taglia.txt` append-only and one-way; one lane; no FIX with the small size; `--full` with `--light` = usage | `driver.py run` (`taglia_passo`) | `driver.test.sh` §13 |
+| A file declared new in a folder that does not exist yet (T3 of the benchmark) | `plan-check.sh lint2` (`path_ok`) | `plan-check.test.sh`, `guard.test.sh` (scope), `test-review-surface.sh` (single files of a new folder) |
+| `piano.taglia` in `maat.json` needs `"harness": ">=1.7"` (S11) | `maat-config.py valida` | `maat-config.test.sh` |
 | Fix budget (`n<3`, `k<1`) (FIC «Worker fix») | `cycle-state.sh` row 11b | `cycle-state.test.sh` |
 | Structured outcome: JSON valid for the schema, deviazioni/bloccato_su → STOP, the more conservative of prose and JSON wins (FIC «Worker mode», «Run directory») | `run-phase.sh` + `driver.py valida`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b, `driver.test.sh` §2, counterproof §6 |
 | Deviations all `defensive: ` (`difensiva: `) (purely defensive, no effect on the plan's cases) → no STOP: a line in `log/deviazioni-difensive.txt`, `AVVISO` in `.esito`, a note in the plan changelog (outside the fingerprint), the list passed to the review (a non-defensive one = major); even one without the prefix → STOP (FIC «Hard rules») | `run-phase.sh` (`difensive`, line `DEVIAZIONI DIFENSIVE`) + `driver.py`; `cycle-state.sh` 7s/11s | `run-phase.test.sh` 6b-bis, `driver.test.sh` §2, `cycle-state.test.sh` |

@@ -10,7 +10,7 @@
    feature's phases changed — measured, never exclude»), the do-not-touch list with its reason, your
    counterproof results with their observed output, and **as is** the prompt's lines
    `EVIDENZE DEI GATE (driver, run-phase.sh): <dir>`, `VERIFY IN PARALLELO (driver, run-phase.sh): …`,
-   `DEVIAZIONI DIFENSIVE (driver, run-phase.sh): <file>` with the lines under it, and, for
+   `DEVIAZIONI DIFENSIVE (driver, run-phase.sh): <file>` with the lines under it, `TAGLIA (driver): piccola — …` (1.7.0: one review round; give the reviewer as focus the plan changelog's `taglia piccola` note, the corrections taken without a second round), and, for
    ring k>1 of a chain, `DIFF DELL'ANELLO (driver, run-phase.sh): <file> …` with its index (the ring's review
    surface, built by the driver: the reviewer reads it, never a diff against HEAD), plus the `Anelli
    precedenti:` files as exclusion candidates, written in `Excluded:` as `<path> — same chain, previous ring (<spec>)` (Italian: `stessa catena, anello

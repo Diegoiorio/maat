@@ -2,7 +2,7 @@
 name: full-implementation-cycle
 description: "Runs the whole chain autonomously and in order — /plan-review-cycle until the plan is APPROVED, then implements it with the plan-implementer agent, then /implementation-review-cycle, fixing blocker/major findings and re-reviewing within the review's own budget. The deterministic driver (the plugin's scripts/driver.py) decides and launches each phase as a separate headless Claude sub-session with an empty context, so this chat only receives short progress lines. Accepts a spec file or pasted specification text. Resumable: re-invoking it continues from the right phase. Does not commit. The two underlying skills stay independently callable."
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, BashOutput, Task, Skill, Monitor, TaskStop
-argument-hint: "<path to spec-<name>.md, or pasted specification text> [--tests=min|std|full] [--light] [--no-dev] [--with-e2e] [--base=<ref>] [--worktree] [--inline]"
+argument-hint: "<path to spec-<name>.md, or pasted specification text> [--tests=min|std|full] [--full|--light] [--no-dev] [--with-e2e] [--base=<ref>] [--worktree] [--inline]"
 ---
 
 # Full Implementation Cycle
@@ -36,9 +36,8 @@ $ARGUMENTS
 
 ## Flags
 
-Forwarded after `--` to every phase: `--tests` and `--no-dev` (with `--no-dev` the cycle stops at
-`NEEDS_VERIFICATION` — say so at the start); `--light` selects `plan-review-cycle-light` for the plan phase only;
-`--with-e2e` and `--base=<ref>` reach the review. The level in force: `--tests`, else the plan's `Test level:`.
+Forwarded after `--` to every phase: `--tests` and `--no-dev` (with `--no-dev` the cycle stops at `NEEDS_VERIFICATION` — say so at the start). The **size** (1.7.0) is a script's (`plan-check.sh taglia`, `riferimento.md` «The size of the cycle»): a small plan gets one plan-review round, one lane, one code-review round, and escalates to the full flow on a measured cause;
+`--full` forces the full size, `--light` the small one below the barriers (never both: usage error); `--with-e2e` and `--base=<ref>` reach the review. The level in force: `--tests`, else the plan's `Test level:`.
 `--worktree` is the orchestrator's, never forwarded: the cycle runs in its own worktree `../<repo>-fic-<name>` (branch
 `fic/<name>`, made by `${CLAUDE_PLUGIN_ROOT}/scripts/ciclo-worktree.sh`, not by you); the DEV stays shared, so it forces `--no-dev` and
 refuses `--with-e2e` (DEV checks later, from the main tree) — `orchestratore.md`, steps 3 and 7.

@@ -59,6 +59,12 @@ Hard rules on writing:
   and that text lands in the changelog.
 - `Risk surfaces:` follows the SAME rule again: line-anchored, single-occurrence,
   immediately under `Test level:`; in prose write "risk surfaces" in lower case.
+- **The size of the cycle (1.7.0)** is measured by `plan-check.sh taglia` on what you write (files, new files,
+  steps, requirements, tests, lines, surfaces, migrations, destructive and security words): you never choose it and
+  never write it down. You may only ask for MORE weight, with an optional line `Size request: full — <reason>`
+  (Italian `Taglia richiesta: piena — <motivo>`), at most one, when the change is riskier than its size says; any
+  other value is a `VIOLAZIONE` of `lint`. Do not shape the plan to stay small: the same facts are measured again
+  on the code written, and a file outside the plan escalates the cycle.
 - **An approved plan is never edited.** After `Plan status: APPROVED` only the changelog is written
   (notes, metric line). Any other change — a new constraint, an amendment, a "small fix" — goes
   through a re-opening (SKILL.md, «re-opening»). Measured: 308 lines added to an approved plan by
