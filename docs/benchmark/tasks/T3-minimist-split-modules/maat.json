@@ -1,0 +1,26 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.6",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "minimist",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "**/{m}.js", "a": "test/*.js" },
+      "ambiente": "nativo",
+      "report": "junit",
+      "comandi": {
+        "test": "python3 .claude/bench/tape-junit.py {report} {test}",
+        "lint": { "comando": "npx eslint --ext=js,mjs {file}; r=$?; case $r in 0) e=PASS ;; 1) e=FAIL ;; *) e=BLOCKED ;; esac; echo \"vitest-fast: esito=$e (eslint exit $r)\"; exit $r", "cartella": "repo" }
+      },
+      "controlli": [
+        { "glob": "**/*.js", "comando": "node --check {file}" }
+      ],
+      "collega_nel_worktree": ["node_modules"],
+      "file_dipendenze": ["package.json"]
+    }
+  ],
+  "gate": { "min": ["test", "controlli"], "std": ["test", "controlli", "lint"], "full": ["test", "controlli", "lint"] },
+  "piattaforma": { "copia_wsl": "no" }
+}

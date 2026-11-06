@@ -1,0 +1,26 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.6",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "humanize",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "src/humanize/{m}.py", "a": "tests/test_*.py" },
+      "ambiente": "nativo",
+      "python": [".venv/bin/python", ".venv/Scripts/python.exe"],
+      "report": "junit",
+      "comandi": {
+        "test": "{python} -m pytest -q -p no:cacheprovider --junitxml={report} tests && : {test}"
+      },
+      "controprova": {
+        "runner": "pytest",
+        "comando": "{python} -B -m pytest {test} -p no:cacheprovider --junitxml={report}"
+      },
+      "collega_nel_worktree": [".venv"],
+      "file_dipendenze": ["pyproject.toml"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}
