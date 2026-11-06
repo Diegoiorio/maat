@@ -1,6 +1,6 @@
 # Maat benchmark — pre-registration
 
-**Status: prepared, not frozen, no run made.** This folder applies [`../BENCHMARK-PROTOCOL.md`](../BENCHMARK-PROTOCOL.md)
+**Status: frozen, no run made.** This folder applies [`../BENCHMARK-PROTOCOL.md`](../BENCHMARK-PROTOCOL.md)
 (version 2) to five tasks. It is published before the first run. The commit that freezes it changes only this
 status line; its full commit id, with a public random value drawn after it, gives the seed of the schedule
 (Procedure, step 1), and the first run starts only after that commit is public. After it, nothing here changes except the «Results» section, which is filled in as the runs
