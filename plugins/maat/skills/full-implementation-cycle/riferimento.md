@@ -269,10 +269,17 @@ for more weight (`Size request: full`, any other value is a `lint` `VIOLAZIONE`)
 **When.** T1 in the plan phase (`plan-review-cycle`, after `route`): `piccola` → one round of
 `spec-plan-reviewer-light`, `plan-check.sh e1` on its reply (a blocker, more than 2 major, a partial reply → the full
 branch from Step 2; `STOP_HUMAN_DECISION_REQUIRED` stays a stop), the verified majors applied without a second round;
-the metric line ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan: a plan approved small
-whose facts are above → **E2**, the plan phase again with `--full` and the line `RIAPERTURA (driver): …` (the
-re-opening). T3 after every implement/fix, with `--diff` of the `touched.txt` paths: a path outside the plan or a fact
-above → **E3**. After every review: `.gates` not green or a required gate `NOT RUN` → **E4**; `NEEDS_CHANGES` → **E5**.
+the metric line ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan (again whenever the plan
+gets a new metric line): a plan approved small whose facts are above, or a full size with no proof that the full branch
+ran (no `spec-plan-reviewer` call, `-light` does not count, in the log of a plan phase: the metric line is the
+model's word) → **E2**, the plan phase again with `--full` and the line `RIAPERTURA (driver): …` (the re-opening,
+which needs that proof too). T3 after every implement/fix, with `--diff` and `--touched` of the `touched.txt` paths: a
+path outside the plan (spaces included), a diff header that cannot be read, or a fact above → **E3**. After every
+review: `.gates` not green or a required gate `NOT RUN` → **E4**; any `Review status` other than `APPROVED` → **E5**.
+Only the driver writes `taglia.txt`: the guard denies it to every phase and the driver compares its sha256 before and
+after each phase (a change → **E0**). The facts do not trust the plan's own labels: a file of the test table counts
+as a test only by the test convention; a source path not in the repo, or `new file mode`, is new; a plan `lint2`
+refuses is not measurable.
 
 **What changes with `piccola`.** One plan-review round; the implement in one lane (`FIC_LANES=0`); one code-review
 round (the full `implementation-review-cycle`, never `light.md`, with the line `TAGLIA (driver): piccola`); a `FIX`
@@ -281,7 +288,8 @@ without an escalation is a STOP. Gates, the level of the tests (`--tests` or `st
 
 **`<run-dir>/taglia.txt`**: append-only, one line per decision (`<utc> · <moment> · Taglia: … · fatti F1=… …` or
 `<utc> · <moment> · Escalation: piccola → piena — <cause>`); from `piena` it never goes back. Absent = `piena`: a
-cycle started before 1.7 goes on in the full flow (its plan phases with `--full`). The driver prints the same lines
+cycle started before 1.7 goes on exactly as in 1.6: its flags unchanged, `FIC_TAGLIA=off` to every phase, and
+`plan-check.sh taglia` answers «off» so the plan skill applies the branch rule of 1.6. The driver prints the same lines
 (`driver: Taglia: …`, `driver: Escalation: …`); `cycle-report.py` prints `Size: <size> (<reason> · escalation: <n>)`.
 **Overrides:** `--full` (always `piena`), `--light` (`piccola` above the numeric thresholds F1–F6 and F13, never
 above F7–F12, F14 or a file outside the plan); both together: usage error before any phase. `piano.taglia.automatica:

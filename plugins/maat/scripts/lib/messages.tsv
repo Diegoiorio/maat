@@ -247,6 +247,13 @@ driver-170.review_ok	review {label}: gates green, no blocker or major	review {la
 driver-170.fix_small	FIX with the small size: its budget is one review round and taglia.txt records no escalation	FIX con la taglia piccola: il suo budget e' un giro di review e taglia.txt non registra un'escalation
 driver-170.review_line	small size: one review round; give the reviewer as focus the corrections the plan took without a second round (plan changelog, note taglia piccola)	taglia piccola: un giro di review; dai al revisore come focus le correzioni che il piano ha preso senza un secondo giro (changelog del piano, nota taglia piccola)
 driver-170.lanes_small	lanes: one (small size)	corsie: una (taglia piccola)
+plan-check-170.why_off	size off for a cycle started before 1.7 (FIC_TAGLIA=off): the flow of 1.6	taglia spenta per un ciclo partito prima della 1.7 (FIC_TAGLIA=off): il flusso della 1.6
+plan-check-170.why_nopaths	no backticked path in Touched files	nessun percorso fra backtick in File toccati
+plan-check-170.why_lint2	lint2 refuses the plan ({n} violations; the first: {first})	lint2 rifiuta il piano ({n} violazioni; la prima: {first})
+plan-check-170.e1_inconsistent	Decision: NEEDS_CHANGES with no blocker or major counted: reply not readable	Decision: NEEDS_CHANGES senza blocker o major contati: risposta non leggibile
+driver-170.tampered	taglia.txt changed during {label} (sha256 {a} → {b}): only the driver writes it	taglia.txt cambiato durante {label} (sha256 {a} → {b}): lo scrive solo il driver
+driver-170.no_full_proof	no proof that the full plan branch ran (no spec-plan-reviewer call in the logs of the plan phases)	nessuna prova che il ramo pieno del piano sia stato fatto (nessuna chiamata a spec-plan-reviewer nei log delle fasi plan)
+driver-170.review_not_approved	review {label}: Review status {rs}	review {label}: Review status {rs}
 maat-config-170.s11	piano.taglia needs "harness": ">=1.7" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	piano.taglia richiede "harness": ">=1.7" o successiva, cosi' una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
 
 # --- run-phase (lingua-converti.py)

@@ -453,6 +453,15 @@ R3=$(nat "$T/t3repo"); mkdir -p "$T/t3repo"; printf 'lib/x.py\nlib/test_x.py\n' 
 prun 0 test-red "$R3" "$R3/lib/x.py" "" "" "$SC3"        # declared new, folder missing: allowed
 prun 0 test-red "$R3" "$R3/lib/test_x.py" "" "" "$SC3"
 prun 2 test-red "$R3" "$R3/lib/altro.py" "" "" "$SC3"    # same new folder, outside the scope: denied
+# 9. 1.7.0 review: <run-dir>/taglia.txt is the driver's: no phase writes it (the run dir stays writable otherwise)
+TG=$R3/.claude/.ai-workflow/spec-x.run
+for ph in plan review implement fix; do prun 2 "$ph" "$R3" "$TG/taglia.txt"; done
+prun 0 plan "$R3" "$TG/note.txt"                         # another file of the run dir: allowed as before
+GUARD_SALVA=$GUARD
+if GUARD=$(gmutante taglia 'if phase and path and re.search(' 'if False and re.search('); then
+  prun 0 plan "$R3" "$TG/taglia.txt"                     # counterproof: without the rule the plan phase writes it
+else fail=$((fail + 1)); echo "FAIL: controprova taglia.txt non applicabile"; fi
+GUARD=$GUARD_SALVA
 
 echo "guard.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

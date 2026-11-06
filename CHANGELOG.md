@@ -30,7 +30,7 @@ in the full flow. `--full` gives the flow of 1.6.
   plan or a fact above → full (E3). After every review: gates not green (E4) or `NEEDS_CHANGES` (E5) → full. A `FIX`
   with the small size and no escalation is a STOP: its budget is one round.
 - **`<run-dir>/taglia.txt`**, new, append-only: one line per decision, from full it never goes back. Absent = full:
-  a run dir of 1.6 goes on as before, and its plan phases get `--full`. The driver prints `driver: Taglia: …` and
+  a run dir of 1.6 goes on exactly as before (see below). The driver prints `driver: Taglia: …` and
   `driver: Escalation: piccola → piena — <cause> (after <label>)`; `cycle-report.py` prints `Size: …`; the final
   response of the orchestrator has a `Size:` line.
 - **Overrides.** `--full`: always full. `--light` (it contains the `--light` of 1.6): small above the numeric
@@ -44,6 +44,17 @@ in the full flow. `--full` gives the flow of 1.6.
 - **`lint2`: a file declared new in a new folder.** A path `` `lib/x.js` (new) `` in a step, a test or a mutation
   passed only if `lib/` existed, and the plan phase cannot create it (a run of the benchmark stopped there). Now a
   path declared new needs only to be a valid relative path; a path not declared new still needs its first folder.
+- **What the agent writes cannot keep the small size** (independent review before the release). Only the driver
+  writes `taglia.txt`: the guard denies it to every phase, and the driver compares its sha256 before and after each
+  phase (a change is an escalation, `E0`). A full size after the plan needs a proof that the full branch ran (a call of
+  `spec-plan-reviewer`, not `-light`, in the log of a plan phase), not only the metric line; otherwise the plan is
+  reopened. T2 runs again when the plan gets a new metric line. `e1` reads the severity in any markdown form, and a
+  `NEEDS_CHANGES` with nothing counted is full. `taglia`: the out-of-plan check also reads `touched.txt` (paths with
+  spaces), a diff header it cannot read is not measurable, a rename counts as the deletion of the old path; a file of
+  the test table that does not follow the test convention counts as a source file; a source path not in the repo or
+  `new file mode` is new even without `(new)`; a plan that `lint2` refuses, or with no backticked path in Touched
+  files, is not measurable. A review counts as passed only with `APPROVED`. A cycle started with 1.6 gets
+  `FIC_TAGLIA=off` and its flags unchanged: `taglia` answers «off» and the plan skill applies the 1.6 rule, identical.
 - **Tests.** `plan-check.test.sh` (a section for the size: each fact at the threshold and above it, `e1`, `Size
   request:`, fail-closed, overrides, `piano.taglia`, the new folder), `driver.test.sh` §13 (T2/E2 and the reopening,
   E3, E4, E5, one way, append-only, one lane, `--full`/`--light`, a run dir of 1.6), `maat-config.test.sh` (S11),

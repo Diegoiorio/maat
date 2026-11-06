@@ -268,8 +268,8 @@ Then restart Claude Code and run the check: the version line must say OK. Don't 
 you do, the cycle notices, stops and asks you to confirm.
 
 From 1.6.x to 1.7.0 the default changes: a **new** cycle on a small plan takes the small size by itself (above, «The
-size of the cycle»); `--full` gives the flow of 1.6. A cycle started with 1.6 goes on in the full flow after the
-usual «harness changed» confirmation (its run dir has no `taglia.txt`). Specs, approved plans, `maat.json` and the
+size of the cycle»); `--full` gives the flow of 1.6. A cycle started with 1.6 goes on exactly as in 1.6, flags
+included, after the usual «harness changed» confirmation (its run dir has no `taglia.txt`: no size is measured). Specs, approved plans, `maat.json` and the
 run dirs are read as before. See `CHANGELOG.md`.
 
 From 1.5.1 to 1.6.0, with the plugin as installed and `FIC_DRIVER` not set, a cycle does and prints the same, except
