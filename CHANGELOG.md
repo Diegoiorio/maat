@@ -46,9 +46,14 @@ in the full flow. `--full` gives the flow of 1.6.
   path declared new needs only to be a valid relative path; a path not declared new still needs its first folder.
 - **What the agent writes cannot keep the small size** (two independent reviews before the release). Only the driver
   writes `taglia.txt`: the guard denies it, `taglia.sha` and the phase logs and prompts (`log/`, `prompts/`) to every
-  phase, case-insensitive on the normalised path; the driver keeps the sha256 it expects in `taglia.sha` after each
-  of its writes and checks it at every start of its loop and after every phase (a change by a phase, between two
-  phases or between two invocations is an escalation, `E0`). A full size after the plan needs a proof that the full
+  phase, case-insensitive on the normalised path; the driver keeps the sha256 it expects in its own memory, compared
+  at every start of its loop and after every phase (a change by a phase, even with `taglia.sha` recomputed in Bash, a
+  rewrite, or both files deleted is an escalation, `E0`); `taglia.sha` serves only the first check of a new
+  invocation (weaker: it needs a deliberate rewrite of two files between invocations), and a run dir whose
+  `driver.log` has the `Taglia: avvio` line is never treated as a cycle of 1.6. With `Percorso: leggero` (the light
+  rounds of 1.6) one `spec-plan-reviewer-light` call is the proof of the plan review; any proof since the last T2
+  counts. Note for run dirs of a work-in-progress build of 1.7.0 (a `taglia.txt` without `taglia.sha`): their next
+  run gives `E0` and the full size, fail-closed. A full size after the plan needs a proof that the full
   branch ran, read right after each plan phase from THAT label's log only, as JSON: at least 3 `tool_use` calls
   (Task/Agent) of `spec-plan-reviewer` (never `-light`; a text naming it does not count; a missing log is no proof),
   recorded as `P <label> · prova=sì|no`; T2 reads the last `P` line, never the metric line or the folder, and the

@@ -275,13 +275,19 @@ proof of the full branch → **E2**, the plan phase again with `--full` and the 
 re-opening, which needs a proof after it). The proof is read by the driver right after each plan phase from THAT
 label's log only (`log/<label>.jsonl`), parsed as JSON: at least 3 `tool_use` blocks Task/Agent with `subagent_type`
 `spec-plan-reviewer` (never `-light`; text naming it does not count; a missing log = no proof), recorded as `P <label> ·
-prova=sì|no`. Only a run dir with no `P` line at all (a plan approved outside the cycle) is exempt. T3 after every implement/fix, with `--diff` and `--touched` of the `touched.txt` paths: a
+prova=sì|no · leggeri=<m>`. Any proof since the last T2/E2 counts (a resumed phase that only approves does not cancel
+it); when `plan-check.sh route` says `Percorso: leggero` (the light rounds of 1.6, the full size's own flow) one
+`spec-plan-reviewer-light` call (one per round of that branch) is the proof. Only a run dir with no `P` line at all (a
+plan approved outside the cycle) is exempt. T3 after every implement/fix, with `--diff` and `--touched` of the `touched.txt` paths: a
 path outside the plan (spaces included), a diff header that cannot be read, or a fact above → **E3**. After every
 review: `.gates` not green or a required gate `NOT RUN` → **E4**; any `Review status` other than `APPROVED` → **E5**.
 Only the driver writes `taglia.txt`: the guard denies it, `taglia.sha`, `log/` and `prompts/` of a run dir to every
-phase (case-insensitive, normalised path); the driver writes the expected sha256 in `taglia.sha` after each of its
-lines and checks it at every start of its loop and after every phase (a change by a phase, between phases or between
-invocations → **E0**). Limit: a Bash append to a phase's live log is not seen by the guard (like every Bash write);
+phase (case-insensitive, normalised path). The driver keeps the expected sha256 **in its memory**, updated after
+each of its lines, and compares it at every start of its loop and after every phase: a change by a phase (Bash
+included, even with `taglia.sha` recomputed), a rewrite, or both files deleted → **E0**. `taglia.sha` serves only the
+first check of a new invocation (the weaker check: it takes a deliberate rewrite of two files between invocations).
+A run dir is a cycle of 1.6 only if it has neither file and its `driver.log` has no `Taglia: avvio` line (written by
+the 1.7 driver at the first launch): with that line, missing files are **E0**, never the 1.6 path. Limit: a Bash append to a phase's live log is not seen by the guard (like every Bash write);
 the JSON parse and the three calls make a forged proof costlier, not impossible. The facts do not trust the plan's own
 labels: a file of the test table counts as a test only by the test convention (limit: a source module named like a
 test, `test_x.py`, is still subtracted); a source path not in the repo, or `new file mode`, is new; a plan `lint2`

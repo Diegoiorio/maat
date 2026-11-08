@@ -39,7 +39,7 @@ cp "$HERE/maat_msg.py" "$T/"; mkdir -p "$T/lib"; cp "$HERE/lib/messages.tsv" "$H
 export HOME="$T/home"; mkdir -p "$HOME"
 unset FIC_DRIVER FIC_DRIVER_PY FIC_RUN_PHASE FIC_CONTEXT_PACK FIC_MAX_FASI FIC_REPO FIC_LOCK
 pass=0 fail=0
-check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; if [ -n "${DRV_DEBUG:-}" ]; then tail -6 "$T/run.out" | sed "s/^/    out| /"; sed "s/^/    tg| /" "${RT:-/nessuna}/taglia.txt" 2>/dev/null; sed "s/^/    calls| /" "$FAKE_CALLS" 2>/dev/null; fi; fi; }
+check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; if [ -n "${DRV_DEBUG:-}" ]; then tail -6 "$T/run.out" | sed "s/^/    out| /"; sed "s/^/    tg| /" "${RT:-/nessuna}/taglia.txt" 2>/dev/null; sed "s/^/    calls| /" "$FAKE_CALLS" 2>/dev/null; tail -8 "${RT:-/nessuna}/driver.log" 2>/dev/null | sed "s/^/    log| /"; fi; fi; }
 drv() { "$FIC_PY" "$DRV" "$@"; }
 
 # --- 1. usage ---
@@ -822,6 +822,13 @@ case "$l" in
   *implement*|*fix*)
     [ "$FAKE_MODE" = scrive-taglia ] && echo "2026-11-06T10:00:09Z · T3 $l · Taglia: piccola — scritta dalla fase" >> "$d/taglia.txt"
     [ "$FAKE_MODE" = cancella-taglia ] && rm -f "$d/taglia.txt"
+    # third review: a phase that also forges taglia.sha with Bash, rewrites the file, or deletes both
+    [ "$FAKE_MODE" = forgia-sha ] && { echo "2026-11-06T10:00:09Z · T3 $l · Taglia: piccola — forgiata" >> "$d/taglia.txt"
+      sha256sum "$d/taglia.txt" | cut -c1-64 > "$d/taglia.sha"; }
+    case "$FAKE_MODE:$l" in nc-riscrive:*fix*)
+      grep -v ' · E5 ' "$d/taglia.txt" > "$d/taglia.tmp"; echo "2026-11-06T10:00:09Z · R 02-review · Taglia: piccola — finta" >> "$d/taglia.tmp"
+      mv "$d/taglia.tmp" "$d/taglia.txt"; sha256sum "$d/taglia.txt" | cut -c1-64 > "$d/taglia.sha" ;; esac
+    [ "$FAKE_MODE" = cancella-tutto ] && rm -f "$d/taglia.txt" "$d/taglia.sha"
     git rev-parse HEAD > "$d/base.txt"
     printf '# cambiato\n' >> src/a.py; echo src/a.py >> "$d/touched.txt"
     [ "$FAKE_MODE" = fuori ] && { printf 'x = 1\n' > src/fuori.py; echo src/fuori.py >> "$d/touched.txt"; }
@@ -831,7 +838,7 @@ case "$l" in
     printf 'ESITO FASE %s: OK — fatto\nstate=%s\n' "$ph" "$(st)" > "$d/log/$l.esito" ;;
   *review*)
     : > "$d/log/$l.jsonl"; rs=APPROVED fs=IMPLEMENTED g=PASS sev=
-    case "$FAKE_MODE" in nc-major) rs=NEEDS_CHANGES fs=NEEDS_CHANGES sev=major ;; gates-fail) rs=NEEDS_CHANGES fs=NEEDS_CHANGES g=FAIL ;; esac
+    case "$FAKE_MODE" in nc-major|nc-riscrive) rs=NEEDS_CHANGES fs=NEEDS_CHANGES sev=major ;; gates-fail) rs=NEEDS_CHANGES fs=NEEDS_CHANGES g=FAIL ;; esac
     if [ "$FAKE_MODE" = vuota ]; then printf '%s\n' "## Implementation review" >> "$spec"   # a section with no status
     else printf '%s\n' "## Implementation review" "Review status: $rs" "Feature status: $fs" "Review rounds: 1/3 · post-approval NEEDS_CHANGES: 0/1" >> "$spec"; fi
     printf 'gates: esito=%s chiave=k evidence=-\n' "$g" > "$d/log/$l.gates"
@@ -965,12 +972,12 @@ check "E2: metrica taglia=piena con l ultima fase plan prova=no (anche senza log
 pieno_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=sì (3 spec-plan-reviewer)" > "$RT/taglia.txt"; tsha'
 TRUN_PRE=$pieno_pre trun avanza 3 piena
 check "  con P prova=sì → T2 piena, nessuna riapertura, implement" '[ "$(tcalls)" = "01-implement 02-review " ] && ! tg | grep -q " · E2 "'
-if tmut prova 's/^        senza_prova = k == "piena" and mt != "piccola" and bool(pr) and not pr\[-1\]  # PROVA-T2$/        senza_prova = False/'; then
+if tmut prova 's/^        senza_prova = k == "piena" and mt != "piccola" and bool(tutte) and not any(pr)  # PROVA-T2$/        senza_prova = False/'; then
   TRUN_DRV="$T/drv-prova.py" TRUN_PRE=$leggero_pre trun avanza 3 piena
   check "controprova E2: fidandosi della metrica il piano senza prova passa senza riapertura (rosso)" '[ "$(tcalls)" != "01-plan " ] && ! tg | grep -q " · E2 "'
 else check "controprova E2 prova: la mutazione si applica" false; fi
 trun riapre 3 piccola
-check "P: la fase plan con tre spec-plan-reviewer nel suo log → «P 01-plan · prova=sì (3 spec-plan-reviewer)»" 'tg | grep -q " · P 01-plan · prova=sì (3 spec-plan-reviewer)$"'
+check "P: la fase plan con tre spec-plan-reviewer nel suo log → «P 01-plan · prova=sì (3 spec-plan-reviewer)»" 'tg | grep -q " · P 01-plan · prova=sì (3 spec-plan-reviewer) · leggeri=0$"'
 for md in riapre-uno riapre-falso; do
   trun "$md" 3 piccola
   check "P ($md): una chiamata sola, o testo e un log di un altra etichetta che nominano il revisore → prova=no, STOP" '[ $rc -eq 1 ] && tg | grep -q " · P 01-plan · prova=no " && grep -q "Driver result: STOP — il piano riaperto e. stato approvato fuori dal ramo pieno" "$T/run.out"'
@@ -983,6 +990,49 @@ if tmut rlight 's/^REVISORI_PIENI = ("spec-plan-reviewer", "maat:spec-plan-revie
   TRUN_DRV="$T/drv-rlight.py" trun riapre-leggero 3 piccola
   check "controprova P: contando anche il revisore leggero la riapertura leggera passa (rosso)" '[ $rc -eq 0 ] && tg | grep -q " · P 01-plan · prova=sì "'
 else check "controprova P leggero: la mutazione si applica" false; fi
+# third review: the expected sha is in the driver's memory, not only in taglia.sha (which a phase can rewrite with Bash)
+trun forgia-sha 0 piccola
+check "E0 (forgia-sha): la fase aggiunge una riga piccola e ricalcola taglia.sha → Escalation E0, la review non e' piccola" 'tg | grep -q " · E0 01-implement · Escalation: piccola → piena — taglia.txt cambiato durante 01-implement" && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.02-review.prompt"'
+trun nc-riscrive 0 piccola --max-fasi 4
+check "E0 (riscrive): il fix toglie l Escalation E5, aggiunge una R finta e ricalcola lo sha → E0, la review dopo non e' piccola" 'tg | grep -q " · E0 03-fix · Escalation: piccola → piena — taglia.txt cambiato durante 03-fix" && [ -f "$FAKE_CALLS.04-review.prompt" ] && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.04-review.prompt"'
+trun cancella-tutto 0 piccola
+check "E0 (cancella-tutto): la fase cancella taglia.txt e taglia.sha → E0 e NON il percorso della 1.6 (niente FIC_TAGLIA=off alla review)" 'tg | grep -q " · E0 01-implement · Escalation: piccola → piena" && grep -qx "FIC_TAGLIA=" "$FAKE_CALLS.02-review.env" && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.02-review.prompt"'
+if tmut mem 's/^    if run_fs in ATTESO:   # this invocation.s own record: what a phase rewrites on disk does not count  # SHA-IN-MEMORIA$/    if False:/'; then
+  TRUN_DRV="$T/drv-mem.py" trun forgia-sha 0 piccola
+  check "controprova sha in memoria: con il solo taglia.sha la riga forgiata passa e la review resta piccola (rosso)" 'grep -q "TAGLIA (driver): piccola" "$FAKE_CALLS.02-review.prompt" && ! tg | grep -q " · E0 "'
+  TRUN_DRV="$T/drv-mem.py" trun nc-riscrive 0 piccola --max-fasi 4
+  check "controprova sha in memoria: con il solo taglia.sha la riscrittura passa e la review dopo il fix torna piccola (rosso)" 'grep -q "TAGLIA (driver): piccola" "$FAKE_CALLS.04-review.prompt"'
+else check "controprova sha in memoria: la mutazione si applica" false; fi
+if tmut memmarca 's/^    if run_fs in ATTESO:   # this invocation.s own record: what a phase rewrites on disk does not count  # SHA-IN-MEMORIA$/    if False:/; s/^    return (" " + MARCA_170 + " — ") in (_read(os.path.join(run_fs, "driver.log")) or "")  # MARCA-170$/    return False/'; then
+  TRUN_DRV="$T/drv-memmarca.py" trun cancella-tutto 0 piccola
+  check "controprova cancella-tutto: senza memoria ne' marcatore il ciclo diventa «della 1.6» (FIC_TAGLIA=off: rosso)" 'grep -qx "FIC_TAGLIA=off" "$FAKE_CALLS.02-review.env"'
+else check "controprova cancella-tutto: la mutazione si applica" false; fi
+# both files deleted between two invocations: the marker of driver.log keeps it a 1.7 cycle (the weaker check)
+trun avanza 0 piccola --max-fasi 1
+rm -f "$RT/taglia.txt" "$RT/taglia.sha"
+FAKE_MODE=avanza FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$ST" > "$T/run.out" 2>&1
+check "E0 fra invocazioni (cancellati entrambi): il marcatore in driver.log → E0 *, non il percorso della 1.6" 'tg | grep -q " · E0 \* · Escalation" && grep -qx "FIC_TAGLIA=" "$FAKE_CALLS.02-review.env"'
+if tmut marca 's/^    return (" " + MARCA_170 + " — ") in (_read(os.path.join(run_fs, "driver.log")) or "")  # MARCA-170$/    return False/'; then
+  trun avanza 0 piccola --max-fasi 1; rm -f "$RT/taglia.txt" "$RT/taglia.sha"
+  FAKE_MODE=avanza FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "$T/drv-marca.py" run "$ST" > "$T/run.out" 2>&1
+  check "controprova marcatore: senza il marcatore la run dir svuotata diventa un ciclo della 1.6 (rosso)" 'grep -qx "FIC_TAGLIA=off" "$FAKE_CALLS.02-review.env"'
+else check "controprova marcatore: la mutazione si applica" false; fi
+# minor 2: the full size with route = leggero is the light rounds of 1.6: a light reviewer call is its proof
+legg_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=no (0 spec-plan-reviewer) · leggeri=1" > "$RT/taglia.txt"; tsha'
+TRUN_PRE=$legg_pre trun avanza 3 piena
+check "prova leggera: taglia piena e route leggero, un giro di spec-plan-reviewer-light → nessuna riapertura (implement)" '[ "$(tcalls)" = "01-implement 02-review " ] && ! tg | grep -q " · E2 "'
+if tmut legg 's/^        res.append(body.startswith("prova=sì") or (leggero and bool(ml) and int(ml.group(1)) >= LEGGERI_MIN))  # PROVA-LEGGERA$/        res.append(body.startswith("prova=sì"))/'; then
+  TRUN_DRV="$T/drv-legg.py" TRUN_PRE=$legg_pre trun avanza 3 piena
+  check "controprova prova leggera: contando solo il ramo pieno il giro leggero legittimo forza la riapertura (rosso)" '[ "$(tcalls)" = "01-plan " ]'
+else check "controprova prova leggera: la mutazione si applica" false; fi
+# minor 3: any proof since the last T2/E2 counts (full review, then a resumed phase that only approves)
+due_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=sì (3 spec-plan-reviewer) · leggeri=0" "2026-11-06T10:00:02Z · P 02-plan · prova=no (0 spec-plan-reviewer) · leggeri=0" > "$RT/taglia.txt"; tsha'
+TRUN_PRE=$due_pre trun avanza 3 piena -- --full
+check "prova: una prova=sì prima di una fase plan senza revisori (ripresa) vale ancora → nessuna riapertura" '[ "$(tcalls)" = "01-implement 02-review " ] && ! tg | grep -q " · E2 "'
+if tmut ultima 's/ and bool(tutte) and not any(pr)  # PROVA-T2$/ and bool(tutte) and not pr[-1]  # PROVA-T2/'; then
+  TRUN_DRV="$T/drv-ultima.py" TRUN_PRE=$due_pre trun avanza 3 piena -- --full
+  check "controprova: «vince l ultima riga P» rifiuta la prova di prima (rosso: riapertura)" '[ "$(tcalls)" = "01-plan " ]'
+else check "controprova ultima P: la mutazione si applica" false; fi
 # minor 2: a change between two invocations (a process a phase left running) is seen at the next start: E0 *
 trun avanza 0 piccola --max-fasi 1
 echo "2026-11-06T10:00:09Z · T3 01-implement · Taglia: piccola — aggiunta da fuori" >> "$RT/taglia.txt"

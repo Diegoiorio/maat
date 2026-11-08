@@ -1238,6 +1238,12 @@ def taglia_stato(run_fs):
 
 
 TAGLIA_SHA = "taglia.sha"   # the sha256 the driver expects taglia.txt to have, rewritten after each of its writes
+# The expected sha256 of each run dir's taglia.txt IN THE DRIVER'S MEMORY (third review): set after each of its writes
+# and after each check, compared before and after every phase. A phase can rewrite taglia.sha with Bash; it cannot
+# reach this. taglia.sha is used only at the first check of an invocation (the weaker check, between invocations).
+ATTESO = {}
+# a line the driver writes in driver.log when a cycle gets its size: a run dir with it is never a cycle of 1.6
+MARCA_170 = "Taglia: avvio"
 
 
 def _taglia_scrivi(run_fs, momento, testo):
@@ -1245,8 +1251,14 @@ def _taglia_scrivi(run_fs, momento, testo):
     with open(os.path.join(run_fs, TAGLIA_TXT), "ab") as fh:   # append-only: never rewritten  # TAGLIA-APPEND
         fh.write(_enc("%s · %s · %s\n" % (_utc(int(datetime.datetime.now(datetime.timezone.utc).timestamp())),
                                           momento, testo)))
+    ATTESO[run_fs] = _taglia_sha(run_fs)
     with open(os.path.join(run_fs, TAGLIA_SHA), "w", encoding="ascii", newline="\n") as fh:
-        fh.write((_taglia_sha(run_fs) or "") + "\n")
+        fh.write((ATTESO[run_fs] or "") + "\n")
+
+
+def _marcato_170(run_fs):
+    """driver.log holds the line the 1.7 driver writes at avvio: the cycle has (had) a size, it is not one of 1.6."""
+    return (" " + MARCA_170 + " — ") in (_read(os.path.join(run_fs, "driver.log")) or "")  # MARCA-170
 
 
 def _sha_atteso(run_fs):
@@ -1258,9 +1270,15 @@ def verifica_taglia(run_fs, ev, label=""):
     """taglia.txt is the one the driver last wrote (taglia.sha), checked before every launch and after every phase:
     a change made by a phase, between two phases or between two invocations of the driver (a process left running)
     is an Escalation E0. Neither file (a cycle older than 1.7): nothing to check."""
-    reale, atteso = _taglia_sha(run_fs), _sha_atteso(run_fs)
-    if reale is None and atteso is None:
-        return
+    reale = _taglia_sha(run_fs)
+    if run_fs in ATTESO:   # this invocation's own record: what a phase rewrites on disk does not count  # SHA-IN-MEMORIA
+        atteso = ATTESO[run_fs]
+    else:                  # first check of this invocation: taglia.sha of the previous one (weaker)
+        atteso = _sha_atteso(run_fs)
+        if reale is None and atteso is None:
+            if not _marcato_170(run_fs):
+                return     # a cycle older than 1.7 (or a new one): nothing to check
+            atteso = "-"   # a 1.7 cycle whose two files are gone: never the 1.6 path
     if reale != atteso:  # TAGLIA-INTATTA
         if label:   # during the phase just finished
             _scala(run_fs, ev, "E0 " + label, T("driver-170.tampered", label=label, a=(atteso or "-")[:12],
@@ -1268,6 +1286,8 @@ def verifica_taglia(run_fs, ev, label=""):
         else:       # between two phases or two invocations
             _scala(run_fs, ev, "E0 *", T("driver-170.tampered_between", a=(atteso or "-")[:12], b=(reale or "-")[:12]),
                    "*")
+    else:
+        ATTESO[run_fs] = reale
 
 
 def _avviato(run_fs):
@@ -1303,7 +1323,11 @@ REVISORI_PIENI = ("spec-plan-reviewer", "maat:spec-plan-reviewer")
 REVISORI_MIN = 3
 
 
-def _chiamate_revisore(path):
+REVISORI_LEGGERI = ("spec-plan-reviewer-light", "maat:spec-plan-reviewer-light")
+LEGGERI_MIN = 1   # the light branch (plan-review-cycle-light) calls spec-plan-reviewer-light once per round, >= 1 round
+
+
+def _chiamate_revisore(path, nomi=REVISORI_PIENI):
     n = 0
     try:
         fh = open(path, encoding="utf-8", errors="replace")
@@ -1320,21 +1344,42 @@ def _chiamate_revisore(path):
             for b in cont if isinstance(cont, list) else []:
                 inp = b.get("input") if isinstance(b, dict) else None
                 if (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in ("Task", "Agent")
-                        and isinstance(inp, dict) and inp.get("subagent_type") in REVISORI_PIENI):  # PROVA-RAMO-PIENO
+                        and isinstance(inp, dict) and inp.get("subagent_type") in nomi):  # PROVA-RAMO-PIENO
                     n += 1
     return n
 
 
 def registra_prova(run_fs, label, ev):
-    """After a plan phase: "P <label> · prova=sì|no (<n> spec-plan-reviewer)" in taglia.txt."""
-    n = _chiamate_revisore(os.path.join(run_fs, "log", label + ".jsonl"))
-    _taglia_scrivi(run_fs, "P " + label, "prova=%s (%d spec-plan-reviewer)" % ("sì" if n >= REVISORI_MIN else "no", n))
+    """After a plan phase: "P <label> · prova=sì|no (<n> spec-plan-reviewer) · leggeri=<m>" in taglia.txt (prova =
+    the full branch; leggeri = the calls of the light branch, which count only when route says leggero)."""
+    lg = os.path.join(run_fs, "log", label + ".jsonl")
+    n, m = _chiamate_revisore(lg), _chiamate_revisore(lg, REVISORI_LEGGERI)
+    _taglia_scrivi(run_fs, "P " + label, "prova=%s (%d spec-plan-reviewer) · leggeri=%d"
+                   % ("sì" if n >= REVISORI_MIN else "no", n, m))
 
 
-def _prove(rr, dopo=-1):
-    """The P lines after line index `dopo`: [True|False], in order."""
-    return [_momento(l)[:2] == "P " and l.split(" · ", 2)[2].startswith("prova=sì")
-            for l in rr[dopo + 1:] if _momento(l).startswith("P ")]
+def _prove(rr, dopo=-1, leggero=False):
+    """The P lines after line index `dopo`: [True|False] (with leggero, a light round counts too), in order."""
+    res = []
+    for l in rr[dopo + 1:]:
+        if not _momento(l).startswith("P "):
+            continue
+        body = l.split(" · ", 2)[2]
+        ml = re.search(r" · leggeri=([0-9]+)", body)
+        res.append(body.startswith("prova=sì") or (leggero and bool(ml) and int(ml.group(1)) >= LEGGERI_MIN))  # PROVA-LEGGERA
+    return res
+
+
+def _da_ultimo_t2(rr):
+    """The index of the last T2, T2r or E2 line (-1 if none): a proof counts from there on (third review)."""
+    ix = [i for i, l in enumerate(rr) if _momento(l) in ("T2", "T2r", "E2")]
+    return ix[-1] if ix else -1
+
+
+def _route_leggero(spec_fs):
+    """plan-check.sh route says Percorso: leggero (the light rounds of 1.6 are the full size's own flow)."""
+    rc, o = _run([BASH, _fw(PC), "route", shown(spec_fs)], cwd=os.path.dirname(spec_fs))
+    return any(l.startswith("Percorso: leggero") for l in o.replace("\r", "").split("\n"))
 
 
 def _taglia_cmd(spec_fs, ovr, diff="", touched=""):
@@ -1410,7 +1455,7 @@ def taglia_passo(spec_fs, run_fs, root, flags, ev, plan_ok):
             return "riapri", _perche(rr[e2[-1]].split("Escalation: ", 1)[-1].split(" · metriche=", 1)[0])
         # the reopened plan: a new metric line taglia=piena AND a full reviewer in a plan phase after the E2
         pr = _prove(rr, e2[-1])
-        if mt != "piena" or not (pr and pr[-1]):  # PROVA-DOPO-E2
+        if mt != "piena" or not any(pr):  # PROVA-DOPO-E2
             return "stop", T("driver-170.reopen_not_full", m=mt or "-")
         t = "Taglia: piena — " + T("driver-170.reopen_done")
         _taglia_scrivi(run_fs, "T2r", t + " · metriche=%d" % nmet)
@@ -1425,8 +1470,9 @@ def taglia_passo(spec_fs, run_fs, root, flags, ev, plan_ok):
         # E2: a plan approved small whose facts are above the small size, or a full size with no proof that the full
         # branch ran in a plan phase of this run dir (the metric line is the model's word, the log is not)
         # no P line at all: a plan approved outside the cycle (the only exemption); otherwise the last plan phase
-        pr = _prove(rr)
-        senza_prova = k == "piena" and mt != "piccola" and bool(pr) and not pr[-1]  # PROVA-T2
+        tutte = _prove(rr)
+        pr = _prove(rr, _da_ultimo_t2(rr), leggero=k == "piena" and bool(tutte) and _route_leggero(spec_fs))
+        senza_prova = k == "piena" and mt != "piccola" and bool(tutte) and not any(pr)  # PROVA-T2
         if (mt == "piccola" and k == "piena") or senza_prova:
             _taglia_scrivi(run_fs, "T2", t + fatti + " · piano: taglia=%s · metriche=%d" % (mt or "-", nmet))
             ev(t)
@@ -1642,6 +1688,7 @@ def cmd_run(argv):
             verifica_taglia(run_fs, ev)   # a change since the driver's last write, before any decision
             if fase in ("plan", "test-red", "implement") and taglia_stato(run_fs) is None and not _avviato(run_fs):
                 _taglia_scrivi(run_fs, "avvio", T("driver-170.avvio"))
+                ev(MARCA_170 + " — " + T("driver-170.avvio"))   # driver.log: this run dir is a 1.7 cycle
             azione, perche = taglia_passo(spec_fs, run_fs, root, flags, ev,
                                           bool(out) and out[0].startswith("Plan status: APPROVED"))
             if azione == "stop":
