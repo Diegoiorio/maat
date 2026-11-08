@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites><testsuite name="go test" tests="74" failures="7"><testcase classname="bigbytes_test.go" name="TestBigByteParsing" /><testcase classname="bigbytes_test.go" name="TestBigByteErrors" /><testcase classname="bigbytes_test.go" name="TestOommLimit" /><testcase classname="bigbytes_test.go" name="TestBigBytes"><failure message="FAIL: TestBigBytes">=== RUN   TestBigBytes
+    bigbytes_test.go:156: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB'
+    bigbytes_test.go:156: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB'
+    bigbytes_test.go:156: On bytes(1TB - 1M), expected '1.0 TB', but got '1000 GB'
+    bigbytes_test.go:156: On bytes(1MB - 1), expected '1.0 MiB', but got '1024 KiB'
+    bigbytes_test.go:156: On bytes(1GB - 1K), expected '1.0 GiB', but got '1024 MiB'
+    bigbytes_test.go:156: On bytes(1TB - 1M), expected '1.0 TiB', but got '1024 GiB'
+--- FAIL: TestBigBytes (0.00s)
+</failure></testcase><testcase classname="bigbytes_test.go" name="TestBigBytesPromotion"><failure message="FAIL: TestBigBytesPromotion">=== RUN   TestBigBytesPromotion
+    bigbytes_test.go:221: On BigBytes(999.5 kB), expected '1.0 MB', but got '1000 kB'
+    bigbytes_test.go:221: On BigBytes(999.5 MB), expected '1.0 GB', but got '1000 MB'
+    bigbytes_test.go:221: On BigBytes(999.5 GB), expected '1.0 TB', but got '1000 GB'
+    bigbytes_test.go:221: On BigBytes(999.5 TB), expected '1.0 PB', but got '1000 TB'
+    bigbytes_test.go:221: On BigBytes(999.5 PB), expected '1.0 EB', but got '1000 PB'
+    bigbytes_test.go:221: On BigBytes(999.5 EB), expected '1.0 ZB', but got '1000 EB'
+    bigbytes_test.go:221: On BigBytes(999.5 ZB), expected '1.0 YB', but got '1000 ZB'
+    bigbytes_test.go:221: On BigBytes(999.5 YB), expected '1.0 RB', but got '1000 YB'
+    bigbytes_test.go:221: On BigBytes(999.5 RB), expected '1.0 QB', but got '1000 RB'
+    bigbytes_test.go:221: On BigBytes(1 GB - 1), expected '1.0 GB', but got '1000 MB'
+--- FAIL: TestBigBytesPromotion (0.00s)
+</failure></testcase><testcase classname="bigbytes_test.go" name="TestBigIBytesPromotion"><failure message="FAIL: TestBigIBytesPromotion">=== RUN   TestBigIBytesPromotion
+    bigbytes_test.go:285: On BigIBytes(1023.5 KiB), expected '1.0 MiB', but got '1024 KiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 MiB), expected '1.0 GiB', but got '1024 MiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 GiB), expected '1.0 TiB', but got '1024 GiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 TiB), expected '1.0 PiB', but got '1024 TiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 PiB), expected '1.0 EiB', but got '1024 PiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 EiB), expected '1.0 ZiB', but got '1024 EiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 ZiB), expected '1.0 YiB', but got '1024 ZiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 YiB), expected '1.0 RiB', but got '1024 YiB'
+    bigbytes_test.go:285: On BigIBytes(1023.5 RiB), expected '1.0 QiB', but got '1024 RiB'
+    bigbytes_test.go:285: On BigIBytes(1 GiB - 1), expected '1.0 GiB', but got '1024 MiB'
+--- FAIL: TestBigIBytesPromotion (0.00s)
+</failure></testcase><testcase classname="bigbytes_test.go" name="TestVeryBigBytes" /><testcase classname="bigbytes_test.go" name="TestVeryVeryBigBytes" /><testcase classname="bigbytes_test.go" name="TestParseVeryBig" /><testcase classname="bytes_test.go" name="TestByteParsing" /><testcase classname="bytes_test.go" name="TestByteErrors" /><testcase classname="bytes_test.go" name="TestParseBytesExactIntegers" /><testcase classname="bytes_test.go" name="TestBytes"><failure message="FAIL: TestBytes">=== RUN   TestBytes
+    bytes_test.go:189: On bytes(1MB - 1), expected '1.0 MB', but got '1000 kB'
+    bytes_test.go:189: On bytes(1GB - 1K), expected '1.0 GB', but got '1000 MB'
+    bytes_test.go:189: On bytes(1TB - 1M), expected '1.0 TB', but got '1000 GB'
+    bytes_test.go:189: On bytes(1MB - 1), expected '1.0 MiB', but got '1024 KiB'
+    bytes_test.go:189: On bytes(1GB - 1K), expected '1.0 GiB', but got '1024 MiB'
+    bytes_test.go:189: On bytes(1TB - 1M), expected '1.0 TiB', but got '1024 GiB'
+--- FAIL: TestBytes (0.00s)
+</failure></testcase><testcase classname="bytes_test.go" name="TestBytesPromotion"><failure message="FAIL: TestBytesPromotion">=== RUN   TestBytesPromotion
+    bytes_test.go:220: On Bytes(999500), expected '1.0 MB', but got '1000 kB'
+    bytes_test.go:220: On Bytes(999999), expected '1.0 MB', but got '1000 kB'
+    bytes_test.go:220: On Bytes(999500000), expected '1.0 GB', but got '1000 MB'
+    bytes_test.go:220: On Bytes(999500000000), expected '1.0 TB', but got '1000 GB'
+    bytes_test.go:220: On Bytes(999500000000000), expected '1.0 PB', but got '1000 TB'
+    bytes_test.go:220: On Bytes(999499999999999936), expected '1.0 EB', but got '1000 PB'
+--- FAIL: TestBytesPromotion (0.00s)
+</failure></testcase><testcase classname="bytes_test.go" name="TestIBytesPromotion"><failure message="FAIL: TestIBytesPromotion">=== RUN   TestIBytesPromotion
+    bytes_test.go:267: On IBytes(1048064), expected '1.0 MiB', but got '1024 KiB'
+    bytes_test.go:267: On IBytes(1048575), expected '1.0 MiB', but got '1024 KiB'
+    bytes_test.go:267: On IBytes(1073217536), expected '1.0 GiB', but got '1024 MiB'
+    bytes_test.go:267: On IBytes(1098974756864), expected '1.0 TiB', but got '1024 GiB'
+    bytes_test.go:267: On IBytes(1125350151028736), expected '1.0 PiB', but got '1024 TiB'
+    bytes_test.go:267: On IBytes(1152358554653425600), expected '1.0 EiB', but got '1024 PiB'
+--- FAIL: TestIBytesPromotion (0.00s)
+</failure></testcase><testcase classname="bytes_test.go" name="TestBytesNPromotion"><failure message="FAIL: TestBytesNPromotion">=== RUN   TestBytesNPromotion
+    bytes_test.go:335: On BytesN(999500, -1), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999500, 0), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999500, 1), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999500, 2), expected '1.0 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999500, 3), expected '1.00 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999950, 4), expected '1.000 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999995, 5), expected '1.0000 MB', but got '1000.0 kB'
+    bytes_test.go:335: On BytesN(999999, 3), expected '1.00 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999500000, 3), expected '1.00 GB', but got '1000 MB'
+    bytes_test.go:335: On BytesN(999500000000, 3), expected '1.00 TB', but got '1000 GB'
+    bytes_test.go:335: On BytesN(999500000000000, 3), expected '1.00 PB', but got '1000 TB'
+    bytes_test.go:335: On BytesN(999499999999999936, 3), expected '1.00 EB', but got '1000 PB'
+    bytes_test.go:335: On BytesN(999999500, 6), expected '1.00000 GB', but got '1000.00 MB'
+    bytes_test.go:335: On BytesN(999999950, 7), expected '1.000000 GB', but got '1000.000 MB'
+    bytes_test.go:335: On BytesN(999999, -1), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 0), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 1), expected '1 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 2), expected '1.0 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 3), expected '1.00 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 4), expected '1.000 MB', but got '1000 kB'
+    bytes_test.go:335: On BytesN(999999, 5), expected '1.0000 MB', but got '1000.0 kB'
+    bytes_test.go:335: On BytesN(999999999, 6), expected '1.00000 GB', but got '1000.00 MB'
+    bytes_test.go:335: On BytesN(999999999, 7), expected '1.000000 GB', but got '1000.000 MB'
+--- FAIL: TestBytesNPromotion (0.00s)
+</failure></testcase><testcase classname="comma_test.go" name="TestCommas" /><testcase classname="comma_test.go" name="TestCommafWithDigits" /><testcase classname="comma_test.go" name="TestCommafs" /><testcase classname="comma_test.go" name="TestBigCommas" /><testcase classname="comma_test.go" name="TestVeryBigCommas" /><testcase classname="comma_test.go" name="TestHumanizeBigIntMutation" /><testcase classname="comma_test.go" name="TestParseComma" /><testcase classname="comma_test.go" name="TestParseCommaErrors" /><testcase classname="comma_test.go" name="TestParseCommaf" /><testcase classname="comma_test.go" name="TestParseCommafErrors" /><testcase classname="commaf_test.go" name="TestBigCommafs" /><testcase classname="ftoa_precision_test.go" name="TestFtoaWithDigitsLargeLimit" /><testcase classname="ftoa_test.go" name="TestFtoa" /><testcase classname="ftoa_test.go" name="TestFtoaWithDigits" /><testcase classname="ftoa_test.go" name="TestStripTrailingDigits" /><testcase classname="number_test.go" name="TestFormatFloat" /><testcase classname="ordinals_test.go" name="TestOrdinals" /><testcase classname="si_test.go" name="TestSI" /><testcase classname="si_test.go" name="TestSIWithDigits" /><testcase classname="si_test.go" name="TestParseSIGreekMu" /><testcase classname="si_test.go" name="TestBug106" /><testcase classname="si_test.go" name="TestComputeSIOutsidePrefixTable" /><testcase classname="si_test.go" name="TestComputeSIPreservesMagnitude" /><testcase classname="si_test.go" name="TestComputeSINonFinite" /><testcase classname="times_test.go" name="TestPast" /><testcase classname="times_test.go" name="TestRelTimeEmptyLabel" /><testcase classname="times_test.go" name="TestReltimeOffbyone" /><testcase classname="times_test.go" name="TestFuture" /><testcase classname="times_test.go" name="TestRange" /><testcase classname="times_test.go" name="TestCustomRelTime" /><testcase classname="comma_fuzz_test.go" name="FuzzComma" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#0" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#1" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#2" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#3" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#4" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#5" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#6" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#7" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#8" /><testcase classname="comma_fuzz_test.go" name="FuzzComma/seed#9" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#0" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#1" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#2" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#3" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#4" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#5" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#6" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#7" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#8" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#9" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#10" /><testcase classname="commaf_fuzz_test.go" name="FuzzBigCommaf/seed#11" /><testcase classname="english.words_test.go" name="TestPluralWord" /><testcase classname="english.words_test.go" name="TestPlural" /><testcase classname="english.words_test.go" name="TestWordSeries" /><testcase classname="english.words_test.go" name="TestOxfordWordSeries" /></testsuite></testsuites>

@@ -1,0 +1,19 @@
+{
+ "fase": "test-red",
+ "esito": "OK",
+ "motivo": "6 tests (T1-T6: 5 new, 1 updated case), 0 stubs",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  "tests/test_utils/test_make_default_short_help.py",
+  "tests/test_commands.py"
+ ],
+ "gate_interni": [
+  {
+   "comando": ".venv/bin/python -B -m pytest tests/test_utils/test_make_default_short_help.py tests/test_commands.py -p no:cacheprovider --junitxml=/tmp/t5-short-help-report.xml -q --tb=line",
+   "esito": "FAIL",
+   "dettaglio": "expected red before the code, reported by the acceptance-test-writer: 19 failed, 147 passed in 0.21s; all failures are assertions in rows T1-T6"
+  }
+ ],
+ "finding": []
+}

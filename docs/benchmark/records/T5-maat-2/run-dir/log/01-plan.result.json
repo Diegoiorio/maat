@@ -1,0 +1,56 @@
+{
+ "fase": "plan",
+ "esito": "OK",
+ "motivo": "plan APPROVED after 2 iterations (R1 2 majors fixed, delta and fresh eyes clean), basis FRESH, gen OK, next TEST-RED",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  ".claude/.ai-workflow/spec-short-help-abbreviation.md"
+ ],
+ "gate_interni": [
+  {
+   "comando": "plan-check.sh lint --baseline",
+   "esito": "PASS",
+   "dettaglio": "lint: OK"
+  },
+  {
+   "comando": "plan-check.sh lint2",
+   "esito": "PASS",
+   "dettaglio": "lint2: OK"
+  },
+  {
+   "comando": "plan-check.sh skeleton",
+   "esito": "PASS",
+   "dettaglio": "Scheletro: SOTTO IL TETTO"
+  },
+  {
+   "comando": "plan-check.sh s2",
+   "esito": "PASS",
+   "dettaglio": "S2: APPROVA — delta and fresh eyes clean on fingerprint 18073607a825"
+  },
+  {
+   "comando": "plan-check.sh basis",
+   "esito": "PASS",
+   "dettaglio": "Status: FRESH"
+  },
+  {
+   "comando": "plan-check.sh gen",
+   "esito": "PASS",
+   "dettaglio": "gen: written procedura.txt and counterproof mutations.json"
+  }
+ ],
+ "finding": [
+  {
+   "severita": "major",
+   "file": "tests/test_utils/test_make_default_short_help.py",
+   "riga": 11,
+   "testo": "Updated existing test had no Test plan row and T2 duplicated its case: fixed with row T6, P3 assigned to test-red, duplicate removed"
+  },
+  {
+   "severita": "major",
+   "file": "tests/test_utils/test_make_default_short_help.py",
+   "riga": 9,
+   "testo": "Three T4 cases duplicated existing coverage: removed"
+  }
+ ]
+}

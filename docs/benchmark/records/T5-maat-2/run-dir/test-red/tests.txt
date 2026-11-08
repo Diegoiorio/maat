@@ -1,0 +1,2 @@
+73e2fef0c4e3e58f4fb7672b5f2b604ce050a515fba8a490dde0a323f208a7c7  tests/test_commands.py
+76d8d2a8ed0b5235f7e4f74ba82d7913be8eb59479335eedd4ff1c33fc9b230a  tests/test_utils/test_make_default_short_help.py

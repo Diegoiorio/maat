@@ -1,0 +1,18 @@
+[
+  {
+    "id": "T1",
+    "file": "src/click/utils.py",
+    "simbolo": "_make_default_short_help",
+    "mutazione": {
+      "cerca": "not words[i + 1][0].islower()",
+      "sostituisci": "True"
+    },
+    "test": {
+      "percorso": "tests/test_utils/test_make_default_short_help.py"
+    },
+    "rosso_se": {
+      "test_id": "tests/test_utils/test_make_default_short_help.py::test_first_sentence_end",
+      "asserzione": "'Weigh apples vs.' == 'Weigh apples vs. pears.'"
+    }
+  }
+]

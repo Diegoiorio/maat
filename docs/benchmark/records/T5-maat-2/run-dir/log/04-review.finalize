@@ -1,0 +1,4 @@
+counterproof T1: result missing (counterproof.sh not run or incomplete)
+finalize: Evidence composed — 7 requirements, 7 not covered
+finalize: esito=NEEDS_VERIFICATION — counterproof T1: result missing (counterproof.sh not run or incomplete)
+exit=1

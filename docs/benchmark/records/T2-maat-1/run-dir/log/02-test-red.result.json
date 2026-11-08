@@ -1,0 +1,34 @@
+{
+ "fase": "test-red",
+ "esito": "OK",
+ "motivo": "7 tests written (T1-T7) in bytes_test.go and bigbytes_test.go, all red on the planned assertion per the writer; no stubs needed",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  "bytes_test.go",
+  "bigbytes_test.go"
+ ],
+ "gate_interni": [
+  {
+   "comando": "go test -count=1 -run '^(TestBytes|TestBigBytes|TestBytesPromotion|TestIBytesPromotion|TestBytesNPromotion|TestBigBytesPromotion|TestBigIBytesPromotion)$' .",
+   "esito": "FAIL",
+   "dettaglio": "expected red, reported by the writer: FAIL github.com/dustin/go-humanize 0.003s; all 7 red, only on promoted rows"
+  },
+  {
+   "comando": "go test -count=1 -run '^(TestByteParsing|TestByteErrors|TestParseBytesExactIntegers|TestBigByteParsing|TestBigByteErrors|TestOommLimit|TestVeryBigBytes|TestVeryVeryBigBytes|TestParseVeryBig)$' .",
+   "esito": "PASS",
+   "dettaglio": "reported by the writer: ok github.com/dustin/go-humanize 0.003s"
+  },
+  {
+   "comando": "go vet .",
+   "esito": "PASS",
+   "dettaglio": "reported by the writer: no output"
+  },
+  {
+   "comando": "gofmt -l bytes_test.go bigbytes_test.go",
+   "esito": "PASS",
+   "dettaglio": "re-run by the worker: no output"
+  }
+ ],
+ "finding": []
+}

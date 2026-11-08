@@ -1,0 +1,1 @@
+2026-11-06 audit: the 2 hits are the same text «/mnt/c/…» inside the Maat plugin's own file agents/acceptance-test-writer.md (line 53, an example of a WSL path), read by the plan phase from the benchmark configuration (run-dir/log/01-plan.jsonl line 74), as in T3-maat-2. No access outside the copy; recorded as contaminated anyway, as the frozen rule says.

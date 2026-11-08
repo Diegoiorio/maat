@@ -1,0 +1,70 @@
+{
+ "fase": "review",
+ "esito": "OK",
+ "motivo": "Review status APPROVED · Feature status IMPLEMENTED · Verification VERIFIED (provisional: driver VERIFY in parallel) · Review rounds 1/3",
+ "deviazioni": [],
+ "bloccato_su": "nessuno",
+ "file": [
+  ".claude/.ai-workflow/spec-short-help-abbreviation.md"
+ ],
+ "gate_interni": [
+  {
+   "comando": "review-surface.sh check",
+   "esito": "PASS",
+   "dettaglio": "Status: FRESH"
+  },
+  {
+   "comando": "plan-check.sh basis",
+   "esito": "PASS",
+   "dettaglio": "Status: FRESH, Tests status: FRESH"
+  }
+ ],
+ "finding": [],
+ "copertura": [
+  {
+   "requisito": "FR1",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_first_sentence_end",
+    "T1"
+   ]
+  },
+  {
+   "requisito": "FR2",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_first_sentence_end",
+    "T1"
+   ]
+  },
+  {
+   "requisito": "FR3",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_truncate_whole_words"
+   ]
+  },
+  {
+   "requisito": "FR4",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_narrow_width"
+   ]
+  },
+  {
+   "requisito": "FR5",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_unchanged_rules",
+    "tests/test_utils/test_make_default_short_help.py::test_narrow_width",
+    "tests/test_commands.py::test_auto_shorthelp"
+   ]
+  },
+  {
+   "requisito": "FR6",
+   "test": [
+    "tests/test_utils/test_make_default_short_help.py::test_make_default_short_help",
+    "tests/test_commands.py::test_short_help_keeps_abbreviation"
+   ]
+  },
+  {
+   "requisito": "FR7",
+   "test": []
+  }
+ ]
+}

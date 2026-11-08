@@ -1,0 +1,34 @@
+[
+  {
+    "id": "T3",
+    "file": "bytes.go",
+    "simbolo": "humanateBytes",
+    "mutazione": {
+      "cerca": "if promote && val >= base && int(e)+1 < len(sizes) {",
+      "sostituisci": "if false {"
+    },
+    "test": {
+      "percorso": "bytes_test.go"
+    },
+    "rosso_se": {
+      "test_id": "TestBytesPromotion",
+      "asserzione": "expected '1.0 MB', but got '1000 kB'"
+    }
+  },
+  {
+    "id": "T6",
+    "file": "bigbytes.go",
+    "simbolo": "humanateBigBytes",
+    "mutazione": {
+      "cerca": "if math.RoundToEven(val) >= float64(base.Int64()) && mag+1 < len(sizes) {",
+      "sostituisci": "if math.RoundToEven(val) < 0 {"
+    },
+    "test": {
+      "percorso": "bigbytes_test.go"
+    },
+    "rosso_se": {
+      "test_id": "TestBigBytesPromotion",
+      "asserzione": "expected '1.0 MB', but got '1000 kB'"
+    }
+  }
+]
