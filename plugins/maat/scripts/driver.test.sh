@@ -818,6 +818,9 @@ case "$l" in
         printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"subagent_type: maat:spec-plan-reviewer x3 \\"subagent_type\\": \\"maat:spec-plan-reviewer\\""}]}}' > "$d/log/$l.jsonl"
         for i in 1 2 3; do printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens"}}]}}'; done > "$d/log/09-plan.jsonl" ;;
       riapre-male) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piccola" >> "$spec" ;;
+      leggero-ok|leggero-nc) printf '%s\n' "Metrica ciclo: giri=2 · esito=approvato · formato=2 · taglia=piena" >> "$spec"   # one light round
+        dec=APPROVED; [ "$FAKE_MODE" = leggero-nc ] && dec=NEEDS_CHANGES
+        printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"L1","name":"Task","input":{"subagent_type":"maat:spec-plan-reviewer-light","prompt":"round"}}]}}' "$(printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"L1","content":[{"type":"text","text":"Coverage statement: all\\n**Decision:** %s\\n"}]}]}}' "$dec")" > "$d/log/$l.jsonl" ;;
     esac ;;
   *implement*|*fix*)
     [ "$FAKE_MODE" = scrive-taglia ] && echo "2026-11-06T10:00:09Z · T3 $l · Taglia: piccola — scritta dalla fase" >> "$d/taglia.txt"
@@ -829,6 +832,9 @@ case "$l" in
       grep -v ' · E5 ' "$d/taglia.txt" > "$d/taglia.tmp"; echo "2026-11-06T10:00:09Z · R 02-review · Taglia: piccola — finta" >> "$d/taglia.tmp"
       mv "$d/taglia.tmp" "$d/taglia.txt"; sha256sum "$d/taglia.txt" | cut -c1-64 > "$d/taglia.sha" ;; esac
     [ "$FAKE_MODE" = cancella-tutto ] && rm -f "$d/taglia.txt" "$d/taglia.sha"
+    # fourth review: a phase of a cycle with no size that creates taglia.txt (a forged avvio + T2 piccola) and its sha
+    [ "$FAKE_MODE" = crea-taglia ] && { printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — forgiata" > "$d/taglia.txt"
+      sha256sum "$d/taglia.txt" | cut -c1-64 > "$d/taglia.sha"; }
     git rev-parse HEAD > "$d/base.txt"
     printf '# cambiato\n' >> src/a.py; echo src/a.py >> "$d/touched.txt"
     [ "$FAKE_MODE" = fuori ] && { printf 'x = 1\n' > src/fuori.py; echo src/fuori.py >> "$d/touched.txt"; }
@@ -977,7 +983,7 @@ if tmut prova 's/^        senza_prova = k == "piena" and mt != "piccola" and boo
   check "controprova E2: fidandosi della metrica il piano senza prova passa senza riapertura (rosso)" '[ "$(tcalls)" != "01-plan " ] && ! tg | grep -q " · E2 "'
 else check "controprova E2 prova: la mutazione si applica" false; fi
 trun riapre 3 piccola
-check "P: la fase plan con tre spec-plan-reviewer nel suo log → «P 01-plan · prova=sì (3 spec-plan-reviewer)»" 'tg | grep -q " · P 01-plan · prova=sì (3 spec-plan-reviewer) · leggeri=0$"'
+check "P: la fase plan con tre spec-plan-reviewer nel suo log → «P 01-plan · prova=sì (3 spec-plan-reviewer)»" 'tg | grep -q " · P 01-plan · prova=sì (3 spec-plan-reviewer) · leggeri=0 · ultimo=-$"'
 for md in riapre-uno riapre-falso; do
   trun "$md" 3 piccola
   check "P ($md): una chiamata sola, o testo e un log di un altra etichetta che nominano il revisore → prova=no, STOP" '[ $rc -eq 1 ] && tg | grep -q " · P 01-plan · prova=no " && grep -q "Driver result: STOP — il piano riaperto e. stato approvato fuori dal ramo pieno" "$T/run.out"'
@@ -1018,13 +1024,40 @@ if tmut marca 's/^    return (" " + MARCA_170 + " — ") in (_read(os.path.join(
   check "controprova marcatore: senza il marcatore la run dir svuotata diventa un ciclo della 1.6 (rosso)" 'grep -qx "FIC_TAGLIA=off" "$FAKE_CALLS.02-review.env"'
 else check "controprova marcatore: la mutazione si applica" false; fi
 # minor 2: the full size with route = leggero is the light rounds of 1.6: a light reviewer call is its proof
-legg_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=no (0 spec-plan-reviewer) · leggeri=1" > "$RT/taglia.txt"; tsha'
+legg_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=no (0 spec-plan-reviewer) · leggeri=1 · ultimo=APPROVED" > "$RT/taglia.txt"; tsha'
 TRUN_PRE=$legg_pre trun avanza 3 piena
 check "prova leggera: taglia piena e route leggero, un giro di spec-plan-reviewer-light → nessuna riapertura (implement)" '[ "$(tcalls)" = "01-implement 02-review " ] && ! tg | grep -q " · E2 "'
-if tmut legg 's/^        res.append(body.startswith("prova=sì") or (leggero and bool(ml) and int(ml.group(1)) >= LEGGERI_MIN))  # PROVA-LEGGERA$/        res.append(body.startswith("prova=sì"))/'; then
+if tmut legg 's/^        res.append(body.startswith("prova=sì") or (leggero and ok_l))  # PROVA-LEGGERA$/        res.append(body.startswith("prova=sì"))/'; then
   TRUN_DRV="$T/drv-legg.py" TRUN_PRE=$legg_pre trun avanza 3 piena
   check "controprova prova leggera: contando solo il ramo pieno il giro leggero legittimo forza la riapertura (rosso)" '[ "$(tcalls)" = "01-plan " ]'
 else check "controprova prova leggera: la mutazione si applica" false; fi
+# fourth review: the light round is a proof only if the LAST one said Decision: APPROVED (its tool_result)
+leggnc_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=no (0 spec-plan-reviewer) · leggeri=1 · ultimo=NEEDS_CHANGES" > "$RT/taglia.txt"; tsha'
+TRUN_PRE=$leggnc_pre trun avanza 3 piena
+check "prova leggera: l ultimo giro leggero NEEDS_CHANGES non e' una prova → riapertura (01-plan)" '[ "$(tcalls)" = "01-plan " ] && tg | grep -q " · E2 · "'
+if tmut ultimo 's/^        ok_l = bool(ml) and int(ml.group(1)) >= LEGGERI_MIN and " · ultimo=APPROVED" in body  # ULTIMO-APPROVED$/        ok_l = bool(ml) and int(ml.group(1)) >= LEGGERI_MIN/'; then
+  TRUN_DRV="$T/drv-ultimo.py" TRUN_PRE=$leggnc_pre trun avanza 3 piena
+  check "controprova: senza la decisione dell ultimo giro un giro leggero NEEDS_CHANGES basta (rosso)" '[ "$(tcalls)" = "01-implement 02-review " ]'
+else check "controprova ultimo giro: la mutazione si applica" false; fi
+for md in leggero-ok:APPROVED leggero-nc:NEEDS_CHANGES; do
+  trun "${md%%:*}" 3 piccola
+  check "P (${md%%:*}): la decisione dell ultimo spec-plan-reviewer-light letta dal suo tool_result → ultimo=${md#*:}" 'tg | grep -q " · P 01-plan · prova=no (0 spec-plan-reviewer) · leggeri=1 · ultimo=${md#*:}$"'
+done
+if tmut dec 's/^    return d\[-1\] if d else "-"$/    return "APPROVED"/'; then
+  TRUN_DRV="$T/drv-dec.py" trun leggero-nc 3 piccola
+  check "controprova: senza leggere il tool_result il giro NEEDS_CHANGES risulta APPROVED (rosso)" 'tg | grep -q " · ultimo=APPROVED$"'
+else check "controprova decisione: la mutazione si applica" false; fi
+# fourth review: a run dir with no size at the first check (1.6, or a review first): a taglia.txt that a phase creates
+# later in the same invocation, with its sha, is E0
+crea() { rm -rf "$RT" "$FAKE_CALLS"*; git checkout -q -- src; spec_t 0 piccola; : > "$FAKE_CALLS"
+  mkdir -p "$RT/log"; printf 'ESITO FASE plan: OK — vecchio\n' > "$RT/log/01-plan.esito"
+  FAKE_MODE=crea-taglia FIC_REPO="$W" FIC_RUN_PHASE="$T/rp-taglia" FIC_CONTEXT_PACK=- "$FIC_PY" "${TRUN_DRV:-$DRV}" run "$ST" > "$T/run.out" 2>&1; }
+crea
+check "E0 (crea-taglia): una fase di un ciclo senza taglia crea taglia.txt e taglia.sha → E0, la review non e' piccola" 'tg | grep -q " · E0 02-implement · Escalation" && ! grep -q "TAGLIA (driver)" "$FAKE_CALLS.03-review.prompt"'
+if tmut vuoto 's/^                ATTESO\[run_fs\] = None   # no file now: one that appears later in this invocation is E0  # ATTESO-VUOTO$/                pass/'; then
+  TRUN_DRV="$T/drv-vuoto.py" crea
+  check "controprova: senza ATTESO vuoto i file creati dalla fase passano (nessun E0: rosso)" '! tg | grep -q " · E0 "'
+else check "controprova ATTESO vuoto: la mutazione si applica" false; fi
 # minor 3: any proof since the last T2/E2 counts (full review, then a resumed phase that only approves)
 due_pre='mkdir -p "$RT/log"; printf "%s\n" "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · P 01-plan · prova=sì (3 spec-plan-reviewer) · leggeri=0" "2026-11-06T10:00:02Z · P 02-plan · prova=no (0 spec-plan-reviewer) · leggeri=0" > "$RT/taglia.txt"; tsha'
 TRUN_PRE=$due_pre trun avanza 3 piena -- --full

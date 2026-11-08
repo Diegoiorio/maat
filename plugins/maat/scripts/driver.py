@@ -1277,6 +1277,7 @@ def verifica_taglia(run_fs, ev, label=""):
         atteso = _sha_atteso(run_fs)
         if reale is None and atteso is None:
             if not _marcato_170(run_fs):
+                ATTESO[run_fs] = None   # no file now: one that appears later in this invocation is E0  # ATTESO-VUOTO
                 return     # a cycle older than 1.7 (or a new one): nothing to check
             atteso = "-"   # a 1.7 cycle whose two files are gone: never the 1.6 path
     if reale != atteso:  # TAGLIA-INTATTA
@@ -1349,13 +1350,51 @@ def _chiamate_revisore(path, nomi=REVISORI_PIENI):
     return n
 
 
+DECISIONE = re.compile(r"Decision[*]*:[*\s]*([A-Z_]+)")
+
+
+def _ultima_decisione_leggera(path):
+    """The Decision of the LAST spec-plan-reviewer-light call of the stream: its tool_result (matched by
+    tool_use_id), the last «Decision: X» in its text; "-" if there is none (no call, no result, no Decision line)."""
+    ids, testi = [], {}
+    try:
+        fh = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return "-"
+    with fh:
+        for riga in fh:
+            try:
+                ev_ = json.loads(riga)
+            except ValueError:
+                continue
+            msg = ev_.get("message") if isinstance(ev_, dict) else None
+            cont = msg.get("content") if isinstance(msg, dict) else None
+            for b in cont if isinstance(cont, list) else []:
+                if not isinstance(b, dict):
+                    continue
+                inp = b.get("input")
+                if (b.get("type") == "tool_use" and b.get("name") in ("Task", "Agent") and isinstance(inp, dict)
+                        and inp.get("subagent_type") in REVISORI_LEGGERI):
+                    ids.append(b.get("id"))
+                elif b.get("type") == "tool_result":
+                    c = b.get("content")
+                    if isinstance(c, list):
+                        c = "\n".join(str(x.get("text", "")) for x in c if isinstance(x, dict))
+                    testi[b.get("tool_use_id")] = str(c or "")
+    if not ids or ids[-1] not in testi:
+        return "-"
+    d = DECISIONE.findall(testi[ids[-1]])
+    return d[-1] if d else "-"
+
+
 def registra_prova(run_fs, label, ev):
-    """After a plan phase: "P <label> · prova=sì|no (<n> spec-plan-reviewer) · leggeri=<m>" in taglia.txt (prova =
-    the full branch; leggeri = the calls of the light branch, which count only when route says leggero)."""
+    """After a plan phase: "P <label> · prova=sì|no (<n> spec-plan-reviewer) · leggeri=<m> · ultimo=<Decision>" in
+    taglia.txt (prova = the full branch; leggeri and ultimo = the light branch, which counts only when route says
+    leggero, and only if its LAST round's reply says Decision: APPROVED)."""
     lg = os.path.join(run_fs, "log", label + ".jsonl")
     n, m = _chiamate_revisore(lg), _chiamate_revisore(lg, REVISORI_LEGGERI)
-    _taglia_scrivi(run_fs, "P " + label, "prova=%s (%d spec-plan-reviewer) · leggeri=%d"
-                   % ("sì" if n >= REVISORI_MIN else "no", n, m))
+    _taglia_scrivi(run_fs, "P " + label, "prova=%s (%d spec-plan-reviewer) · leggeri=%d · ultimo=%s"
+                   % ("sì" if n >= REVISORI_MIN else "no", n, m, _ultima_decisione_leggera(lg)))
 
 
 def _prove(rr, dopo=-1, leggero=False):
@@ -1366,7 +1405,8 @@ def _prove(rr, dopo=-1, leggero=False):
             continue
         body = l.split(" · ", 2)[2]
         ml = re.search(r" · leggeri=([0-9]+)", body)
-        res.append(body.startswith("prova=sì") or (leggero and bool(ml) and int(ml.group(1)) >= LEGGERI_MIN))  # PROVA-LEGGERA
+        ok_l = bool(ml) and int(ml.group(1)) >= LEGGERI_MIN and " · ultimo=APPROVED" in body  # ULTIMO-APPROVED
+        res.append(body.startswith("prova=sì") or (leggero and ok_l))  # PROVA-LEGGERA
     return res
 
 

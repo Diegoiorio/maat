@@ -463,12 +463,15 @@ prun 2 plan "$R3" "$TG/log/09-plan.jsonl"
 prun 2 review "$R3" "$TG/prompts/05-review.md"
 prun 2 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"
 prun 2 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run/./Log/01-plan.jsonl"
+prun 2 plan "$R3" "$TG/driver.log"                       # fourth review: driver.log holds the 1.7 marker
+prun 2 implement "$R3" "$R3/.claude/.ai-workflow/spec-x.run//DRIVER.LOG"
 prun 0 plan "$R3" "$TG/note.txt"                         # another file of the run dir: allowed as before
 prun 0 review "$R3" "$TG/counterproof/mutations.json"     # the review worker writes it: allowed as before
 GUARD_SALVA=$GUARD
 if GUARD=$(gmutante taglia 'if phase and re.search(' 'if False and re.search('); then
   prun 0 plan "$R3" "$TG/taglia.txt"                     # counterproof: without the rule the plan phase writes it
   prun 0 plan "$R3" "$TG/log/09-plan.jsonl"              # … and forges a plan log
+  prun 0 plan "$R3" "$TG/driver.log"                     # … and rewrites driver.log
 else fail=$((fail + 1)); echo "FAIL: controprova taglia.txt non applicabile"; fi
 if GUARD=$(gmutante taglia-maiuscole '.lower() if path else ""' ' if path else ""'); then
   prun 0 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"   # counterproof: case-sensitive, the upper case passes
