@@ -28,9 +28,9 @@ The whole output, with every step, is [`draw.txt`](draw.txt); `python3 draw.py <
 | Easy | E1 | BurntSushi/toml | Go, bug fix |
 | Easy | E3 | BurntSushi/jiff | Rust, bug fix |
 
-Three of the six hard tasks (N3, N7, N11) and the new-feature task N12 are among those the qualification file marks close
-to the line of D1 or D4: if they turn out easy they stay, marked «not discriminating». Replacement order, used only if a
-task fails a check made before the freeze (C8–C10, D2, D3, D5): hard N5, N1, N6, N4; easy E2.
+Four of the six hard tasks (N3, N7, N11, N12) are among those the qualification file marks close to the line: if they
+turn out easy they stay, marked «not discriminating». Replacement order, used only if a task fails a check made before
+the freeze (C8–C10, D2, D3, D5): hard N5, N1, N6, N4; easy E2.
 
 ## What is compared
 
