@@ -1515,6 +1515,384 @@ zconf -
 expect 3 "^rossi: esito=BLOCKED — .*report nessuno: esiti dei test non leggibili .*report.* junit" "D-B rossi: report nessuno = BLOCKED con il rimedio" -- zr "$Z/dd.md" --evidence "$Z/ev-tb" --run-dir "$Z/dd.run"
 zconf junit
 
+# ── 1.7.0: the size of the cycle (taglia), e1, Size request: in lint, the new folder in lint2 (T3) ─────────────────────
+# A repo of its own (K): one module at the root, junit, and a maat.json with its own critical surfaces and migrations, so
+# that each fact can be moved alone. Every rule: the case at the threshold, the case above it, a counterproof on a
+# mutated copy of plan-check.sh (mutpc) that must turn it red.
+K="$T/k"; mkdir -p "$K/.claude" "$K/src/guard" "$K/tests" "$K/web" "$K/go" "$K/script" "$K/db/migrations"
+# the files the fixtures name exist (F2 counts as new a source path not in the repo, 1.7.0 review)
+for f in src/c.py src/d.py src/guard/g.py db/migrations/0001_init.py web/x.ts go/x.go script/x.sh; do printf 'x\n' > "$K/$f"; done
+printf 'def a():\n    return 1\n' > "$K/src/a.py"; printf 'def b():\n    return 1\n' > "$K/src/b.py"
+printf 'def test_a():\n    assert 1 == 1\n' > "$K/tests/test_a.py"
+kconf() { # $1 = extra JSON of the piano key (- = none) · $2 = harness
+  "$FIC_PY" - "$1" "${2:->=1.7}" "$K/.claude/maat.json" <<'EOF'
+import json, sys
+m = {"nome": "k", "radice": ".", "regola_test": "specchio", "specchio": {"da": "**/{m}.py", "a": "**/test_{m}*.py"},
+     "ambiente": "nativo", "report": "junit",
+     "comandi": {"test": {"comando": "{python} -m pytest -q --junitxml {report} {test}", "cartella": "radice"}}}
+piano = {"superfici_critiche": [{"superficie": "permessi", "regex": "/guard/"}, {"superficie": "contratto-api", "regex": "^web/api/"}],
+         "migrazioni": ["/migrations/"]}
+if sys.argv[1] != "-":
+    piano["taglia"] = json.loads(sys.argv[1])
+json.dump({"versione_schema": 1, "harness": sys.argv[2], "moduli": [m], "piattaforma": {"copia_wsl": "no"}, "piano": piano},
+          open(sys.argv[3], "w"), indent=1)
+EOF
+}
+kconf -
+kspec() {
+cat <<'EOF'
+# K
+## Functional requirements
+1. FR1 — a.
+2. FR2 — b.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: shared-logic
+### Touched files
+- `src/a.py`
+- `src/b.py`
+- `tests/test_a.py`
+### Steps
+#### Block B1 — code
+writes: `src/a.py`, `src/b.py`, `tests/test_a.py`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | `src/a.py` | change a | T1 |
+| P2 | `src/b.py` | change b | T1 |
+### Requirement traceability
+| Req | Steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+| FR2 | P2 | T1 |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1, FR2 | `tests/test_a.py::test_a` (new) | red if: `assert 1 == 2` | — |
+### Plan review changelog
+- round 1: first plan.
+EOF
+}
+kspec > "$K/k.md"
+ktg() { env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" taglia "$@"; }
+kmut() { # <name> <sed> → PCX = the mutated plan-check.sh (with MAAT_ROOT of the plugin), 1 if the mutation does not apply
+  mutpc "$1" "$2" && PCX="$T/pcm-$1/plan-check.sh"; }
+kpc() { env MAAT_ROOT="$PLUGIN_DIR" PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$@"; }
+# add <n> lines after the line that matches <regex> (awk), the lines from a command
+kadd() { # <file in> <file out> <regex of the anchor line> <lines…>
+  local i=$1 o=$2 a=$3; shift 3
+  printf '%s\n' "$@" > "$T/kadd.txt"
+  KADD_A="$a" awk -v f="$T/kadd.txt" '{ print } $0 ~ ENVIRON["KADD_A"] && !done { while ((getline l < f) > 0) print l; done = 1 }' "$i" > "$o"
+}
+expect 0 "^Taglia: piccola — file 2/3 · nuovi 0/1 · passi 2/6 · requisiti 2/12 · test 1/10 · righe [0-9]+/250 · superfici critiche: nessuna · api-contract: nessuna · migrazioni: nessuna · distruttive: nessuna · sicurezza: nessuna · richiesta: nessuna · override: nessuno$" "taglia: piano piccolo = piccola, ogni fatto con la sua soglia" -- ktg "$K/k.md"
+expect 0 "^Fatti: F1=2/3 F2=0/1 F3=2/6 F4=2/12 F5=1/10 F6=[0-9]+/250 F7=0 F8=0 F9=0 F10=0 F11=0 F12=- F13=- F14=0$" "taglia: la riga Fatti: (chiavi fisse in ogni lingua)" -- ktg "$K/k.md"
+expect 0 "^F1 file sorgente: 2/3$" "taglia: un fatto per riga" -- ktg "$K/k.md"
+expect 0 "^Taglia: piccola — files 2/3 · new 0/1 · steps 2/6" "en taglia: Taglia: piccola e la spiegazione in inglese" -- env MAAT_LINGUA=en bash -c 'PLAN_CHECK_ROOT="$1" MAAT_CONFIG="$1/.claude/maat.json" bash "$2" taglia "$1/k.md"' _ "$K" "$PC"
+refute "file sorgente|nessuna|passi" "en taglia: nessuna spiegazione italiana" -- env MAAT_LINGUA=en bash -c 'PLAN_CHECK_ROOT="$1" MAAT_CONFIG="$1/.claude/maat.json" bash "$2" taglia "$1/k.md"' _ "$K" "$PC"
+expect 0 "^Taglia: piccola" "taglia: shared-logic dichiarata da sola non da' piena (D2)" -- ktg "$K/k.md"
+# F1-F6 at the threshold and above it
+kadd "$K/k.md" "$K/f1a.md" '^- `src/b.py`$' '- `src/c.py`'
+kadd "$K/f1a.md" "$K/f1b.md" '^- `src/c.py`$' '- `src/d.py`'
+expect 0 "^Taglia: piccola — file 3/3 " "taglia F1: 3 file sorgente = piccola (soglia)" -- ktg "$K/f1a.md"
+expect 0 "^Taglia: piena — file 4/3$" "taglia F1: 4 file sorgente = piena" -- ktg "$K/f1b.md"
+sed 's/^- `src\/a.py`$/- `src\/a.py` (new)/' "$K/k.md" > "$K/f2a.md"
+sed 's/^- `src\/b.py`$/- `src\/b.py` (new)/' "$K/f2a.md" > "$K/f2b.md"
+expect 0 "^Taglia: piccola — file 2/3 · nuovi 1/1 " "taglia F2: 1 file nuovo = piccola" -- ktg "$K/f2a.md"
+expect 0 "^Taglia: piena — nuovi 2/1$" "taglia F2: 2 file nuovi = piena" -- ktg "$K/f2b.md"
+kadd "$K/k.md" "$K/f3a.md" '^\| P2 \|' '| P3 | `src/a.py` | x | T1 |' '| P4 | `src/a.py` | x | T1 |' '| P5 | `src/a.py` | x | T1 |' '| P6 | `src/a.py` | x | T1 |'
+kadd "$K/f3a.md" "$K/f3b.md" '^\| P6 \|' '| P7 | `src/a.py` | x | T1 |'
+expect 0 "^Taglia: piccola — file 2/3 · nuovi 0/1 · passi 6/6 " "taglia F3: 6 passi = piccola" -- ktg "$K/f3a.md"
+expect 0 "^Taglia: piena — passi 7/6$" "taglia F3: 7 passi = piena" -- ktg "$K/f3b.md"
+kadd "$K/k.md" "$K/f4a.md" '^\| FR2 \| P2 \|' $(for i in 3 4 5 6 7 8 9 10 11 12; do printf '| FR%d | P1 | not verifiable by test: doc |\n' "$i"; done | tr ' ' '\a') && sed -i 's/\a/ /g' "$K/f4a.md"
+kadd "$K/f4a.md" "$K/f4b.md" '^\| FR12 \|' '| FR13 | P1 | not verifiable by test: doc |'
+expect 0 "^Taglia: piccola — .* requisiti 12/12 " "taglia F4: 12 requisiti = piccola" -- ktg "$K/f4a.md"
+expect 0 "^Taglia: piena — requisiti 13/12$" "taglia F4: 13 requisiti = piena" -- ktg "$K/f4b.md"
+kadd "$K/k.md" "$K/f4s.md" '^2\. FR2 — b\.$' $(for i in 3 4 5 6 7 8 9 10 11 12 13 14; do printf '%d. FR%d — x.\n' "$i" "$i"; done | tr ' ' '\a') && sed -i 's/\a/ /g' "$K/f4s.md"
+expect 0 "^Taglia: piena — requisiti 14/12$" "taglia F4: tracciabilita' con 2 ID ma la spec ne ha 14 = piena (conta la spec)" -- ktg "$K/f4s.md"
+expect 0 "^F4 requisiti: 14/12 \(tracciabilita' 2, spec 14\)$" "taglia F4: il dettaglio dice da dove viene il massimo" -- ktg "$K/f4s.md"
+if kmut f4 's/max(len(tr), len(ids)), w or/len(tr), w or/'; then
+  expect 0 "^Taglia: piccola" "controprova F4: contando solo la tracciabilita' la spec di 14 requisiti diventa piccola (rosso)" -- kpc "$PCX" taglia "$K/f4s.md"
+else echo "FAIL [controprova F4: la mutazione non si applica]"; fail=$((fail+1)); fi
+kadd "$K/k.md" "$K/f5a.md" '^\| T1 \|' $(for i in 2 3 4 5 6 7 8 9 10; do printf '| T%d | FR1 | `tests/test_a.py::test_%d` (new) | red if: `x` | — |\n' "$i" "$i"; done | tr ' ' '\a') && sed -i 's/\a/ /g' "$K/f5a.md"
+kadd "$K/f5a.md" "$K/f5b.md" '^\| T10 \|' '| T11 | FR1 | `tests/test_a.py::test_11` (new) | red if: `x` | — |'
+# every test in a step (lint2 must accept the plan, 1.7.0 review)
+sed -i 's/^| P1 | `src\/a.py` | change a | T1 |$/| P1 | `src\/a.py` | change a | T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11 |/' "$K/f5a.md" "$K/f5b.md"
+expect 0 "^Taglia: piccola — .* test 10/10 " "taglia F5: 10 test = piccola" -- ktg "$K/f5a.md"
+expect 0 "^Taglia: piena — test 11/10$" "taglia F5: 11 test = piena" -- ktg "$K/f5b.md"
+kn=$(ktg "$K/k.md" | sed -n 's/^F6 [^:]*: \([0-9]*\)\/250$/\1/p')
+awk -v k=$((250 - kn)) '/^### Requirement traceability$/ && !d { for (i = 1; i <= k; i++) print "filler " i; d = 1 } { print }' "$K/k.md" > "$K/f6a.md"
+awk '/^### Requirement traceability$/ && !d { print "filler extra"; d = 1 } { print }' "$K/f6a.md" > "$K/f6b.md"
+expect 0 "^Taglia: piccola — .* righe 250/250 " "taglia F6: 250 righe del piano = piccola" -- ktg "$K/f6a.md"
+expect 0 "^Taglia: piena — righe 251/250$" "taglia F6: 251 righe = piena" -- ktg "$K/f6b.md"
+# counterproof of the numeric thresholds: a threshold ignored → every case +1 is piccola
+if kmut soglie 's/(kind == "num" and v > cap and not light)/(kind == "num" and False)/'; then
+  ko=0; for f in f1b f2b f3b f4b f5b f6b; do kpc "$PCX" taglia "$K/$f.md" | grep -q '^Taglia: piccola' || ko=1; done
+  [ $ko -eq 0 ] && pass=$((pass+1)) || { echo "FAIL [controprova F1-F6: con le soglie ignorate i casi +1 devono dare piccola]"; fail=$((fail+1)); }
+else echo "FAIL [controprova F1-F6: la mutazione non si applica]"; fail=$((fail+1)); fi
+# F7 declared or detected, F8, F9
+sed 's/^Risk surfaces: shared-logic$/Risk surfaces: permissions, shared-logic/' "$K/k.md" > "$K/f7d.md"
+expect 0 "^Taglia: piena — superfici critiche: permessi \(dichiarata\)$" "taglia F7: permissions dichiarata = piena" -- ktg "$K/f7d.md"
+sed 's#src/b\.py#src/guard/g.py#g' "$K/k.md" > "$K/f7r.md"
+expect 0 "^Taglia: piena — superfici critiche: permessi \(src/guard/g.py\)$" "taglia F7: percorso che combacia con superfici_critiche = piena" -- ktg "$K/f7r.md"
+if kmut f7 's/f7 += \[s + " (" + p + ")" for s in SIZE_CRIT if s in ss\]  # F7-RILEVATA/f7 += []/'; then
+  expect 0 "^Taglia: piccola" "controprova F7: la regex di maat.json non letta → il percorso critico da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f7r.md"
+else echo "FAIL [controprova F7: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed 's/^Risk surfaces: shared-logic$/Risk surfaces: api-contract/' "$K/k.md" > "$K/f8.md"
+expect 0 "^Taglia: piena — api-contract: dichiarata$" "taglia F8: api-contract dichiarata = piena (D2)" -- ktg "$K/f8.md"
+sed 's#src/b\.py#db/migrations/0001_init.py#g' "$K/k.md" > "$K/f9.md"
+expect 0 "^Taglia: piena — migrazioni: db/migrations/0001_init.py$" "taglia F9: migrazione = piena" -- ktg "$K/f9.md"
+if kmut f9 's/if is_mig(p) and p not in f9:/if False:/'; then
+  expect 0 "^Taglia: piccola" "controprova F9: senza il controllo delle migrazioni la migrazione da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f9.md"
+else echo "FAIL [controprova F9: la mutazione non si applica]"; fail=$((fail+1)); fi
+kadd "$K/k.md" "$K/f10.md" '^Risk surfaces: shared-logic$' 'The job runs DELETE FROM t.'
+expect 0 "^Taglia: piena — distruttive: parola chiave DELETE \(piano riga 10\)$" "taglia F10: DELETE nel piano = piena" -- ktg "$K/f10.md"
+if kmut f10 's/m = DESTR.search(t)  # F10-DESTR/m = None/'; then
+  expect 0 "^Taglia: piccola" "controprova F10: senza DESTR la parola distruttiva da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f10.md"
+else echo "FAIL [controprova F10: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed 's/^2\. FR2 — b\.$/2. FR2 — the password is checked./' "$K/k.md" > "$K/f11s.md"
+expect 0 "^Taglia: piena — sicurezza: password \(spec riga 4\)$" "taglia F11: password nella spec = piena" -- ktg "$K/f11s.md"
+sed 's/| change a |/| keeps the Session open |/' "$K/k.md" > "$K/f11p.md"
+expect 0 "^Taglia: piena — sicurezza: Session \(piano riga [0-9]+\)$" "taglia F11: session nel piano (maiuscole indifferenti) = piena" -- ktg "$K/f11p.md"
+sed 's/^2\. FR2 — b\.$/2. FR2 — the author of the page./' "$K/k.md" > "$K/f11a.md"
+expect 0 "^Taglia: piccola" "taglia F11: author non e' una parola di sicurezza" -- ktg "$K/f11a.md"
+if kmut f11 's/for m in (sec_rx.finditer(t) if sec_rx else \[\]):  # F11-SICUREZZA/for m in []:/'; then
+  expect 0 "^Taglia: piccola" "controprova F11: senza le parole di sicurezza la password da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11s.md"
+else echo "FAIL [controprova F11: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed 's/| change b |/| frobnicate b |/' "$K/k.md" > "$K/f11c.md"
+expect 0 "^Taglia: piccola" "taglia F11: una parola del progetto non dichiarata = piccola" -- ktg "$K/f11c.md"
+kconf '{"parole_sicurezza": ["frobnicat\\w*"]}'
+expect 0 "^Taglia: piena — sicurezza: frobnicate" "taglia F11: piano.taglia.parole_sicurezza aggiunge le sue parole" -- ktg "$K/f11c.md"
+kconf -
+# F12, F13 and outside the plan, with --diff
+kdiff() { # <file> <path> <lines +…>: a unified diff that adds the lines to the path
+  local f=$1 p=$2; shift 2
+  { printf 'diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n@@ -1,1 +1,%d @@\n' "$p" "$p" "$p" "$p" "$#"; printf '+%s\n' "$@"; } > "$f"
+}
+kdiff "$K/d0.diff" src/a.py '    return 2' '    # changed'
+expect 0 "^Taglia: piccola — .*simboli 0/2" "taglia --diff: un diff nel piano senza simboli nuovi = piccola" -- ktg "$K/k.md" --diff "$K/d0.diff"
+expect 0 "^Fatti: .* F12=0 F13=0/2 F14=0$" "taglia --diff: F12 e F13 misurati" -- ktg "$K/k.md" --diff "$K/d0.diff"
+{ printf 'diff --git a/src/b.py b/src/b.py\ndeleted file mode 100644\n--- a/src/b.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-def b():\n-    return 1\n'; } > "$K/d12.diff"
+expect 0 "^Taglia: piena — eliminati: src/b.py$" "taglia F12: file eliminato nel diff = piena" -- ktg "$K/k.md" --diff "$K/d12.diff"
+if kmut f12 's/deleted.append(cur)/pass/'; then
+  expect 0 "^Taglia: piccola" "controprova F12: senza il controllo dei file eliminati il diff da' piccola (rosso)" -- kpc "$PCX" taglia "$K/k.md" --diff "$K/d12.diff"
+else echo "FAIL [controprova F12: la mutazione non si applica]"; fail=$((fail+1)); fi
+kdiff "$K/d13p2.diff" src/a.py 'def uno():' '    pass' 'def due():' '    pass' 'def _privata():' '    pass' '    def metodo(self):'
+kdiff "$K/d13p3.diff" src/a.py 'def uno():' 'def due():' 'class Tre:'
+expect 0 "^Taglia: piccola — .*simboli 2/2" "taglia F13 Python: 2 def pubbliche (privata e metodo esclusi) = piccola" -- ktg "$K/k.md" --diff "$K/d13p2.diff"
+expect 0 "^Taglia: piena — simboli 3/2$" "taglia F13 Python: 3 simboli pubblici = piena" -- ktg "$K/k.md" --diff "$K/d13p3.diff"
+sed 's#src/a\.py#web/x.ts#g; s#src/b\.py#go/x.go#g; s#^- `go/x\.go`$#- `go/x.go`\n- `script/x.sh`#' "$K/k.md" > "$K/f13.md"
+kdiff "$K/d13j2.diff" web/x.ts 'export function a() {}' 'export const b = 1' 'function interna() {}'
+kdiff "$K/d13j3.diff" web/x.ts 'export function a() {}' 'export const b = 1' 'export { c }'
+kdiff "$K/d13g2.diff" go/x.go 'func Uno() {}' 'func (s *T) Due() {}' 'func interna() {}'
+kdiff "$K/d13g3.diff" go/x.go 'func Uno() {}' 'func (s *T) Due() {}' 'type Tre struct{}'
+expect 0 "^Taglia: piccola — .*simboli 2/2" "taglia F13 JS/TS: 2 export = piccola" -- ktg "$K/f13.md" --diff "$K/d13j2.diff"
+expect 0 "^Taglia: piena — simboli 3/2$" "taglia F13 JS/TS: 3 export = piena" -- ktg "$K/f13.md" --diff "$K/d13j3.diff"
+expect 0 "^Taglia: piccola — .*simboli 2/2" "taglia F13 Go: 2 nomi Maiuscoli = piccola" -- ktg "$K/f13.md" --diff "$K/d13g2.diff"
+expect 0 "^Taglia: piena — simboli 3/2$" "taglia F13 Go: 3 nomi Maiuscoli = piena" -- ktg "$K/f13.md" --diff "$K/d13g3.diff"
+kdiff "$K/d13s.diff" script/x.sh 'echo ciao'
+expect 0 "^Taglia: piena — simboli: non misurabile: nessuna regola dei simboli pubblici per script/x.sh$" "taglia F13 (D9): shell senza regola = non misurabile = piena" -- ktg "$K/f13.md" --diff "$K/d13s.diff"
+{ printf 'diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n@@ -1 +1 @@\n-def a():\n+def a(x=1):\n'; } > "$K/d13sig.diff"
+expect 0 "^Taglia: piccola — .*simboli 0/2" "taglia F13: una firma cambiata non e' un simbolo nuovo" -- ktg "$K/k.md" --diff "$K/d13sig.diff"
+for lg in "py:s/m = PY_DEF.match(l)   # F13-PY.*/m = None/:k.md:d13p3" "js:s/m = TS_EXP.match(l)  # F13-JS/m = None/:f13.md:d13j3" "go:s/m = GO_SYM.match(l)  # F13-GO/m = None/:f13.md:d13g3"; do
+  IFS=: read -r n s f d <<< "$lg"
+  if kmut "f13$n" "$s"; then
+    expect 0 "^Taglia: piccola" "controprova F13 $n: la regex tolta → 3 simboli danno piccola (rosso)" -- kpc "$PCX" taglia "$K/$f" --diff "$K/$d.diff"
+  else echo "FAIL [controprova F13 $n: la mutazione non si applica]"; fail=$((fail+1)); fi
+done
+if kmut f13d9 's/if ext != ".py" and ext != ".go" and ext not in SIZE_JS:  # SIMBOLI-NON-MISURABILI/if False:/'; then
+  expect 0 "^Taglia: piccola" "controprova D9: «non misurabile = 0» → lo shell da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f13.md" --diff "$K/d13s.diff"
+else echo "FAIL [controprova D9: la mutazione non si applica]"; fail=$((fail+1)); fi
+kdiff "$K/doop.diff" src/z.py 'x = 1'
+expect 0 "^Taglia: piena — fuori dal piano: src/z.py$" "taglia --diff: un file fuori dal piano = piena (E3)" -- ktg "$K/k.md" --diff "$K/doop.diff"
+expect 0 "^Taglia: piena — .*non misurabile: diff illeggibile" "taglia --diff: diff illeggibile = piena" -- ktg "$K/k.md" --diff "$K/non-esiste.diff"
+# F14 and R3: Size request: full only
+kadd "$K/k.md" "$K/f14.md" '^Risk surfaces: shared-logic$' 'Size request: full — the change looks small but is subtle'
+expect 0 "^Taglia: piena — richiesta: full — the change looks small but is subtle$" "taglia F14: Size request: full = piena" -- ktg "$K/f14.md"
+expect 0 "lint: OK" "lint: Size request: full e' accettata" -- env PLAN_CHECK_ROOT="$K" bash "$PC" lint "$K/f14.md"
+sed 's/^Size request: full — .*/Taglia richiesta: piena — delicato/' "$K/f14.md" > "$K/f14it.md"
+expect 0 "lint: OK" "lint: Taglia richiesta: piena e' accettata" -- env PLAN_CHECK_ROOT="$K" bash "$PC" lint "$K/f14it.md"
+expect 0 "^Taglia: piena — richiesta: piena — delicato$" "taglia F14: Taglia richiesta: piena = piena" -- ktg "$K/f14it.md"
+sed 's/^Size request: full — .*/Size request: small — less review/' "$K/f14.md" > "$K/f14bad.md"
+expect 1 "VIOLAZIONE: Size request: small — l'unico valore ammesso e' full" "lint (R3): Size request: small = VIOLAZIONE" -- env PLAN_CHECK_ROOT="$K" bash "$PC" lint "$K/f14bad.md"
+expect 0 "^Taglia: piena — richiesta: non valida: small — less review$" "taglia F14: una richiesta non valida = piena" -- ktg "$K/f14bad.md"
+kadd "$K/f14.md" "$K/f14dup.md" '^Size request: full' 'Size request: full — again'
+expect 1 "VIOLAZIONE: la riga Size request: compare 2 volte" "lint: due righe Size request: = VIOLAZIONE" -- env PLAN_CHECK_ROOT="$K" bash "$PC" lint "$K/f14dup.md"
+if mutpc f14lint 's/case $srv in full|piena) ;; \*) viol/case $srv in full|piena|small) ;; *) viol/'; then
+  expect 0 "lint: OK" "controprova R3: un lint che accetta small → il caso small passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" PLAN_CHECK_ROOT="$K" bash "$T/pcm-f14lint/plan-check.sh" lint "$K/f14bad.md"
+else echo "FAIL [controprova R3: la mutazione non si applica]"; fail=$((fail+1)); fi
+# compatibility: the lint of 1.6.1 does not refuse the line (it is text of the plan)
+if git -c safe.directory='*' -C "$HERE" cat-file -e v1.6.1:plugins/maat/scripts/plan-check.sh 2>/dev/null; then
+  # the whole plugin of 1.6.1, not the script alone: it sources lib/ and reads schemas and profiles from its own root
+  # (from the root of the repository: from a subfolder the paths of git archive are relative to it)
+  mkdir -p "$T/pc-161"; git -c safe.directory='*' -C "$(git -c safe.directory='*' -C "$HERE" rev-parse --show-toplevel)" archive v1.6.1 plugins/maat | tar -x -C "$T/pc-161"
+  expect 0 "lint: OK" "compatibilita': il lint della 1.6.1 non rifiuta Size request: full" -- env MAAT_ROOT="$T/pc-161/plugins/maat" PLAN_CHECK_ROOT="$K" bash "$T/pc-161/plugins/maat/scripts/plan-check.sh" lint "$K/f14.md"
+elif [ "${GITHUB_ACTIONS:-}" = true ]; then   # in CI the tag is there (fetch-depth: 0): a skip is a FAIL
+  echo "FAIL [lint della 1.6.1 su Size request: — nessun v1.6.1 in $HERE, in CI]"; fail=$((fail+1))
+else echo "SKIP [lint della 1.6.1 su Size request: — nessun v1.6.1 in $HERE]"; fi
+# fail-closed: what cannot be measured is piena
+awk '/^### Test plan$/ { s = 1 } /^### Plan review changelog$/ { s = 0 } !s' "$K/k.md" > "$K/fc-sez.md"
+expect 0 "^Taglia: piena — test: non misurabile: sezione Piano di test assente" "taglia fail-closed: sezione mancante = piena" -- ktg "$K/fc-sez.md"
+printf '{ rotto\n' > "$K/rotto.json"
+expect 0 "^Taglia: piena — .*non misurabile: .claude/maat.json illeggibile o non valida" "taglia fail-closed: maat.json illeggibile = piena" -- env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/rotto.json" bash "$PC" taglia "$K/k.md"
+grep -v '^Plan format: 2$' "$K/k.md" > "$K/fc-f1.md"
+expect 0 "^Taglia: piena — .*non misurabile: piano in formato 1" "taglia fail-closed: piano in formato 1 = piena" -- ktg "$K/fc-f1.md"
+grep -v '^Risk surfaces:' "$K/k.md" > "$K/fc-decl.md"
+expect 0 "^Taglia: piena — superfici critiche: non misurabile: riga Risk surfaces: assente" "taglia fail-closed: Risk surfaces: assente = piena" -- ktg "$K/fc-decl.md"
+expect 0 "^Taglia: piena — nessuna sezione del piano" "taglia fail-closed: spec senza piano = piena, exit 0" -- ktg "$T/noplan.md"
+if kmut fc 's/if why or (kind == "bar" and items)/if (kind == "bar" and items)/'; then
+  expect 0 "^Taglia: piccola" "controprova fail-closed: «non misurabile = piccola» → la sezione mancante da' piccola (rosso)" -- kpc "$PCX" taglia "$K/fc-sez.md"
+else echo "FAIL [controprova fail-closed: la mutazione non si applica]"; fail=$((fail+1)); fi
+# override: --full, --light above the thresholds, --light against a barrier (D5)
+expect 0 "^Taglia: piena — override: --full$" "taglia --override full = piena" -- ktg "$K/k.md" --override full
+expect 0 "^Taglia: piccola — file 4/3 .* override: --light$" "taglia --override light sopra la soglia numerica = piccola" -- ktg "$K/f1b.md" --override light
+expect 0 "^Taglia: piena — migrazioni: db/migrations/0001_init.py$" "taglia --override light con una migrazione = piena (barriera, D5)" -- ktg "$K/f9.md" --override light
+expect 0 "^Taglia: piena — simboli 3/2$" "taglia senza --light: F13 conta" -- ktg "$K/k.md" --diff "$K/d13p3.diff"
+expect 0 "^Taglia: piccola — .*simboli 3/2.*override: --light$" "taglia --override light: F13 e' numerico, non conta" -- ktg "$K/k.md" --diff "$K/d13p3.diff" --override light
+expect 2 "uso:" "taglia --override con un valore sconosciuto = uso" -- ktg "$K/k.md" --override small
+if kmut light 's/(kind == "bar" and items)/(kind == "bar" and items and not light)/'; then
+  expect 0 "^Taglia: piccola" "controprova D5: --light che ignora le barriere → la migrazione da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f9.md" --override light
+else echo "FAIL [controprova D5: la mutazione non si applica]"; fail=$((fail+1)); fi
+# piano.taglia of maat.json: automatica false, thresholds of the project, invalid thresholds
+kconf '{"automatica": false}'
+expect 0 "^Taglia: piena — override: taglia automatica spenta" "taglia: piano.taglia.automatica false = piena (D7)" -- ktg "$K/k.md"
+expect 0 "^Taglia: piccola" "taglia: automatica false ma --light della persona = piccola" -- ktg "$K/k.md" --override light
+kconf '{"soglie": {"file_sorgente": 4}}'
+expect 0 "^Taglia: piccola — file 4/4 " "taglia: la soglia del progetto (file_sorgente 4) vale" -- ktg "$K/f1b.md"
+kconf '{"soglie": {"file_sorgente": -1}}'
+expect 0 "^Taglia: piena — .*soglie non valide in piano.taglia.soglie: file_sorgente" "taglia: una soglia negativa = non misurabile = piena" -- ktg "$K/k.md"
+kconf -
+expect 0 "^Taglia: piccola" "compatibilita': maat.json senza piano.taglia = i default" -- ktg "$K/k.md"
+# e1: the one round of the small size
+ke1() { printf '%s\n' "Decision: $1" "Coverage statement: all"; shift; for s in "$@"; do printf '%s\n' "1. Severity: $s" "   Claim: x"; done; }
+ke1 NEEDS_CHANGES major major minor nit > "$K/e1-ok"; ke1 NEEDS_CHANGES major major major > "$K/e1-3m"; ke1 NEEDS_CHANGES blocker > "$K/e1-b"
+ke1 STOP_HUMAN_DECISION_REQUIRED > "$K/e1-stop"; { ke1 APPROVED; echo "Blocked on: budget"; } > "$K/e1-part"; printf 'nothing\n' > "$K/e1-none"
+expect 0 "^E1: piccola — 0 blocker, 2 major" "e1: 2 major = resta piccola (D4)" -- bash "$PC" e1 "$K/e1-ok"
+expect 0 "^E1: piena — 0 blocker, 3 major" "e1: 3 major = piena" -- bash "$PC" e1 "$K/e1-3m"
+expect 0 "^E1: piena — 1 blocker, 0 major" "e1: un blocker = piena" -- bash "$PC" e1 "$K/e1-b"
+expect 0 "^E1: STOP — " "e1: STOP_HUMAN_DECISION_REQUIRED = STOP" -- bash "$PC" e1 "$K/e1-stop"
+expect 0 "^E1: piena — risposta parziale" "e1: risposta parziale = piena" -- bash "$PC" e1 "$K/e1-part"
+expect 0 "^E1: piena — nessuna riga Decision:" "e1: senza Decision: = piena" -- bash "$PC" e1 "$K/e1-none"
+if mutpc e1 's/if \[ "${nb:-0}" -gt 0 \] || \[ "${nm:-0}" -gt "$E1_MAJOR" \]; then  # SOGLIA-E1/if false; then/'; then
+  expect 0 "^E1: piccola" "controprova E1: senza la soglia 3 major restano piccola (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1/plan-check.sh" e1 "$K/e1-3m"
+else echo "FAIL [controprova E1: la mutazione non si applica]"; fail=$((fail+1)); fi
+# ── 1.7.0 review: what the agent writes must not keep the small size on a large or risky change ──
+# e1: every markdown form of the severity, and NEEDS_CHANGES with nothing counted
+for frm in '1. **Severity:** major' '- Severity: major' '### 1. Severity: major' 'Severity: major' '1. **Severity**: major'; do
+  { echo "Decision: NEEDS_CHANGES"; for i in 1 2 3; do printf '%s\n' "$frm" "   Claim: x"; done; } > "$K/e1-form"
+  expect 0 "^E1: piena — 0 blocker, 3 major" "e1: tre major scritti «$frm» = piena" -- bash "$PC" e1 "$K/e1-form"
+done
+{ echo "**Decision:** NEEDS_CHANGES"; printf '%s\n' "1. **Severity:** blocker"; } > "$K/e1-bold"
+expect 0 "^E1: piena — 1 blocker, 0 major" "e1: Decision e Severity in grassetto = un blocker, piena" -- bash "$PC" e1 "$K/e1-bold"
+# «**Severity**: major» (the colon after the bold) mixed with well-formed findings: all three counted
+{ echo "Decision: NEEDS_CHANGES"; printf '%s\n' "1. **Severity**: major" "2. Severity: major" "3. - **Severity:** major" "4. Severity: minor"; } > "$K/e1-mix"
+expect 0 "^E1: piena — 0 blocker, 3 major" "e1: **Severity**: major mescolato a righe ben formate = 3 major, piena" -- bash "$PC" e1 "$K/e1-mix"
+if mutpc e1col "s/grep -ciE 'Severity\[\*\]\*:\[\*\[:space:\]\]\*major' || true)/grep -ciE 'Severity:[*[:space:]]*major' || true)/"; then
+  expect 0 "^E1: piccola — 0 blocker, 2 major" "controprova e1: senza Severity\\** il major in grassetto prima dei due punti sparisce (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1col/plan-check.sh" e1 "$K/e1-mix"
+else echo "FAIL [controprova e1 Severity**:: la mutazione non si applica]"; fail=$((fail+1)); fi
+ke1 NEEDS_CHANGES minor nit > "$K/e1-incoer"
+expect 0 "^E1: piena — Decision: NEEDS_CHANGES senza blocker o major contati" "e1: NEEDS_CHANGES senza blocker/major contati = piena (incoerente)" -- bash "$PC" e1 "$K/e1-incoer"
+{ echo "Decision: NEEDS_CHANGES"; for i in 1 2 3; do printf '%s\n' "1. **Severity:** major"; done; } > "$K/e1-form"
+if mutpc e1sev "s/grep -ciE 'Severity\[\*\]\*:\[\*\[:space:\]\]\*major' || true)/grep -ciE '^[[:space:]]*Severity:[[:space:]]*major' || true)/"; then
+  expect 0 "^E1: (piccola|piena — Decision: NEEDS_CHANGES senza)" "controprova e1: col conteggio ancorato a inizio riga i major in grassetto spariscono (rosso: non piu' «3 major»)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1sev/plan-check.sh" e1 "$K/e1-form"
+else echo "FAIL [controprova e1 severita: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc e1inc 's/if \[ "$d" = NEEDS_CHANGES \] && \[ "${nb:-0}" -eq 0 \] && \[ "${nm:-0}" -eq 0 \]; then  # E1-INCOERENTE/if false; then/'; then
+  expect 0 "^E1: piccola" "controprova e1: senza il controllo di coerenza NEEDS_CHANGES vuoto resta piccola (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-e1inc/plan-check.sh" e1 "$K/e1-incoer"
+else echo "FAIL [controprova e1 coerenza: la mutazione non si applica]"; fail=$((fail+1)); fi
+# paths with spaces: the out-of-plan check reads touched.txt; a diff header that cannot be read is not measurable
+printf '%s\n' 'src/a.py' 'src/x y.py' > "$K/touched-sp.txt"
+expect 0 "^Taglia: piena — fuori dal piano: src/x y.py$" "taglia --touched: un file con spazi fuori dal piano (da touched.txt) = piena" -- ktg "$K/k.md" --diff "$K/d0.diff" --touched "$K/touched-sp.txt"
+if kmut tch 's/    for p in dpaths + tlines:/    for p in dpaths:/'; then
+  expect 0 "^Taglia: piccola" "controprova: fuori-piano solo dal diff → il file con spazi sfugge (rosso)" -- kpc "$PCX" taglia "$K/k.md" --diff "$K/d0.diff" --touched "$K/touched-sp.txt"
+else echo "FAIL [controprova --touched: la mutazione non si applica]"; fail=$((fail+1)); fi
+printf 'diff --git a/src/x y.py b/src/x y.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/x y.py\n@@ -0,0 +1 @@\n+def pubblica():\n' > "$K/dsp.diff"
+expect 0 "^Taglia: piena — .*fuori dal piano: src/x y.py" "taglia --diff: il percorso con spazi letto dalla riga +++ b/" -- ktg "$K/k.md" --diff "$K/dsp.diff"
+printf 'diff --git a/src/x y.py b/src/x y.py\nold mode 100644\nnew mode 100755\n' > "$K/dsp2.diff"
+expect 0 "^Taglia: piena — .*non misurabile: diff illeggibile" "taglia --diff: intestazione con spazi senza righe ---/+++ = non misurabile = piena" -- ktg "$K/k.md" --diff "$K/dsp2.diff"
+# a rename hides a deletion (F12)
+printf 'diff --git a/src/b.py b/src/c.py\nsimilarity index 90%%\nrename from src/b.py\nrename to src/c.py\n' > "$K/dren.diff"
+kadd "$K/k.md" "$K/fren.md" '^- `src/b.py`$' '- `src/c.py`'
+expect 0 "^Taglia: piena — eliminati: src/b.py$" "taglia F12: una rinomina e' l'eliminazione del vecchio percorso" -- ktg "$K/fren.md" --diff "$K/dren.diff"
+if kmut ren 's/        if st.get("rfrom"):  # RINOMINA-ELIMINA/        if False:/'; then
+  expect 0 "^Taglia: piccola" "controprova F12: senza la rinomina come eliminazione il diff da' piccola (rosso)" -- kpc "$PCX" taglia "$K/fren.md" --diff "$K/dren.diff"
+else echo "FAIL [controprova rinomina: la mutazione non si applica]"; fail=$((fail+1)); fi
+# F1: a source file in the file column of the test table is a source file (only the test convention is subtracted)
+kadd "$K/k.md" "$K/fconv.md" '^- `src/b.py`$' '- `src/d.py`'
+sed -i 's#tests/test_a\.py#src/c.py#g' "$K/fconv.md"
+expect 0 "^Taglia: piena — file 4/3$" "taglia F1: src/c.py nella colonna file del Piano di test non segue la convenzione dei test = sorgente (4/3)" -- ktg "$K/fconv.md"
+if kmut conv 's/    if SIZE_TEST.search(p):  # CONVENZIONE-TEST/    if True:/'; then
+  expect 0 "^Taglia: piccola" "controprova F1: sottraendo ogni percorso del Piano di test il file sorgente sparisce (rosso)" -- kpc "$PCX" taglia "$K/fconv.md"
+else echo "FAIL [controprova convenzione dei test: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed 's#src/a\.py#src/z1.py#g; s#src/b\.py#src/z2.py#g' "$K/k.md" > "$K/fnew.md"
+expect 0 "^Taglia: piena — nuovi 2/1$" "taglia F2: due file sorgente assenti dal repo senza (new) = nuovi 2/1" -- ktg "$K/fnew.md"
+if kmut nuovi 's/    newf |= set(p for p in src if rel_ok(p) and not os.path.exists(os.path.join(root, p)))  # NUOVI-DAL-DISCO/    pass/'; then
+  expect 0 "^Taglia: piccola" "controprova F2: contando solo (new) i file nuovi non dichiarati spariscono (rosso)" -- kpc "$PCX" taglia "$K/fnew.md"
+else echo "FAIL [controprova F2 dal disco: la mutazione non si applica]"; fail=$((fail+1)); fi
+printf 'diff --git a/src/a.py b/src/a.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/a.py\n@@ -0,0 +1 @@\n+x = 1\ndiff --git a/src/b.py b/src/b.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/b.py\n@@ -0,0 +1 @@\n+y = 1\n' > "$K/dnew.diff"
+expect 0 "^Taglia: piena — nuovi 2/1$" "taglia F2 --diff: new file mode conta come file nuovo" -- ktg "$K/k.md" --diff "$K/dnew.diff"
+# a malformed plan: no backticked path, or a plan lint2 refuses = not measurable
+sed 's/^- `\(src\/[ab]\.py\|tests\/test_a\.py\)`$/- \1/; s/^| P\([12]\) | `src\/\([ab]\)\.py` |/| P\1 | src\/\2.py |/; s/^writes: .*/writes: src\/a.py, src\/b.py/' "$K/k.md" > "$K/fnop.md"
+expect 0 "^Taglia: piena — file: non misurabile: nessun percorso fra backtick in File toccati" "taglia: File toccati senza percorsi fra backtick = non misurabile = piena" -- ktg "$K/fnop.md"
+if kmut nop 's/    w = why_sec("File toccati") or ("" if M\["files"\] else _msg.T("plan-check-170.why_nopaths"))  # NESSUN-PERCORSO/    w = why_sec("File toccati")/'; then
+  expect 0 "^Taglia: piccola" "controprova: senza il controllo dei percorsi il piano malformato da' piccola (rosso)" -- kpc "$PCX" taglia "$K/fnop.md"
+else echo "FAIL [controprova nessun percorso: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed 's/^| T1 | FR1, FR2 |/| T1 | FR1 |/' "$K/k.md" > "$K/flint.md"
+expect 0 "^Taglia: piena — lint2: non misurabile: lint2 rifiuta il piano \(1 violazioni; la prima: riga [0-9]+: requisito FR2 senza test" "taglia: un piano che lint2 rifiuta = piena" -- ktg "$K/flint.md"
+if kmut lint 's/    if rc2:  # LINT2-NON-MISURABILE/    if False:/'; then
+  expect 0 "^Taglia: piccola" "controprova: senza lint2 il piano rifiutato da' piccola (rosso)" -- kpc "$PCX" taglia "$K/flint.md"
+else echo "FAIL [controprova lint2: la mutazione non si applica]"; fail=$((fail+1)); fi
+# a cycle started before 1.7 (FIC_TAGLIA=off from the driver): no size at all, the flow of 1.6
+expect 0 "^Taglia: piena — taglia spenta per un ciclo partito prima della 1.7 \(FIC_TAGLIA=off\)" "taglia con FIC_TAGLIA=off = piena, nessun fatto" -- env FIC_TAGLIA=off PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" taglia "$K/k.md"
+refute "^F1 " "taglia con FIC_TAGLIA=off: nessun fatto misurato" -- env FIC_TAGLIA=off PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" taglia "$K/k.md"
+
+# T3: a file declared new in a folder that does not exist (lib/ is not in K)
+kt3() {
+cat <<'EOF'
+# K3
+## Functional requirements
+1. FR1 — x.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: none
+### Touched files
+- `lib/x.py` (new)
+- `lib/test_x.py` (new)
+### Steps
+#### Block B1 — lib
+writes: `lib/x.py`, `lib/test_x.py`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | `lib/x.py` | the function | T1 |
+| P2 | `lib/test_x.py` | the test | T1 |
+### Requirement traceability
+| Req | Steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1 | `lib/test_x.py::test_x` (new) | red if: `assert 1 == 2` | `lib/x.py` · `x` · `return 1` → `return 2` · red if: `assert 2 == 1` |
+EOF
+}
+kt3 > "$K/t3.md"
+[ ! -e "$K/lib" ] && pass=$((pass+1)) || { echo "FAIL [premessa T3: lib/ non deve esistere in K]"; fail=$((fail+1)); }
+expect 0 "^lint2: OK$" "lint2 (T3): lib/x.py (new) in passo, test e mutazione con lib/ assente = 0 violazioni" -- env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" lint2 "$K/t3.md"
+expect 0 "^nuovo lib/x.py$" "accept (T3): lib/x.py e' nello scope della fase test-red" -- env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" accept "$K/t3.md"
+sed 's/^- `lib\/x.py` (new)$/- `lib\/x.py`/' "$K/t3.md" > "$K/t3-nonew.md"
+expect 1 "VIOLAZIONE: .*lib/x.py" "lint2 (T3): lib/x.py senza (new) con lib/ assente = violazione (refuso)" -- env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" lint2 "$K/t3-nonew.md"
+sed 's/`lib\/x.py`/`..\/x.py`/g' "$K/t3.md" > "$K/t3-up.md"
+expect 1 "VIOLAZIONE: .*\.\./x.py" "lint2 (T3): ../x.py (new) = violazione" -- env PLAN_CHECK_ROOT="$K" MAAT_CONFIG="$K/.claude/maat.json" bash "$PC" lint2 "$K/t3-up.md"
+if kmut t3 's/    return in_repo(root, p) or (rel_ok(p) and p in M\["new_files"\])  # ECCEZIONE-NUOVI/    return in_repo(root, p)/'; then
+  expect 1 "VIOLAZIONE" "controprova T3: senza l'eccezione dei file nuovi il primo caso torna rosso" -- kpc "$PCX" lint2 "$K/t3.md"
+else echo "FAIL [controprova T3: la mutazione non si applica]"; fail=$((fail+1)); fi
+unset PCX
+
 # ── oracle (safety constraint 2 of the 1.3.0 plan): on every Italian fixture of this file, plan-check.sh of
 # 1.2.1 (a2c5b99) and the current one give the SAME output, byte for byte: basis (plan fingerprint), contract and
 # lint everywhere, lint2 and route on the format 2 fixtures. Opt-in (MAAT_ORACOLO_121=1: it doubles the run time and

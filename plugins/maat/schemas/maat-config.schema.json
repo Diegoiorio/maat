@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://maat.local/schemas/maat-config.schema.json",
   "title": "maat.json — configurazione di Maat per un progetto",
-  "description": "Single source of the project's paths, commands and rules for the Maat harness (R2). Read only by scripts/maat-config.py, with an internal validator that covers the constructs used here: type (list too), required, enum, properties, items, additionalProperties: false, pattern. The defaults are the `default` keys of this file, plus radice_pacchetti = radice. Semantic checks, in the SEMANTICA table of maat-config.py: S1 regola_test specchio => specchio present; S2 comandi.test contains {test}, comandi.lint and every controlli[].comando contain {file}; S3 versione_schema accepted by the reader (current or previous, R9; greater = future version); S4 lint_base true => comandi.lint contains {base?...}; S5 a command of comandi that contains test-fast.sh => copia has the matching entry (test or lint); S6 no command of copia contains test-fast.sh; S7 copia.test contains {test}, every copia.lint and copia.lint_messaggi contains {file}; S8 regola_test nessuna => no comandi.test; S9 no generati[] entry is a golden, a snapshot or the lint baseline; S10 moduli[].preparati => preparazione present. Command placeholders: {file} and {test} (lists, each entry quoted separately), {base?prefix} and {cache?prefix} (optional: prefix, quoted value and a space, or nothing: `{base?--base }{file}` gives `--base 'b' 'f'` or `'f'`), {maat} (plugin root, always quoted), {python} (interpreter: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python > python3 in the PATH), {report} (report file in the evidence), {nome} (name of a counterproof's test, quoted). Without a test command a module's gate is NOT RUN (dichiarato), never PASS.",
+  "description": "Single source of the project's paths, commands and rules for the Maat harness (R2). Read only by scripts/maat-config.py, with an internal validator that covers the constructs used here: type (list too), required, enum, properties, items, additionalProperties: false, pattern. The defaults are the `default` keys of this file, plus radice_pacchetti = radice. Semantic checks, in the SEMANTICA table of maat-config.py: S1 regola_test specchio => specchio present; S2 comandi.test contains {test}, comandi.lint and every controlli[].comando contain {file}; S3 versione_schema accepted by the reader (current or previous, R9; greater = future version); S4 lint_base true => comandi.lint contains {base?...}; S5 a command of comandi that contains test-fast.sh => copia has the matching entry (test or lint); S6 no command of copia contains test-fast.sh; S7 copia.test contains {test}, every copia.lint and copia.lint_messaggi contains {file}; S8 regola_test nessuna => no comandi.test; S9 no generati[] entry is a golden, a snapshot or the lint baseline; S10 moduli[].preparati => preparazione present; S11 piano.taglia => harness >=1.7 or newer (1.7.0). Command placeholders: {file} and {test} (lists, each entry quoted separately), {base?prefix} and {cache?prefix} (optional: prefix, quoted value and a space, or nothing: `{base?--base }{file}` gives `--base 'b' 'f'` or `'f'`), {maat} (plugin root, always quoted), {python} (interpreter: FIC_GATES_VENV_PY > moduli[].python > piattaforma.python > python3 in the PATH), {report} (report file in the evidence), {nome} (name of a counterproof's test, quoted). Without a test command a module's gate is NOT RUN (dichiarato), never PASS.",
   "type": "object",
   "required": ["versione_schema", "moduli"],
   "additionalProperties": false,
@@ -418,6 +418,36 @@
         "migrazioni": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "taglia": {
+          "description": "1.7.0: the size of the cycle (plan-check.sh taglia): piccola, a lighter flow, only if every fact of the plan is under its threshold; piena otherwise. Optional: without it every value below is its default. A file that uses it declares \"harness\": \">=1.7\" or newer (S11).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "automatica": {
+              "description": "Default true: the size is chosen by the script. false: always piena, unless the person gives --light.",
+              "type": "boolean"
+            },
+            "soglie": {
+              "description": "The thresholds of piccola (each fact must be at most its value). Defaults: file_sorgente 3, file_nuovi 1, passi 6, requisiti 12, test 10, righe 250, simboli_pubblici 2.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file_sorgente": { "type": "integer" },
+                "file_nuovi": { "type": "integer" },
+                "passi": { "type": "integer" },
+                "requisiti": { "type": "integer" },
+                "test": { "type": "integer" },
+                "righe": { "type": "integer" },
+                "simboli_pubblici": { "type": "integer" }
+              }
+            },
+            "parole_sicurezza": {
+              "description": "Security words ADDED to the built-in list (regexes, matched at word boundaries without case): any of them in the spec, the plan or the diff gives piena. The built-in words cannot be removed. Default: none added.",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
         }
       }
     },

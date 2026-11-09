@@ -445,5 +445,38 @@ else
   echo "SALTATO [maiuscole fuori da Windows]: Python di Windows, il confronto piega gia' sempre (casi di equivalenza)"
 fi
 
+# 8. 1.7.0 (T3 of the benchmark): the test-red phase may create a file the plan declares new in a folder that does not
+#    exist yet (lib/ missing; FIC_SCOPE from `plan-check.sh accept`, "nuovo lib/x.py"); a file of the same new folder
+#    outside the scope stays denied (the counterproof of the case: the scope decides, not the folder).
+R3=$(nat "$T/t3repo"); mkdir -p "$T/t3repo"; printf 'lib/x.py\nlib/test_x.py\n' > "$T/scope-t3"; SC3=$(nat "$T/scope-t3")
+[ ! -e "$T/t3repo/lib" ] || { fail=$((fail + 1)); echo "FAIL: premessa T3: lib/ non deve esistere"; }
+prun 0 test-red "$R3" "$R3/lib/x.py" "" "" "$SC3"        # declared new, folder missing: allowed
+prun 0 test-red "$R3" "$R3/lib/test_x.py" "" "" "$SC3"
+prun 2 test-red "$R3" "$R3/lib/altro.py" "" "" "$SC3"    # same new folder, outside the scope: denied
+# 9. 1.7.0 review: <run-dir>/taglia.txt is the driver's: no phase writes it (the run dir stays writable otherwise)
+TG=$R3/.claude/.ai-workflow/spec-x.run
+for ph in plan review implement fix; do prun 2 "$ph" "$R3" "$TG/taglia.txt"; done
+# second review: also taglia.sha and the phase logs and prompts (the proof of the full branch is read from the log),
+# case-insensitive and on the normalised path
+prun 2 plan "$R3" "$TG/taglia.sha"
+prun 2 plan "$R3" "$TG/log/09-plan.jsonl"
+prun 2 review "$R3" "$TG/prompts/05-review.md"
+prun 2 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"
+prun 2 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run/./Log/01-plan.jsonl"
+prun 2 plan "$R3" "$TG/driver.log"                       # fourth review: driver.log holds the 1.7 marker
+prun 2 implement "$R3" "$R3/.claude/.ai-workflow/spec-x.run//DRIVER.LOG"
+prun 0 plan "$R3" "$TG/note.txt"                         # another file of the run dir: allowed as before
+prun 0 review "$R3" "$TG/counterproof/mutations.json"     # the review worker writes it: allowed as before
+GUARD_SALVA=$GUARD
+if GUARD=$(gmutante taglia 'if phase and re.search(' 'if False and re.search('); then
+  prun 0 plan "$R3" "$TG/taglia.txt"                     # counterproof: without the rule the plan phase writes it
+  prun 0 plan "$R3" "$TG/log/09-plan.jsonl"              # … and forges a plan log
+  prun 0 plan "$R3" "$TG/driver.log"                     # … and rewrites driver.log
+else fail=$((fail + 1)); echo "FAIL: controprova taglia.txt non applicabile"; fi
+if GUARD=$(gmutante taglia-maiuscole '.lower() if path else ""' ' if path else ""'); then
+  prun 0 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"   # counterproof: case-sensitive, the upper case passes
+else fail=$((fail + 1)); echo "FAIL: controprova maiuscole non applicabile"; fi
+GUARD=$GUARD_SALVA
+
 echo "guard.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

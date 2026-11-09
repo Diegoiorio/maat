@@ -118,6 +118,11 @@ scripts/finalize.sh	--default nessuno|^"(stato|gate|controprove|scrivi|unisci)"$
 scripts/maat-doctor.sh	^"nessuno"$	valore di maat.json (report nessuno, 1.6.0 blocco Z), come finalize.sh
 scripts/gates.sh	^"node=wsl non raggiungibile"$|echo assente|<non impostata>|'eseguito'|^"(scrivi|stato|invalida|riga|totale)"$	componenti della chiave dei gate che non sono motivi (chiave.txt: cambiarli invaliderebbe le evidenze); token eseguito/riuso delle righe dei gate; sottocomandi del Python interno
 
+# --- 11. the size of the cycle (1.7.0): keys of maat.json and lines the skills write
+scripts/plan-check.sh	^"(file_sorgente|file_nuovi|passi|requisiti|test|righe|simboli_pubblici)"$	1.7.0: chiavi di piano.taglia.soglie di maat.json (taglia)
+scripts/driver.py	prova=%s|prova=sì|^"sì"$	1.7.0: token della riga P <label> · prova=sì|no di taglia.txt (la prova del ramo pieno, scritta e letta dal driver)
+scripts/driver.py	Metrica ciclo:	1.7.0: prefisso della riga di metrica del changelog del piano, scritta dalla skill plan-review-cycle, letta per taglia=
+
 # --- exemptions: text that is not Maat's
 scripts/ciclo-worktree.sh	non trovato\|not found	testo del sistema (cmd.exe), non di Maat (ciclo-worktree.sh:188)
 scripts/ciclo-worktree.sh	^'fic-ciclo-worktree\\npath=%s\\nbranch=%s\\nbase=%s\\nprincipale=%s\\nprincipale_run=%s\\ncreato=%s\\n'$	righe del marcatore spec-<nome>.worktree, rilette da mk_get (ours, riporta)
@@ -125,7 +130,7 @@ scripts/ciclo-worktree.sh	\.(nuova|vecchia)\.\$\$	suffissi delle cartelle tempor
 scripts/worktree-lib.sh	^"cartella"$	chiave di maat.json (collega_nel_worktree e file_dipendenze: cartella), fuori dalla 1.4.0
 scripts/lib/maat-paths.sh	MAAT_ROOT='\$MAAT_ROOT' non e' la radice di un plugin maat \(manca \.claude-plugin/plugin\.json\)|la cartella di lavoro \$\(pwd\) non e' in un repository git: PROJECT_ROOT non risolta|\(lancia dalla cartella del progetto, o imposta FIC_REPO\)|cartelle\.lavoro non letta da maat\.json: uso il default \$_maat_lavoro	errori di avvio prima che il plugin sia noto: italiano di ripiego se manca il catalogo (Revisione 1 §9)
 scripts/guard.py	^"`(input dell'hook|\{what\}|python - <<|find -delete|git \{sub\})`: [^"]*"$|^"regola del (nucleo|progetto) \([^"]*\)"$	già bilingue: tabella MSG it/en (fuori dalla 1.4.0), prima e seconda parte delle voci italiane
-scripts/guard.py	^"(riprova il comando|crea \.claude/maat\.json|correggi \.claude/maat\.json|conferma solo se|lascialo all'utente|scrivi il file con Write|togli i file uno per uno|lavora in un worktree collegato|usa l'involucro del progetto|per le letture usa|indica un file o un selettore|un file di un altro blocco|scrivi solo i test del piano|revert e ripristino)[^"]*"$	già bilingue: tabella MSG it/en, terza parte delle voci italiane (dubbio 1 del Blocco 0: l'esenzione copre solo la tabella)
+scripts/guard.py	^"(taglia.txt e' del driver|riprova il comando|crea \.claude/maat\.json|correggi \.claude/maat\.json|conferma solo se|lascialo all'utente|scrivi il file con Write|togli i file uno per uno|lavora in un worktree collegato|usa l'involucro del progetto|per le letture usa|indica un file o un selettore|un file di un altro blocco|scrivi solo i test del piano|revert e ripristino)[^"]*"$	già bilingue: tabella MSG it/en, terza parte delle voci italiane (dubbio 1 del Blocco 0: l'esenzione copre solo la tabella)
 scripts/guard.py	maat-config\.py valida	nome del sottocomando di maat-config.py, citato anche nella voce inglese
 scripts/guard.py	^"(assente|non_valido)"$	valori interni di CONF["stato"]
 scripts/guard.py	^"guardia di (sessione|fase)"$	già bilingue: tabella WHO it/en accanto a MSG (Blocco D: l'hook non carica il catalogo a ogni comando)
