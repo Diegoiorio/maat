@@ -1725,8 +1725,9 @@ if mutpc f14lint 's/case $srv in full|piena) ;; \*) viol/case $srv in full|piena
 else echo "FAIL [controprova R3: la mutazione non si applica]"; fail=$((fail+1)); fi
 # compatibility: the lint of 1.6.1 does not refuse the line (it is text of the plan)
 if git -c safe.directory='*' -C "$HERE" cat-file -e v1.6.1:plugins/maat/scripts/plan-check.sh 2>/dev/null; then
-  mkdir -p "$T/pc-161/lib"; git -c safe.directory='*' -C "$HERE" show v1.6.1:plugins/maat/scripts/plan-check.sh > "$T/pc-161/plan-check.sh"
-  expect 0 "lint: OK" "compatibilita': il lint della 1.6.1 non rifiuta Size request: full" -- env MAAT_ROOT="$PLUGIN_DIR" PLAN_CHECK_ROOT="$K" bash "$T/pc-161/plan-check.sh" lint "$K/f14.md"
+  # the whole plugin of 1.6.1, not the script alone: it sources lib/ and reads schemas and profiles from its own root
+  mkdir -p "$T/pc-161"; git -c safe.directory='*' -C "$HERE" archive v1.6.1 plugins/maat | tar -x -C "$T/pc-161"
+  expect 0 "lint: OK" "compatibilita': il lint della 1.6.1 non rifiuta Size request: full" -- env MAAT_ROOT="$T/pc-161/plugins/maat" PLAN_CHECK_ROOT="$K" bash "$T/pc-161/plugins/maat/scripts/plan-check.sh" lint "$K/f14.md"
 elif [ "${GITHUB_ACTIONS:-}" = true ]; then   # in CI the tag is there (fetch-depth: 0): a skip is a FAIL
   echo "FAIL [lint della 1.6.1 su Size request: — nessun v1.6.1 in $HERE, in CI]"; fail=$((fail+1))
 else echo "SKIP [lint della 1.6.1 su Size request: — nessun v1.6.1 in $HERE]"; fi
