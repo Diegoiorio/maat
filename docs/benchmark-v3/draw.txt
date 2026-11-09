@@ -1,0 +1,26 @@
+commit: 890c1479f447ba25fe71b1bb389741a9d1bcf500
+committer_date_utc: 2026-11-09T11:13:37Z
+sha256_of_SHA256SUMS: 3649f300fa6434cd243baf3672e9f8fc6ad7d10c7e1c1de9706512f2a47b4688
+c2_for_E1: commit before 2026-11-16: E1 is in
+drand_chain: 52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971
+drand_round: 33807685
+drand_round_time_utc: 2026-11-09T12:13:39Z
+drand_randomness: dcc045f94cefc4f8e1963a7e10180c6852e8ac05edfd7af80651f3d3b14352c8
+seed: 946be1d77de1b42b2d4bc87a8c6f6519e5bd6661f113b00c23ab89598664e97f
+pool hard: N1 N2 N3 N4 N5 N6 N7 N9 N11 N12
+pool easy: E1 E2 E3
+attempts:
+  k=0: hard N3 N11 N2 N12 N9 N7 | easy E1 E3 -> valid
+accepted at k=0
+hard tasks (6):
+  N3 labstack/echo (Go, bug fix)
+  N11 tox-dev/tox (Python, bug fix)
+  N2 h3js/h3 (JS/TS, compatibility)
+  N12 alecthomas/kong (Go, new feature)
+  N9 pyenv/pyenv (shell, new feature)
+  N7 tafia/quick-xml (Rust, bug fix)
+easy tasks (2):
+  E1 BurntSushi/toml (Go, bug fix)
+  E3 BurntSushi/jiff (Rust, bug fix)
+replacement order, hard: N5 N1 N6 N4
+replacement order, easy: E2
