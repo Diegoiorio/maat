@@ -31,7 +31,7 @@ for 30 to 90 minutes; in practice they were changes of 1 to 3 files and under 10
 
 | # | Requirement | Threshold |
 |---|---|---|
-| D1 | A change across several files | the upstream fix touches ≥ 3 source files (tests, docs, changelogs, lock files and version numbers excluded), or ≥ 150 changed source lines in one large module |
+| D1 | A change across several files | the upstream fix touches ≥ 3 source files, or ≥ 150 changed source lines in one large module. Not source: tests, docs and their examples, changelogs, lock files, version numbers, build thresholds, fuzzers, data files |
 | D2 | Requirements with edge cases | ≥ 6 functional requirements, ≥ 3 of them with explicit edge cases |
 | D3 | At least one known trap | backward compatibility, security (hostile input), concurrency, error paths, data loss or corruption, exact round trip: named in the spec and covered by ≥ 3 hidden tests |
 | D4 | Estimated baseline time ≥ 30–60 minutes | estimated from the signals below, never from a trial run |
@@ -41,6 +41,13 @@ D4 is estimated only from signals that can be checked before any run: the size o
 lines added and removed, tests excluded), the regression cases added upstream, the days between opening and merge
 and the rounds of review, the edge cases and traps listed in the issue, and the comparison with version 2 (1–3
 files, < 100 lines of source). None of them says how long an agent will take; this is a threat to validity.
+
+**A first list of candidates was dropped.** The first list of eight hard candidates was made by counting the whole
+size of each upstream pull request, test lines included. Checked against D1, which excludes tests, six of the eight
+failed, a seventh failed C6 and the eighth was weak on D4. The list was dropped and a second search was made. **The
+thresholds were not lowered**: the same D1 and D4 were applied to the second search, and the exclusions named in D1
+were only made more explicit, which can reject a candidate but never admit one. The first list and the reason for
+each rejection stay in the README.
 
 ### 2. Specs written like an issue
 
@@ -73,11 +80,12 @@ tasks where Maat is expected to do well.
 3. **Qualification in public.** For every candidate the README publishes the result of each criterion and its
    evidence (repository, license, upstream issue and pull request, dates, the merge commit, the starting commit =
    its parent, the size), rejected candidates included.
-4. **Draw.** Among the qualified candidates, **6 hard** and **2 easy** tasks are drawn with a public seed, under a
-   rule of variety (at least 4 languages over the 8 tasks, at most 2 hard tasks per language, at most one task per
-   repository, at least one bug fix, one new feature and one compatibility change among all the tasks). The
-   procedure is in the README («Draw»). If fewer than 6 hard candidates qualify, all of them are taken, with a
-   minimum of 5; with fewer than 5, more candidates are looked for, with the same criteria, before the draw.
+4. **Draw.** **6 hard** tasks are drawn from a pool of 10 and **2 easy** tasks from a pool of 3, with a public seed,
+   under a rule of variety (at least 4 languages over the 8 tasks, at most 2 hard tasks per language, at most one task
+   per repository, at least one bug fix and one new feature; the clause on compatibility changes is an open point, see
+   the README, «Variety rule»). The procedure is in the README («Draw»). If a later check leaves fewer than 6 hard
+   candidates, all of them are taken, with a minimum of 5; with fewer than 5, more candidates are looked for, with
+   the same criteria, before the freeze.
 5. **Specs and hidden tests come after the draw.** They are written only for the drawn tasks, so that no effort is
    spent on tasks that will not be drawn. The criteria that depend on them (C8, C9, C10, D2, D3, D5) are checked on
    the drawn tasks before the freeze. A drawn task that fails one of them is replaced by the next candidate in the
@@ -97,6 +105,17 @@ tables or the charts of the hard tasks, and nothing is added up across the two g
 cost and the wall-clock time of Maat against the baseline; the hidden score is the check that the light flow does
 not lose quality. The flow Maat chose in each run is recorded (from the driver's output).
 
+### 4a. Failures already present at the starting commit
+
+A test of the project that fails at the starting commit for a reason unrelated to the task is **declared**: named in
+the task's folder before the freeze, said in the same words to both sides, and excluded from every count (the hidden
+total, a check on the project's suite, Maat's test gate). It is never fixed in the copy.
+
+Declared now, for E2 (git-extras): six tests, `works with linux and github`, `… gitlab` and `… bitbucket` in both
+`tests/git-browse.bats` and `tests/git-browse-ci.bats`. They fail with or without the network, because in WSL the
+script does not use `xdg-open`; they have nothing to do with the changelog. The same rule applies to the other tasks
+with such failures (README, «Offline suites»); their lists are fixed if those tasks are drawn.
+
 ### 5. A stop rule written in advance
 
 **Why.** Version 2 was stopped after 8 of 30 runs by a decision taken while the runs were going, after the partial
@@ -105,8 +124,8 @@ pre-registration should exclude.
 
 **What.** Once the first run has started, version 3 stops before its last run **only** for one of these reasons:
 
-1. **Calendar.** The runs are not finished by the end date fixed in the README (the freeze date plus a number of
-   weeks written there before the freeze), whatever the reason (quota, availability of the operator).
+1. **Calendar.** The runs are not finished **3 months after the date of the freeze commit**, whatever the reason
+   (quota, availability of the operator).
 2. **Instrument defect.** A defect of the benchmark's own tooling (run script, sandbox, adapter, hidden-test runner,
    record collection) that makes the runs not comparable, shown on the tooling itself and independent of which side
    ran. The benchmark then restarts from the beginning under a new version of this protocol, as version 2 says.
@@ -151,8 +170,8 @@ are expected to last 5 to 10 times longer, and a full Maat cycle makes many sess
 **What.**
 
 - Runs go in schedule order, one at a time, in **groups of at most 4**. The usage of the subscription is checked
-  **before each run**, not only before each group: above **75% of the five-hour window** (or above the weekly
-  threshold fixed in the README), the next run waits for the reset.
+  **before each run**, not only before each group: above **75% of the five-hour window**, the next run waits for the
+  reset. In addition, **no group starts with the weekly window above 75%**; it waits for the weekly reset.
 - **A group may be split between two runs, never in the middle of a run.** When a group is split, the group table
   gets a note: after which order, when, the usage seen, and when it resumed. The order of the runs never changes.
 - A run is never stopped on purpose. A run stopped or slowed by the usage limit is recognised as in version 2
@@ -164,21 +183,25 @@ are expected to last 5 to 10 times longer, and a full Maat cycle makes many sess
 - **3 runs per task and per side** (6 hard + 2 easy tasks: 48 runs), in an order shuffled with a second public seed,
   drawn after the freeze commit, as in version 2. With 3 runs per side the results show a spread; they do not support
   a statistical test.
-- New toolchains are pinned and checked by `run-bench.sh check` (for the current candidates: Node 22, Rust, GNU
-  `parallel`, bats).
-- Maat 1.6 reads the outcome of single tests only from a JUnit report in the pytest form or from vitest. For other
-  runners (Go, tape, the Node test runner, bats, cargo) the task gets a format adapter on the Maat side only, outside
-  the diff, as in version 2; each adapter is tested on red, green and missing-adapter cases before the freeze. If
-  Maat 1.7.0 reads a format natively, no adapter is used for it, and the README says so.
+- **Claude Code** is the version current at the freeze. It is written in the freeze commit and then pinned: one
+  binary, auto-update disabled, as in version 2.
+- New toolchains are pinned and checked by `run-bench.sh check` (for the current pools: Node 22, Rust, GNU `parallel`,
+  bats, and pnpm for N2 if it is drawn).
+- **Format adapters are written after the draw, only for the tasks drawn**, and proven before the freeze as in
+  version 2: red, green and missing-adapter cases, with `gates.sh` and `plan-check.sh rossi`, on a prepared copy and
+  with no agent working on the task. Maat 1.6 reads the outcome of single tests only from a JUnit report in the pytest
+  form or from vitest; other runners (Go, the Node test runner, bats, cargo) get an adapter on the Maat side only,
+  outside the diff. If `v1.7.0` reads a format natively, no adapter is used for it, and the README says so.
 
 ## Pre-registration
 
 Two public commits, each followed by a drand round at least one hour after it:
 
 1. **Qualification commit:** this protocol (status «qualification, no run made») and the README with every
-   candidate's qualification. Its round gives the seed of the **draw** of the tasks.
+   candidate's qualification. Its round gives the seed of the **draw** of the tasks. Its date is the reference date
+   of C2 for every candidate: E1 stays in the pool only if this commit is dated before 2026-11-16.
 2. **Freeze commit:** the drawn tasks with their specs, `maat.json`, adapters, the hash of the hidden tests, the
-   versions, the end date of the calendar and the quota thresholds. Its round gives the seed of the **schedule**.
+   versions and the end date of the calendar. Its round gives the seed of the **schedule**.
    After it, nothing changes except the «Results» section of the README; a flaw found once the runs have started
    restarts the benchmark under a new version of this protocol.
 
@@ -194,5 +217,10 @@ Two public commits, each followed by a drand round at least one hour after it:
   one would hurt Maat only. They are small, published, and tested before the freeze.
 - The plugin-text rule of the audit is a change in favour of the Maat side compared with version 2. It is narrow
   (verbatim text of the plugin's own files) and tested on both a known false positive and a real hit.
-- The draw is random only among the candidates that the author found and qualified; the list of candidates was made
-  by hand, by searching recent merged changes in public projects.
+- The draw is random only among the candidates that the author found and qualified. The second search measured D1 by
+  script on the merged commits of about 390 public repositories, but the final reading, and the choice of the pool
+  from what qualified, were made by hand. The pool's D4 is an estimate, and some candidates are close to the line (the
+  README says which).
+- The rule of at most 2 hard tasks per language makes each of the three Go candidates less likely to be drawn than
+  the others (about 52% against 64%). It follows from the rule, not from a judgement on those tasks.
+- The pool contains no deprecation task, so version 3 says nothing about how either side handles one.
