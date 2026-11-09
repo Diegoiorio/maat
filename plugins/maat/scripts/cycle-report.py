@@ -498,6 +498,31 @@ def harness_of(arg):
     return {"versione": kv["versione"].strip() or "versione ignota", "radice": kv.get("radice", "")}
 
 
+def size_of(arg):
+    """1.7.0: the size of the cycle from <run>/taglia.txt: {"taglia": piccola|piena, "motivo", "escalation": n}; None
+    without the file (a cycle older than 1.7, or a single .jsonl). The rule of driver.py (taglia_stato): any line that
+    is neither piccola nor avvio makes it piena."""
+    if not os.path.isdir(arg):
+        return None
+    try:
+        with open(os.path.join(arg, "taglia.txt"), encoding="utf-8", errors="replace") as fh:
+            rows = [l for l in fh.read().replace("\r", "").split("\n") if l.strip()]
+    except OSError:
+        return None
+    size, why, esc = "", "", 0
+    for l in rows:
+        p = l.split(" · ", 2)
+        if len(p) == 3 and p[1] == "avvio":
+            continue
+        body = p[2] if len(p) == 3 else l
+        esc += body.startswith("Escalation: ")
+        if size == "piena":   # piena stays piena: the reason is the line that made it so
+            continue
+        size = "piccola" if body.startswith("Taglia: piccola") else "piena"
+        why = body.split(" — ", 1)[-1].split(" · fatti ")[0]
+    return {"taglia": size or "piena", "motivo": why, "escalation": esc}
+
+
 def analyse_cycle(arg, projects):
     phases = [analyse_phase(f) for f in files_of(arg)]
     driver = driver_seconds(arg) if os.path.isdir(arg) else 0.0
@@ -585,6 +610,7 @@ def analyse_cycle(arg, projects):
         "quota_5h": [first_q, last_q] if first_q is not None else None,
         "stops": stops,
         "stops_by_cause": by_cause,
+        **({"size": size_of(arg)} if size_of(arg) else {}),
     }
 
 
@@ -605,6 +631,9 @@ def print_cycle(c):
                     q="%.0f%%->%.0f%%" % (q[0] * 100, q[1] * 100) if q else "-"))
     h = c["harness"]
     print("   Harness: " + ("maat %s — %s" % (h["versione"], h["radice"]) if h else T("cycle-report.internal")))
+    if c.get("size"):   # 1.7.0: the size of the cycle, as the orchestrator's final response says it
+        s = c["size"]
+        print("   Size: %s (%s · escalation: %d)" % (s["taglia"], s["motivo"], s["escalation"]))
     if c["B_s"] is None and c["B_missing_sessions"]:
         # the frozen JSON value (D7) printed in the language of the summary
         print("   " + T("cycle-report.missing_tr", s=", ".join(T("cycle-report.no_sid") if x == NO_SID else x

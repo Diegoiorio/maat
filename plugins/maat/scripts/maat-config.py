@@ -273,6 +273,16 @@ def s10(cfg):
             yield "moduli.%d.preparati" % i, T("maat-config.s10")
 
 
+def s11(cfg):
+    """1.7.0: piano.taglia (the size of the cycle) exists from 1.7: a file that uses it declares "harness": ">=1.7"
+    or newer, so that an older Maat refuses it with a clear error instead of reading it without the key."""
+    if "taglia" not in (cfg.get("piano") or {}):
+        return
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 7):  # HARNESS-PER-TAGLIA
+        yield "harness", T("maat-config-170.s11")
+
+
 # Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
 # maat-config.s* keys of the catalog).
 SEMANTICA = [
@@ -286,6 +296,7 @@ SEMANTICA = [
     ("S8", "regola_test=nessuna => no comandi.test", s8),
     ("S9", "generati[]: no golden, snapshot or lint baseline", s9),
     ("S10", "moduli[].preparati => preparazione present", s10),
+    ("S11", "piano.taglia => harness >=1.7 or newer", s11),
 ]
 
 

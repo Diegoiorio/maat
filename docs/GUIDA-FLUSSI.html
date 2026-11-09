@@ -134,6 +134,7 @@ details summary { cursor: pointer; font-weight: 600; }
   <a href="#spec-author">1 · Spec: spec-author</a>
   <a href="#plan">2 · Plan: /plan-review-cycle</a>
   <a href="#light">2b · Light variant</a>
+  <a href="#taglia">The size of the cycle</a>
   <a href="#livelli">Test levels</a>
   <a href="#implement">3 · Implementation</a>
   <a href="#review">4 · Review: /implementation-review-cycle</a>
@@ -204,7 +205,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/maat-doctor.sh"</pre>
 <div class="tablewrap"><table>
 <tr><th>Option</th><th>Applies to</th><th>Effect</th></tr>
 <tr><td><code>--tests=min|std|full</code></td><td>plan, review, full cycle</td><td>how much verification to prescribe and run (default <code>std</code>); see <a href="#livelli">Test levels</a></td></tr>
-<tr><td><code>--light</code></td><td>plan (in the full cycle: plan only)</td><td>uses <code>/plan-review-cycle-light</code>: one reviewer, every round at full scope</td></tr>
+<tr><td><code>--full</code></td><td>plan, full cycle</td><td>always the full size (<a href="#taglia">The size of the cycle</a>): the flow of 1.6</td></tr>
+<tr><td><code>--light</code></td><td>plan, full cycle</td><td>the small size above the numeric thresholds, never above a barrier (<a href="#taglia">The size of the cycle</a>); with the full size, <code>/plan-review-cycle-light</code> as before. Not together with <code>--full</code></td></tr>
 <tr><td><code>--light</code></td><td>review (by hand only)</td><td>a single round with a narrow mandate, never <code>IMPLEMENTED</code>; the full cycle never passes it to the review</td></tr>
 <tr><td><code>--no-dev</code></td><td>plan, review, full cycle</td><td>no access to the remote test environment (<code>verifica_remota</code>) and no gate run from there: at most <code>NEEDS_VERIFICATION</code>. Without <code>verifica_remota</code> in <code>maat.json</code> the cycle always runs this way</td></tr>
 <tr><td><code>--with-e2e</code></td><td>review</td><td>adds a targeted e2e spec as an <i>optional</i> gate</td></tr>
@@ -418,6 +420,28 @@ stateDiagram-v2
 <p>Same rules as the full branch (anchors, surgical revision, optional findings as notes, <code>Approved basis</code>, recurrence, lint, levels, floors) with two declared exceptions: it uses <code>spec-plan-reviewer-light</code> (concise, in depth only on permissions, DB, API, import, shared logic, auth, persistent state) and it <b>does not take</b> fan-out, delta or gate: <b>every round is at full scope</b>.</p>
 <div class="note"><b>L5 · format 2:</b> the light branch is no longer chosen by hand. After Step 1 <code>plan-check.sh route</code> grants it only with a plan ≤150 lines, no migration and no surface, neither detected from the files (the <code>piano.superfici_critiche</code> and <code>piano.migrazioni</code> regexes in <code>maat.json</code>: for example the routes folder → permessi and contratto-api, the DB schema → dati, shared packages → logica-condivisa; <code>DELETE</code>, <code>DROP</code>, <code>TRUNCATE</code>… → distruttiva) nor declared. Any mismatch ⇒ full branch. The implementation review always stays full.</div>
 <div class="note warn">There is never a fresh-eyes gate here: the rule "a partial review is not an approval" is the only thing between a partial round and an approved plan. On small changes the structural gain is zero: the branch exists so as not to make them worse. When in doubt, use the full branch.</div>
+
+<!-- ====================================================================== -->
+<h2 class="sec" id="taglia">The size of the cycle <span class="tag ok">1.7.0</span></h2>
+<p>Two sizes: <b><code>piccola</code></b> (small, a lighter flow) and <b><code>piena</code></b> (full: the flow of 1.6, unchanged). A <b>script</b> decides, from facts that can be checked, never the model: <code>plan-check.sh taglia &lt;spec&gt;</code> prints one fact per line, the line <code>Fatti:</code> and last <code>Taglia: piccola | piena — &lt;reasons&gt;</code>. Small only if <b>every</b> fact is under its threshold; a fact that cannot be measured counts as full.</p>
+<div class="tablewrap"><table>
+<tr><th>Fact</th><th>Measured on</th><th>Small if</th></tr>
+<tr><td>F1 · F2</td><td>source files of <code>Touched files</code> (tests excluded) · those declared <code>(new)</code></td><td>≤ 3 · ≤ 1</td></tr>
+<tr><td>F3 · F4 · F5 · F6</td><td>steps · requirements (the maximum of the traceability and of the spec) · rows of the test plan · plan lines</td><td>≤ 6 · ≤ 12 · ≤ 10 · ≤ 250</td></tr>
+<tr><td>F7 · F8 · F9</td><td>critical surfaces and <code>api-contract</code>, declared or detected by <code>piano.superfici_critiche</code> · migrations (<code>piano.migrazioni</code>)</td><td>none</td></tr>
+<tr><td>F10 · F11</td><td>destructive words (<code>DELETE</code>, <code>DROP</code>…) · security words (<code>password</code>, <code>token</code>, <code>sql</code>, <code>session</code>…, plus <code>piano.taglia.parole_sicurezza</code>) in spec, plan and diff</td><td>none</td></tr>
+<tr><td>F12 · F13</td><td>on the code written (the diff of <code>touched.txt</code>): deleted files · new public symbols (Python, JS/TS, Go)</td><td>none · ≤ 2</td></tr>
+<tr><td>F14</td><td>the optional plan line <code>Size request: full — &lt;reason&gt;</code>: the model can only ask for more</td><td>absent</td></tr>
+</table></div>
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th>Small</th><th>Full</th></tr>
+<tr><td>plan review</td><td><b>one</b> round of <code>spec-plan-reviewer-light</code>; the verified majors applied without a second round</td><td>three lenses, S2, up to 4 iterations</td></tr>
+<tr><td>test-red, gates, counterproofs, signature</td><td colspan="2">the same in both: <code>IMPLEMENTED</code> needs the same evidence; the test level does not go down</td></tr>
+<tr><td>implement</td><td>one lane</td><td>batches and lanes</td></tr>
+<tr><td>code review</td><td><b>one</b> round of <code>/implementation-review-cycle</code> (never <code>light.md</code>)</td><td>up to 3 rounds and fixes</td></tr>
+</table></div>
+<p><b>Escalation</b>, always small → full, never back, with its cause on a line (<code>driver: Escalation: piccola → piena — …</code>): E1 the plan round has a blocker or more than 2 majors (a human-decision request stays a stop); E2 the approved plan is above the thresholds (the plan is reopened in the full branch); E3 the code touches a file outside the plan or a fact of the diff is above; E4 a gate not green; E5 a review <code>NEEDS_CHANGES</code>. From there the cycle goes on as the full flow; nothing done is redone. The record is <code>&lt;run-dir&gt;/taglia.txt</code>, append-only; a run dir without it (a cycle started with 1.6) is full.</p>
+<div class="note"><b>Overrides and configuration.</b> <code>--full</code>: always full. <code>--light</code>: small above the numeric thresholds (F1–F6, F13), never above the barriers (F7–F12, F14, a file outside the plan). Both together: usage error, no phase launched. In <code>.claude/maat.json</code> the optional key <code>piano.taglia</code>: <code>automatica</code> (default <code>true</code>; <code>false</code> = always full unless <code>--light</code>), <code>soglie</code> (<code>file_sorgente</code>, <code>file_nuovi</code>, <code>passi</code>, <code>requisiti</code>, <code>test</code>, <code>righe</code>, <code>simboli_pubblici</code>), <code>parole_sicurezza</code> (added, never removed); a file that uses it declares <code>"harness": "&gt;=1.7"</code>.</div>
 
 <!-- ====================================================================== -->
 <h2 class="sec" id="livelli">Test levels: <code>--tests=min|std|full</code></h2>

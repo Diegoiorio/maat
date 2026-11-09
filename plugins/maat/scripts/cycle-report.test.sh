@@ -271,6 +271,24 @@ hi=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-hi.run" 2>&1)
 HE="$W/hv/spec-he.run"; mkdir -p "$HE" && cp -r "$R/log" "$HE/"; sed 's/^versione=.*/versione=/' "$HV/harness.fp" > "$HE/harness.fp"
 he=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-he.run" 2>&1)
 grep -q "Harness: maat versione ignota — C:/plug/maat" <<< "$he" && ok || ko "versione= vuota: «maat versione ignota», mai «maat »" "$he"
+# --- 1.7.0: the size of the cycle from taglia.txt (the rule of driver.py: from piena never back), only when it exists ---
+HS="$W/hv/spec-hs.run"; mkdir -p "$HS" && cp -r "$R/log" "$HS/"
+printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — file 1/3 · fatti F1=1/3" \
+  "2026-11-06T10:00:02Z · E3 01-implement · Escalation: piccola → piena — fuori dal piano: src/x.py" \
+  "2026-11-06T10:00:03Z · T3 02-fix · Taglia: piccola — file 1/3" > "$HS/taglia.txt"
+hs=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-hs.run" 2>&1)
+grep -qx "   Size: piena (fuori dal piano: src/x.py · escalation: 1)" <<< "$hs" && ok ||
+  ko "taglia.txt: Size: piena con la causa dell'escalation, una piccola dopo non la riporta indietro" "$hs"
+grep -q "Size:" <<< "$hv" && ko "senza taglia.txt nessuna riga Size: (run dir precedente alla 1.7)" "$hv" || ok
+printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:01Z · T2 · Taglia: piccola — file 1/3 · fatti F1=1/3" > "$HS/taglia.txt"
+hs=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-hs.run" 2>&1)
+grep -qx "   Size: piccola (file 1/3 · escalation: 0)" <<< "$hs" && ok || ko "taglia.txt piccola: Size: piccola con il motivo, senza i fatti" "$hs"
+sed 's/^        if size == "piena":   # piena stays piena: the reason is the line that made it so$/        if False:/' "$CR" > "$W/cr-su.py"
+printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:02Z · E3 01-implement · Escalation: piccola → piena — y" \
+  "2026-11-06T10:00:03Z · T3 02-fix · Taglia: piccola — z" > "$HS/taglia.txt"
+hs=$("$FIC_PY" "$W/cr-su.py" --projects "$WP/projects" "$WP/hv/spec-hs.run" 2>&1)
+{ ! cmp -s "$CR" "$W/cr-su.py" && grep -q "   Size: piccola" <<< "$hs"; } && ok ||
+  ko "controprova: un lettore che torna a piccola dopo l'escalation → Size: piccola (rosso)" "$hs"
 mcols() { # $1 csv file → per row: number of fields and last field, "|" between rows
   "$FIC_PY" -c 'import csv, sys
 print("|".join("%d:%s" % (len(r), r[-1]) for r in csv.reader(open(sys.argv[1], encoding="utf-8", newline=""))))' "$1" | tr -d '\r'

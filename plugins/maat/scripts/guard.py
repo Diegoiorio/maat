@@ -324,6 +324,13 @@ MSG = {
         "en": ("`{what}`: file outside the scope of phase {fase} (FIC_SCOPE)",
                "core rule (test-red and test-stage phases: write scope)",
                "write only the plan's tests and the declared new files (test-stage: staging/ only)")},
+    "taglia_fase": {
+        "it": ("`{what}`: taglia.txt e' del driver, nella fase {fase} non si scrive",
+               "regola del nucleo (la taglia del ciclo la decide uno script)",
+               "taglia.txt e' del driver: per chiedere piu' peso scrivi nel piano la riga Size request: full"),
+        "en": ("`{what}`: taglia.txt belongs to the driver, phase {fase} does not write it",
+               "core rule (the size of the cycle is decided by a script)",
+               "taglia.txt belongs to the driver: to ask for more weight write the line Size request: full in the plan")},
     "lavoro_fase": {
         "it": ("`{what}`: scrittura fuori da {lav} nella fase {fase}",
                "regola del nucleo (fasi in sola lettura: si scrive solo nella cartella di lavoro)",
@@ -973,6 +980,15 @@ def check_scope(path, data):
 
 def check_write(path, data):
     check_scope(path, data)
+    phase = os.environ.get("FIC_PHASE", "")
+    # 1.7.0: <run-dir>/taglia.txt (the size of the cycle) is written by driver.py only, never by a phase; the driver
+    # also checks its sha256 around every phase, for the writes the guard does not see (Bash)
+    # also the expected sha (taglia.sha) and the phase logs and prompts (log/, prompts/: the proof of the full plan
+    # branch is read from the log). Case-insensitive, on the normalised path. A Bash append to the live log is the class
+    # of writes the guard does not see (docstring): the JSON parse and the three reviewer calls make it costlier only.
+    pn = os.path.normpath(path).replace("\\", "/").lower() if path else ""
+    if phase and re.search(r"\.run/(taglia\.txt|taglia\.sha|driver\.log)$|\.run/(log|prompts)/", pn):  # TAGLIA-DEL-DRIVER
+        deny("taglia_fase", what=path.replace("\\", "/"), fase=phase)
     phase = os.environ.get("FIC_PHASE", "")
     if (phase not in READONLY_PHASES and phase not in SCOPED_PHASES) or not path:
         return

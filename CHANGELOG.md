@@ -2,6 +2,80 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.7.0 — the size of the cycle, decided by a script
+
+**Why 1.7.0 and not a patch:** the default behaviour changes. On a small plan a new cycle now takes a lighter flow by
+itself, with no flag: one plan-review round instead of the fan-out and the S2 loop, one implement lane, one
+code-review round. Measured on the benchmark v2 (frozen at 8 runs of 30): the plan phase was 58–73% of the cost of a
+cycle, and the review was always approved in one round. The guarantees do not change: the red tests before the code,
+the gates outside the sub-session, the counterproofs, an independent review and the signature of `finalize.sh`;
+`IMPLEMENTED` needs the same evidence. No format Maat reads changes incompatibly, and a cycle started with 1.6 goes on
+in the full flow. `--full` gives the flow of 1.6.
+
+- **`plan-check.sh taglia <spec> [--diff <file>] [--override full|light]`.** One fact per line, the line `Fatti: F1=…`
+  and last `Taglia: piccola | piena — <reasons>` (exit 0). `piccola` only if every fact is under its threshold: F1
+  source files ≤ 3 (Touched files minus the tests of the test table), F2 new ≤ 1, F3 steps ≤ 6, F4 requirements ≤ 12
+  (the maximum of the traceability ids and of the ids in the spec above the plan, which the plan phase cannot touch),
+  F5 tests ≤ 10, F6 plan lines ≤ 250, F7 no critical surface declared or detected, F8 no `api-contract`, F9 no
+  migration, F10 no destructive word, F11 no security word, F12 no deleted file and F13 at most 2 new public symbols
+  (with `--diff`: Python, JS/TS, Go; another language is not measurable), F14 no `Size request: full`; with `--diff`
+  also no path outside the plan. A fact that cannot be measured is `piena` (fail-closed). `shared-logic` and `import`
+  alone do not make it `piena`. `route` and `skeleton` print as before.
+- **The flow.** T1 in the plan phase (`plan-review-cycle`, after `route`): small → one round of
+  `spec-plan-reviewer-light`, then `plan-check.sh e1` on its reply (a blocker, more than 2 majors or a partial reply →
+  the full branch from Step 2; a human-decision request stays a stop), the verified majors applied without a second
+  round. The metric line of the plan ends with `taglia=piccola|piena`. T2 in `driver.py run` on the approved plan: a
+  plan approved small whose facts are above the thresholds is reopened in the full branch (E2, the plan phase with
+  `--full` and `RIAPERTURA (driver):`). T3 after every implement/fix, on the diff of `touched.txt`: a file outside the
+  plan or a fact above → full (E3). After every review: gates not green (E4) or `NEEDS_CHANGES` (E5) → full. A `FIX`
+  with the small size and no escalation is a STOP: its budget is one round.
+- **`<run-dir>/taglia.txt`**, new, append-only: one line per decision, from full it never goes back. Absent = full:
+  a run dir of 1.6 goes on exactly as before (see below). The driver prints `driver: Taglia: …` and
+  `driver: Escalation: piccola → piena — <cause> (after <label>)`; `cycle-report.py` prints `Size: …`; the final
+  response of the orchestrator has a `Size:` line.
+- **Overrides.** `--full`: always full. `--light` (it contains the `--light` of 1.6): small above the numeric
+  thresholds (F1–F6, F13), never above the barriers (F7–F12, F14, a file outside the plan). Both together: usage error
+  (exit 2) before any phase. The model has no flag: a `Size request: full — <reason>` line in the plan, and `lint`
+  refuses any other value.
+- **`maat.json`:** optional key `piano.taglia` (`automatica`, default `true`; `soglie`; `parole_sicurezza`, added to
+  the built-in list). A file that uses it must declare `"harness": ">=1.7"` (new semantic check S11), so that an older
+  Maat refuses it with a clear error. The defaults are written in the schema descriptions and in `plan-check.sh`, not
+  as `default` keywords: the resolved configuration of an existing `maat.json` stays byte for byte the same.
+- **`lint2`: a file declared new in a new folder.** A path `` `lib/x.js` (new) `` in a step, a test or a mutation
+  passed only if `lib/` existed, and the plan phase cannot create it (a run of the benchmark stopped there). Now a
+  path declared new needs only to be a valid relative path; a path not declared new still needs its first folder.
+- **What the agent writes cannot keep the small size** (two independent reviews before the release). Only the driver
+  writes `taglia.txt`: the guard denies it, `taglia.sha` and the phase logs and prompts (`log/`, `prompts/`) to every
+  phase, case-insensitive on the normalised path; the driver keeps the sha256 it expects in its own memory, compared
+  at every start of its loop and after every phase (a change by a phase, even with `taglia.sha` recomputed in Bash, a
+  rewrite, or both files deleted is an escalation, `E0`); `taglia.sha` serves only the first check of a new
+  invocation (weaker: it needs a deliberate rewrite of two files between invocations), and a run dir whose
+  `driver.log` has the `Taglia: avvio` line is never treated as a cycle of 1.6. With `Percorso: leggero` (the light
+  rounds of 1.6) the light round is the proof of the plan review only if the reply of its last
+  `spec-plan-reviewer-light` call says `Decision: APPROVED`; any proof since the last T2 counts. A run dir with no size
+  at the first check stays watched: a `taglia.txt` a phase creates later is `E0`. `driver.log` is denied to the phases
+  too. Note for run dirs of a work-in-progress build of 1.7.0 (a `taglia.txt` without `taglia.sha`): their next
+  run gives `E0` and the full size, fail-closed. A full size after the plan needs a proof that the full
+  branch ran, read right after each plan phase from THAT label's log only, as JSON: at least 3 `tool_use` calls
+  (Task/Agent) of `spec-plan-reviewer` (never `-light`; a text naming it does not count; a missing log is no proof),
+  recorded as `P <label> · prova=sì|no`; T2 reads the last `P` line, never the metric line or the folder, and the
+  reopening needs a `prova=sì` after it. Only a run dir with no `P` line at all (a plan approved outside the cycle) is
+  exempt. Limit: a Bash append to the live log of a phase is not seen by the guard (as every Bash write it documents);
+  the JSON parse and the three-call minimum make a forgery costlier, not impossible. T2 runs again when the plan gets a new metric line. `e1` reads the severity in any markdown form (`**Severity**: major` too), and a
+  `NEEDS_CHANGES` with nothing counted is full. `taglia`: the out-of-plan check also reads `touched.txt` (paths with
+  spaces), a diff header it cannot read is not measurable, a rename counts as the deletion of the old path; a file of
+  the test table that does not follow the test convention counts as a source file (limit: a source module whose name
+  looks like a test, `test_x.py`, is still subtracted); a source path not in the repo or
+  `new file mode` is new even without `(new)`; a plan that `lint2` refuses, or with no backticked path in Touched
+  files, is not measurable. A review counts as passed only with `APPROVED`. A cycle started with 1.6 gets
+  `FIC_TAGLIA=off` and its flags unchanged: `taglia` answers «off» and the plan skill applies the 1.6 rule, identical.
+- **Tests.** `plan-check.test.sh` (a section for the size: each fact at the threshold and above it, `e1`, `Size
+  request:`, fail-closed, overrides, `piano.taglia`, the new folder), `driver.test.sh` §13 (T2/E2 and the reopening,
+  E3, E4, E5, one way, append-only, one lane, `--full`/`--light`, a run dir of 1.6), `maat-config.test.sh` (S11),
+  `guard.test.sh` (the scope of test-red in a folder that does not exist), `test-review-surface.sh` (the files of a
+  new untracked folder one by one), `cycle-report.test.sh` (`Size:`): each rule with a counterproof on a mutated copy
+  that must turn it red. The expected outputs of the public examples do not change (`next` and `valida` are the same).
+
 ## 1.6.1 — chains in a worktree, a build left in the copy, `(empty)` between backticks
 
 A patch: fixes found on a real chain of nine rings and in the CI; no format Maat reads changes.
