@@ -1,6 +1,7 @@
 # Maat benchmark, version 3
 
-**Status: frozen on 2026-11-10; no run made yet.**
+**Status: interrupted on 2026-11-10 after 3 of 48 runs, by the author's decision. The reason is not one of the three
+the protocol allows (§5); see [«Interruption»](#interruption). Version 3 will not be completed.**
 
 This folder applies [`../BENCHMARK-PROTOCOL-v3.md`](../BENCHMARK-PROTOCOL-v3.md).
 [`QUALIFICATION.md`](QUALIFICATION.md) fixes the criteria, the pools of candidates and the procedure of the draw.
@@ -115,13 +116,63 @@ records T3-maat-2 and T5-maat-2 (plugin text only, clean) and on a log with a re
 
 ## Calendar
 
-- **Order of the runs:** shuffled with a second public seed, the first drand «quicknet» round one hour after this freeze
+- **Order of the runs:** shuffled with a second public seed, the first drand «quicknet» round one hour after the freeze
   commit (`run-bench.sh seed <commit>` then `schedule <seed>`). The order is published before the first run.
+  - freeze commit `c93b72fb2ac1809a9129c8fe9cf0bfd80eeee81f` (merge of
+    [pull request #13](https://github.com/Diegoiorio/maat/pull/13));
+  - drand round `33842904`, of 2026-11-10T17:34:36Z;
+  - seed `42b53b4410fbbce174f4e766f2cd868cd43ea773de4de6cfa419ebfb20b133e8`;
+  - the whole record is [`seed.txt`](seed.txt) and the order is [`schedule.tsv`](schedule.tsv). The first group is rows 1–4:
+    N2-baseline-3, N2-maat-3, E3-maat-3, E3-maat-2.
 - **Groups** of at most 4 runs. The usage is checked before each run. The first group is run on its own, to measure the real cost
   before the rest are scheduled. It is still the first 4 rows of the shuffled order, so no run is chosen by hand.
 - **End date:** the runs are not finished after **2027-02-10**, 3 months after this commit, whatever the reason (protocol, §5).
   A task not run by then is reported as not run.
 
+## Interruption
+
+**What happened.** The first group started on 2026-11-10 at 17:41 UTC. After 3 runs it was split for the quota, as
+`run-bench.sh` does. In those 3 runs, and in checking them, the author found:
+
+1. **Two defects of the benchmark's tooling.** Neither of them makes the two sides less comparable.
+   - **The audit flags the run's own copy when Claude Code shortens a path.** Claude Code truncates long descriptions
+     with «…», so a path such as `copies/N2-ma…` appears in the logs. The audit rule excludes only the full name of the
+     run's own copy, so it flags the shortened form. Both «contaminated» marks below are this case. In each, the only
+     other copy that existed could not have that prefix.
+   - **Six of the eight `maat.json` declare no counterproof** (the Go, Rust and shell tasks). Maat 1.7.0 supports a
+     generic one, so these six were wrong. Without it, even a successful Maat cycle ends `NEEDS_VERIFICATION`, which
+     lowers Maat's outcome on question A only. The checks before the freeze (C10) proved the test gate and the red
+     tests, not the counterproof.
+2. **Two defects of Maat 1.7.0 itself.**
+   - **N2-maat-3: Maat stopped on a reasonable deviation.** The writer of the acceptance tests declared a deviation
+     from the plan: other base paths, to avoid route collisions. With nobody to answer, the cycle ended `STOP` before
+     any implementation.
+   - **E3-maat-3: the light flow was not used on an easy task.** The plan named «permissions», which put a security
+     surface into the size rule, so Maat chose the full size.
+
+**Why the benchmark stops.** The author chose to fix Maat first and measure it after. Measuring for weeks a version
+already known to need these fixes would give a result out of date at once. A wish to change the product under
+measurement is not a reason §5 allows. So this is a **deviation from the pre-registration**, published as such.
+Version 3 stops here and is not completed. The 3 runs below are published as they are, and they are not results of
+Maat's quality.
+
+**What comes next.**
+- **Development round.** The drawn tasks are used for development, not for measurement: one Maat run per task, then
+  the defects are fixed.
+- **Maat 1.8.0** is released with the fixes.
+- **A new pre-registered benchmark** follows, with its own protocol, qualification and freeze. Its tasks will not be
+  the ones used in the development round, so that Maat is not measured on the tasks it was fixed on.
+
 ## Results
 
-None: no run made.
+These are the 3 runs made before the interruption. They are not a measure of Maat. The hidden tests stay private during the
+development round, which uses them, and are published after it.
+
+| Run | Hidden tests | Wall-clock | Cost (API-equivalent) | Maat outcome | Audit as recorded |
+|---|---|---|---|---|---|
+| N2-baseline-3 | 234/234 | 7.9 min | $1.93 | — | clean |
+| N2-maat-3 | 147/234 | 46.7 min | $10.82 | `STOP` at test-red: a declared deviation, before any implementation | flagged: 21 shortened paths of its own copy |
+| E3-maat-3 | 29/29 | 18.3 min | $5.71 | `NEEDS_VERIFICATION`: no counterproof declared; full size chosen on an easy task | flagged: 10 shortened paths of its own copy |
+
+The start of N2 scores 149/234: N2-maat-3 is below it because its tree held only the new acceptance tests, red by
+design. The 4th run of the group (E3-maat-2) was not made.
