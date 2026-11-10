@@ -1,0 +1,20 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "quick-xml",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "src/**/{m}.rs", "a": "tests/**/*.rs" },
+      "ambiente": "nativo",
+      "report": "junit",
+      "comandi": {
+        "test": "python3 .claude/bench/cargo-junit.py {report} --features serialize && : {test}"
+      },
+      "file_dipendenze": ["Cargo.toml"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}

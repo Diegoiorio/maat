@@ -1,0 +1,23 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "toml",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "**/{m}.go", "a": "**/*_test.go" },
+      "ambiente": "nativo",
+      "report": "junit",
+      "comandi": {
+        "test": "python3 .claude/bench/go-junit.py {report} && go vet ./... && : {test}"
+      },
+      "controlli": [
+        { "glob": "**/*.go", "comando": "test -z \"$(gofmt -l {file})\"", "se_presente": "gofmt" }
+      ],
+      "file_dipendenze": ["go.mod"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}

@@ -1,0 +1,23 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "pyenv",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "**/{m}", "a": "**/*.bats" },
+      "ambiente": "nativo",
+      "report": "junit",
+      "comandi": {
+        "test": "python3 .claude/bench/bats-junit.py {report} && : {test}"
+      },
+      "controlli": [
+        { "glob": "**/libexec/*", "comando": "bash -n {file}" },
+        { "glob": "**/bin/*", "comando": "bash -n {file}" }
+      ]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}

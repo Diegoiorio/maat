@@ -1,0 +1,30 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "h3",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "src/**/{m}.ts", "a": "test/**/*.test.ts" },
+      "ambiente": "nativo",
+      "report": "vitest",
+      "comandi": {
+        "test": ": {test}; NO_COLOR=1 CI=true npx vitest run --testTimeout=60000 --hookTimeout=60000 -t '^(?!.*(uses the request ip when no x-forwarded-for header set|response stream: client abort propagates to (source stream|cancel)|response stream: source error terminates response (without crashing|gracefully)) \\(node\\))'; r=$?; case $r in 0) e=PASS ;; 1) e=FAIL ;; *) e=BLOCKED ;; esac; echo \"vitest-fast: esito=$e (vitest exit $r)\"; exit $r",
+        "lint": { "comando": "npx oxlint {file} && npx oxfmt --check {file}; r=$?; case $r in 0) e=PASS ;; 1) e=FAIL ;; *) e=BLOCKED ;; esac; echo \"vitest-fast: esito=$e (oxlint and oxfmt exit $r)\"; exit $r", "cartella": "repo" }
+      },
+      "controlli": [
+        { "glob": "**/*.ts", "comando": "npx tsc --noEmit && : {file}" }
+      ],
+      "controprova": {
+        "runner": "vitest",
+        "comando": "CI=true npx vitest run {test} -t {nome} --reporter=default --reporter=json --outputFile.json={report}"
+      },
+      "collega_nel_worktree": ["node_modules"],
+      "file_dipendenze": ["package.json", "pnpm-lock.yaml"]
+    }
+  ],
+  "gate": { "min": ["test", "controlli"], "std": ["test", "controlli", "lint"], "full": ["test", "controlli", "lint"] },
+  "piattaforma": { "copia_wsl": "no" }
+}

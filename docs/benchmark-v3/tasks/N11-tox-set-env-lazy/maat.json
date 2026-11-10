@@ -1,0 +1,26 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "tox",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "src/tox/{m}.py", "a": "tests/**/test_*.py" },
+      "ambiente": "nativo",
+      "python": [".venv/bin/python", ".venv/Scripts/python.exe"],
+      "report": "junit",
+      "comandi": {
+        "test": "PATH=\"$PWD/.venv/bin:$PATH\" {python} -m pytest -q -p no:cacheprovider -n 8 -o timeout=300 --deselect=tests/tox_env/python/virtual_env/package/test_package_cmd_builder.py::test_run_installpkg_targz --junitxml={report} tests && : {test}"
+      },
+      "controprova": {
+        "runner": "pytest",
+        "comando": "PYTHONPATH=\"$PWD/src\" PATH=\"$(dirname {python}):$PATH\" {python} -B -m pytest {test} -p no:cacheprovider -o timeout=300 --junitxml={report}"
+      },
+      "collega_nel_worktree": [".venv"],
+      "file_dipendenze": ["pyproject.toml"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}
