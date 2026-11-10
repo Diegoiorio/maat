@@ -1,0 +1,6 @@
+Implement the specification in {spec} in this repository.
+Test the change with the project's tests and checks, adding tests where the specification asks for them.
+Nobody will answer questions during this session: when something is unclear, make a reasonable choice and say so in your report.
+Do not commit, do not push, and do not install anything: the environment is already set up.
+The environment: the project's dependencies are installed (a Python project has its virtual environment in .venv: use .venv/bin/python; a Node project has its node_modules; the Go modules and the Rust crates of a project are in a local cache, and a Rust project is already built once); go, gofmt, node, npx, cargo, rustc, python3, bats, parallel, dash and shellcheck are in the PATH, and pnpm in a pnpm project.
+When you are done, end with a report: what you changed (files), what you verified and how (commands and their results), and anything you could not verify or that remains open.

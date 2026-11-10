@@ -1,0 +1,6 @@
+src/tox/version.py
+build/
+__pycache__/
+*.egg-info
+.tox
+.pytest_cache/

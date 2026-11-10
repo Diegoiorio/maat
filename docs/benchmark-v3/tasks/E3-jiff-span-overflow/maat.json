@@ -1,0 +1,20 @@
+{
+  "versione_schema": 1,
+  "harness": ">=1.7",
+  "lingua": "en",
+  "moduli": [
+    {
+      "nome": "jiff",
+      "radice": ".",
+      "regola_test": "specchio",
+      "specchio": { "da": "crates/jiff/src/**/{m}.rs", "a": "crates/jiff/tests/**/*.rs" },
+      "ambiente": "nativo",
+      "report": "junit",
+      "comandi": {
+        "test": "python3 .claude/bench/cargo-junit.py {report} -p jiff && : {test}"
+      },
+      "file_dipendenze": ["Cargo.toml", "crates/jiff/Cargo.toml"]
+    }
+  ],
+  "piattaforma": { "copia_wsl": "no" }
+}
