@@ -1,6 +1,6 @@
 # Maat benchmark, version 3
 
-**Status: frozen on 2026-11-10; no run made yet.**
+**Status: frozen on 2026-11-10; order of the runs drawn; first group running.**
 
 This folder applies [`../BENCHMARK-PROTOCOL-v3.md`](../BENCHMARK-PROTOCOL-v3.md).
 [`QUALIFICATION.md`](QUALIFICATION.md) fixes the criteria, the pools of candidates and the procedure of the draw.
@@ -115,8 +115,14 @@ records T3-maat-2 and T5-maat-2 (plugin text only, clean) and on a log with a re
 
 ## Calendar
 
-- **Order of the runs:** shuffled with a second public seed, the first drand «quicknet» round one hour after this freeze
+- **Order of the runs:** shuffled with a second public seed, the first drand «quicknet» round one hour after the freeze
   commit (`run-bench.sh seed <commit>` then `schedule <seed>`). The order is published before the first run.
+  - freeze commit `c93b72fb2ac1809a9129c8fe9cf0bfd80eeee81f` (merge of
+    [pull request #13](https://github.com/Diegoiorio/maat/pull/13));
+  - drand round `33842904`, of 2026-11-10T17:34:36Z;
+  - seed `42b53b4410fbbce174f4e766f2cd868cd43ea773de4de6cfa419ebfb20b133e8`;
+  - the whole record is [`seed.txt`](seed.txt) and the order is [`schedule.tsv`](schedule.tsv). The first group is rows 1–4:
+    N2-baseline-3, N2-maat-3, E3-maat-3, E3-maat-2.
 - **Groups** of at most 4 runs. The usage is checked before each run. The first group is run on its own, to measure the real cost
   before the rest are scheduled. It is still the first 4 rows of the shuffled order, so no run is chosen by hand.
 - **End date:** the runs are not finished after **2027-02-10**, 3 months after this commit, whatever the reason (protocol, §5).
