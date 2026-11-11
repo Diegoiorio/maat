@@ -52,6 +52,13 @@ EOF
 MIN=$T/min/.claude/maat.json
 mc valida "$MIN" > "$T/out" 2>&1; check "maat.json minimo valido" '[ $? = 0 ]'
 check "  modulo alla radice senza copia: nessun avviso sulla copia alla radice" '! grep -q "copia con radice_pacchetti" "$T/out"'
+# 1.8.0 (D1-bis): moduli[].separatori_test, optional list of strings (the levels of the test names, nomi_test.py)
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": ["/", "::"]}]}' > "$T/sep.json"
+mc valida "$T/sep.json" > "$T/out" 2>&1; check "separatori_test: lista di stringhe valida" '[ $? = 0 ]'
+check "  leggi moduli.0.separatori_test" '[ "$(MAAT_CONFIG=$T/sep.json mc leggi moduli.0.separatori_test 2>/dev/null | tr -d "\r")" != "" ]'
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": "/"}]}' > "$T/sep-ko.json"
+mc valida "$T/sep-ko.json" > "$T/out" 2>&1; rc=$?
+check "separatori_test non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.separatori_test" "$T/out"'
 # 1.8.0 (A4, DA3): copia at the root of the repository -> valid (exit 0) with a warning on stderr, before the cycle
 cat > "$T/copia-radice.json" <<'EOF'
 {"versione_schema": 1,

@@ -123,7 +123,7 @@ project. From Git Bash:
 bash plugins/maat/scripts/<name>.test.sh
 ```
 
-- Short: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
+- Short: `maat-paths`, `maat-config`, `nomi_test` (1.8.0: the relation of the test names), `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
   `harness-merge`, `guard`, `stop-hook`, `session-start`, `phase-usage`, `blocks-independent`, `phase-events`,
   `test-review-surface.sh`, `plan-check`,
   `senza-wsl` (pk08: Windows without WSL, PATH without `wsl`/`wsl.exe`; about 5 minutes, two `run-phase.sh` phases),

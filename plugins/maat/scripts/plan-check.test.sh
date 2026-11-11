@@ -540,19 +540,21 @@ CPS="$HERE/counterproof.sh"
 awk "/^PY='\$/{f=1;next} f&&/^'\$/{exit} f" "$CPS" > "$T/cp.py"
 # 1.4.0: that Python imports the message catalog from MAAT_MSG_PY, as counterproof.sh exports it (native form)
 MAAT_MSG_PY=$(cygpath -m "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
+# 1.8.0 (D1-bis): and nomi_test.py from NOMI_TEST_PY (only for that Python: plan-check.sh finds its own)
+CP_NT=$(cygpath -m "$HERE/nomi_test.py" 2>/dev/null || printf '%s' "$HERE/nomi_test.py")
 mkdir -p "$T/cptmp" "$T/cpout"
 # prep summary (pk04b-2, block A): groups, runnable entries, absorbed, NOT RUN; the modules in <tmp>/mods
-expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
+expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
 expect 0 "^be$" "gen: la mutazione e' del modulo be (pytest)" -- cat "$T/cptmp/mods"
 expect 0 '"test_id": "modules/api/tests/test_goals.py::test_update_denied"' "gen: test_id pytest = node id" -- cat "$MJ"
 expect 0 '"superficie": "permessi"' "gen: la riga [pavimento:] che nomina il test da' la superficie" -- cat "$MJ"
 # counterproof of the validator: a list without rosso_se is rejected (exit 64)
 printf '%s\n' '[{"id": "T1", "file": "modules/api/app/routers/goals.py", "simbolo": "x", "mutazione": {"cerca": "a", "sostituisci": "b"}, "test": {"percorso": "modules/api/tests/test_goals.py"}}]' > "$T/cpout/bad.json"
-expect 64 "rosso_se" "gen: controprova, prep rifiuta una lista malformata" -- "$FIC_PY" "$T/cp.py" prep "$T/cpout/bad.json" "$R" "$T/cptmp2" "$T/cpout"
+expect 64 "rosso_se" "gen: controprova, prep rifiuta una lista malformata" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/cpout/bad.json" "$R" "$T/cptmp2" "$T/cpout"
 # a frontend mutation: test_id = vitest name, vitest runner
 sed 's/^| T2 | RF2 | \(.*\) | — |$/| T2 | RF2 | \1 | `modules\/app\/apps\/admin\/components\/Bar.vue` · `Bar` · `goals-company-bar` → `x` · rosso se: `expected false to be true` |/' "$T/f2.md" > "$T/f2-fe.md"
 expect 0 "^mutazioni: 2$" "gen: due mutazioni" -- bash "$PC" gen "$T/f2-fe.md"
-expect 0 "^2 2 0 0$" "gen: mutations.json con vitest e pytest accettato da prep" -- "$FIC_PY" "$T/cp.py" prep "$T/f2-fe.run/counterproof/mutations.json" "$R" "$T/cptmp3" "$T/cpout"
+expect 0 "^2 2 0 0$" "gen: mutations.json con vitest e pytest accettato da prep" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/f2-fe.run/counterproof/mutations.json" "$R" "$T/cptmp3" "$T/cpout"
 expect 0 "^fe be $" "gen: le due mutazioni sono dei moduli fe e be" -- bash -c 'tr "\n" " " < "$1"; echo' _ "$T/cptmp3/mods"
 expect 0 '"test_id": "bar"' "gen: test_id vitest = nome del test" -- cat "$T/f2-fe.run/counterproof/mutations.json"
 # no mutation: the mutations.json generated earlier disappears
@@ -1010,7 +1012,7 @@ expect 0 "^stub modules/app/apps/admin/utils/fmt.ts: fmt$" "stubs: simboli degli
 expect 0 "^gen: mutazione T1 assorbita \(L2\)$" "gen: file nuovo con rosso dimostrato e simboli testati = assorbita" -- bash "$PC" gen "$T/f2t.md"
 expect 0 '"assorbita": true' "gen: mutations.json con assorbita" -- cat "$T/f2t.run/counterproof/mutations.json"
 mkdir -p "$T/cptmp4" "$T/cpout4"
-expect 0 "^0 0 1 0$" "prep di counterproof.sh: l'assorbita non si esegue" -- "$FIC_PY" "$T/cp.py" prep "$T/f2t.run/counterproof/mutations.json" "$R" "$T/cptmp4" "$T/cpout4"
+expect 0 "^0 0 1 0$" "prep di counterproof.sh: l'assorbita non si esegue" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/f2t.run/counterproof/mutations.json" "$R" "$T/cptmp4" "$T/cpout4"
 expect 0 '"esito": "assorbita"' "prep: <id>.json con esito assorbita" -- cat "$T/cpout4/T1.json"
 expect 0 "^L2 T1: OK$" "l2: condizioni valide sul codice attuale" -- bash "$PC" l2 "$T/f2t.md"
 cp -r "$T/f2t.run" "$T/f2t-b.run"
@@ -1947,6 +1949,77 @@ else
   echo "SKIP [vincolo 2 della 1.4.0 — nessun v1.3.0:plugins/maat/scripts/plan-check.sh in $HERE]"
 fi
 unset PLAN_CHECK_ROOT FIC_PY
+
+# ── 1.8.0 (D1-bis): hierarchical names in rossi (nomi_test.py) ──────────────────────────────────────────
+# A Go module at the root, JUnit. N3 reduced: the parent TestX (red with no assertion, as `go test` writes it) and two
+# subtests, one red on the assertion -> dimostrato, 0 conflicts; a foreign test with a red subtest -> still a conflict;
+# parent and subtests all green -> verde; a plan that names the subtest TestX/limit 5 with a folded JUnit (only the
+# parent, its text with «--- FAIL: TestX/limit_5») -> dimostrato. Counterproof: relazione reduced to equality
+# (NOMI_TEST_PY on a mutated copy) -> the N3 subtests are conflicts again.
+D1="$T/d1"; mkdir -p "$D1/.claude" "$D1/m"
+echo '{"versione_schema": 1, "moduli": [{"nome": "go", "radice": ".", "report": "junit", "comandi": {"test": "go test ./... {test}"}}], "piattaforma": {"copia_wsl": "no"}}' > "$D1/.claude/maat.json"
+d1spec() { # $1 = test id of T1
+cat <<EOF
+# Spec: body limit
+## Functional requirements
+FR1. The body is never read past the limit.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: none
+### Touched files
+- \`m/body.go\`
+- \`m/body_test.go\`
+### Steps
+#### Block B1 — body
+writes: \`m/body.go\`, \`m/body_test.go\`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | \`m/body.go\` | limit the reads | T1 |
+### Requirement traceability
+| Req | Plan steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1 | \`$1\` (new) | \`read(5, 50) == 5\` · red if: \`expected 5 got 50\` | — |
+EOF
+}
+d1spec 'm/body_test.go::TestX' > "$D1/padre.md"
+d1spec 'm/body_test.go::TestX/limit 5' > "$D1/sotto.md"
+d1ev() { # $1 folder · $2 the testcases
+  mkdir -p "$1"
+  printf '<?xml version="1.0"?><testsuites><testsuite name="m">%s</testsuite></testsuites>\n' "$2" > "$1/tests-go.junit.xml"
+  printf '{"gate":"tests-go","esito":"FAIL","report":"tests-go.junit.xml","motivo":""}\n' > "$1/tests-go.json"
+}
+GO_PADRE='<testcase classname="m.body_test.go" name="TestX"><failure message="Failed">--- FAIL: TestX (0.01s)</failure></testcase>'
+GO_ROSSO='<testcase classname="m.body_test.go" name="TestX/limit_5"><failure message="Failed">m/body_test.go:31: expected 5 got 50</failure></testcase>'
+GO_VERDE='<testcase classname="m.body_test.go" name="TestX/limit_0"/>'
+d1ev "$D1/ev-n3" "$GO_PADRE$GO_ROSSO$GO_VERDE"
+d1ev "$D1/ev-estraneo" "$GO_PADRE$GO_ROSSO$GO_VERDE"'<testcase classname="m.body_test.go" name="TestY/caso"><failure message="Failed">m/body_test.go:80: other</failure></testcase>'
+d1ev "$D1/ev-verde" '<testcase classname="m.body_test.go" name="TestX"/><testcase classname="m.body_test.go" name="TestX/limit_5"/>'"$GO_VERDE"
+d1ev "$D1/ev-piegato" '<testcase classname="m.body_test.go" name="TestX"><failure message="Failed">--- FAIL: TestX/limit_5 (0.00s)
+    m/body_test.go:31: expected 5 got 50</failure></testcase>'
+d1r() { env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$@"; }
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: N3 ridotto (padre + 2 sottotest Go, uno rosso sull asserzione) = dimostrato" -- d1r "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+refute "^conflitto:" "D1-bis rossi: N3 ridotto, i sottotest del test nominato non sono conflitti" -- d1r "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+expect 1 "^conflitto: m.body_test.go::TestY/caso " "D1-bis rossi: un test estraneo con un sottotest rosso = ancora conflitto" -- d1r "$D1/padre.md" --evidence "$D1/ev-estraneo" --run-dir "$D1/r.run"
+expect 1 "^rosso T1: verde " "D1-bis rossi: padre e sottotest tutti verdi = verde" -- d1r "$D1/padre.md" --evidence "$D1/ev-verde" --run-dir "$D1/r.run"
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: piano che nomina il sottotest (TestX/limit 5) con JUnit piegato nel padre = dimostrato" -- d1r "$D1/sotto.md" --evidence "$D1/ev-piegato" --run-dir "$D1/r.run"
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: piano che nomina il sottotest con il JUnit dei sottotest = dimostrato" -- d1r "$D1/sotto.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
+(. "$HERE/python.sh" && "$FIC_PY" - "$T/nomi-uguale.py") <<'EOF'   # FIC_PY was unset above (PLAN_CHECK_ROOT section)
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
+assert s.count(a) == 1
+open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
+EOF
+expect 1 "^conflitto: m.body_test.go::TestX/limit_5 " "controprova D1-bis: relazione ridotta all uguaglianza -> i sottotest di N3 tornano conflitti" -- env NOMI_TEST_PY="$(cygpath -m "$T/nomi-uguale.py" 2>/dev/null || printf '%s' "$T/nomi-uguale.py")" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
 
 # ── usage ────────────────────────────────────────────────────────────────────────────────────────
 expect 2 "uso:" "argomenti sbagliati = uscita 2" -- bash "$PC" boh

@@ -125,9 +125,9 @@ jx=""; for a in "$@"; do case "$a" in --junitxml=*) jx=${a#--junitxml=} ;; esac;
 if grep -q IMPORTROTTO app/core.py; then
   printf '<testsuites><testsuite><testcase classname="" name="tests.test_core"><error message="collection failure">ImportError: cannot import name UNO</error></testcase></testsuite></testsuites>' > "$jx"; exit 2
 elif grep -q ROSSO app/core.py; then
-  printf '<testsuites><testsuite><testcase classname="tests.test_core" name="test_uno"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' > "$jx"; exit 1
+  printf '<testsuites><testsuite><testcase classname="%s" name="%s"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 1
 fi
-printf '<testsuites><testsuite><testcase classname="tests.test_core" name="test_uno"/></testsuite></testsuites>' > "$jx"; exit 0
+printf '<testsuites><testsuite><testcase classname="%s" name="%s"/></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 0
 EOF
 # fake rsync: FAKE_RSYNC_LOG records the arguments (sources, destinations, exclusions), then the real one
 cat > "$BIN/rsync" <<'EOF'
@@ -331,6 +331,31 @@ check "test nominato non eseguito -> rosso_raccolta" '[ "$(field RAC esito)" = r
 # 9. pytest: collection error on import -> rosso_import
 cpr "$(mj pyi.json "[$(entry PYI modules/api/app/core.py 'UNO = 1' 'UNO = 1  # IMPORTROTTO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")"
 check "pytest: import rotto in raccolta -> rosso_import" '[ "$(field PYI esito)" = rosso_import ]'
+
+# 9b. (1.8.0, D1-bis) hierarchical names (nomi_test.py, the same relation as plan-check.sh rossi): pytest `test_uno[a]`
+#     with the plan naming test_uno, and a class TestC named by the plan with its method test_a in the report ->
+#     rosso_asserzione; vitest on a `describe` («somma», its test «somma vale uno» red) -> rosso_asserzione. Before:
+#     rosso_raccolta (exact name only). Counterproof: NOMI_TEST_PY on a copy with relazione reduced to equality -> red.
+PYP=$(mj pyp.json "[$(entry PYP modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")
+PYC=$(mj pyc.json "[$(entry PYC modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::TestC' 'assert 2 == 1')]")
+VTD=$(mj vtd.json "[$(entry VTD $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma')]")
+caso_nomi() { # [NOMI_TEST_PY]: the three cases -> 0 if all rosso_asserzione
+  NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; local a=$(field PYP esito)
+  NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; local b=$(field PYC esito)
+  NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; local c=$(field VTD esito)
+  echo "$a $b $c" > "$T/nomi"
+  [ "$a $b $c" = "rosso_asserzione rosso_asserzione rosso_asserzione" ]
+}
+check "pytest test_uno[a] e classe TestC, vitest su un describe -> rosso_asserzione (D1-bis)" 'caso_nomi || { echo "    $(cat "$T/nomi")"; false; }'
+cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
+python3 - "$T/nomi-uguale.py" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
+assert s.count(a) == 1
+open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
+PY
+check "controprova: relazione ridotta all uguaglianza -> i tre casi non sono rosso_asserzione: rosso" '! caso_nomi "$T/nomi-uguale.py"'
 
 # 10. invalid input -> 64, nothing run
 cpr "$(mj bad.json "[$(entry X modules/api/app/core.py 'UNO = 1' 'UNO = 2')]")"

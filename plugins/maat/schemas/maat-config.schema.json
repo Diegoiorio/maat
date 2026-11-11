@@ -252,6 +252,11 @@
               }
             }
           },
+          "separatori_test": {
+            "description": "1.8.0 (D1-bis): the separators of the levels of the test names in the reports of this module (scripts/nomi_test.py), for an adapter that does not follow the language of the test file. Without it: by the extension of the test file (.go: /, .py: [, .rs: none, others: [), :: always.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "file_dipendenze": {
             "description": "Globs of the files that decide the dependencies (git :(glob) pathspec): a string (relative to the radice) or {glob, cartella}. If they differ between a worktree's base and the main tree, the linked dependencies are not valid: ciclo-worktree.sh and replay.sh stop.",
             "type": "array",

@@ -2428,9 +2428,26 @@ def junit_cases(p):
     return out
 
 
-def py_claim(T, c, trel):
-    """come un caso JUnit riguarda il test T (trel: il suo percorso relativo alla radice del modulo): target | file |
-    suite | None"""
+_NOMI = []
+
+
+def nomi():
+    """1.8.0 (D1-bis): nomi_test.py next to this script (NOMI_TEST_PY, exported by need_py), imported: the same
+    relation of the test names as counterproof.sh"""
+    if not _NOMI:
+        import importlib.util
+        sp = importlib.util.spec_from_file_location("nomi_test", os.environ["NOMI_TEST_PY"])
+        mo = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(mo)
+        _NOMI.append(mo)
+    return _NOMI[0]
+
+
+def py_claim(T, c, trel, seps=None):
+    """come un caso JUnit riguarda il test T (trel: il suo percorso relativo alla radice del modulo): target | antenato
+    | file | suite | None. 1.8.0 (D1-bis): la relazione dei nomi di nomi_test.py coi separatori del linguaggio
+    (seps): uguale e discendente -> target (un sottotest Go, un parametro pytest, i metodi di una classe nominata),
+    antenato -> reclamato (un adattatore che piega i sottotest nel padre)"""
     mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
     cn, nm = c["cn"], c["nm"]
     if not cn:
@@ -2443,10 +2460,9 @@ def py_claim(T, c, trel):
         return None
     if not T["name"]:
         return "target"
-    nid = trel + rest + "::" + nm
-    if nid.endswith("::" + T["name"]) or nid.split("[")[0].endswith("::" + T["name"]):
-        return "target"
-    return "file"
+    nt = nomi()
+    rel = nt.relazione(T["name"], trel + rest + "::" + nm, seps or nt.separatori(trel))
+    return {"uguale": "target", "discendente": "target", "antenato": "antenato"}.get(rel, "file")
 
 
 def vitest_blocks(text):
@@ -2482,10 +2498,11 @@ def vt_claim(T, b, trel):
         return "suite"
     if not T["name"]:
         return "target"
-    s = b["segs"]
-    # the plan may name the test as vitest prints it ("describe > it") or with the full -t name ("describe it")
-    ids = set([sep.join(s[k:]) for k in range(len(s)) for sep in (" ", " > ")] + [s[-1]])
-    return "target" if T["name"] in ids else "file"
+    # the plan may name the test as vitest prints it ("describe > it") or with the full -t name ("describe it");
+    # 1.8.0 (D1-bis): a `describe` named by the plan claims its tests (the structured chain, never a prefix with a space)
+    nt = nomi()
+    rel = nt.relazione(T["name"], None, nt.SEP_VITEST, segmenti=b["segs"])
+    return {"uguale": "target", "discendente": "target", "antenato": "antenato"}.get(rel, "file")
 
 
 # D-D (1.6.0): the frame of a Python traceback, as a JUnit of a runner other than pytest (unittest) carries it
@@ -2585,10 +2602,15 @@ def cmd_rossi(M, root, run, ev):
             out[tid] = ("non_eseguito", "gate %s %s: %s" % (g, d.get("esito"), d.get("motivo") or ""), "", None)
             continue
         trel = rel_radice(mt, T["path"])
+        # 1.8.0 (D1-bis): an ancestor case (antenato) is claimed, never a conflict; its text counts only without a case
+        # uguale/discendente and if it holds the leaf of the plan name (the adapter that folds the subtests)
+        seps = nomi().separatori(trel, mt.get("separatori_test"))
+        leaf = nomi().foglia(T["name"], seps)
+        anc_bad, anc_pass, has_t = [], False, False
         if fmt[g] == "junit":
             failed, suite, ran, passed = [], [], False, False
             for c in rep[g]:
-                k = py_claim(T, c, trel)
+                k = py_claim(T, c, trel, seps)
                 if k is None:
                     continue
                 if k == "suite":
@@ -2598,12 +2620,23 @@ def cmd_rossi(M, root, run, ev):
                         c["own"] = tid
                     continue
                 ran = True
+                if k == "antenato":   # ANTENATO-RECLAMATO
+                    if c["bad"]:
+                        anc_bad += c["bad"]
+                        c["own"] = c["own"] or tid
+                    elif not c["skip"]:
+                        anc_pass = True
+                    continue
                 if k == "target":
+                    has_t = True
                     if c["bad"]:
                         failed += c["bad"]
                         c["own"] = tid
                     elif not c["skip"]:
                         passed = True
+            if not has_t:
+                failed = [x for x in anc_bad if leaf and leaf in x]
+                passed = anc_pass and not anc_bad
             out[tid] = verdict(T, failed, suite, ran, passed, IMPORT_PY, trel)
         else:
             blocks, ran_files = rep[g]
@@ -2613,9 +2646,14 @@ def cmd_rossi(M, root, run, ev):
                 if k == "target":
                     failed.append("\n".join(b["body"]))
                     b["own"] = tid
+                elif k == "antenato":
+                    anc_bad.append("\n".join(b["body"]))
+                    b["own"] = b["own"] or tid
                 elif k == "suite":
                     suite.append("\n".join(b["body"]))
                     b["own"] = tid
+            if not failed:
+                failed = [x for x in anc_bad if leaf and leaf in x]
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
     # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
@@ -2740,6 +2778,13 @@ need_py() {
   # PY2 imports the message catalog: maat_msg.py next to THIS script (a copy of the plugin uses its own), in the
   # form native Python reads
   MAAT_MSG_PY=$(maat_cygm "$PC_HERE/maat_msg.py" 2>/dev/null || printf '%s' "$PC_HERE/maat_msg.py"); export MAAT_MSG_PY
+  # 1.8.0 (D1-bis): the relation of the test names (shared with counterproof.sh): NOMI_TEST_PY if set, otherwise
+  # nomi_test.py next to THIS script, otherwise the plugin's (a copy of plan-check.sh alone, in the tests)
+  if [ -z "${NOMI_TEST_PY:-}" ]; then
+    NOMI_TEST_PY=$PC_HERE/nomi_test.py; [ -f "$NOMI_TEST_PY" ] || NOMI_TEST_PY=$MAAT_SCRIPTS/nomi_test.py
+    NOMI_TEST_PY=$(maat_cygm "$NOMI_TEST_PY" 2>/dev/null || printf '%s' "$NOMI_TEST_PY")
+  fi
+  export NOMI_TEST_PY
   export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0

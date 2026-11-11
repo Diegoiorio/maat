@@ -185,6 +185,9 @@ export PROJECT_ROOT=$ROOT MAAT_CONFIG_PY="$HERE/maat-config.py"
 # interpreter reads (C:/… for a Windows Python, the path as it is inside WSL)
 maat_msg_carica; maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
 MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
+# 1.8.0 (D1-bis): the relation of the test names, the same module as plan-check.sh rossi (NOMI_TEST_PY wins: tests)
+[ -n "${NOMI_TEST_PY:-}" ] || NOMI_TEST_PY=$(maat_cygm "$HERE/nomi_test.py" 2>/dev/null || printf '%s' "$HERE/nomi_test.py")
+export NOMI_TEST_PY
 missing=""
 for t in sha256sum timeout; do command -v "$t" >/dev/null 2>&1 || missing+="${missing:+, }$t"; done
 command -v rsync >/dev/null 2>&1 || command -v tar >/dev/null 2>&1 || missing+="${missing:+, }$(msg counterproof.rsync_tar)"
@@ -217,6 +220,9 @@ _s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"
 _m = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(_m)
 T = _m.T   # the catalog (lib/messages.tsv), the same as the bash side
+_s = importlib.util.spec_from_file_location("nomi_test", os.environ["NOMI_TEST_PY"])
+NT = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(NT)   # 1.8.0 (D1-bis): relazione() of the test names, shared with plan-check.sh rossi
 
 def die(msg):
     print("counterproof: " + msg, file=sys.stderr)
@@ -477,6 +483,7 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "tname"), nome)
         wtxt(os.path.join(d, "python"), val["python"] or "")
         wtxt(os.path.join(d, "tpl"), x["controprova"]["comando"])
+        wtxt(os.path.join(d, "separatori"), json.dumps(NT.separatori(trel, x.get("separatori_test"))))
         with open(os.path.join(d, "valori.json"), "w", encoding="utf-8") as fh:
             json.dump(val, fh, ensure_ascii=False)
     # lock: that of the module with copia among the mutations (the same as test-fast.sh); without one, that of the first module with
@@ -547,16 +554,13 @@ def apply(path, cf, sf):
         except PermissionError:
             pass
 
-def vitest_ids(a):
-    # names by which a test can be cited: fullName (ancestors + title, joined by a space), the title, and every
-    # suffix of the ancestor chain, joined by a space or by " > " as in FAILs; exact comparison, never
-    # by substring
-    anc, title = a.get("ancestorTitles") or [], a.get("title") or ""
-    ids = {a.get("fullName"), title}
-    for k in range(len(anc)):
-        for sep in (" ", " > "):
-            ids.add(sep.join(anc[k:] + [title]))
-    return ids
+def vitest_mio(a, tid):
+    # 1.8.0 (D1-bis): the test is the named one or one of its descendants (a `describe` named by the plan), by the
+    # structured chain ancestorTitles + title (nomi_test.relazione): the title, every suffix of the chain joined by
+    # " > " as in FAILs or by a space as in the full -t name; never a prefix with a space ("parse" is not the parent
+    # of "parse empty"), never by substring
+    segs = (a.get("ancestorTitles") or []) + [a.get("title") or ""]
+    return tid == a.get("fullName") or NT.relazione(tid, None, NT.SEP_VITEST, segmenti=segs) in ("uguale", "discendente")
 
 def classify_vitest(report, trel, tid, asserz):
     try:
@@ -568,7 +572,7 @@ def classify_vitest(report, trel, tid, asserz):
     if not files:
         return "rosso_raccolta", T("counterproof.not_collected"), ""
     fr = files[0]
-    targets = [a for a in fr.get("assertionResults", []) if tid in vitest_ids(a)]
+    targets = [a for a in fr.get("assertionResults", []) if vitest_mio(a, tid)]
     failed = [a for a in targets if a.get("status") == "failed"]
     if failed:
         msg = norm("\n".join(x for a in failed for x in (a.get("failureMessages") or [])))
@@ -592,7 +596,7 @@ def suite_red(msg, imp):
         return "rosso_import", T("counterproof.suite_import"), msg
     return "rosso_raccolta", T("counterproof.suite_collect"), msg
 
-def classify_pytest(report, trel, tid, asserz, rc, radp):
+def classify_pytest(report, trel, tid, asserz, rc, radp, seps):
     if rc in (4, 5):
         return "rosso_raccolta", T("counterproof.pytest_collect", rc=rc), ""
     try:
@@ -601,7 +605,7 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
         return "bloccato", T("counterproof.no_junit_report"), ""
     tid = tid[len(radp):] if radp and tid.startswith(radp) else tid
     mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
-    targets, coll = [], []
+    targets, coll, anc = [], [], []
     for c in root.iter("testcase"):
         cn, nm = c.get("classname") or "", c.get("name") or ""
         bad = [e for e in list(c) if e.tag in ("failure", "error")]
@@ -615,9 +619,17 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
         else:
             continue
         nodeid = trel + rest + "::" + nm
-        if nodeid == tid or nodeid.endswith("::" + tid):
-            skipped = any(e.tag == "skipped" for e in list(c))
+        # 1.8.0 (D1-bis): the named test, its parameters ([a]), the methods of a named class, the subtests -> the
+        # test; an ancestor (a folding adapter) only without them, and only with the leaf of the name in its text
+        rel = "uguale" if nodeid == tid else NT.relazione(tid, nodeid, seps)
+        skipped = any(e.tag == "skipped" for e in list(c))
+        if rel in ("uguale", "discendente"):
             targets.append((bad, skipped))
+        elif rel == "antenato":
+            anc.append((bad, skipped))
+    if not targets and anc:
+        leaf = NT.foglia(tid, seps)
+        targets = [(b, s) for b, s in anc if not b or any(leaf and leaf in (e.get("message") or "") + "\n" + (e.text or "") for e in b)]
     failed = [b for b, s in targets if b]
     if failed:
         msg = norm("\n".join((e.get("message") or "") + "\n" + (e.text or "") for b in failed for e in b))
@@ -648,7 +660,11 @@ def result(d, out, report, rc, ms, log, cmd, why):
     elif runner == "vitest":
         esito, motivo, msg = classify_vitest(report, trel, tid, asserz)
     elif runner == "pytest":
-        esito, motivo, msg = classify_pytest(report, trel, tid, asserz, rc, radp)
+        try:
+            seps = json.loads(rtxt(os.path.join(d, "separatori")))
+        except (OSError, ValueError):
+            seps = NT.separatori(trel)
+        esito, motivo, msg = classify_pytest(report, trel, tid, asserz, rc, radp, seps)
     else:
         esito, motivo, msg = classify_comando(rc)
     cp = {"rosso_asserzione": "PASS", "rosso_generico": "PASS", "bloccato": "BLOCKED"}.get(esito, "FAIL")

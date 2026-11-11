@@ -142,3 +142,8 @@ scripts/corpus/inject/test-in-conflitto.sh	^'la barra aziendale non offre Â«\$XÂ
 
 # --- the Italian outcome line of 1.2.x, still read (since 1.3.0 every reader takes both languages)
 scripts/*	ESITO FASE	forma italiana della riga di esito delle fasi, letta accanto a PHASE RESULT (1.3.0)
+
+# --- 1.8.0 (D1-bis): the values of nomi_test.relazione(), passed between nomi_test.py, plan-check.sh and counterproof.sh
+scripts/nomi_test.py	^"(uguale|discendente|antenato|altro)"$	valori di relazione() (uguale | discendente | antenato | altro), letti da plan-check.sh rossi e counterproof.sh: uguali in ogni lingua
+scripts/plan-check.sh	^"(uguale|discendente|antenato)"$	valori di nomi_test.relazione() letti da py_claim e vt_claim
+scripts/counterproof.sh	^"(uguale|discendente|antenato)"$	valori di nomi_test.relazione() letti da classify_pytest e vitest_mio
