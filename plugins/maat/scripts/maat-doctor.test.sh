@@ -214,6 +214,14 @@ V8=$(variante copia-anche 'c["moduli"][0]["copia_anche"] = ["dati", "non-esiste"
 caso_copia_anche() { DOCX=${1:-} doc MAAT_CONFIG="$V8"; [ "$rc" = 1 ] && ha "^MANCA copia_anche del modulo m: non-esiste non esiste" && ha "^OK copia_anche del modulo m: dati"; }
 check "copia_anche verso una cartella inesistente -> MANCA (e la cartella vera OK)" 'caso_copia_anche'
 
+# --- 8b. (1.8.0, A4, DA3) copia at the root of the repository: not supported, said before the cycle (ATTENZIONE with the
+#     remedy); the module at the root without copia (the base project) has no such line. Counterproof at the end.
+V8B=$(variante copia-radice 'c["moduli"][0]["copia"] = {"test": "true {test}"}')
+caso_copia_radice() { DOCX=${1:-} doc MAAT_CONFIG="$V8B"; ha "^ATTENZIONE modulo m: copia con radice_pacchetti alla radice del repository non e' supportata \(1\.8\.0\): la controprova si ferma con exit 64 e test-fast\.sh rifiuta la copia — per la controprova usa un modulo senza copia \(alla radice gira\), o metti radice_pacchetti in una sottocartella$"; }
+check "copia alla radice -> ATTENZIONE col rimedio" 'caso_copia_radice'
+doc
+check "  modulo alla radice senza copia -> nessuna riga sulla copia alla radice" '! ha "copia con radice_pacchetti alla radice"'
+
 # --- 9. Windows without WSL: copia_wsl auto, nativo modules --------------------------------------------------------------
 V9=$(variante wsl-auto 'c["piattaforma"]["copia_wsl"] = "auto"')
 caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
@@ -483,6 +491,8 @@ mutante() { # <name> <sed expression> -> path of the mutated doctor (with the pl
 }
 m=$(mutante copia-anche 's/ok = os.path.isdir(posixpath.join(ROOT, mc.norm(d)))/ok = True/')
 check "controprova: copia_anche senza controllo -> la cartella inesistente passa, rosso" '[ -n "$m" ] && ! caso_copia_anche "$m"'
+m=$(mutante copia-radice 's/    if m.get("copia") and not mc.norm(m\["radice_pacchetti"\]):   # COPIA-RADICE/    if False:   # COPIA-RADICE/')
+check "controprova (1.8.0, A4): senza il controllo della copia alla radice -> niente ATTENZIONE, rosso" '[ -n "$m" ] && ! caso_copia_radice "$m"'
 m=$(mutante modulo-wsl 's/elif amb == "wsl" and not wsl:/elif False:/; s/if amb == "wsl" and not WIN:/if False:/')
 check "controprova: modulo wsl senza la riga MANCA -> rosso" '[ -n "$m" ] && ! caso_modulo_wsl "$m"'
 m=$(mutante sonda 's/ok = any(x.search(cmd) for _p, x in rx)/ok = True/')

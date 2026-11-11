@@ -734,6 +734,10 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
                                  where="in WSL" if amb == "wsl" else T("maat-doctor.present")))
             out.append(strumenti)
 
+    # --- 1.8.0 (A4, DA3): copia at the root of the repository is not supported: said before the cycle
+    if m.get("copia") and not mc.norm(m["radice_pacchetti"]):   # COPIA-RADICE
+        out.append(lambda: riga("ATTENZIONE", T("maat-doctor-180.root_copy", nome=nome), T("maat-doctor-180.root_copy_fix")))
+
     # --- WSL copy of the module
     if amb == "wsl" and wsl and m.get("copia"):
         pac = mc.norm(m["radice_pacchetti"])

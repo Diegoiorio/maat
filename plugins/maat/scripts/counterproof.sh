@@ -70,6 +70,19 @@
 #   module with copia among the mutations: that of the first module with copia in maat.json, otherwise of the first
 #   module of the mutations), taken with `flock -w "${FIC_LOCK_WAIT:-900}"`: it WAITS, and beyond the cap -> exit 3. NEVER a
 #   fallback to /mnt/c: there the test would run on the unmutated tree and give a false «not red».
+# - 1.8.0 (A4) a module at the ROOT of the repository (radice_pacchetti "" or "."), only WITHOUT `copia` (with `copia`
+#   -> exit 64: not in 1.8.0, maat-doctor and `maat-config.py valida` say it before the cycle). It is the whole mirror,
+#   shared by every module, so:
+#   - its sync excludes, besides the core list, the copy state and the locks of EVERY folder (`.fic-*` not
+#     anchored: a tracked file of the project named .fic-* is not copied either, and the manifest check gives
+#     BLOCKED, said in a line), `/.git` (from a worktree a file that points to the real repository), the cycles
+#     folder (`cartelle.lavoro`, anchored; also out of the manifest: OUT writes there during the run) and the
+#     `collega_nel_worktree` folders of every module, each anchored to its folder;
+#   - it takes <mirror>/.fic-lock AND <mirror>/<radice_pacchetti>/.fic-lock of EVERY module of maat.json (with or
+#     without copia: a counterproof on a module B holds the lock of B's folder, test-fast.sh that of its own), in the
+#     order of maat.json, without duplicates, under ONE total deadline FIC_LOCK_WAIT for all the waits; one not taken
+#     -> exit 3 «mirror occupato … (lock <path>)», nothing synced, the locks already taken released. Every run
+#     closes all the lock descriptors (an orphaned run keeps none).
 # - Without rsync or without flock (pk08, for example Git Bash on Windows without WSL; CHANGES THE CONTRACT of pk04b-2, which gave
 #   BLOCKED): counterproofs run anyway, with the fic-mirror.sh fallbacks, slower and declared in one line
 #   «counterproof: … di ripiego …». Copy: fic_sync (find + sha256 fingerprints + tar, same exclusions, --delete and
@@ -389,8 +402,8 @@ def prep(mj, root, tmp, out):
         if not SAFE_ID.match(nm):
             die(T("counterproof.bad_module_name", nm=nm))
         rad, pac = mc.norm(x["radice"]), mc.norm(x["radice_pacchetti"])
-        if not pac:
-            die(T("counterproof.pkg_is_root", nm=nm))
+        if not pac and x.get("copia"):   # 1.8.0 (A4): the root is allowed, only without `copia` (DA3)
+            die(T("counterproof.pkg_is_root", nm=nm) + " — " + T("counterproof-180.root_copy_fix"))
         try:
             gruppo = mc.relativa(rad, pac)
         except mc.Uscita as u:
@@ -404,15 +417,24 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "copia"), "1" if x.get("copia") else "")
         wtxt(os.path.join(d, "runner"), cp["runner"])
         # extra exclusions of the module: the collega_nel_worktree folders (installed dependencies), relative to the
-        # packages root, anchored
-        esc = []
-        for v in x.get("collega_nel_worktree", []):
-            v = {"percorso": v} if isinstance(v, str) else v
-            b = mc.cartella_di(x, v.get("cartella", "radice"))
-            p = mc.norm(posixpath.join(b, v["percorso"]) if b else v["percorso"])
-            if p != pac and mc.sotto(p, pac):
-                esc.append("/" + p[len(pac) + 1:])
+        # packages root, anchored. 1.8.0 (A4): a module at the root (pac "") is the whole mirror, shared by the other
+        # modules: its sync also excludes the copy state and the locks of every folder (.fic-*, NOT anchored), the
+        # .git of the repository (the .git file of a worktree points to the real repository), the cycles folder (OUT
+        # writes there during the run) and the collega_nel_worktree folders of EVERY module, each anchored to the
+        # repository root. Before, "/" + p[len(pac) + 1:] cut the first character when pac == "".
+        esc, lav = [], ""
+        if not pac:
+            lav = mc.norm((r.get("cartelle") or {}).get("lavoro") or "")
+            esc += [".fic-*", "/.git"] + (["/" + lav] if lav else [])   # ESCLUSIONI-RADICE
+        for x2 in ([x] if pac else r["moduli"]):
+            for v in x2.get("collega_nel_worktree", []):
+                v = {"percorso": v} if isinstance(v, str) else v
+                b = mc.cartella_di(x2, v.get("cartella", "radice"))
+                p = mc.norm(posixpath.join(b, v["percorso"]) if b else v["percorso"])
+                if p and p != pac and mc.sotto(p, pac):
+                    esc.append("/" + (p[len(pac) + 1:] if pac else p))   # COLLEGA-RADICE
         wtxt(os.path.join(d, "escludi"), "".join(e + "\n" for e in esc))
+        wtxt(os.path.join(d, "lavoro"), lav)
         wtxt(os.path.join(d, "preparati"), "".join(g + "\n" for g in x.get("preparati", [])))
         anche = [mc.norm(a) for a in x.get("copia_anche", []) if rel_ok(mc.norm(a))]
         wtxt(os.path.join(d, "anche"), "".join(a + "\n" for a in anche))
@@ -465,6 +487,18 @@ def prep(mj, root, tmp, out):
     elif usati:
         primo = next((x for x in r["moduli"] if x.get("copia") and mc.norm(x["radice_pacchetti"])), None)
         lock = mc.norm((primo or usati[0])["radice_pacchetti"])
+    locks = [lock]
+    # 1.8.0 (A4): a module at the root syncs the whole mirror with --delete, so it takes the lock of the mirror root
+    # AND that of the radice_pacchetti of EVERY module of maat.json (with or without copia: a counterproof on a
+    # module B holds the lock of the folder of B), always in the order of maat.json (two root counterproofs cannot
+    # deadlock), without duplicates
+    if any(not mc.norm(x["radice_pacchetti"]) for x in usati):
+        locks = [""]
+        for x in r["moduli"]:   # LOCK-TUTTI
+            k = mc.norm(x["radice_pacchetti"])
+            if k not in locks:
+                locks.append(k)
+    wtxt(os.path.join(tmp, "locks"), "".join(k + "\n" for k in locks))
     wtxt(os.path.join(tmp, "mods"), "".join(x["nome"] + "\n" for x in usati))
     wtxt(os.path.join(tmp, "copiamod"), con_copia[0] if con_copia else "")
     wtxt(os.path.join(tmp, "lockpkg"), lock)
@@ -647,7 +681,9 @@ elif cmd == "result":
 '
 
 TMPD=$(mktemp -d)
-CPD=""; LOCKD=""   # LOCKD: the fallback lock (mkdir) taken by this process, to release in cleanup
+# LOCKDS: the fallback locks (mkdir) taken by this process, to release in cleanup; LOCKFDS: the descriptors of the
+# flock locks (1.8.0, A4: one per lock, a root module takes several), closed in every run (run_cmd)
+CPD=""; LOCKDS=(); LOCKFDS=()
 : > "$TMPD/inflight"
 # On a signal (TERM, INT, HUP -> normal exit -> EXIT trap), in this order: ALL descendants are killed
 # (workers, `timeout`, the runner command: `timeout` opens its own process group, so killing only the jobs
@@ -693,7 +729,7 @@ cleanup() {
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
   [ -n "$CPD" ] && rm -rf "$CPD"
   rm -rf "$TMPD"
-  [ -z "$LOCKD" ] || fic_unlock_dir "$LOCKD" "$$"   # last: the mirror is already restored
+  for q in ${LOCKDS[@]+"${LOCKDS[@]}"}; do fic_unlock_dir "$q" "$$"; done   # last: the mirror is already restored
 }
 # 1.8.0 (C1): the handler exits only once (CP_FINE). Before, a second TERM (two runs that signal at the same moment,
 # case 11b) arriving between `exit 143` and the first line of cleanup ran `exit 143` again inside the EXIT trap:
@@ -734,8 +770,8 @@ excl_of() {  # <module> -> EX: the core list + the module's collega_nel_worktree
   while IFS= read -r x; do [ -n "$x" ] && EX+=("--exclude=$x"); done < "$TMPD/mod/$1/escludi"
 }
 CM=$(cat "$TMPD/copiamod")   # the module with copia among those of the mutations ("" if none)
-LOCKPKG=$(cat "$TMPD/lockpkg")
-LOCK="$MIR/$LOCKPKG/.fic-lock"
+# the locks to take, in order (prep): one, or (1.8.0, A4) with a module at the root the mirror root and every module
+mapfile -t LOCKPKGS < "$TMPD/locks"
 SRCC=""; DSTC=""
 [ -n "$CM" ] && { SRCC="$ROOT/${M_PAC[$CM]}"; DSTC="$MIR/${M_PAC[$CM]}"; }
 
@@ -760,15 +796,29 @@ if [ -n "$CM" ]; then
   fi
   [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ] || blocked "$(msg counterproof.mirror_missing why="$why")"
 fi
-mkdir -p "$MIR/$LOCKPKG" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$LOCKPKG")"
 [ -z "$FALLBACK" ] || echo "counterproof: $(msg counterproof.fallback_slower fallback="$FALLBACK")"
-if [ -n "$FLOCK" ]; then
-  exec 9>"$LOCK"
-  flock -w "$WAIT" 9 || blocked "$(msg counterproof.busy wait="${WAIT}" lock="$LOCK")"
-else
-  fic_lock_dir "$LOCK.d" "$WAIT" || blocked "$(msg counterproof.busy_dir wait="${WAIT}" lock="$LOCK")"
-  LOCKD=$LOCK.d
-fi
+# 1.8.0 (A4): every lock with ONE total deadline FIC_LOCK_WAIT for all the waits together (not FIC_LOCK_WAIT per
+# lock), held until the end; one not taken in time -> BLOCKED «mirror occupato» with its path, exit 3, no sync; the
+# ones already taken are released (flock: at the exit; mkdir: by cleanup)
+WAIT_MS=$(awk -v w="$WAIT" 'BEGIN { printf "%d", w * 1000 }')
+T_LOCK=$(date +%s%N)
+for pk in "${LOCKPKGS[@]}"; do
+  LOCK="$MIR${pk:+/$pk}/.fic-lock"
+  mkdir -p "${LOCK%/.fic-lock}" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$pk")"
+  RESTO=$(( WAIT_MS - ($(date +%s%N) - T_LOCK) / 1000000 ))   # SCADENZA-UNICA
+  [ "$RESTO" -gt 0 ] || RESTO=0
+  if [ -n "$FLOCK" ]; then
+    exec {fd}>"$LOCK" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$pk")"
+    LOCKFDS+=("$fd")
+    flock -w "$((RESTO / 1000)).$(printf '%03d' $((RESTO % 1000)))" "$fd" || blocked "$(msg counterproof.busy wait="${WAIT}" lock="$LOCK")"
+  else
+    fic_lock_dir "$LOCK.d" "$(( (RESTO + 999) / 1000 ))" || blocked "$(msg counterproof.busy_dir wait="${WAIT}" lock="$LOCK")"
+    LOCKDS+=("$LOCK.d")
+  fi
+done
+# the descriptors of the locks belong to this process only: closed in every run and worker (1.8.0, A4: all of them,
+# not only the first; a run orphaned by a signal, the C1 case, must not keep the locks of the other modules taken)
+chiudi_lock() { local f; for f in ${LOCKFDS[@]+"${LOCKFDS[@]}"}; do exec {f}>&-; done; }   # CHIUDI-LOCK
 
 if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
   # stale dependencies: automatic realignment under the lock (fic-mirror.sh, fic_deps_autorefresh), then the
@@ -779,7 +829,7 @@ if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
   fic_deps_ok "$SRCC" "$DSTC" || blocked "$(msg counterproof.deps_still)"
 fi
 for m in "${MODS[@]}"; do
-  pk=${M_PAC[$m]}; src="$ROOT/$pk"; dst="$MIR/$pk"
+  pk=${M_PAC[$m]}; src="$ROOT${pk:+/$pk}"; dst="$MIR${pk:+/$pk}"   # pk "" (1.8.0, A4): the module at the root
   mkdir -p "$dst" || blocked "$(msg counterproof.mirror_mkdir_dst dst="$dst")"
   excl_of "$m"
   fic_sync --delete --checksum "${EX[@]}" "$src/" "$dst/" || blocked "$(msg counterproof.sync_failed pk="$pk")"
@@ -792,13 +842,18 @@ for m in "${MODS[@]}"; do
     mkdir -p "$MIR/$a" &&
       fic_sync --delete --checksum --exclude=node_modules "$ROOT/$a/" "$MIR/$a/" || blocked "$(msg counterproof.sync_failed pk="$a")"
   done < "$TMPD/mod/$m/anche"
+  # 1.8.0 (A4): at the root the cycles folder is out of the manifest too (OUT writes its <id>.json there)
+  lav=$(modv "$m" lavoro)
   git -c safe.directory='*' -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
-    manifest_list "$src" > "$TMPD/list.$m" && [ -s "$TMPD/list.$m" ] || blocked "$(msg counterproof.manifest_nc pk="$pk")"
+    manifest_list "$src" | awk -v p="$lav" 'p == "" || ($0 != p && index($0, p "/") != 1)' > "$TMPD/list.$m" &&
+    [ -s "$TMPD/list.$m" ] || blocked "$(msg counterproof.manifest_nc pk="$pk")"
   hashes "$src" "$TMPD/list.$m" > "$TMPD/src0.$m"
   hashes "$dst" "$TMPD/list.$m" > "$TMPD/base.$m"
   if ! cmp -s "$TMPD/src0.$m" "$TMPD/base.$m"; then
     echo "counterproof: $(msg counterproof.diff_origin pk="$pk")"; diff "$TMPD/src0.$m" "$TMPD/base.$m" | head -5
-    blocked "$(msg counterproof.copy_misaligned pk="$pk")"
+    # at the root the .fic-* names are never copied (copy state and locks of every folder): fail-closed, said
+    [ -n "$pk" ] || ! grep -Eq '(^|/)\.fic-' "$TMPD/list.$m" || echo "counterproof: $(msg counterproof-180.root_fic_name)"
+    blocked "$(msg counterproof.copy_misaligned pk="${pk:-.}")"
   fi
 done
 
@@ -816,7 +871,8 @@ run_cmd() {
   cwd="$mroot${M_RAD[$mod]:+/${M_RAD[$mod]}}"
   if [ -n "$cache" ] && [ "$(cat "$d/runner")" = vitest ]; then allow="$mroot/${M_PAC[$mod]}:$DSTC/node_modules:$DSTC/packages"; fi
   CMD="(cd $cwd && ${allow:+FIC_VITE_CACHE_DIR=$cache FIC_VITE_FS_ALLOW=$allow }$line)"
-  # 9>&-: the lock belongs to the main process only, not to the runs. `& wait`: a signal to the main process makes
+  # chiudi_lock: the locks belong to the main process only, not to the runs (1.8.0, A4: every lock descriptor, not
+  # only fd 9 as before; with a module at the root they are several). `& wait`: a signal to the main process makes
   # the trap fire at once, without waiting for the run to end. The subshell records ITS OWN pid in runpgids, then
   # execs env, which execs `timeout`: the same pid, and `timeout` opens the group with pgid = pid, so the trap kills
   # the whole group. 1.8.0 (C1): recorded BEFORE the run exists. Before, the parent recorded `$!` after the fork: a
@@ -826,9 +882,10 @@ run_cmd() {
   # runpgids): a subshell orphaned by the death of its worker, and recorded after cleanup's last read, gives up
   # instead of starting a run that nobody would kill.
   (cd "$cwd" || exit 1
+   chiudi_lock
    echo "$BASHPID" >> "$TMPD/runpgids"   # REGISTRA
    [ -d "$TMPD" ] && [ ! -e "$TMPD/fine" ] || exit 143   # FINE
-   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") 9>&- > "$w/log" 2>&1 &
+   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") > "$w/log" 2>&1 &
   wait $!
 }
 
@@ -868,7 +925,7 @@ run_one() {
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
     why="$(msg counterproof.file_missing_mirror f="$f")"
   elif ! mf=$(percorso_reale "$mroot/$f" "$mroot/${M_PAC[$mod]}"); then
-    why="$(msg counterproof.link_outside f="$f" real="$(realpath -- "$mroot/$f" 2>/dev/null)" root="${M_PAC[$mod]}")"
+    why="$(msg counterproof-180.link_outside f="$f" real="$(realpath -- "$mroot/$f" 2>/dev/null)" root="${M_PAC[$mod]}")"
   elif mt0=$(modo_tipo "$mf" "$mroot/$f"); ! cp -p "$mf" "$w/bak"; then
     why="$(msg counterproof.backup_failed f="$f")"
   else
@@ -891,7 +948,7 @@ run_one() {
     mt1=$(modo_tipo "$mf" "$mroot/$f")
     if [ "$mt1" != "$mt0" ]; then
       echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"
-      echo "  $(msg counterproof.mode_changed before="$mt0" after="$mt1")"
+      echo "  $(msg counterproof-180.mode_changed before="$mt0" after="$mt1")"
       return 5
     fi
   fi
@@ -994,8 +1051,8 @@ if [ ${#PAR[@]} -gt 0 ]; then
   printf '%s\n' "${PAR[@]}" > "$TMPD/q.all"; echo 0 > "$TMPD/q.next"
   PIDS=()
   for i in $(seq 1 "$N"); do
-    ( w="$TMPD/w$i"; mkdir -p "$w"; : > "$w/results"; : > "$w/inflight"
-      while d=$(next_job) && [ -n "$d" ]; do run_one "$d" "$CPD/$i" "$w" "$CPD/$i/.fic-vite-cache" || exit $?; done ) 9>&- &
+    ( chiudi_lock; w="$TMPD/w$i"; mkdir -p "$w"; : > "$w/results"; : > "$w/inflight"
+      while d=$(next_job) && [ -n "$d" ]; do run_one "$d" "$CPD/$i" "$w" "$CPD/$i/.fic-vite-cache" || exit $?; done ) &
     PIDS+=($!)
   done
   for p in "${PIDS[@]}"; do wait "$p" || INTEG=1; done

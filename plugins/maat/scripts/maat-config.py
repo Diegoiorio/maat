@@ -581,6 +581,11 @@ def cmd_valida(args):
     if len(args) > 1:
         raise Uscita(64, T("maat-config.usage_valida"))
     _cfg, p = carica(args[0] if args else None)
+    # 1.8.0 (A4, DA3): a module with copia at the root of the repository is not supported (counterproof exit 64,
+    # test-fast.sh refuses it): a warning here, before the cycle, not an error (the file stays valid)
+    for i, m in moduli(_cfg):   # AVVISO-COPIA-RADICE
+        if m.get("copia") and norm(m.get("radice_pacchetti", m.get("radice", ""))) == "":
+            err(T("maat-config-180.root_copy", name=p, i=i, nome=m.get("nome", "")))
     print("maat-config: " + T("maat-config.valid", p=p))
 
 

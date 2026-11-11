@@ -402,4 +402,5 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Eligibility for the gate-only path, EXCLUDED-CHANGED (IRC «Freshness») | `review-surface.sh check` | `test-review-surface.sh` |
 | Classification of lint outside the module's `radice` (IRC Step 2.5) | `test-fast.sh --lint --base` | `test-fast.test.sh` |
 | Execution and outcomes of the counterproofs (FIC «Counterproofs») | `counterproof.sh` | `counterproof.test.sh` |
+| Counterproofs of a module at the repository root without `copia` (1.8.0, A4): whole-mirror sync without `.git`, the cycles folder, `.fic-*` at any depth and every module's `collega_nel_worktree`; the lock of every module under one deadline; `copia` at the root refused (64) and announced by `maat-doctor` and `maat-config.py valida` | `counterproof.sh`, `maat-doctor.sh`, `maat-config.py` | `counterproof.test.sh` §16c, `maat-doctor.test.sh` §8b, `maat-config.test.sh` |
 | Lines loaded per phase ≤300 (pt14 goal) | `driver.py righe` | `driver.test.sh` §8 |
