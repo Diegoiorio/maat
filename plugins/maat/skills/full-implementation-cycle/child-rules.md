@@ -9,6 +9,9 @@ live and nobody can answer a question.
   each, a revision, a gate result, the outcome), as plain text, never for routine reads and searches.
 - BATCHING. Independent tool calls (reads, searches, read-only commands) go in one message by default; never
   two Edits on the same file, nor a write with what must see it. Never fewer checks to save turns.
+- AGENTS ALWAYS IN THE FOREGROUND: never `run_in_background` on Agent/Task (`guard.py` denies it here). Parallel
+  reviewers = several Agent calls in the same message: they already run in parallel and you get every verdict
+  before your next turn.
 - COLLECT what you launch in background (BashOutput/TaskOutput until it has finished; the Bash tool caps at
   600000 ms): a `Stop` hook sends back a turn without `PHASE RESULT` or with an uncollected job, and a run you
   did not collect is `BLOCKED (run non raccolto)`.

@@ -69,6 +69,30 @@ hook allow "TaskStop sul job: ammesso"
 { BG_START; use tu5 Bash '{"command":"sleep 5","run_in_background":true}'; res tu5 'Command running in background with ID: b456. Output is being written to: C:\\x'; notif b123 completed; txt "$OK_LINE"; } > "$TR"
 hook block "due job, uno solo concluso: negato per l'altro" false "b456"
 
+# --- 1.8.0 (D2): agents launched asynchronously (Agent/Task with run_in_background) ---
+AG_RES='Async agent launched successfully. (This tool result is internal metadata.)\nagentId: ac655 (internal ID)\nThe agent is working in the background. You will be notified automatically when it completes.'
+AG_START() { use ta1 Agent '{"description":"L1","subagent_type":"maat:spec-plan-reviewer","prompt":"x","run_in_background":true}'; res ta1 "$AG_RES"; }
+{ AG_START; txt "$OK_LINE"; } > "$TR"
+hook block "agente asincrono senza notifica: negato (anche con ESITO), motivo nuovo" false "agenti in background non raccolti: ac655 — attendi le notifiche dei revisori"
+hook allow "  con stop_hook_active: lascia chiudere (difesa, non garanzia)" true
+{ AG_START; notif ac655 completed; txt "$OK_LINE"; } > "$TR"
+hook allow "agente asincrono con notifica completed: ammesso"
+{ AG_START; notif ac655 running; txt "$OK_LINE"; } > "$TR"
+hook block "agente con notifica senza stato finale: ancora negato" false "ac655"
+{ use ta2 Task '{"description":"L2","prompt":"x","run_in_background":true}'; res ta2 "$AG_RES"; txt "$OK_LINE"; } > "$TR"
+hook block "Task asincrono senza notifica: negato" false "ac655"
+{ use ta3 Agent '{"description":"L1","prompt":"x"}'; res ta3 'APPROVED\nagentId: ab12 (use SendMessage to continue)'; txt "$OK_LINE"; } > "$TR"
+hook allow "agente in primo piano (risultato senza Async agent launched): ammesso"
+# counterproof: the open jobs of Bash only, as in 1.7 → the asynchronous agent is not seen (the first case red)
+SHX="$T/mut/stop-hook.py"; mkdir -p "$T/mut/lib"; cp "$HERE/maat_msg.py" "$T/mut/"; cp "$HERE/lib/messages.tsv" "$T/mut/lib/"
+sed 's/elif name in AGENT_TOOLS and AGENT_BG_RE.search(res\[:300\]):/elif False:/' "$SH" > "$SHX"
+if ! cmp -s "$SH" "$SHX"; then
+  { AG_START; txt "$OK_LINE"; } > "$TR"
+  SH_SALVA=$SH; SH=$SHX
+  hook allow "controprova D2: con i soli job Bash l'agente asincrono passa (il primo caso diventa rosso)"
+  SH=$SH_SALVA
+else fail=$((fail + 1)); echo "FAIL controprova D2: la mutazione non si applica"; fi
+
 # --- 1.4.0, English (MAAT_LINGUA=en, inherited by the sub-session from run-phase.sh): both reasons from the catalog ---
 { BG_START; txt "ho finito"; } > "$TR"
 n=$((n + 1))
