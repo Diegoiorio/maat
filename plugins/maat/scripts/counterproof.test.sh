@@ -646,6 +646,56 @@ check "controprova: strumenti non controllati -> niente «manca sha256sum», ros
 caso_ripiego >/dev/null   # copy realigned after the mutants
 rm -rf "$M/apps/admin/node_modules/tieni" "$M/apps/admin/vuota-estranea" "$MA/__pycache__"
 
+# 16b. (1.8.0, A5) the mutation keeps the mode of the file and does not break a link (own configuration a5.json:
+#      module sx, `comando` runner, and lib for a link that leaves the module).
+#      - an executable script mutated: its test exits 0 when the file is NOT executable («non eseguibile» = green) and
+#        1 when its output says ROSSO → rosso_generico (1.7: the file reborn 0644, verde); mode 755 after the restore
+#      - a symbolic link inside the module mutated: the target is mutated, and after the restore the link is still a
+#        link to the same target, with the content of before; the same with a signal halfway through the run (the
+#        restore of cleanup, FAKE_KILL)
+#      - a link to a file outside the module → bloccato «collegamento fuori dal modulo», nothing mutated
+#      Counterproofs: chmod taken out of apply() → verde, red; restore on the path of the link (as in 1.7) → the link
+#      becomes a file, red.
+mkdir -p "$R/v/sx"
+printf '#!/usr/bin/env bash\necho UNO\n' > "$R/v/sx/core.sh"; chmod 755 "$R/v/sx/core.sh"
+printf '[ -x core.sh ] || { echo "non eseguibile"; exit 0; }\n./core.sh | grep -q ROSSO && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-x.sh"
+echo 'UNO=1' > "$R/v/sx/dati.txt"; ln -s dati.txt "$R/v/sx/link.txt"; ln -s ../../z/lib/core.txt "$R/v/sx/fuori.txt"
+printf 'grep -q ROSSO link.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-l.sh"
+printf 'grep -q ROSSO fuori.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-f.sh"
+printf 'grep -q ROSSO link.txt && npx uccidi\nexit 0\n' > "$R/v/sx/t-k.sh"
+(cd "$R" && git add -A && git commit -qm a5) > /dev/null 2>&1
+cat > "$T/a5.json" <<EOF
+{"versione_schema": 1, "moduli": [
+  {"nome": "sx", "radice": "v/sx", $CMDC},
+  {"nome": "lib", "radice": "z/lib", $CMDC}
+]}
+EOF
+SX=$HOME/fic-mirror/v/sx
+ta5() { entry "$1" "v/sx/$2" "$3" "$4" "v/sx/$5" "v/sx/$5" 'rosso'; }
+LX=$(mj a5x.json "[$(ta5 X1 core.sh 'echo UNO' 'echo ROSSO' t-x.sh)]")
+LK=$(mj a5k.json "[$(ta5 K1 link.txt 'UNO=1' 'UNO=1 ROSSO' t-l.sh)]")
+LS=$(mj a5s.json "[$(ta5 K2 link.txt 'UNO=1' 'UNO=1 ROSSO' t-k.sh)]")
+LF=$(mj a5f.json "[$(ta5 O1 fuori.txt 'UNO=1' 'UNO=1 ROSSO' t-f.sh),$(te L1 z/lib)]")
+caso_x() { MAAT_CONFIG=$T/a5.json CPX=${1:-} cpr "$LX"
+  [ "$(rc)" = 0 ] && [ "$(field X1 esito)" = rosso_generico ] && [ "$(field X1 controprova)" = PASS ] && [ "$(stat -c %a "$SX/core.sh")" = 755 ] && grep -qx "echo UNO" "$SX/core.sh"; }
+link_intatto() { [ -L "$SX/link.txt" ] && [ "$(readlink "$SX/link.txt")" = dati.txt ] && [ -f "$SX/dati.txt" ] && [ ! -L "$SX/dati.txt" ] && grep -qx "UNO=1" "$SX/dati.txt"; }
+caso_k() { MAAT_CONFIG=$T/a5.json CPX=${1:-} cpr "$LK"
+  [ "$(rc)" = 0 ] && [ "$(field K1 esito)" = rosso_generico ] && link_intatto; }
+caso_x
+check "16b script eseguibile mutato: resta eseguibile durante il run → rosso_generico, PASS; modo 755 dopo il ripristino" '[ "$(rc)" = 0 ] && [ "$(field X1 esito)" = rosso_generico ] && [ "$(field X1 controprova)" = PASS ] && [ "$(stat -c %a "$SX/core.sh")" = 755 ] && grep -qx "echo UNO" "$SX/core.sh"'
+caso_k
+check "  collegamento interno mutato: il bersaglio vede la mutazione (rosso_generico); dopo il ripristino ancora un collegamento a dati.txt, contenuto di prima" '[ "$(rc)" = 0 ] && [ "$(field K1 esito)" = rosso_generico ] && link_intatto'
+MAAT_CONFIG=$T/a5.json FAKE_KILL="$CP" cpr "$LS"
+check "  lo stesso con un segnale a metà run: exit 143, il ripristino di cleanup lascia il collegamento intatto" '[ "$(rc)" = 143 ] && link_intatto'
+MAAT_CONFIG=$T/a5.json cpr "$LF"
+check "  collegamento verso fuori dal modulo → bloccato «collegamento fuori dal modulo», nessuna mutazione" '[ "$(field O1 esito)" = bloccato ] && field O1 motivo | grep -q "collegamento fuori dal modulo" && [ -L "$SX/fuori.txt" ] && grep -qx "UNO=1" "$HOME/fic-mirror/z/lib/core.txt" && [ "$(field L1 esito)" = rosso_generico ]'
+# counterproofs on plugin copies (mut16: a sed on one file of the copy)
+m=$(mut16 a5-chmod counterproof.sh 's/^    os\.chmod(path, stat\.S_IMODE(st\.st_mode))$/    pass   # CHMOD tolto/')
+check "controprova: chmod tolto da apply() → il file perde il bit x, verde: il caso 16b è rosso" '[ -n "$m" ] && ! caso_x "$m" && [ "$(field X1 esito)" = verde ]'
+m=$(mut16 a5-restore counterproof.sh 's/^    restore "\$w\/bak" "\$mf"   # RESTORE$/    restore "$w\/bak" "$mroot\/$f"   # RESTORE sul collegamento/')
+check "controprova: restore sul percorso del collegamento (come in 1.7) → il collegamento diventa un file: rosso" '[ -n "$m" ] && ! caso_k "$m" && [ ! -L "$SX/link.txt" ]'
+rm -f "$SX/link.txt"; ln -s dati.txt "$SX/link.txt"   # the mirror as before the counterproof
+
 # 17. project root: from PROJECT_ROOT, never from the script location; without it (outside a repo) -> exit 64.
 #     Counterproof: ROOT again from $HERE/../.. -> the cases above are red.
 mkdir -p "$T/nogit"

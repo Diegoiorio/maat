@@ -603,6 +603,8 @@ counterproof.file_missing_mirror	file missing in the mirror: {f}	file assente ne
 counterproof.backup_failed	backup copy failed: {f}	copia di sicurezza non riuscita: {f}
 counterproof.not_applicable	mutation not applicable	mutazione non applicabile
 counterproof.not_restored	{mroot} NOT restored after {mut} ({f}):	{mroot} NON ripristinato dopo {mut} ({f}):
+counterproof.mode_changed	mode or type of the file not restored: before {before}, after {after}	modo o tipo del file non ripristinato: prima {before}, dopo {after}
+counterproof.link_outside	link outside the module: {f} -> {real} (outside {root}), no mutation	collegamento fuori dal modulo: {f} -> {real} (fuori da {root}), nessuna mutazione
 counterproof.result_unwritable	result not writable in {out}	risultato non scrivibile in {out}
 counterproof.not_integer	FIC_CP_PARALLEL and FIC_CP_MEM_MB want an integer	FIC_CP_PARALLEL e FIC_CP_MEM_MB vogliono un intero
 counterproof.integrity_mirror	integrity: mirror not restored, list interrupted	integrita': mirror non ripristinato, lista interrotta

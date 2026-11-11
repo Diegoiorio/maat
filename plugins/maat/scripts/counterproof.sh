@@ -91,6 +91,11 @@
 #   only, restore (unlink + copy), then the hash of the module in the mirror compared again with the initial manifest. If
 #   it does not match -> exit 5 and it stops (a dirty mirror would falsify the following mutations). If the script dies
 #   halfway, the EXIT trap restores the in-flight file.
+#   1.8.0 (A5): the file is the REAL path, resolved once (a symbolic link inside the module copy is followed; one that
+#   leads outside it -> bloccato «collegamento fuori dal modulo», nothing mutated): backup, in-flight record, mutation,
+#   restore and the restore of the EXIT trap all work on it, so a link stays a link. The mutation keeps the mode (and,
+#   when allowed, the owner) of the file; after the restore the mode of the file and the type of the path (a link to
+#   the same target, if it was one) are compared with those of before: different -> exit 5, like the manifest.
 # - {python}: $FIC_PYTEST_PY if set (override); otherwise, for an `ambiente: wsl` module, the gates.sh
 #   search (moduli[].python, string or list, relative to the root; then piattaforma.python; then python3: the first
 #   that exists, here inside WSL) and none -> exit 3 «python WSL assente»; for a native module the reader's
@@ -192,7 +197,7 @@ OUT=$(cd "$(dirname "$MJ")" && pwd)
 
 # Logic on JSON and reports, in Python (no jq in WSL). No single quote in here.
 PY='
-import importlib.util, json, os, posixpath, re, shutil, sys
+import importlib.util, json, os, posixpath, re, shutil, stat, sys
 import xml.etree.ElementTree as ET
 sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
 _s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
@@ -494,9 +499,19 @@ def apply(path, cf, sf):
         print(T("counterproof.search_count", n=n))
         sys.exit(2)
     new = data.replace(cerca, sost, 1)
+    # 1.8.0 (A5): `path` is the real path (run_one resolves a link). unlink + write as before (a hardlink is split on
+    # purpose: never mutate a shared inode), then the mode and, when allowed, the owner of before: an executable
+    # script stays executable during the run
+    st = os.stat(path)
     os.unlink(path)
     with open(path, "wb") as fh:
         fh.write(new)
+    os.chmod(path, stat.S_IMODE(st.st_mode))
+    if hasattr(os, "chown"):
+        try:
+            os.chown(path, st.st_uid, st.st_gid)
+        except PermissionError:
+            pass
 
 def vitest_ids(a):
     # names by which a test can be cited: fullName (ancestors + title, joined by a space), the title, and every
@@ -674,6 +689,7 @@ cleanup() {
   : > "$TMPD/fine"   # before any read of runpgids: a run recorded after this does not start (run_cmd)
   kill_tree; kill_runs; kill_tree; wait 2>/dev/null
   runs_gone   # ATTESA: no run still alive inside the copy deleted below
+  # inflight holds the real path (run_one, 1.8.0): a link mutated through its target stays a link
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
   [ -n "$CPD" ] && rm -rf "$CPD"
   rm -rf "$TMPD"
@@ -816,16 +832,30 @@ run_cmd() {
   wait $!
 }
 
-restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <backup copy> <file>: unlink + copy
+restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <backup copy> <file>: unlink + copy (the real path: a link stays a link)
+
+# 1.8.0 (A5): <path> <module copy root> → the real path of <path> (a symbolic link resolved, also one in a parent
+# folder), only if it is inside the module copy; exit 1 otherwise (the mutation would land outside the module)
+percorso_reale() {
+  local r b
+  r=$(realpath -- "$1" 2>/dev/null) && b=$(realpath -- "$2" 2>/dev/null) || return 1
+  case "$r" in "$b"/*) printf '%s' "$r" ;; *) return 1 ;; esac
+}
+# <real path> <path of the mutation> → «<mode> link:<target>» or «<mode> file»: compared before and after the restore
+modo_tipo() {
+  local t=file
+  [ -L "$2" ] && t="link:$(readlink -- "$2")"
+  printf '%s %s' "$(stat -c %a -- "$1" 2>/dev/null)" "$t"
+}
 
 # ONE mutation in a root that mirrors the repo: the mirror (step 1) or a private copy (step 2).
 # <mutation dir> <root> <work dir> [vite cacheDir]. Writes <id>.json, appends the result line to
 # <work dir>/results. Returns 5 if after the restore the root is not identical to the initial manifest.
 run_one() {
   local d=$1 mroot=$2 w=$3 cache=${4:-}
-  local f mod py rep line mf why rc t0 ms out cp esito ids
+  local f mod py rep line mf why rc t0 ms out cp esito ids mt0 mt1
   f=$(cat "$d/file"); mod=$(cat "$d/modulo"); py=$(cat "$d/python")
-  mf="$mroot/$f"
+  mf="$mroot/$f"   # 1.8.0 (A5): becomes the real path below, used by backup, inflight, apply and restore
   rm -f "$w/report" "$w/bak"; : > "$w/log"
   why=""; rc=0; CMD=""; t0=$(date +%s%N)
   # a Windows interpreter (.exe, launched from WSL) writes the report with a Windows path
@@ -837,7 +867,9 @@ run_one() {
     why="$(msg counterproof.cmd_not_expandable err="$(head -1 "$w/log")")"
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
     why="$(msg counterproof.file_missing_mirror f="$f")"
-  elif ! cp -p "$mf" "$w/bak"; then
+  elif ! mf=$(percorso_reale "$mroot/$f" "$mroot/${M_PAC[$mod]}"); then
+    why="$(msg counterproof.link_outside f="$f" real="$(realpath -- "$mroot/$f" 2>/dev/null)" root="${M_PAC[$mod]}")"
+  elif mt0=$(modo_tipo "$mf" "$mroot/$f"); ! cp -p "$mf" "$w/bak"; then
     why="$(msg counterproof.backup_failed f="$f")"
   else
     printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
@@ -852,6 +884,14 @@ run_one() {
     hashes "$mroot/${M_PAC[$mod]}" "$TMPD/list.$mod" > "$w/now.$mod"
     if ! cmp -s "$TMPD/base.$mod" "$w/now.$mod"; then
       echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"; diff "$TMPD/base.$mod" "$w/now.$mod" | head -5
+      return 5
+    fi
+    # 1.8.0 (A5): the manifest sees only the content; the mode of the file and the type of the path (still a link to
+    # the same target, if it was one) too, otherwise exit 5 like the integrity
+    mt1=$(modo_tipo "$mf" "$mroot/$f")
+    if [ "$mt1" != "$mt0" ]; then
+      echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"
+      echo "  $(msg counterproof.mode_changed before="$mt0" after="$mt1")"
       return 5
     fi
   fi
