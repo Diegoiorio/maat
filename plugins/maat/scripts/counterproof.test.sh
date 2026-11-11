@@ -22,6 +22,9 @@ check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAI
 NPROC=$(nproc 2>/dev/null || echo 0)
 check_par() { if [ $((NPROC / 2)) -ge 2 ]; then check "$@"; else echo "SALTATO [$1]: il gradino 2 vuole almeno 4 CPU (nproc $NPROC)"; fi; }
 unset MAAT_CONFIG MAAT_ROOT FIC_REPO PROJECT_ROOT FIC_GATES_VENV_PY MAAT_MODULO
+# 1.8.0 (C1): the lock wait of every case is 60 s, not the default 900: a lock held by an orphan of an earlier case
+# fails soon and says so (BLOCKED «mirror occupato») instead of hanging the suite past the CI job
+export FIC_LOCK_WAIT=60
 
 # fake repo: .claude/maat.json (the example) + modules/app + modules/api
 R=$T/repo; A=$R/modules/app; AD=$A/apps/admin; API=$R/modules/api
@@ -75,7 +78,10 @@ if [ -n "${FAKE_KILL:-}" ]; then
     case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) tgt+=" $p" ;; esac
   done
   tgt=$(printf '%s\n' $tgt $(pgrep -f "$FAKE_KILL" 2>/dev/null) | sort -un)
-  [ -z "$tgt" ] || kill -TERM $tgt 2>/dev/null
+  # FAKE_KILL_RAFFICA (1.8.0): a burst of 200 TERM with no gap (no fork between them), as from several runs
+  # signalling at the same moment
+  nk=1; [ -z "${FAKE_KILL_RAFFICA:-}" ] || nk=200
+  [ -z "$tgt" ] || for ((k = 0; k < nk; k++)); do kill -TERM $tgt 2>/dev/null; done
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
@@ -361,13 +367,87 @@ FAKE_KILL="$CP" FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 \
   cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 sleep 1
 check_par "segnale nel gradino 2: il trap non aspetta la fine dei run" '[ $(( $(date +%s) - t0 )) -lt 25 ] && [ "$(rc)" = 143 ]'
-# 1.6.1: the trap's kills and cleanup finish a moment after counterproof exits; on a loaded runner one second was not
-# enough (CI of 2026-11-06, Linux). Wait up to 15 s for them; a process that really survives still fails the check.
-for _ in $(seq 1 30); do [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && flock -n "$M/.fic-lock" true && break; sleep 0.5; done
-check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ]'
+# 1.8.0 (C1): no more waiting here (1.6.1 waited up to 15 s, and 3 runs out of 12 under load still failed: the runs
+# really survived, their group unrecorded). Each run records its group before it exists, and cleanup waits (at most
+# 5 s) for the recorded groups to be empty before deleting the copies: when counterproof.sh has exited, nothing is
+# left, so the checks are made at once.
+check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ] || { echo "    superstiti: $(for p in $(alive); do ps -o pid=,ppid=,pgid=,stat=,args= -p "$p" 2>/dev/null; done | tr "\n" ";")"; false; }'
 check "  nessuna copia fic-cp.* residua, mirror invariato, lock libero" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true'
 for p in $(alive); do kill -KILL "$p" 2>/dev/null; done
 rm -rf "$HOME"/fic-cp.*   # 1.6.1: a failure here stays here (it used to fail the «nessuna copia» checks of later cases too)
+
+# 11c. (1.8.0, C1) the race of 11b made certain: the fake run signals counterproof.sh as soon as it starts, and the
+#      registration of the group is delayed (FAKE_KILL_DELAY_REGISTRA seconds, in a copy of the plugin: a `sleep`
+#      before the line that records the group). Registered before the run exists → the delay only delays the run:
+#      no survivor, no copy. Counterproof: the registration after the fork (as in 1.7: the parent writes `$!`) with the
+#      same delay → the TERM kills the subshell before it writes, the group of `timeout` is orphaned: survivors, red.
+# $1 = name, $2 = python replacement program on the text of counterproof.sh → the mutated script, empty if unchanged
+mut_cp() {
+  local d=$T/mut11-$1; mkplug "$d"
+  python3 -c "$2" "$CP" "$d/scripts/counterproof.sh" && ! cmp -s "$CP" "$d/scripts/counterproof.sh" && printf '%s' "$d/scripts/counterproof.sh"
+}
+caso_registra() {  # <script>: step 2 killed by the first run, the registration delayed 2 s → rc, survivors, copies
+  rm -f "$FAKE_LOG.pids"
+  FAKE_KILL="$1" FAKE_KILL_SLEEP=30 FAKE_KILL_DELAY_REGISTRA=2 FIC_CP_PARALLEL=2 CPX="$1" \
+    cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && [ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 &&
+    [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true
+}
+pulisci11() { local p; for p in $(alive); do kill -KILL "$p" 2>/dev/null; done; rm -rf "$HOME"/fic-cp.*; }
+# the delay before the registration line, whatever its form (1.8.0: the subshell writes its own pid; 1.7: `$!`)
+m=$(mut_cp ritardo 'import sys
+t = open(sys.argv[1]).read()
+z = "sleep \"${FAKE_KILL_DELAY_REGISTRA:-0}\"; "
+for a in ("   echo \"$BASHPID\" >> \"$TMPD/runpgids\"", "   echo $! >> \"$TMPD/runpgids\"; wait $!)"):
+    if t.count(a) == 1:
+        t = t.replace(a, "   " + z + a[3:])
+        break
+open(sys.argv[2], "w").write(t)')
+check "  premessa 11c: la registrazione del gruppo ritardata nella copia del plugin" '[ -n "$m" ] && grep -q "FAKE_KILL_DELAY_REGISTRA" "$m"'
+diag11() {  # detail of a red: rc, survivors with their group, copies, lock, mirror
+  echo "    rc=$(rc) superstiti: $(for p in $(alive); do ps -o pid=,ppid=,pgid=,stat=,args= -p "$p" 2>/dev/null; done | tr '\n' ';')"
+  echo "    copie: $(ls -d "$HOME"/fic-cp.* 2>&1 | tr '\n' ' ') lock: $(flock -n "$M/.fic-lock" true && echo libero || echo preso) mirror: $([ "$(mir_hash)" = "$MIR1" ] && echo invariato || echo cambiato)"
+  sed 's/^/    out: /' "$T/out" | tail -6
+}
+check_par "11c registrazione ritardata (FAKE_KILL_DELAY_REGISTRA) e segnale appena parte il run → exit 143, nessun superstite, nessuna copia, lock libero" '[ -n "$m" ] && caso_registra "$m" || { diag11; false; }'
+pulisci11
+# counterproof: the 1.7 form (the parent records $! after the fork), with the same delay
+m=$(mut_cp dopo-fork 'import sys
+t = open(sys.argv[1]).read()
+a = """   echo "$BASHPID" >> "$TMPD/runpgids"   # REGISTRA
+   [ -d "$TMPD" ] && [ ! -e "$TMPD/fine" ] || exit 143   # FINE
+   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") 9>&- > "$w/log" 2>&1 &
+"""
+b = """   env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line" &
+   sleep "${FAKE_KILL_DELAY_REGISTRA:-0}"; echo $! >> "$TMPD/runpgids"; wait $!) 9>&- > "$w/log" 2>&1 &
+"""
+open(sys.argv[2], "w").write(t.replace(a, b, 1))')
+check "controprova: premessa, la registrazione dopo il fork (com era in 1.7) applicata" '[ -n "$m" ] && grep -q "echo \$! >> \"\$TMPD/runpgids\"" "$m"'
+check_par "controprova: registrazione dopo il fork, con il ritardo → superstiti o copia residua: il caso 11c è rosso" '[ -n "$m" ] && ! caso_registra "$m"'
+pulisci11
+
+# 11d. (1.8.0, C1) a burst of TERM (FAKE_KILL_RAFFICA: 200 signals after the first, as from the two runs of 11b at the
+#      same moment) does not cut cleanup short: the handler exits once. Step 1 (the mirror file restored by cleanup)
+#      and step 2 (no survivor, no copy). Counterproof: the handler of 1.7 (`exit 143` at every signal) → cleanup cut
+#      short; seen 39 times out of 40, so up to three rounds, red if one is.
+caso_raffica() {  # <script>
+  local s=$1
+  FAKE_KILL="$s" FAKE_KILL_RAFFICA=1 CPX="$s" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && flock -n "$M/.fic-lock" true || return 1
+  rm -f "$FAKE_LOG.pids"
+  FAKE_KILL="$s" FAKE_KILL_RAFFICA=1 FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 CPX="$s" \
+    cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ]
+}
+check_par "11d raffica di TERM: la pulizia non si interrompe (mirror ripristinato, lock libero; nel gradino 2 nessun superstite, nessuna copia)" 'caso_raffica "$CP" || { diag11; false; }'
+pulisci11
+m=$(mut_cp gestore-17 'import sys
+t = open(sys.argv[1]).read()
+a = "trap '"'"'[ -n \"$CP_FINE\" ] || { CP_FINE=1; exit 143; }'"'"' TERM INT HUP"
+open(sys.argv[2], "w").write(t.replace(a, "trap '"'"'exit 143'"'"' TERM INT HUP", 1))')
+r11d=0; for _ in 1 2 3; do caso_raffica "$m" || { r11d=1; break; }; done
+check_par "controprova: il gestore della 1.7 (exit 143 a ogni segnale) → la raffica interrompe la pulizia: rosso" '[ -n "$m" ] && [ $r11d = 1 ]'
+pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"   # the mirror as before the counterproof
 
 # 12. from a worktree (pt03): same rule as test-fast.sh — copy ~/fic-mirror-<hash> (seeded from
 #     ~/fic-mirror) and ITS lock; the worktree code never enters the main tree's copy.

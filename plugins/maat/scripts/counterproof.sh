@@ -113,8 +113,10 @@
 # SIGNALS
 # - TERM, INT (Ctrl-C), HUP: the trap fires at once (runs go in the background and are awaited with `wait`) and,
 #   in order, KILLs all descendants — workers, `timeout`, the runner command and its children — and the
-#   process groups opened by `timeout` (recorded by pid: they outlive the workers if a Ctrl-C kills those first),
-#   restores the in-flight file in the mirror, deletes the private copies $HOME/fic-cp.*; other signals during cleanup
+#   process groups opened by `timeout` (recorded by pid: they outlive the workers if a Ctrl-C kills those first;
+#   1.8.0: each run records its group itself, before it exists, so no run escapes the record), waits at most 5 s
+#   for the recorded groups to be empty, restores the in-flight file in the mirror, deletes the private copies
+#   $HOME/fic-cp.*; other signals during cleanup
 #   are ignored, so that they do not interrupt it halfway. It exits 143;
 #   the <id>.json already written stay, those not yet written are missing: the run is not complete.
 # - KILL (or the death of WSL) cannot be trapped: what may remain is a mutated file in the mirror (realigned by the
@@ -654,17 +656,36 @@ kill_runs() {  # the groups opened by `timeout`: they outlive the workers if tho
   [ -f "$TMPD/runpgids" ] || return 0
   while read -r p; do [ -n "$p" ] && kill -KILL -- "-$p" "$p" 2>/dev/null; done < "$TMPD/runpgids"
 }
+runs_gone() {  # 1.8.0 (C1): up to 5 s for the recorded groups to be empty (kill -0 on the group), killing again
+  local p k vivo
+  [ -f "$TMPD/runpgids" ] || return 0
+  for k in $(seq 1 25); do
+    vivo=0
+    while read -r p; do [ -n "$p" ] && kill -0 -- "-$p" 2>/dev/null && { vivo=1; break; }; done < "$TMPD/runpgids"
+    [ $vivo = 0 ] && return 0
+    kill_runs; sleep 0.2
+  done
+  return 1
+}
 cleanup() {
   # A second signal during cleanup would interrupt it halfway (copies and processes left behind): from here
   # on signals are ignored.
-  trap '' TERM INT HUP
+  CP_FINE=1; trap '' TERM INT HUP
+  : > "$TMPD/fine"   # before any read of runpgids: a run recorded after this does not start (run_cmd)
   kill_tree; kill_runs; kill_tree; wait 2>/dev/null
+  runs_gone   # ATTESA: no run still alive inside the copy deleted below
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
   [ -n "$CPD" ] && rm -rf "$CPD"
   rm -rf "$TMPD"
   [ -z "$LOCKD" ] || fic_unlock_dir "$LOCKD" "$$"   # last: the mirror is already restored
 }
-trap 'exit 143' TERM INT HUP
+# 1.8.0 (C1): the handler exits only once (CP_FINE). Before, a second TERM (two runs that signal at the same moment,
+# case 11b) arriving between `exit 143` and the first line of cleanup ran `exit 143` again inside the EXIT trap:
+# cleanup cut short, nothing killed, the copies left (seen on 11b: both groups of `timeout` alive and recorded, the
+# copy still there; a burst of TERM cut it short 39 times out of 40). A flag, not `trap ''` in the handler: bash
+# warns «run_pending_traps: bad value» on a signal pending while its trap becomes ignored.
+CP_FINE=""
+trap '[ -n "$CP_FINE" ] || { CP_FINE=1; exit 143; }' TERM INT HUP
 trap cleanup EXIT
 
 info=$("$FIC_PY" -c "$PY" prep "$MJ" "$ROOT" "$TMPD" "$OUT") || exit 64
@@ -780,11 +801,18 @@ run_cmd() {
   if [ -n "$cache" ] && [ "$(cat "$d/runner")" = vitest ]; then allow="$mroot/${M_PAC[$mod]}:$DSTC/node_modules:$DSTC/packages"; fi
   CMD="(cd $cwd && ${allow:+FIC_VITE_CACHE_DIR=$cache FIC_VITE_FS_ALLOW=$allow }$line)"
   # 9>&-: the lock belongs to the main process only, not to the runs. `& wait`: a signal to the main process makes
-  # the trap fire at once, without waiting for the run to end. The pid of `timeout` (env does exec) is also the
-  # pgid of the group it opens: recorded in runpgids, the trap kills the whole group.
+  # the trap fire at once, without waiting for the run to end. The subshell records ITS OWN pid in runpgids, then
+  # execs env, which execs `timeout`: the same pid, and `timeout` opens the group with pgid = pid, so the trap kills
+  # the whole group. 1.8.0 (C1): recorded BEFORE the run exists. Before, the parent recorded `$!` after the fork: a
+  # run that signalled counterproof.sh at once (the TERM reaches the subshell before its `echo`) left its group
+  # unrecorded, orphaned of init and out of reach of kill_tree, alive inside the copy being deleted. Then, after its
+  # record, the subshell starts the run only if cleanup has not begun ($TMPD/fine, written by cleanup BEFORE it reads
+  # runpgids): a subshell orphaned by the death of its worker, and recorded after cleanup's last read, gives up
+  # instead of starting a run that nobody would kill.
   (cd "$cwd" || exit 1
-   env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line" &
-   echo $! >> "$TMPD/runpgids"; wait $!) 9>&- > "$w/log" 2>&1 &
+   echo "$BASHPID" >> "$TMPD/runpgids"   # REGISTRA
+   [ -d "$TMPD" ] && [ ! -e "$TMPD/fine" ] || exit 143   # FINE
+   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") 9>&- > "$w/log" 2>&1 &
   wait $!
 }
 
