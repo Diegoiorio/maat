@@ -147,3 +147,6 @@ scripts/*	ESITO FASE	forma italiana della riga di esito delle fasi, letta accant
 scripts/nomi_test.py	^"(uguale|discendente|antenato|altro)"$	valori di relazione() (uguale | discendente | antenato | altro), letti da plan-check.sh rossi e counterproof.sh: uguali in ogni lingua
 scripts/plan-check.sh	^"(uguale|discendente|antenato)"$	valori di nomi_test.relazione() letti da py_claim e vt_claim
 scripts/counterproof.sh	^"(uguale|discendente|antenato)"$	valori di nomi_test.relazione() letti da classify_pytest e vitest_mio
+
+# --- 1.8.0 (A2): the token of the plan template that F11 of taglia reads in the plans of both languages
+scripts/plan-check.sh	nessuna implicazione	token del modello del piano («<aree>: nessuna implicazione», autore.md), letto da size_negated in ogni lingua

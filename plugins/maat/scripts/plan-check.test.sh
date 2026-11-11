@@ -1663,6 +1663,32 @@ expect 0 "^Taglia: piccola" "taglia F11: author non e' una parola di sicurezza" 
 if kmut f11 's/for m in (sec_rx.finditer(t) if sec_rx else \[\]):  # F11-SICUREZZA/for m in []:/'; then
   expect 0 "^Taglia: piccola" "controprova F11: senza le parole di sicurezza la password da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11s.md"
 else echo "FAIL [controprova F11: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.0 (A2): the negated lists of the plan template («…, permissions, …: no implication») do not count for F11
+kadd "$K/k.md" "$K/f11e3.md" '^Risk surfaces: shared-logic$' 'Validation, permissions, persistence, UI, migration: no implication. Data flow: only the parsing of `Span`'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): la riga di modello di E3 «permissions: no implication» = piccola" -- ktg "$K/f11e3.md"
+kadd "$K/k.md" "$K/f11pr.md" '^Risk surfaces: shared-logic$' 'Permission rules: only the owner may change the page.'
+expect 0 "^Taglia: piena — sicurezza: Permission \(piano riga [0-9]+\)$" "taglia F11 (A2): «Permission rules: only the owner…» e' contenuto = piena" -- ktg "$K/f11pr.md"
+kadd "$K/k.md" "$K/f11at.md" '^Risk surfaces: shared-logic$' 'Data flow, permissions: no implication. The auth token is sent in a cookie'
+expect 0 "^Taglia: piena — sicurezza: auth \(piano riga [0-9]+\), cookie \(piano riga [0-9]+\)$" "taglia F11 (A2): la frase dopo la negazione conta (auth, cookie), permissions no" -- ktg "$K/f11at.md"
+kadd "$K/k.md" "$K/f11ps.md" '^Risk surfaces: shared-logic$' 'permissions, sessions: no implication'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): «permissions, sessions: no implication» = piccola (tutte le parole dell'elenco)" -- ktg "$K/f11ps.md"
+kadd "$K/k.md" "$K/f11bo.md" '^Risk surfaces: shared-logic$' '- **Data flow / UI / Permissions:** No implication (a pure function).' 'Cookie, sessions: nessuna implicazione.'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): ** e maiuscole indifferenti, token italiano" -- ktg "$K/f11bo.md"
+kadd "$K/k.md" "$K/f11fo.md" '^Risk surfaces: shared-logic$' 'Permissions: no implication for guests, the admin role changes.'
+expect 0 "^Taglia: piena — sicurezza: Permissions" "taglia F11 (A2): «no implication for …» non e' la riga di modello = piena" -- ktg "$K/f11fo.md"
+kadd "$K/k.md" "$K/f11no.md" '^Risk surfaces: shared-logic$' 'Auth: none required for the admin route.'
+expect 0 "^Taglia: piena — sicurezza: Auth \(piano riga [0-9]+\)$" "taglia F11 (A2): «Auth: none…» non e' un token del modello = piena" -- ktg "$K/f11no.md"
+sed 's/^Risk surfaces: shared-logic$/Risk surfaces: permissions, shared-logic/' "$K/f11e3.md" > "$K/f11d.md"
+expect 0 "^Taglia: piena — superfici critiche: permessi \(dichiarata\)$" "taglia F11 (A2): permissions dichiarata e «no implication» altrove = piena (F7)" -- ktg "$K/f11d.md"
+if kmut negriga 's/spans.append((s + a, s + len(c) - 1))/spans.append((0, len(t)))/'; then
+  expect 0 "^Taglia: piccola" "controprova A2: negazione estesa a tutta la riga → «auth token» da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11at.md"
+else echo "FAIL [controprova A2 riga: la mutazione non si applica]"; fail=$((fail+1)); fi
+if kmut negnone 's/^SIZE_NEG = re.compile(.*$/SIZE_NEG = re.compile(r"(?:no implication|nessuna implicazione|none)", re.I)/'; then
+  expect 0 "^Taglia: piccola" "controprova A2: negazione estesa a «: none» → «Auth: none required» da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11no.md"
+else echo "FAIL [controprova A2 none: la mutazione non si applica]"; fail=$((fail+1)); fi
+if kmut negfiltro 's/if any(a <= m.start() < b for a, b in neg):  # F11-NEGATA/if False:/'; then
+  expect 0 "^Taglia: piena — sicurezza: permissions" "controprova A2: filtro tolto → E3 da' piena (rosso)" -- kpc "$PCX" taglia "$K/f11e3.md"
+else echo "FAIL [controprova A2 filtro: la mutazione non si applica]"; fail=$((fail+1)); fi
 sed 's/| change b |/| frobnicate b |/' "$K/k.md" > "$K/f11c.md"
 expect 0 "^Taglia: piccola" "taglia F11: una parola del progetto non dichiarata = piccola" -- ktg "$K/f11c.md"
 kconf '{"parole_sicurezza": ["frobnicat\\w*"]}'

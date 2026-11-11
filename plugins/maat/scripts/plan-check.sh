@@ -1845,6 +1845,28 @@ SIZE_SEC = (r"(?!author(?:s|ed|ing|ship)?\b)auth\w*", r"passwords?", r"passwd", 
             r"(?:access|auth|api)[ _-]?tokens?", r"(?:en|de)?crypt\w*", r"permission\w*", r"privilege\w*", r"sudo",
             r"chmod", r"eval\(", r"exec\(", r"shell\s*=\s*True", r"sql", r"inject\w*", r"sanitiz\w*", r"csrf",
             r"xss", r"cookies?", r"sessions?")
+# 1.8.0 (A2): the negated mentions of the plan template do not count for F11. In each sentence (split on "." or ";")
+# the list of areas right before ": no implication" (or the Italian token) is ignored: the plan template makes every
+# plan write "…, permissions, …: no implication". Only the two canonical tokens (not "none", not "unchanged"), and only
+# when the token ends there (end of the sentence, or a non-word character: "(", ","): "no implication for X" is not
+# the template. "**" and case do not matter. The rest of the sentence and every other sentence count as before.
+SIZE_NEG = re.compile(r"(?:no implication|nessuna implicazione)(?![ \t]*\w)", re.I)
+
+
+def size_negated(t):
+    """The (start, end) spans of t whose security words F11 ignores (the negated lists of the template)."""
+    u = t.replace("**", "  ")   # same offsets as t
+    spans, s = [], 0
+    for e in [m.start() for m in re.finditer(r"[.;]", u)] + [len(u)]:
+        sent = u[s:e]
+        for m in SIZE_NEG.finditer(sent):
+            c = sent[:m.start()].rstrip()
+            if not c.endswith(":"):
+                continue
+            a = sent.rfind(":", 0, len(c) - 1) + 1   # the list starts after the previous colon of the sentence
+            spans.append((s + a, s + len(c) - 1))
+        s = e + 1
+    return spans
 # F4: the id families always counted in the spec, plus those of the traceability table
 SIZE_REQ = ("RF", "RNF", "NFR", "FR", "CA", "AC", "REQ", "R")
 SIZE_REQUEST = re.compile(r"^(?:Size request|Taglia richiesta):[ \t]*(.*)$")
@@ -2134,8 +2156,12 @@ def taglia(M, root, diff, ovr, touched=""):
     f11, seen = [], set()
     # the Risk surfaces: line is the declaration itself (F7, F8), not a word of the change
     stext = [(w_, t) for w_, t in text if not (t.startswith("Risk surfaces:") or t.startswith("Superfici a rischio:"))]
-    for where, t in [(_msg.T("plan-check-170.spec_line", n=n), t) for n, t in M["above_all"]] + stext + dtext:
+    ntext = len(M["above_all"]) + len(stext)   # spec and plan: the negated lists of the template (A2); the diff: all
+    for i, (where, t) in enumerate([(_msg.T("plan-check-170.spec_line", n=n), t) for n, t in M["above_all"]] + stext + dtext):
+        neg = size_negated(t) if i < ntext else []
         for m in (sec_rx.finditer(t) if sec_rx else []):  # F11-SICUREZZA
+            if any(a <= m.start() < b for a, b in neg):  # F11-NEGATA
+                continue
             k = m.group(0).lower()
             if k not in seen:
                 seen.add(k)
