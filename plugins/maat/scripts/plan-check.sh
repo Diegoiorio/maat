@@ -2574,6 +2574,82 @@ def verdict(T, failed, suite, ran, passed, imp, trel):
     return "rosso_raccolta", _msg.T("plan-check.red_not_run"), "", None
 
 
+ACC_PY_DEF = re.compile(r"^(\s*)(?:async\s+)?(?:def|class)\s+(\w+)")
+ACC_JS_TEST = re.compile(r"(?<![.\w])(?:it|test)(?:\.\w+)*\(\s*$")
+ACC_JS_DESCRIBE = re.compile(r"(?<![.\w])describe(?:\.\w+)*\(\s*$")
+ACC_JS_CALL = re.compile(r"(?<![.\w])(?:it|test|describe)(?:\.\w+)*\(")   # any it/test/describe, literal title or not
+ACC_JS_EXT = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")
+
+
+def accept_span(root, T):
+    """1.8.0 (D5): (first, last) line, from 1, of the body of the acceptance test T in its file; None when it cannot be
+    found. From the text, no parsing. Python: the def named T["name"] (Class::method along the classes, the first
+    segment at column 0; a [param] dropped as in py_claim), up to the line before the first non-empty, non-comment
+    line indented no more than the def. JS/TS: the only it(/test( whose literal title, with the titles of the
+    describes around it, is `uguale` to the plan name in the relation of nomi_test.py (as vt_claim matches it), up to
+    the line before the next it/test/describe. Fail-closed: no name, unreadable file, other language, dynamic title,
+    name not found or ambiguous -> None, and the line stays a conflict."""
+    if not T.get("name"):
+        return None
+    path = T["path"]
+    try:
+        with open(os.path.join(root, path), encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().split("\n")
+    except OSError:
+        return None
+    if path.endswith(".py"):
+        lo, ind = 0, -1
+        for seg in [s.strip().split("[")[0] for s in T["name"].split("::")]:
+            if not seg:
+                return None
+            found = None
+            for i in range(lo, len(lines)):
+                m = ACC_PY_DEF.match(lines[i])
+                if not m:
+                    continue
+                if len(m.group(1)) <= ind:   # out of the class of the previous segment
+                    break
+                if m.group(2) == seg and (ind >= 0 or not m.group(1)):   # the first segment at column 0
+                    found = (i, len(m.group(1)))
+                    break
+            if found is None:
+                return None
+            lo, ind = found[0] + 1, found[1]
+        end = len(lines)
+        for i in range(lo, len(lines)):
+            s = lines[i]
+            if s.strip() and len(s) - len(s.lstrip()) <= ind and not COMMENT.match(s):
+                end = i
+                break
+        return (lo, end)
+    if not path.endswith(ACC_JS_EXT):
+        return None
+    nt = nomi()
+    found = []
+    for i, l in enumerate(lines):
+        m = TITLE.search(l)
+        if not m or not ACC_JS_TEST.search(l[:m.start(1)]):
+            continue
+        lit = m.group(1)
+        if lit.startswith("`") and "${" in lit:   # dynamic title: never matched
+            continue
+        segs, ind = [lit[1:-1]], len(l) - len(l.lstrip())
+        for j in range(i - 1, -1, -1):   # the describes around it: titles at a smaller and smaller indentation
+            d = TITLE.search(lines[j])
+            dj = len(lines[j]) - len(lines[j].lstrip())
+            if d and dj < ind and ACC_JS_DESCRIBE.search(lines[j][:d.start(1)]):
+                segs.insert(0, d.group(1)[1:-1])
+                ind = dj
+        if nt.relazione(T["name"], None, nt.SEP_VITEST, segmenti=segs) == "uguale":
+            end = len(lines)
+            for j in range(i + 1, len(lines)):
+                if ACC_JS_CALL.search(lines[j]) and not COMMENT.match(lines[j]):
+                    end = j
+                    break
+            found.append((i + 1, end))
+    return found[0] if len(found) == 1 else None   # two tests with that name: ambiguous, no exclusion
+
+
 def cmd_rossi(M, root, run, ev):
     """Verifica del driver sulla base con stub (evidenza di gates.sh in <ev>): ogni test di accettazione rosso
     sulla sua asserzione, nessuna suite esistente in conflitto. Scrive <run>/test-red/rossi.json.
@@ -2715,8 +2791,13 @@ def cmd_rossi(M, root, run, ev):
                 if v:
                     adds.append((STR_TP[c[1].strip().lower()], v))
     if adds:
+        # 1.8.0 (D5): an absence asserted INSIDE an acceptance test of the plan is its assertion, not an existing suite
+        own = [(tests[t]["path"], accept_span(root, tests[t])) for t in M["order"]]
+        own = [(p, s) for p, s in own if s]
         for val, hs in find_hits(root, adds).items():
             for rel, ln, neg in hs:
+                if neg and any(p == rel and a <= ln <= b for p, (a, b) in own):  # ESCLUDI-ACCETTAZIONE
+                    continue
                 if neg:  # CONFLITTO-STATICO
                     near = [t for t in M["order"] if val in tests[t]["asserzione"]] or M["order"]
                     confl.append(_msg.T("plan-check.red_absence", rel=rel, ln=ln, val=val,

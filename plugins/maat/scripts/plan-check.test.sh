@@ -995,6 +995,35 @@ expect 1 "^conflitto: tests/old.test.ts > vecchio caso — AssertionError: expec
 printf '%s\n' "it('g', () => { expect(src).not.toContain('Titolo Tred') })" > "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
 expect 1 "^conflitto: modules/app/apps/admin/tests/tred-guard.test.ts:1 asserisce l assenza di Titolo Tred, che il piano aggiunge" "rossi: test esistente che vieta un valore aggiunto dal piano (forma ux-6) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
 rm -f "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
+# 1.8.0 (D5): an absence asserted INSIDE an acceptance test of the plan (T1 test_somma, T2 «fmt formatta») is its
+# assertion, not a conflict; the same line in another test of the same file stays a conflict. Counterproof: without
+# ESCLUDI-ACCETTAZIONE the «nessun conflitto» cases go red.
+cp "$R/modules/api/tests/test_calc.py" "$T/test_calc.py.bak"; cp "$R/modules/app/apps/admin/tests/fmt.test.ts" "$T/fmt.test.ts.bak"
+printf 'from app.services.calc import somma\n\ndef test_somma():\n    files = []\n    # commento\n    assert "Titolo Tred" not in files\n    assert somma(1, 2) == 3\n\n\n@pytest.mark.x\ndef test_altro():\n    assert "Titolo Tred" not in []\n' > "$R/modules/api/tests/test_calc.py"
+printf "import { fmt } from '../utils/fmt'\nit('fmt formatta', () => {\n  expect(src).not.toContain('Titolo Tred')\n  expect(fmt(1)).toBe('1,00')\n})\nit('altro', () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+refute "^conflitto: modules/api/tests/test_calc.py:6 " "rossi D5: assenza nel test di accettazione T1 (pytest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+refute "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:3 " "rossi D5: assenza nel test di accettazione T2 (vitest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/api/tests/test_calc.py:12 asserisce l assenza di Titolo Tred" "rossi D5: la stessa assenza in un altro test dello stesso file (pytest) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:7 asserisce l assenza di Titolo Tred" "rossi D5: la stessa assenza in un altro test dello stesso file (vitest) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+sed -i '/^@pytest/,$d' "$R/modules/api/tests/test_calc.py"; sed -i '/^it(.altro/,$d' "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 0 "^rossi: esito=OK" "rossi D5: solo assenze dentro i test di accettazione = OK" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+# fail-closed: a dynamic title is never the plan test; a dynamic it after the plan test ends its body
+printf "import { fmt } from '../utils/fmt'\nconst nome = 'fmt formatta'\nit(nome, () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: titolo JS dinamico = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+printf "import { fmt } from '../utils/fmt'\nit('fmt formatta', () => { expect(fmt(1)).toBe('1,00') })\nit(nome, () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: un it dinamico dopo il test del piano ne chiude il corpo = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+# homonyms: only the test that carries the plan name is excluded, not a method of a class or an it of another describe
+# with the same last title (counterproof: Python first segment at any column, or JS last title alone: these cases go red)
+printf 'class TestOld:\n    def test_somma(self):\n        assert "Titolo Tred" not in []\n\n\ndef test_somma():\n    assert "Titolo Tred" not in []\n' > "$R/modules/api/tests/test_calc.py"
+printf "import { fmt } from '../utils/fmt'\ndescribe('legacy', () => {\n  it('formatta', () => {\n    expect(src).not.toContain('Titolo Tred')\n  })\n})\ndescribe('fmt', () => {\n  it('formatta', () => {\n    expect(src).not.toContain('Titolo Tred')\n  })\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/api/tests/test_calc.py:3 asserisce l assenza di Titolo Tred" "rossi D5: metodo omonimo in una classe (pytest) = conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+refute "^conflitto: modules/api/tests/test_calc.py:7 " "rossi D5: la funzione di modulo del piano (pytest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: it omonimo in un altro describe (vitest) = conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+refute "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:9 " "rossi D5: il «fmt > formatta» del piano (vitest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+# ambiguous: the plan names «formatta» alone and two it carry it -> no exclusion
+sed 's/fmt\.test\.ts::fmt formatta`/fmt.test.ts::formatta`/' "$T/f2t.md" > "$T/f2t-amb.md"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:9 asserisce l assenza di Titolo Tred" "rossi D5: nome ambiguo (due it) = conflitto" -- bash "$PC" rossi "$T/f2t-amb.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+cp "$T/test_calc.py.bak" "$R/modules/api/tests/test_calc.py"; cp "$T/fmt.test.ts.bak" "$R/modules/app/apps/admin/tests/fmt.test.ts"
 mkdir -p "$T/ev-blk"; printf '{"gate":"tests-be","esito":"BLOCKED","motivo":"venv assente"}\n' > "$T/ev-blk/tests-be.json"; cp "$T/ev-ok/tests-fe.json" "$T/ev-ok/tests-fe.log" "$T/ev-blk/"
 expect 3 "^rossi: esito=BLOCKED — .*tests-be: esito BLOCKED \(venv assente\)" "rossi: gate BLOCKED = BLOCKED (mai OK)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-blk" --run-dir "$T/rr.run"
 # pk04b-2: NOT RUN (with the space, phase-result.schema.json) as SKIPPED: the module tests are non_eseguito with
