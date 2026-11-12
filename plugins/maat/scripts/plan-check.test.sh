@@ -540,19 +540,21 @@ CPS="$HERE/counterproof.sh"
 awk "/^PY='\$/{f=1;next} f&&/^'\$/{exit} f" "$CPS" > "$T/cp.py"
 # 1.4.0: that Python imports the message catalog from MAAT_MSG_PY, as counterproof.sh exports it (native form)
 MAAT_MSG_PY=$(cygpath -m "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
+# 1.8.0 (D1-bis): and nomi_test.py from NOMI_TEST_PY (only for that Python: plan-check.sh finds its own)
+CP_NT=$(cygpath -m "$HERE/nomi_test.py" 2>/dev/null || printf '%s' "$HERE/nomi_test.py")
 mkdir -p "$T/cptmp" "$T/cpout"
 # prep summary (pk04b-2, block A): groups, runnable entries, absorbed, NOT RUN; the modules in <tmp>/mods
-expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
+expect 0 "^1 1 0 0$" "gen: mutations.json accettato da counterproof.sh (prep: 1 gruppo, 0 assorbite)" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$MJ" "$R" "$T/cptmp" "$T/cpout"
 expect 0 "^be$" "gen: la mutazione e' del modulo be (pytest)" -- cat "$T/cptmp/mods"
 expect 0 '"test_id": "modules/api/tests/test_goals.py::test_update_denied"' "gen: test_id pytest = node id" -- cat "$MJ"
 expect 0 '"superficie": "permessi"' "gen: la riga [pavimento:] che nomina il test da' la superficie" -- cat "$MJ"
 # counterproof of the validator: a list without rosso_se is rejected (exit 64)
 printf '%s\n' '[{"id": "T1", "file": "modules/api/app/routers/goals.py", "simbolo": "x", "mutazione": {"cerca": "a", "sostituisci": "b"}, "test": {"percorso": "modules/api/tests/test_goals.py"}}]' > "$T/cpout/bad.json"
-expect 64 "rosso_se" "gen: controprova, prep rifiuta una lista malformata" -- "$FIC_PY" "$T/cp.py" prep "$T/cpout/bad.json" "$R" "$T/cptmp2" "$T/cpout"
+expect 64 "rosso_se" "gen: controprova, prep rifiuta una lista malformata" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/cpout/bad.json" "$R" "$T/cptmp2" "$T/cpout"
 # a frontend mutation: test_id = vitest name, vitest runner
 sed 's/^| T2 | RF2 | \(.*\) | — |$/| T2 | RF2 | \1 | `modules\/app\/apps\/admin\/components\/Bar.vue` · `Bar` · `goals-company-bar` → `x` · rosso se: `expected false to be true` |/' "$T/f2.md" > "$T/f2-fe.md"
 expect 0 "^mutazioni: 2$" "gen: due mutazioni" -- bash "$PC" gen "$T/f2-fe.md"
-expect 0 "^2 2 0 0$" "gen: mutations.json con vitest e pytest accettato da prep" -- "$FIC_PY" "$T/cp.py" prep "$T/f2-fe.run/counterproof/mutations.json" "$R" "$T/cptmp3" "$T/cpout"
+expect 0 "^2 2 0 0$" "gen: mutations.json con vitest e pytest accettato da prep" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/f2-fe.run/counterproof/mutations.json" "$R" "$T/cptmp3" "$T/cpout"
 expect 0 "^fe be $" "gen: le due mutazioni sono dei moduli fe e be" -- bash -c 'tr "\n" " " < "$1"; echo' _ "$T/cptmp3/mods"
 expect 0 '"test_id": "bar"' "gen: test_id vitest = nome del test" -- cat "$T/f2-fe.run/counterproof/mutations.json"
 # no mutation: the mutations.json generated earlier disappears
@@ -993,6 +995,35 @@ expect 1 "^conflitto: tests/old.test.ts > vecchio caso — AssertionError: expec
 printf '%s\n' "it('g', () => { expect(src).not.toContain('Titolo Tred') })" > "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
 expect 1 "^conflitto: modules/app/apps/admin/tests/tred-guard.test.ts:1 asserisce l assenza di Titolo Tred, che il piano aggiunge" "rossi: test esistente che vieta un valore aggiunto dal piano (forma ux-6) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
 rm -f "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
+# 1.8.0 (D5): an absence asserted INSIDE an acceptance test of the plan (T1 test_somma, T2 «fmt formatta») is its
+# assertion, not a conflict; the same line in another test of the same file stays a conflict. Counterproof: without
+# ESCLUDI-ACCETTAZIONE the «nessun conflitto» cases go red.
+cp "$R/modules/api/tests/test_calc.py" "$T/test_calc.py.bak"; cp "$R/modules/app/apps/admin/tests/fmt.test.ts" "$T/fmt.test.ts.bak"
+printf 'from app.services.calc import somma\n\ndef test_somma():\n    files = []\n    # commento\n    assert "Titolo Tred" not in files\n    assert somma(1, 2) == 3\n\n\n@pytest.mark.x\ndef test_altro():\n    assert "Titolo Tred" not in []\n' > "$R/modules/api/tests/test_calc.py"
+printf "import { fmt } from '../utils/fmt'\nit('fmt formatta', () => {\n  expect(src).not.toContain('Titolo Tred')\n  expect(fmt(1)).toBe('1,00')\n})\nit('altro', () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+refute "^conflitto: modules/api/tests/test_calc.py:6 " "rossi D5: assenza nel test di accettazione T1 (pytest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+refute "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:3 " "rossi D5: assenza nel test di accettazione T2 (vitest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/api/tests/test_calc.py:12 asserisce l assenza di Titolo Tred" "rossi D5: la stessa assenza in un altro test dello stesso file (pytest) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:7 asserisce l assenza di Titolo Tred" "rossi D5: la stessa assenza in un altro test dello stesso file (vitest) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+sed -i '/^@pytest/,$d' "$R/modules/api/tests/test_calc.py"; sed -i '/^it(.altro/,$d' "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 0 "^rossi: esito=OK" "rossi D5: solo assenze dentro i test di accettazione = OK" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+# fail-closed: a dynamic title is never the plan test; a dynamic it after the plan test ends its body
+printf "import { fmt } from '../utils/fmt'\nconst nome = 'fmt formatta'\nit(nome, () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: titolo JS dinamico = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+printf "import { fmt } from '../utils/fmt'\nit('fmt formatta', () => { expect(fmt(1)).toBe('1,00') })\nit(nome, () => {\n  expect(src).not.toContain('Titolo Tred')\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: un it dinamico dopo il test del piano ne chiude il corpo = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+# homonyms: only the test that carries the plan name is excluded, not a method of a class or an it of another describe
+# with the same last title (counterproof: Python first segment at any column, or JS last title alone: these cases go red)
+printf 'class TestOld:\n    def test_somma(self):\n        assert "Titolo Tred" not in []\n\n\ndef test_somma():\n    assert "Titolo Tred" not in []\n' > "$R/modules/api/tests/test_calc.py"
+printf "import { fmt } from '../utils/fmt'\ndescribe('legacy', () => {\n  it('formatta', () => {\n    expect(src).not.toContain('Titolo Tred')\n  })\n})\ndescribe('fmt', () => {\n  it('formatta', () => {\n    expect(src).not.toContain('Titolo Tred')\n  })\n})\n" > "$R/modules/app/apps/admin/tests/fmt.test.ts"
+expect 1 "^conflitto: modules/api/tests/test_calc.py:3 asserisce l assenza di Titolo Tred" "rossi D5: metodo omonimo in una classe (pytest) = conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+refute "^conflitto: modules/api/tests/test_calc.py:7 " "rossi D5: la funzione di modulo del piano (pytest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:4 asserisce l assenza di Titolo Tred" "rossi D5: it omonimo in un altro describe (vitest) = conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+refute "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:9 " "rossi D5: il «fmt > formatta» del piano (vitest) = nessun conflitto" -- bash "$PC" rossi "$T/f2t-desc.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+# ambiguous: the plan names «formatta» alone and two it carry it -> no exclusion
+sed 's/fmt\.test\.ts::fmt formatta`/fmt.test.ts::formatta`/' "$T/f2t.md" > "$T/f2t-amb.md"
+expect 1 "^conflitto: modules/app/apps/admin/tests/fmt.test.ts:9 asserisce l assenza di Titolo Tred" "rossi D5: nome ambiguo (due it) = conflitto" -- bash "$PC" rossi "$T/f2t-amb.md" --evidence "$T/ev-desc" --run-dir "$T/rr.run"
+cp "$T/test_calc.py.bak" "$R/modules/api/tests/test_calc.py"; cp "$T/fmt.test.ts.bak" "$R/modules/app/apps/admin/tests/fmt.test.ts"
 mkdir -p "$T/ev-blk"; printf '{"gate":"tests-be","esito":"BLOCKED","motivo":"venv assente"}\n' > "$T/ev-blk/tests-be.json"; cp "$T/ev-ok/tests-fe.json" "$T/ev-ok/tests-fe.log" "$T/ev-blk/"
 expect 3 "^rossi: esito=BLOCKED — .*tests-be: esito BLOCKED \(venv assente\)" "rossi: gate BLOCKED = BLOCKED (mai OK)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-blk" --run-dir "$T/rr.run"
 # pk04b-2: NOT RUN (with the space, phase-result.schema.json) as SKIPPED: the module tests are non_eseguito with
@@ -1010,7 +1041,7 @@ expect 0 "^stub modules/app/apps/admin/utils/fmt.ts: fmt$" "stubs: simboli degli
 expect 0 "^gen: mutazione T1 assorbita \(L2\)$" "gen: file nuovo con rosso dimostrato e simboli testati = assorbita" -- bash "$PC" gen "$T/f2t.md"
 expect 0 '"assorbita": true' "gen: mutations.json con assorbita" -- cat "$T/f2t.run/counterproof/mutations.json"
 mkdir -p "$T/cptmp4" "$T/cpout4"
-expect 0 "^0 0 1 0$" "prep di counterproof.sh: l'assorbita non si esegue" -- "$FIC_PY" "$T/cp.py" prep "$T/f2t.run/counterproof/mutations.json" "$R" "$T/cptmp4" "$T/cpout4"
+expect 0 "^0 0 1 0$" "prep di counterproof.sh: l'assorbita non si esegue" -- env NOMI_TEST_PY="$CP_NT" "$FIC_PY" "$T/cp.py" prep "$T/f2t.run/counterproof/mutations.json" "$R" "$T/cptmp4" "$T/cpout4"
 expect 0 '"esito": "assorbita"' "prep: <id>.json con esito assorbita" -- cat "$T/cpout4/T1.json"
 expect 0 "^L2 T1: OK$" "l2: condizioni valide sul codice attuale" -- bash "$PC" l2 "$T/f2t.md"
 cp -r "$T/f2t.run" "$T/f2t-b.run"
@@ -1661,6 +1692,32 @@ expect 0 "^Taglia: piccola" "taglia F11: author non e' una parola di sicurezza" 
 if kmut f11 's/for m in (sec_rx.finditer(t) if sec_rx else \[\]):  # F11-SICUREZZA/for m in []:/'; then
   expect 0 "^Taglia: piccola" "controprova F11: senza le parole di sicurezza la password da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11s.md"
 else echo "FAIL [controprova F11: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.0 (A2): the negated lists of the plan template («…, permissions, …: no implication») do not count for F11
+kadd "$K/k.md" "$K/f11e3.md" '^Risk surfaces: shared-logic$' 'Validation, permissions, persistence, UI, migration: no implication. Data flow: only the parsing of `Span`'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): la riga di modello di E3 «permissions: no implication» = piccola" -- ktg "$K/f11e3.md"
+kadd "$K/k.md" "$K/f11pr.md" '^Risk surfaces: shared-logic$' 'Permission rules: only the owner may change the page.'
+expect 0 "^Taglia: piena — sicurezza: Permission \(piano riga [0-9]+\)$" "taglia F11 (A2): «Permission rules: only the owner…» e' contenuto = piena" -- ktg "$K/f11pr.md"
+kadd "$K/k.md" "$K/f11at.md" '^Risk surfaces: shared-logic$' 'Data flow, permissions: no implication. The auth token is sent in a cookie'
+expect 0 "^Taglia: piena — sicurezza: auth \(piano riga [0-9]+\), cookie \(piano riga [0-9]+\)$" "taglia F11 (A2): la frase dopo la negazione conta (auth, cookie), permissions no" -- ktg "$K/f11at.md"
+kadd "$K/k.md" "$K/f11ps.md" '^Risk surfaces: shared-logic$' 'permissions, sessions: no implication'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): «permissions, sessions: no implication» = piccola (tutte le parole dell'elenco)" -- ktg "$K/f11ps.md"
+kadd "$K/k.md" "$K/f11bo.md" '^Risk surfaces: shared-logic$' '- **Data flow / UI / Permissions:** No implication (a pure function).' 'Cookie, sessions: nessuna implicazione.'
+expect 0 "^Taglia: piccola" "taglia F11 (A2): ** e maiuscole indifferenti, token italiano" -- ktg "$K/f11bo.md"
+kadd "$K/k.md" "$K/f11fo.md" '^Risk surfaces: shared-logic$' 'Permissions: no implication for guests, the admin role changes.'
+expect 0 "^Taglia: piena — sicurezza: Permissions" "taglia F11 (A2): «no implication for …» non e' la riga di modello = piena" -- ktg "$K/f11fo.md"
+kadd "$K/k.md" "$K/f11no.md" '^Risk surfaces: shared-logic$' 'Auth: none required for the admin route.'
+expect 0 "^Taglia: piena — sicurezza: Auth \(piano riga [0-9]+\)$" "taglia F11 (A2): «Auth: none…» non e' un token del modello = piena" -- ktg "$K/f11no.md"
+sed 's/^Risk surfaces: shared-logic$/Risk surfaces: permissions, shared-logic/' "$K/f11e3.md" > "$K/f11d.md"
+expect 0 "^Taglia: piena — superfici critiche: permessi \(dichiarata\)$" "taglia F11 (A2): permissions dichiarata e «no implication» altrove = piena (F7)" -- ktg "$K/f11d.md"
+if kmut negriga 's/spans.append((s + a, s + len(c) - 1))/spans.append((0, len(t)))/'; then
+  expect 0 "^Taglia: piccola" "controprova A2: negazione estesa a tutta la riga → «auth token» da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11at.md"
+else echo "FAIL [controprova A2 riga: la mutazione non si applica]"; fail=$((fail+1)); fi
+if kmut negnone 's/^SIZE_NEG = re.compile(.*$/SIZE_NEG = re.compile(r"(?:no implication|nessuna implicazione|none)", re.I)/'; then
+  expect 0 "^Taglia: piccola" "controprova A2: negazione estesa a «: none» → «Auth: none required» da' piccola (rosso)" -- kpc "$PCX" taglia "$K/f11no.md"
+else echo "FAIL [controprova A2 none: la mutazione non si applica]"; fail=$((fail+1)); fi
+if kmut negfiltro 's/if any(a <= m.start() < b for a, b in neg):  # F11-NEGATA/if False:/'; then
+  expect 0 "^Taglia: piena — sicurezza: permissions" "controprova A2: filtro tolto → E3 da' piena (rosso)" -- kpc "$PCX" taglia "$K/f11e3.md"
+else echo "FAIL [controprova A2 filtro: la mutazione non si applica]"; fail=$((fail+1)); fi
 sed 's/| change b |/| frobnicate b |/' "$K/k.md" > "$K/f11c.md"
 expect 0 "^Taglia: piccola" "taglia F11: una parola del progetto non dichiarata = piccola" -- ktg "$K/f11c.md"
 kconf '{"parole_sicurezza": ["frobnicat\\w*"]}'
@@ -1947,6 +2004,77 @@ else
   echo "SKIP [vincolo 2 della 1.4.0 — nessun v1.3.0:plugins/maat/scripts/plan-check.sh in $HERE]"
 fi
 unset PLAN_CHECK_ROOT FIC_PY
+
+# ── 1.8.0 (D1-bis): hierarchical names in rossi (nomi_test.py) ──────────────────────────────────────────
+# A Go module at the root, JUnit. N3 reduced: the parent TestX (red with no assertion, as `go test` writes it) and two
+# subtests, one red on the assertion -> dimostrato, 0 conflicts; a foreign test with a red subtest -> still a conflict;
+# parent and subtests all green -> verde; a plan that names the subtest TestX/limit 5 with a folded JUnit (only the
+# parent, its text with «--- FAIL: TestX/limit_5») -> dimostrato. Counterproof: relazione reduced to equality
+# (NOMI_TEST_PY on a mutated copy) -> the N3 subtests are conflicts again.
+D1="$T/d1"; mkdir -p "$D1/.claude" "$D1/m"
+echo '{"versione_schema": 1, "moduli": [{"nome": "go", "radice": ".", "report": "junit", "comandi": {"test": "go test ./... {test}"}}], "piattaforma": {"copia_wsl": "no"}}' > "$D1/.claude/maat.json"
+d1spec() { # $1 = test id of T1
+cat <<EOF
+# Spec: body limit
+## Functional requirements
+FR1. The body is never read past the limit.
+## Implementation plan
+Plan format: 2
+Plan status: DRAFT
+Test level: std
+Risk surfaces: none
+### Touched files
+- \`m/body.go\`
+- \`m/body_test.go\`
+### Steps
+#### Block B1 — body
+writes: \`m/body.go\`, \`m/body_test.go\`
+after: none
+
+| id | file | change | test |
+|---|---|---|---|
+| P1 | \`m/body.go\` | limit the reads | T1 |
+### Requirement traceability
+| Req | Plan steps | Verification |
+|---|---|---|
+| FR1 | P1 | T1 |
+### Test plan
+| ID | requirement | file | assertion | mutation |
+|---|---|---|---|---|
+| T1 | FR1 | \`$1\` (new) | \`read(5, 50) == 5\` · red if: \`expected 5 got 50\` | — |
+EOF
+}
+d1spec 'm/body_test.go::TestX' > "$D1/padre.md"
+d1spec 'm/body_test.go::TestX/limit 5' > "$D1/sotto.md"
+d1ev() { # $1 folder · $2 the testcases
+  mkdir -p "$1"
+  printf '<?xml version="1.0"?><testsuites><testsuite name="m">%s</testsuite></testsuites>\n' "$2" > "$1/tests-go.junit.xml"
+  printf '{"gate":"tests-go","esito":"FAIL","report":"tests-go.junit.xml","motivo":""}\n' > "$1/tests-go.json"
+}
+GO_PADRE='<testcase classname="m.body_test.go" name="TestX"><failure message="Failed">--- FAIL: TestX (0.01s)</failure></testcase>'
+GO_ROSSO='<testcase classname="m.body_test.go" name="TestX/limit_5"><failure message="Failed">m/body_test.go:31: expected 5 got 50</failure></testcase>'
+GO_VERDE='<testcase classname="m.body_test.go" name="TestX/limit_0"/>'
+d1ev "$D1/ev-n3" "$GO_PADRE$GO_ROSSO$GO_VERDE"
+d1ev "$D1/ev-estraneo" "$GO_PADRE$GO_ROSSO$GO_VERDE"'<testcase classname="m.body_test.go" name="TestY/caso"><failure message="Failed">m/body_test.go:80: other</failure></testcase>'
+d1ev "$D1/ev-verde" '<testcase classname="m.body_test.go" name="TestX"/><testcase classname="m.body_test.go" name="TestX/limit_5"/>'"$GO_VERDE"
+d1ev "$D1/ev-piegato" '<testcase classname="m.body_test.go" name="TestX"><failure message="Failed">--- FAIL: TestX/limit_5 (0.00s)
+    m/body_test.go:31: expected 5 got 50</failure></testcase>'
+d1r() { env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$@"; }
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: N3 ridotto (padre + 2 sottotest Go, uno rosso sull asserzione) = dimostrato" -- d1r "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+refute "^conflitto:" "D1-bis rossi: N3 ridotto, i sottotest del test nominato non sono conflitti" -- d1r "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+expect 1 "^conflitto: m.body_test.go::TestY/caso " "D1-bis rossi: un test estraneo con un sottotest rosso = ancora conflitto" -- d1r "$D1/padre.md" --evidence "$D1/ev-estraneo" --run-dir "$D1/r.run"
+expect 1 "^rosso T1: verde " "D1-bis rossi: padre e sottotest tutti verdi = verde" -- d1r "$D1/padre.md" --evidence "$D1/ev-verde" --run-dir "$D1/r.run"
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: piano che nomina il sottotest (TestX/limit 5) con JUnit piegato nel padre = dimostrato" -- d1r "$D1/sotto.md" --evidence "$D1/ev-piegato" --run-dir "$D1/r.run"
+expect 0 "^rosso T1: dimostrato m/body_test.go:31 " "D1-bis rossi: piano che nomina il sottotest con il JUnit dei sottotest = dimostrato" -- d1r "$D1/sotto.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
+(. "$HERE/python.sh" && "$FIC_PY" - "$T/nomi-uguale.py") <<'EOF'   # FIC_PY was unset above (PLAN_CHECK_ROOT section)
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
+assert s.count(a) == 1
+open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
+EOF
+expect 1 "^conflitto: m.body_test.go::TestX/limit_5 " "controprova D1-bis: relazione ridotta all uguaglianza -> i sottotest di N3 tornano conflitti" -- env NOMI_TEST_PY="$(cygpath -m "$T/nomi-uguale.py" 2>/dev/null || printf '%s' "$T/nomi-uguale.py")" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
 
 # ── usage ────────────────────────────────────────────────────────────────────────────────────────
 expect 2 "uso:" "argomenti sbagliati = uscita 2" -- bash "$PC" boh

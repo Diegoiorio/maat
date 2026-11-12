@@ -128,7 +128,8 @@ light` with `--light`); its last line is `Taglia: piccola | piena — <motivi>`,
 
 ## Step 2: round 1 — three lenses in one message
 
-Three `maat:spec-plan-reviewer` agents in a single message, each: «Use the maat:spec-plan-reviewer agent. Read
+Three `maat:spec-plan-reviewer` agents in a single message, **in the foreground** (never `run_in_background`: the
+parallel comes from the calls being in the same message, and a sub-session of the cycle denies it), each: «Use the maat:spec-plan-reviewer agent. Read
 `${CLAUDE_PLUGIN_ROOT}/skills/plan-review-cycle/revisori.md`, section «Round 1», and follow it. Lens: <L1|L2|L3>. Spec + plan
 file: <path>. Ranges: spec <offset/limit>, plan <offset/limit>. Context pack: <path | none>. Test level: <lvl>.
 Risk surfaces: <tokens>.» Aggregate. `APPROVED` outright → Step 3, but first one fresh-eyes reviewer
@@ -140,7 +141,8 @@ alone when a critical surface (`permissions`, `data`, `destructive` — `permess
    keep the finding table and the recurrence — an author sub-agent (Task): the spec path, the
    findings to apply with their verified anchors, «read `autore.md`, section «How to revise», apply only these».
    Then `lint --baseline`, `lint2`, `delta <copy> <spec>`. All findings rejected → no author, no delta: step 2.
-2. One message, two `maat:spec-plan-reviewer` agents on the same plan — «read `revisori.md`, section «Delta»» and
+2. One message, two `maat:spec-plan-reviewer` agents on the same plan, in the foreground (never `run_in_background`:
+   same message = already in parallel; the author sub-agent of point 1 too) — «read `revisori.md`, section «Delta»» and
    «… section «Fresh eyes»» — with: the `range:` and `xref:` lines, the pertinent requirement ranges, level and
    surfaces (every round), resolved findings (key + symbol + one line), rejected ones (key + refutation), test
    cases removed as over-testing, budget ~20 → 15 → 12. Save each reply to the scratchpad with, as first line,

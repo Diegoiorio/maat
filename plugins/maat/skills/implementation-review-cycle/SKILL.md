@@ -100,8 +100,9 @@ Review rounds: <n>/3 · post-approval NEEDS_CHANGES: <k>/1
 
 ## Step 2: the reviewer
 
-«Use the maat:implementation-reviewer agent. Read `${CLAUDE_PLUGIN_ROOT}/skills/implementation-review-cycle/prompt-revisore.md` and
-follow it.» plus its parameters: the specification (mode a: its range; mode b: NONE) and plan ranges; the
+The agent in the foreground (never `run_in_background`: several agents go in parallel by being in the same message,
+and a sub-session of the cycle denies it): «Use the maat:implementation-reviewer agent. Read
+`${CLAUDE_PLUGIN_ROOT}/skills/implementation-review-cycle/prompt-revisore.md` and follow it.» plus its parameters: the specification (mode a: its range; mode b: NONE) and plan ranges; the
 scope's `Changes`; the exclusions; the diff file and index; the context pack, if it exists; the delta and the
 resolved findings (later rounds); the risk focus of the contract (critical surfaces, other surfaces, `Rischio:`
 lines, obligations); the requirement list; the test signals; the green gates with their **real** numbers (or

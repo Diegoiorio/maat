@@ -1845,6 +1845,28 @@ SIZE_SEC = (r"(?!author(?:s|ed|ing|ship)?\b)auth\w*", r"passwords?", r"passwd", 
             r"(?:access|auth|api)[ _-]?tokens?", r"(?:en|de)?crypt\w*", r"permission\w*", r"privilege\w*", r"sudo",
             r"chmod", r"eval\(", r"exec\(", r"shell\s*=\s*True", r"sql", r"inject\w*", r"sanitiz\w*", r"csrf",
             r"xss", r"cookies?", r"sessions?")
+# 1.8.0 (A2): the negated mentions of the plan template do not count for F11. In each sentence (split on "." or ";")
+# the list of areas right before ": no implication" (or the Italian token) is ignored: the plan template makes every
+# plan write "…, permissions, …: no implication". Only the two canonical tokens (not "none", not "unchanged"), and only
+# when the token ends there (end of the sentence, or a non-word character: "(", ","): "no implication for X" is not
+# the template. "**" and case do not matter. The rest of the sentence and every other sentence count as before.
+SIZE_NEG = re.compile(r"(?:no implication|nessuna implicazione)(?![ \t]*\w)", re.I)
+
+
+def size_negated(t):
+    """The (start, end) spans of t whose security words F11 ignores (the negated lists of the template)."""
+    u = t.replace("**", "  ")   # same offsets as t
+    spans, s = [], 0
+    for e in [m.start() for m in re.finditer(r"[.;]", u)] + [len(u)]:
+        sent = u[s:e]
+        for m in SIZE_NEG.finditer(sent):
+            c = sent[:m.start()].rstrip()
+            if not c.endswith(":"):
+                continue
+            a = sent.rfind(":", 0, len(c) - 1) + 1   # the list starts after the previous colon of the sentence
+            spans.append((s + a, s + len(c) - 1))
+        s = e + 1
+    return spans
 # F4: the id families always counted in the spec, plus those of the traceability table
 SIZE_REQ = ("RF", "RNF", "NFR", "FR", "CA", "AC", "REQ", "R")
 SIZE_REQUEST = re.compile(r"^(?:Size request|Taglia richiesta):[ \t]*(.*)$")
@@ -2134,8 +2156,12 @@ def taglia(M, root, diff, ovr, touched=""):
     f11, seen = [], set()
     # the Risk surfaces: line is the declaration itself (F7, F8), not a word of the change
     stext = [(w_, t) for w_, t in text if not (t.startswith("Risk surfaces:") or t.startswith("Superfici a rischio:"))]
-    for where, t in [(_msg.T("plan-check-170.spec_line", n=n), t) for n, t in M["above_all"]] + stext + dtext:
+    ntext = len(M["above_all"]) + len(stext)   # spec and plan: the negated lists of the template (A2); the diff: all
+    for i, (where, t) in enumerate([(_msg.T("plan-check-170.spec_line", n=n), t) for n, t in M["above_all"]] + stext + dtext):
+        neg = size_negated(t) if i < ntext else []
         for m in (sec_rx.finditer(t) if sec_rx else []):  # F11-SICUREZZA
+            if any(a <= m.start() < b for a, b in neg):  # F11-NEGATA
+                continue
             k = m.group(0).lower()
             if k not in seen:
                 seen.add(k)
@@ -2428,9 +2454,26 @@ def junit_cases(p):
     return out
 
 
-def py_claim(T, c, trel):
-    """come un caso JUnit riguarda il test T (trel: il suo percorso relativo alla radice del modulo): target | file |
-    suite | None"""
+_NOMI = []
+
+
+def nomi():
+    """1.8.0 (D1-bis): nomi_test.py next to this script (NOMI_TEST_PY, exported by need_py), imported: the same
+    relation of the test names as counterproof.sh"""
+    if not _NOMI:
+        import importlib.util
+        sp = importlib.util.spec_from_file_location("nomi_test", os.environ["NOMI_TEST_PY"])
+        mo = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(mo)
+        _NOMI.append(mo)
+    return _NOMI[0]
+
+
+def py_claim(T, c, trel, seps=None):
+    """come un caso JUnit riguarda il test T (trel: il suo percorso relativo alla radice del modulo): target | antenato
+    | file | suite | None. 1.8.0 (D1-bis): la relazione dei nomi di nomi_test.py coi separatori del linguaggio
+    (seps): uguale e discendente -> target (un sottotest Go, un parametro pytest, i metodi di una classe nominata),
+    antenato -> reclamato (un adattatore che piega i sottotest nel padre)"""
     mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
     cn, nm = c["cn"], c["nm"]
     if not cn:
@@ -2443,10 +2486,9 @@ def py_claim(T, c, trel):
         return None
     if not T["name"]:
         return "target"
-    nid = trel + rest + "::" + nm
-    if nid.endswith("::" + T["name"]) or nid.split("[")[0].endswith("::" + T["name"]):
-        return "target"
-    return "file"
+    nt = nomi()
+    rel = nt.relazione(T["name"], trel + rest + "::" + nm, seps or nt.separatori(trel))
+    return {"uguale": "target", "discendente": "target", "antenato": "antenato"}.get(rel, "file")
 
 
 def vitest_blocks(text):
@@ -2482,10 +2524,11 @@ def vt_claim(T, b, trel):
         return "suite"
     if not T["name"]:
         return "target"
-    s = b["segs"]
-    # the plan may name the test as vitest prints it ("describe > it") or with the full -t name ("describe it")
-    ids = set([sep.join(s[k:]) for k in range(len(s)) for sep in (" ", " > ")] + [s[-1]])
-    return "target" if T["name"] in ids else "file"
+    # the plan may name the test as vitest prints it ("describe > it") or with the full -t name ("describe it");
+    # 1.8.0 (D1-bis): a `describe` named by the plan claims its tests (the structured chain, never a prefix with a space)
+    nt = nomi()
+    rel = nt.relazione(T["name"], None, nt.SEP_VITEST, segmenti=b["segs"])
+    return {"uguale": "target", "discendente": "target", "antenato": "antenato"}.get(rel, "file")
 
 
 # D-D (1.6.0): the frame of a Python traceback, as a JUnit of a runner other than pytest (unittest) carries it
@@ -2529,6 +2572,82 @@ def verdict(T, failed, suite, ran, passed, imp, trel):
     if passed:
         return "verde", _msg.T("plan-check.red_green"), "", None
     return "rosso_raccolta", _msg.T("plan-check.red_not_run"), "", None
+
+
+ACC_PY_DEF = re.compile(r"^(\s*)(?:async\s+)?(?:def|class)\s+(\w+)")
+ACC_JS_TEST = re.compile(r"(?<![.\w])(?:it|test)(?:\.\w+)*\(\s*$")
+ACC_JS_DESCRIBE = re.compile(r"(?<![.\w])describe(?:\.\w+)*\(\s*$")
+ACC_JS_CALL = re.compile(r"(?<![.\w])(?:it|test|describe)(?:\.\w+)*\(")   # any it/test/describe, literal title or not
+ACC_JS_EXT = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")
+
+
+def accept_span(root, T):
+    """1.8.0 (D5): (first, last) line, from 1, of the body of the acceptance test T in its file; None when it cannot be
+    found. From the text, no parsing. Python: the def named T["name"] (Class::method along the classes, the first
+    segment at column 0; a [param] dropped as in py_claim), up to the line before the first non-empty, non-comment
+    line indented no more than the def. JS/TS: the only it(/test( whose literal title, with the titles of the
+    describes around it, is `uguale` to the plan name in the relation of nomi_test.py (as vt_claim matches it), up to
+    the line before the next it/test/describe. Fail-closed: no name, unreadable file, other language, dynamic title,
+    name not found or ambiguous -> None, and the line stays a conflict."""
+    if not T.get("name"):
+        return None
+    path = T["path"]
+    try:
+        with open(os.path.join(root, path), encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().split("\n")
+    except OSError:
+        return None
+    if path.endswith(".py"):
+        lo, ind = 0, -1
+        for seg in [s.strip().split("[")[0] for s in T["name"].split("::")]:
+            if not seg:
+                return None
+            found = None
+            for i in range(lo, len(lines)):
+                m = ACC_PY_DEF.match(lines[i])
+                if not m:
+                    continue
+                if len(m.group(1)) <= ind:   # out of the class of the previous segment
+                    break
+                if m.group(2) == seg and (ind >= 0 or not m.group(1)):   # the first segment at column 0
+                    found = (i, len(m.group(1)))
+                    break
+            if found is None:
+                return None
+            lo, ind = found[0] + 1, found[1]
+        end = len(lines)
+        for i in range(lo, len(lines)):
+            s = lines[i]
+            if s.strip() and len(s) - len(s.lstrip()) <= ind and not COMMENT.match(s):
+                end = i
+                break
+        return (lo, end)
+    if not path.endswith(ACC_JS_EXT):
+        return None
+    nt = nomi()
+    found = []
+    for i, l in enumerate(lines):
+        m = TITLE.search(l)
+        if not m or not ACC_JS_TEST.search(l[:m.start(1)]):
+            continue
+        lit = m.group(1)
+        if lit.startswith("`") and "${" in lit:   # dynamic title: never matched
+            continue
+        segs, ind = [lit[1:-1]], len(l) - len(l.lstrip())
+        for j in range(i - 1, -1, -1):   # the describes around it: titles at a smaller and smaller indentation
+            d = TITLE.search(lines[j])
+            dj = len(lines[j]) - len(lines[j].lstrip())
+            if d and dj < ind and ACC_JS_DESCRIBE.search(lines[j][:d.start(1)]):
+                segs.insert(0, d.group(1)[1:-1])
+                ind = dj
+        if nt.relazione(T["name"], None, nt.SEP_VITEST, segmenti=segs) == "uguale":
+            end = len(lines)
+            for j in range(i + 1, len(lines)):
+                if ACC_JS_CALL.search(lines[j]) and not COMMENT.match(lines[j]):
+                    end = j
+                    break
+            found.append((i + 1, end))
+    return found[0] if len(found) == 1 else None   # two tests with that name: ambiguous, no exclusion
 
 
 def cmd_rossi(M, root, run, ev):
@@ -2585,10 +2704,15 @@ def cmd_rossi(M, root, run, ev):
             out[tid] = ("non_eseguito", "gate %s %s: %s" % (g, d.get("esito"), d.get("motivo") or ""), "", None)
             continue
         trel = rel_radice(mt, T["path"])
+        # 1.8.0 (D1-bis): an ancestor case (antenato) is claimed, never a conflict; its text counts only without a case
+        # uguale/discendente and if it holds the leaf of the plan name (the adapter that folds the subtests)
+        seps = nomi().separatori(trel, mt.get("separatori_test"))
+        leaf = nomi().foglia(T["name"], seps)
+        anc_bad, anc_pass, has_t = [], False, False
         if fmt[g] == "junit":
             failed, suite, ran, passed = [], [], False, False
             for c in rep[g]:
-                k = py_claim(T, c, trel)
+                k = py_claim(T, c, trel, seps)
                 if k is None:
                     continue
                 if k == "suite":
@@ -2598,12 +2722,23 @@ def cmd_rossi(M, root, run, ev):
                         c["own"] = tid
                     continue
                 ran = True
+                if k == "antenato":   # ANTENATO-RECLAMATO
+                    if c["bad"]:
+                        anc_bad += c["bad"]
+                        c["own"] = c["own"] or tid
+                    elif not c["skip"]:
+                        anc_pass = True
+                    continue
                 if k == "target":
+                    has_t = True
                     if c["bad"]:
                         failed += c["bad"]
                         c["own"] = tid
                     elif not c["skip"]:
                         passed = True
+            if not has_t:
+                failed = [x for x in anc_bad if leaf and leaf in x]
+                passed = anc_pass and not anc_bad
             out[tid] = verdict(T, failed, suite, ran, passed, IMPORT_PY, trel)
         else:
             blocks, ran_files = rep[g]
@@ -2613,9 +2748,14 @@ def cmd_rossi(M, root, run, ev):
                 if k == "target":
                     failed.append("\n".join(b["body"]))
                     b["own"] = tid
+                elif k == "antenato":
+                    anc_bad.append("\n".join(b["body"]))
+                    b["own"] = b["own"] or tid
                 elif k == "suite":
                     suite.append("\n".join(b["body"]))
                     b["own"] = tid
+            if not failed:
+                failed = [x for x in anc_bad if leaf and leaf in x]
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
     # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
@@ -2651,8 +2791,13 @@ def cmd_rossi(M, root, run, ev):
                 if v:
                     adds.append((STR_TP[c[1].strip().lower()], v))
     if adds:
+        # 1.8.0 (D5): an absence asserted INSIDE an acceptance test of the plan is its assertion, not an existing suite
+        own = [(tests[t]["path"], accept_span(root, tests[t])) for t in M["order"]]
+        own = [(p, s) for p, s in own if s]
         for val, hs in find_hits(root, adds).items():
             for rel, ln, neg in hs:
+                if neg and any(p == rel and a <= ln <= b for p, (a, b) in own):  # ESCLUDI-ACCETTAZIONE
+                    continue
                 if neg:  # CONFLITTO-STATICO
                     near = [t for t in M["order"] if val in tests[t]["asserzione"]] or M["order"]
                     confl.append(_msg.T("plan-check.red_absence", rel=rel, ln=ln, val=val,
@@ -2740,6 +2885,13 @@ need_py() {
   # PY2 imports the message catalog: maat_msg.py next to THIS script (a copy of the plugin uses its own), in the
   # form native Python reads
   MAAT_MSG_PY=$(maat_cygm "$PC_HERE/maat_msg.py" 2>/dev/null || printf '%s' "$PC_HERE/maat_msg.py"); export MAAT_MSG_PY
+  # 1.8.0 (D1-bis): the relation of the test names (shared with counterproof.sh): NOMI_TEST_PY if set, otherwise
+  # nomi_test.py next to THIS script, otherwise the plugin's (a copy of plan-check.sh alone, in the tests)
+  if [ -z "${NOMI_TEST_PY:-}" ]; then
+    NOMI_TEST_PY=$PC_HERE/nomi_test.py; [ -f "$NOMI_TEST_PY" ] || NOMI_TEST_PY=$MAAT_SCRIPTS/nomi_test.py
+    NOMI_TEST_PY=$(maat_cygm "$NOMI_TEST_PY" 2>/dev/null || printf '%s' "$NOMI_TEST_PY")
+  fi
+  export NOMI_TEST_PY
   export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0

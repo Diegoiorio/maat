@@ -787,7 +787,7 @@ STOP_CMD=""
 if [ -f "$STOP_PY" ]; then STOP_CMD="\"$FIC_PY\" \"$(cd "$(dirname "$STOP_PY")" && { pwd -W 2>/dev/null || pwd; })/stop-hook.py\""
 else echo "AVVISO: $(msg run-phase.stop_hook_missing stop="$STOP_PY")" >> "$err"; fi
 SETTINGS=$("$FIC_PY" -c 'import json, sys
-h = {"PreToolUse": [{"matcher": "Bash|Edit|Write|NotebookEdit|MultiEdit", "hooks": [{"type": "command", "command": sys.argv[1]}]}]}
+h = {"PreToolUse": [{"matcher": "Bash|Edit|Write|NotebookEdit|MultiEdit|Agent|Task", "hooks": [{"type": "command", "command": sys.argv[1]}]}]}
 if sys.argv[2]:
     h["Stop"] = [{"hooks": [{"type": "command", "command": sys.argv[2]}]}]
 print(json.dumps({"hooks": h}))' "$HOOK_CMD" "$STOP_CMD")

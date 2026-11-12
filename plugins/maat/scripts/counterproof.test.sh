@@ -22,6 +22,9 @@ check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAI
 NPROC=$(nproc 2>/dev/null || echo 0)
 check_par() { if [ $((NPROC / 2)) -ge 2 ]; then check "$@"; else echo "SALTATO [$1]: il gradino 2 vuole almeno 4 CPU (nproc $NPROC)"; fi; }
 unset MAAT_CONFIG MAAT_ROOT FIC_REPO PROJECT_ROOT FIC_GATES_VENV_PY MAAT_MODULO
+# 1.8.0 (C1): the lock wait of every case is 60 s, not the default 900: a lock held by an orphan of an earlier case
+# fails soon and says so (BLOCKED «mirror occupato») instead of hanging the suite past the CI job
+export FIC_LOCK_WAIT=60
 
 # fake repo: .claude/maat.json (the example) + modules/app + modules/api
 R=$T/repo; A=$R/modules/app; AD=$A/apps/admin; API=$R/modules/api
@@ -75,7 +78,10 @@ if [ -n "${FAKE_KILL:-}" ]; then
     case "$(ps -o command= -p "$p" 2>/dev/null)" in *"$FAKE_KILL"*) tgt+=" $p" ;; esac
   done
   tgt=$(printf '%s\n' $tgt $(pgrep -f "$FAKE_KILL" 2>/dev/null) | sort -un)
-  [ -z "$tgt" ] || kill -TERM $tgt 2>/dev/null
+  # FAKE_KILL_RAFFICA (1.8.0): a burst of 200 TERM with no gap (no fork between them), as from several runs
+  # signalling at the same moment
+  nk=1; [ -z "${FAKE_KILL_RAFFICA:-}" ] || nk=200
+  [ -z "$tgt" ] || for ((k = 0; k < nk; k++)); do kill -TERM $tgt 2>/dev/null; done
   sleep "${FAKE_KILL_SLEEP:-3}" & echo $! >> "$FAKE_LOG.pids"; wait; exit 1
 fi
 out=""; pat=""; prev=""
@@ -119,9 +125,9 @@ jx=""; for a in "$@"; do case "$a" in --junitxml=*) jx=${a#--junitxml=} ;; esac;
 if grep -q IMPORTROTTO app/core.py; then
   printf '<testsuites><testsuite><testcase classname="" name="tests.test_core"><error message="collection failure">ImportError: cannot import name UNO</error></testcase></testsuite></testsuites>' > "$jx"; exit 2
 elif grep -q ROSSO app/core.py; then
-  printf '<testsuites><testsuite><testcase classname="tests.test_core" name="test_uno"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' > "$jx"; exit 1
+  printf '<testsuites><testsuite><testcase classname="%s" name="%s"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 1
 fi
-printf '<testsuites><testsuite><testcase classname="tests.test_core" name="test_uno"/></testsuite></testsuites>' > "$jx"; exit 0
+printf '<testsuites><testsuite><testcase classname="%s" name="%s"/></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 0
 EOF
 # fake rsync: FAKE_RSYNC_LOG records the arguments (sources, destinations, exclusions), then the real one
 cat > "$BIN/rsync" <<'EOF'
@@ -326,6 +332,31 @@ check "test nominato non eseguito -> rosso_raccolta" '[ "$(field RAC esito)" = r
 cpr "$(mj pyi.json "[$(entry PYI modules/api/app/core.py 'UNO = 1' 'UNO = 1  # IMPORTROTTO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")"
 check "pytest: import rotto in raccolta -> rosso_import" '[ "$(field PYI esito)" = rosso_import ]'
 
+# 9b. (1.8.0, D1-bis) hierarchical names (nomi_test.py, the same relation as plan-check.sh rossi): pytest `test_uno[a]`
+#     with the plan naming test_uno, and a class TestC named by the plan with its method test_a in the report ->
+#     rosso_asserzione; vitest on a `describe` («somma», its test «somma vale uno» red) -> rosso_asserzione. Before:
+#     rosso_raccolta (exact name only). Counterproof: NOMI_TEST_PY on a copy with relazione reduced to equality -> red.
+PYP=$(mj pyp.json "[$(entry PYP modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")
+PYC=$(mj pyc.json "[$(entry PYC modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::TestC' 'assert 2 == 1')]")
+VTD=$(mj vtd.json "[$(entry VTD $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma')]")
+caso_nomi() { # [NOMI_TEST_PY]: the three cases -> 0 if all rosso_asserzione
+  NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; local a=$(field PYP esito)
+  NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; local b=$(field PYC esito)
+  NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; local c=$(field VTD esito)
+  echo "$a $b $c" > "$T/nomi"
+  [ "$a $b $c" = "rosso_asserzione rosso_asserzione rosso_asserzione" ]
+}
+check "pytest test_uno[a] e classe TestC, vitest su un describe -> rosso_asserzione (D1-bis)" 'caso_nomi || { echo "    $(cat "$T/nomi")"; false; }'
+cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
+python3 - "$T/nomi-uguale.py" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
+assert s.count(a) == 1
+open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
+PY
+check "controprova: relazione ridotta all uguaglianza -> i tre casi non sono rosso_asserzione: rosso" '! caso_nomi "$T/nomi-uguale.py"'
+
 # 10. invalid input -> 64, nothing run
 cpr "$(mj bad.json "[$(entry X modules/api/app/core.py 'UNO = 1' 'UNO = 2')]")"
 check "file backend osservato con un test vitest -> 64" '[ "$(rc)" = 64 ] && [ ! -f "$FAKE_LOG.all" ]'
@@ -361,13 +392,87 @@ FAKE_KILL="$CP" FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 \
   cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 sleep 1
 check_par "segnale nel gradino 2: il trap non aspetta la fine dei run" '[ $(( $(date +%s) - t0 )) -lt 25 ] && [ "$(rc)" = 143 ]'
-# 1.6.1: the trap's kills and cleanup finish a moment after counterproof exits; on a loaded runner one second was not
-# enough (CI of 2026-11-06, Linux). Wait up to 15 s for them; a process that really survives still fails the check.
-for _ in $(seq 1 30); do [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && flock -n "$M/.fic-lock" true && break; sleep 0.5; done
-check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ]'
+# 1.8.0 (C1): no more waiting here (1.6.1 waited up to 15 s, and 3 runs out of 12 under load still failed: the runs
+# really survived, their group unrecorded). Each run records its group before it exists, and cleanup waits (at most
+# 5 s) for the recorded groups to be empty before deleting the copies: when counterproof.sh has exited, nothing is
+# left, so the checks are made at once.
+check "  nessun processo dei run superstite" '[ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ] || { echo "    superstiti: $(for p in $(alive); do ps -o pid=,ppid=,pgid=,stat=,args= -p "$p" 2>/dev/null; done | tr "\n" ";")"; false; }'
 check "  nessuna copia fic-cp.* residua, mirror invariato, lock libero" '! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true'
 for p in $(alive); do kill -KILL "$p" 2>/dev/null; done
 rm -rf "$HOME"/fic-cp.*   # 1.6.1: a failure here stays here (it used to fail the «nessuna copia» checks of later cases too)
+
+# 11c. (1.8.0, C1) the race of 11b made certain: the fake run signals counterproof.sh as soon as it starts, and the
+#      registration of the group is delayed (FAKE_KILL_DELAY_REGISTRA seconds, in a copy of the plugin: a `sleep`
+#      before the line that records the group). Registered before the run exists → the delay only delays the run:
+#      no survivor, no copy. Counterproof: the registration after the fork (as in 1.7: the parent writes `$!`) with the
+#      same delay → the TERM kills the subshell before it writes, the group of `timeout` is orphaned: survivors, red.
+# $1 = name, $2 = python replacement program on the text of counterproof.sh → the mutated script, empty if unchanged
+mut_cp() {
+  local d=$T/mut11-$1; mkplug "$d"
+  python3 -c "$2" "$CP" "$d/scripts/counterproof.sh" && ! cmp -s "$CP" "$d/scripts/counterproof.sh" && printf '%s' "$d/scripts/counterproof.sh"
+}
+caso_registra() {  # <script>: step 2 killed by the first run, the registration delayed 2 s → rc, survivors, copies
+  rm -f "$FAKE_LOG.pids"
+  FAKE_KILL="$1" FAKE_KILL_SLEEP=30 FAKE_KILL_DELAY_REGISTRA=2 FIC_CP_PARALLEL=2 CPX="$1" \
+    cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && [ -s "$FAKE_LOG.pids" ] && [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 &&
+    [ "$(mir_hash)" = "$MIR1" ] && flock -n "$M/.fic-lock" true
+}
+pulisci11() { local p; for p in $(alive); do kill -KILL "$p" 2>/dev/null; done; rm -rf "$HOME"/fic-cp.*; }
+# the delay before the registration line, whatever its form (1.8.0: the subshell writes its own pid; 1.7: `$!`)
+m=$(mut_cp ritardo 'import sys
+t = open(sys.argv[1]).read()
+z = "sleep \"${FAKE_KILL_DELAY_REGISTRA:-0}\"; "
+for a in ("   echo \"$BASHPID\" >> \"$TMPD/runpgids\"", "   echo $! >> \"$TMPD/runpgids\"; wait $!)"):
+    if t.count(a) == 1:
+        t = t.replace(a, "   " + z + a[3:])
+        break
+open(sys.argv[2], "w").write(t)')
+check "  premessa 11c: la registrazione del gruppo ritardata nella copia del plugin" '[ -n "$m" ] && grep -q "FAKE_KILL_DELAY_REGISTRA" "$m"'
+diag11() {  # detail of a red: rc, survivors with their group, copies, lock, mirror
+  echo "    rc=$(rc) superstiti: $(for p in $(alive); do ps -o pid=,ppid=,pgid=,stat=,args= -p "$p" 2>/dev/null; done | tr '\n' ';')"
+  echo "    copie: $(ls -d "$HOME"/fic-cp.* 2>&1 | tr '\n' ' ') lock: $(flock -n "$M/.fic-lock" true && echo libero || echo preso) mirror: $([ "$(mir_hash)" = "$MIR1" ] && echo invariato || echo cambiato)"
+  sed 's/^/    out: /' "$T/out" | tail -6
+}
+check_par "11c registrazione ritardata (FAKE_KILL_DELAY_REGISTRA) e segnale appena parte il run → exit 143, nessun superstite, nessuna copia, lock libero" '[ -n "$m" ] && caso_registra "$m" || { diag11; false; }'
+pulisci11
+# counterproof: the 1.7 form (the parent records $! after the fork), with the same delay
+m=$(mut_cp dopo-fork 'import sys
+t = open(sys.argv[1]).read()
+a = """   echo "$BASHPID" >> "$TMPD/runpgids"   # REGISTRA
+   [ -d "$TMPD" ] && [ ! -e "$TMPD/fine" ] || exit 143   # FINE
+   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") > "$w/log" 2>&1 &
+"""
+b = """   env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line" &
+   sleep "${FAKE_KILL_DELAY_REGISTRA:-0}"; echo $! >> "$TMPD/runpgids"; wait $!) > "$w/log" 2>&1 &
+"""
+open(sys.argv[2], "w").write(t.replace(a, b, 1))')
+check "controprova: premessa, la registrazione dopo il fork (com era in 1.7) applicata" '[ -n "$m" ] && grep -q "echo \$! >> \"\$TMPD/runpgids\"" "$m"'
+check_par "controprova: registrazione dopo il fork, con il ritardo → superstiti o copia residua: il caso 11c è rosso" '[ -n "$m" ] && ! caso_registra "$m"'
+pulisci11
+
+# 11d. (1.8.0, C1) a burst of TERM (FAKE_KILL_RAFFICA: 200 signals after the first, as from the two runs of 11b at the
+#      same moment) does not cut cleanup short: the handler exits once. Step 1 (the mirror file restored by cleanup)
+#      and step 2 (no survivor, no copy). Counterproof: the handler of 1.7 (`exit 143` at every signal) → cleanup cut
+#      short; seen 39 times out of 40, so up to three rounds, red if one is.
+caso_raffica() {  # <script>
+  local s=$1
+  FAKE_KILL="$s" FAKE_KILL_RAFFICA=1 CPX="$s" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && flock -n "$M/.fic-lock" true || return 1
+  rm -f "$FAKE_LOG.pids"
+  FAKE_KILL="$s" FAKE_KILL_RAFFICA=1 FAKE_KILL_SLEEP=30 FIC_CP_PARALLEL=2 CPX="$s" \
+    cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
+  [ "$(rc)" = 143 ] && [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ]
+}
+check_par "11d raffica di TERM: la pulizia non si interrompe (mirror ripristinato, lock libero; nel gradino 2 nessun superstite, nessuna copia)" 'caso_raffica "$CP" || { diag11; false; }'
+pulisci11
+m=$(mut_cp gestore-17 'import sys
+t = open(sys.argv[1]).read()
+a = "trap '"'"'[ -n \"$CP_FINE\" ] || { CP_FINE=1; exit 143; }'"'"' TERM INT HUP"
+open(sys.argv[2], "w").write(t.replace(a, "trap '"'"'exit 143'"'"' TERM INT HUP", 1))')
+r11d=0; for _ in 1 2 3; do caso_raffica "$m" || { r11d=1; break; }; done
+check_par "controprova: il gestore della 1.7 (exit 143 a ogni segnale) → la raffica interrompe la pulizia: rosso" '[ -n "$m" ] && [ $r11d = 1 ]'
+pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"   # the mirror as before the counterproof
 
 # 12. from a worktree (pt03): same rule as test-fast.sh — copy ~/fic-mirror-<hash> (seeded from
 #     ~/fic-mirror) and ITS lock; the worktree code never enters the main tree's copy.
@@ -463,7 +568,7 @@ check "due moduli con copia nelle mutazioni -> exit 64 «più moduli con copia»
 #     which therefore stays, as with rsync). Lock held during the runs,
 #     released at the end and on signal; a live lock blocks (exit 3), an orphaned one is taken over; step 2 (worker queue
 #     with the mkdir lock) with the same results. Without sha256sum, timeout, or rsync and tar -> BLOCKED with the reason.
-#     Known limit (pk04b-2): radice_pacchetti = repository root -> 64, the same on both paths.
+#     (The known limit of pk04b-2, radice_pacchetti = repository root -> 64, is gone in 1.8.0: section 16c.)
 #     Counterproofs, run here: fallback disabled in fic_sync -> «sync fallito», red; --delete ignored by the fallback
 #     -> different copy, red; mkdir lock never released -> the folder stays, red; tools not checked -> red.
 path_senza() { # <folder> <name…>: the PATH with the folders containing one of the <name> replaced by <folder>, which
@@ -542,12 +647,7 @@ for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync 
 done
 MAAT_LINGUA=en cpb "$(path_senza "$T/bin-sha256sum-en" rsync flock sha256sum)" "$OUT/one.json"
 check "en: senza sha256sum -> exit 3, prefisso «esito=BLOCKED (» congelato, motivo in inglese" '[ "$(rc)" = 3 ] && grep -qx "counterproof: esito=BLOCKED (counterproofs not available: missing sha256sum) luogo=-" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
-# known limit: radice_pacchetti = repository root -> 64 with the reason, with and without rsync
-echo "{\"versione_schema\": 1, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", $CMDC}]}" > "$T/radice.json"
-RADL=$(mj rad.json "[$(entry R1 y/svc/core.txt 'UNO=1' 'UNO=1 ROSSO' y/svc/t.sh y/svc/t.sh 'rosso')]")
-MAAT_CONFIG=$T/radice.json cpr "$RADL"; RAD1="$(rc) $(grep -c "la copia vuole una cartella" "$T/out")"
-MAAT_CONFIG=$T/radice.json cpb "$PX" "$RADL"; RAD2="$(rc) $(grep -c "la copia vuole una cartella" "$T/out")"
-check "radice_pacchetti = radice del repository -> 64 «la copia vuole una cartella», uguale con rsync e senza" '[ "$RAD1" = "64 1" ] && [ "$RAD2" = "64 1" ]'
+# (1.8.0, A4: the known limit «radice_pacchetti = repository root -> 64» is gone, the root cases are in 16c)
 # counterproofs by mutation (plugin copies with fic-mirror.sh or counterproof.sh mutated)
 mut16() { # <name> <file> <sed>: plugin copy with <file> mutated -> its counterproof.sh; empty if the sed changes nothing
   local d=$T/mut16-$1; mkplug "$d"; sed "$3" "$HERE/$2" > "$d/scripts/$2"
@@ -565,6 +665,195 @@ cpb "$(path_senza "$T/bin-sha256sum-m" rsync flock sha256sum)" "$OUT/one.json" "
 check "controprova: strumenti non controllati -> niente «manca sha256sum», rosso" '[ -n "$m" ] && ! grep -q "manca sha256sum" "$T/out"'
 caso_ripiego >/dev/null   # copy realigned after the mutants
 rm -rf "$M/apps/admin/node_modules/tieni" "$M/apps/admin/vuota-estranea" "$MA/__pycache__"
+
+# 16b. (1.8.0, A5) the mutation keeps the mode of the file and does not break a link (own configuration a5.json:
+#      module sx, `comando` runner, and lib for a link that leaves the module).
+#      - an executable script mutated: its test exits 0 when the file is NOT executable («non eseguibile» = green) and
+#        1 when its output says ROSSO → rosso_generico (1.7: the file reborn 0644, verde); mode 755 after the restore
+#      - a symbolic link inside the module mutated: the target is mutated, and after the restore the link is still a
+#        link to the same target, with the content of before; the same with a signal halfway through the run (the
+#        restore of cleanup, FAKE_KILL)
+#      - a link to a file outside the module → bloccato «collegamento fuori dal modulo», nothing mutated
+#      Counterproofs: chmod taken out of apply() → verde, red; restore on the path of the link (as in 1.7) → the link
+#      becomes a file, red.
+mkdir -p "$R/v/sx"
+printf '#!/usr/bin/env bash\necho UNO\n' > "$R/v/sx/core.sh"; chmod 755 "$R/v/sx/core.sh"
+printf '[ -x core.sh ] || { echo "non eseguibile"; exit 0; }\n./core.sh | grep -q ROSSO && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-x.sh"
+echo 'UNO=1' > "$R/v/sx/dati.txt"; ln -s dati.txt "$R/v/sx/link.txt"; ln -s ../../z/lib/core.txt "$R/v/sx/fuori.txt"
+printf 'grep -q ROSSO link.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-l.sh"
+printf 'grep -q ROSSO fuori.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/v/sx/t-f.sh"
+printf 'grep -q ROSSO link.txt && npx uccidi\nexit 0\n' > "$R/v/sx/t-k.sh"
+(cd "$R" && git add -A && git commit -qm a5) > /dev/null 2>&1
+cat > "$T/a5.json" <<EOF
+{"versione_schema": 1, "moduli": [
+  {"nome": "sx", "radice": "v/sx", $CMDC},
+  {"nome": "lib", "radice": "z/lib", $CMDC}
+]}
+EOF
+SX=$HOME/fic-mirror/v/sx
+ta5() { entry "$1" "v/sx/$2" "$3" "$4" "v/sx/$5" "v/sx/$5" 'rosso'; }
+LX=$(mj a5x.json "[$(ta5 X1 core.sh 'echo UNO' 'echo ROSSO' t-x.sh)]")
+LK=$(mj a5k.json "[$(ta5 K1 link.txt 'UNO=1' 'UNO=1 ROSSO' t-l.sh)]")
+LS=$(mj a5s.json "[$(ta5 K2 link.txt 'UNO=1' 'UNO=1 ROSSO' t-k.sh)]")
+LF=$(mj a5f.json "[$(ta5 O1 fuori.txt 'UNO=1' 'UNO=1 ROSSO' t-f.sh),$(te L1 z/lib)]")
+caso_x() { MAAT_CONFIG=$T/a5.json CPX=${1:-} cpr "$LX"
+  [ "$(rc)" = 0 ] && [ "$(field X1 esito)" = rosso_generico ] && [ "$(field X1 controprova)" = PASS ] && [ "$(stat -c %a "$SX/core.sh")" = 755 ] && grep -qx "echo UNO" "$SX/core.sh"; }
+link_intatto() { [ -L "$SX/link.txt" ] && [ "$(readlink "$SX/link.txt")" = dati.txt ] && [ -f "$SX/dati.txt" ] && [ ! -L "$SX/dati.txt" ] && grep -qx "UNO=1" "$SX/dati.txt"; }
+caso_k() { MAAT_CONFIG=$T/a5.json CPX=${1:-} cpr "$LK"
+  [ "$(rc)" = 0 ] && [ "$(field K1 esito)" = rosso_generico ] && link_intatto; }
+caso_x
+check "16b script eseguibile mutato: resta eseguibile durante il run → rosso_generico, PASS; modo 755 dopo il ripristino" '[ "$(rc)" = 0 ] && [ "$(field X1 esito)" = rosso_generico ] && [ "$(field X1 controprova)" = PASS ] && [ "$(stat -c %a "$SX/core.sh")" = 755 ] && grep -qx "echo UNO" "$SX/core.sh"'
+caso_k
+check "  collegamento interno mutato: il bersaglio vede la mutazione (rosso_generico); dopo il ripristino ancora un collegamento a dati.txt, contenuto di prima" '[ "$(rc)" = 0 ] && [ "$(field K1 esito)" = rosso_generico ] && link_intatto'
+MAAT_CONFIG=$T/a5.json FAKE_KILL="$CP" cpr "$LS"
+check "  lo stesso con un segnale a metà run: exit 143, il ripristino di cleanup lascia il collegamento intatto" '[ "$(rc)" = 143 ] && link_intatto'
+MAAT_CONFIG=$T/a5.json cpr "$LF"
+check "  collegamento verso fuori dal modulo → bloccato «collegamento fuori dal modulo», nessuna mutazione" '[ "$(field O1 esito)" = bloccato ] && field O1 motivo | grep -q "collegamento fuori dal modulo" && [ -L "$SX/fuori.txt" ] && grep -qx "UNO=1" "$HOME/fic-mirror/z/lib/core.txt" && [ "$(field L1 esito)" = rosso_generico ]'
+# counterproofs on plugin copies (mut16: a sed on one file of the copy)
+m=$(mut16 a5-chmod counterproof.sh 's/^    os\.chmod(path, stat\.S_IMODE(st\.st_mode))$/    pass   # CHMOD tolto/')
+check "controprova: chmod tolto da apply() → il file perde il bit x, verde: il caso 16b è rosso" '[ -n "$m" ] && ! caso_x "$m" && [ "$(field X1 esito)" = verde ]'
+m=$(mut16 a5-restore counterproof.sh 's/^    restore "\$w\/bak" "\$mf"   # RESTORE$/    restore "$w\/bak" "$mroot\/$f"   # RESTORE sul collegamento/')
+check "controprova: restore sul percorso del collegamento (come in 1.7) → il collegamento diventa un file: rosso" '[ -n "$m" ] && ! caso_k "$m" && [ ! -L "$SX/link.txt" ]'
+rm -f "$SX/link.txt"; ln -s dati.txt "$SX/link.txt"   # the mirror as before the counterproof
+
+# 16c. (1.8.0, A4) a module at the ROOT of the repository ("radice": "."), without copia: the counterproof runs (before:
+#      64 «la copia vuole una cartella»). Own configurations: radc.json (the root module, a sibling svc without copia with
+#      a collega_nel_worktree folder, the sibling fe with copia of the example; cycles folder `run`, where OUT is) and
+#      radn.json (the same without fe: no module with copia).
+#      - covered -> rosso_generico PASS, uncovered -> verde FAIL, with rsync and without (the same copy); the mirror holds
+#        neither .git nor the cycles folder; the sibling keeps its collega folder; the sibling with copia keeps .fic-deps,
+#        .fic-sync-gen and .fic-lock; from a worktree its .git file is not copied
+#      - the lock of a sibling held (with copia: as test-fast.sh; without: as a counterproof on it) -> exit 3 «mirror
+#        occupato» with that lock, no sync, no runner; released -> it runs. Two locks held: one total deadline
+#      - a run orphaned out of its group (the C1 case) keeps none of the locks
+#      - a module with copia at the root -> 64 with the new message; a tracked .fic-* file -> BLOCKED with the reason
+#      Counterproofs on plugin copies, one per rule (below).
+mkdir -p "$R/top"
+echo 'UNO=1' > "$R/top/core.txt"
+printf 'echo ran >> "$FAKE_LOG.all"\ngrep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/top/t.sh"
+printf 'setsid sleep 27 > /dev/null 2>&1 < /dev/null & echo $! > "$FAKE_LOG.orfano"\ngrep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/top/t-o.sh"
+(cd "$R" && git add -A && git commit -qm radice) > /dev/null 2>&1
+SVC='{"nome": "svc", "radice": "y/svc", "collega_nel_worktree": ["deps"], '"$CMDC"'}'
+FE='{"nome": "fe", "radice": "modules/app/apps/admin", "radice_pacchetti": "modules/app", "copia": {"test": "true {test}"}}'
+echo "{\"versione_schema\": 1, \"cartelle\": {\"lavoro\": \"run\"}, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", $CMDC}, $SVC, $FE]}" > "$T/radc.json"
+echo "{\"versione_schema\": 1, \"cartelle\": {\"lavoro\": \"run\"}, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", $CMDC}, $SVC]}" > "$T/radn.json"
+MR=$HOME/fic-mirror; SVCL=$MR/y/svc/.fic-lock
+tr16() { entry "$1" top/core.txt 'UNO=1' "$2" "top/${3:-t.sh}" "top/${3:-t.sh}" 'rosso'; }
+LR=$(mj radl.json "[$(tr16 RT1 'UNO=1 ROSSO'),$(tr16 RV1 'UNO=2')]")
+LR1=$(mj radl1.json "[$(tr16 RT1 'UNO=1 ROSSO')]")
+LRO=$(mj radlo.json "[$(tr16 RO1 'UNO=1 ROSSO' t-o.sh)]")
+FDEPS=$(cat "$M/.fic-deps"); echo 7 > "$M/.fic-sync-gen"
+semina16() { # the state of the siblings in the mirror before a root run, and a drifted copy of the root module
+  mkdir -p "$MR/y/svc/deps" && echo d > "$MR/y/svc/deps/x"
+  echo "$FDEPS" > "$M/.fic-deps"; echo 7 > "$M/.fic-sync-gen"; touch "$M/.fic-lock"
+  mkdir -p "$MR/top" && echo 'UNO=0 stantio' > "$MR/top/core.txt" && echo x > "$MR/top/estraneo.txt"
+}
+fratelli_intatti() { [ -f "$MR/y/svc/deps/x" ] && [ "$(cat "$M/.fic-deps")" = "$FDEPS" ] && [ -f "$M/.fic-sync-gen" ] && [ -f "$M/.fic-lock" ]; }
+caso_radice() { # [script] [PATH]: the list covered + uncovered at the root
+  semina16; rm -f "$OUT/RT1.json" "$OUT/RV1.json"
+  if [ -n "${2:-}" ]; then MAAT_CONFIG=$T/radc.json FIC_CP_PARALLEL=1 cpb "$2" "$LR" "${1:-$CP}"
+  else MAAT_CONFIG=$T/radc.json FIC_CP_PARALLEL=1 CPX=${1:-} cpr "$LR"; fi
+  [ "$(rc)" = 1 ] && [ "$(field RT1 esito)" = rosso_generico ] && [ "$(field RT1 controprova)" = PASS ] &&
+    [ "$(field RV1 esito)" = verde ] && [ "$(field RV1 controprova)" = FAIL ] &&
+    tail -1 "$T/out" | grep -q "esito=FAIL prove=1/2 fail=1 bloccate=0" && grep -qx "UNO=1" "$MR/top/core.txt" && [ ! -e "$MR/top/estraneo.txt" ]
+}
+caso_radice
+check "16c modulo alla radice senza copia: coperta -> rosso_generico PASS, scoperta -> verde FAIL" '[ "$(rc)" = 1 ] && [ "$(field RT1 esito)" = rosso_generico ] && [ "$(field RV1 esito)" = verde ] && grep -qx "UNO=1" "$MR/top/core.txt" && [ ! -e "$MR/top/estraneo.txt" ] || { sed "s/^/    out: /" "$T/out" | tail -8; false; }'
+check "  lo specchio non contiene .git ne la cartella dei cicli (run)" '[ ! -e "$MR/.git" ] && [ ! -e "$MR/run" ]'
+check "  il fratello svc conserva la sua cartella collega_nel_worktree (deps)" '[ -f "$MR/y/svc/deps/x" ]'
+check "  il fratello con copia conserva .fic-deps, .fic-sync-gen e .fic-lock" '[ "$(cat "$M/.fic-deps")" = "$FDEPS" ] && [ -f "$M/.fic-sync-gen" ] && [ -f "$M/.fic-lock" ]'
+check "  i lock presi rilasciati alla fine" 'flock -n "$MR/.fic-lock" true && flock -n "$SVCL" true && flock -n "$M/.fic-lock" true'
+AL_R=$(albero_copia)
+caso_radice "" "$PX"
+check "  senza rsync e flock: stessi esiti e stessa copia della via rsync, lock di ripiego rilasciati" '[ "$(rc)" = 1 ] && [ "$(field RT1 esito)" = rosso_generico ] && [ "$(field RV1 esito)" = verde ] && [ "$(albero_copia)" = "$AL_R" ] && fratelli_intatti && [ -z "$(find "$MR" -name ".fic-lock.d*")" ]'
+# from a worktree: the .git file is not copied (W of case 12; the root files written there, untracked and not ignored)
+mkdir -p "$W/top" && cp "$R/top/core.txt" "$R/top/t.sh" "$W/top/"
+WMR=${WM%/modules/app}
+printf '[%s]\n' "$(tr16 RW1 'UNO=1 ROSSO')" > "$W/run/counterproof/radw.json"
+rm -f "$FAKE_LOG.all"
+MAAT_CONFIG=$T/radc.json PROJECT_ROOT=$W bash "$CP" "$W/run/counterproof/radw.json" > "$T/out" 2>&1; echo $? > "$T/rc"
+check "  da un worktree: gira nella copia del worktree, il file .git non è copiato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1" && [ -f "$W/.git" ] && [ ! -e "$WMR/.git" ] && [ -f "$WMR/top/core.txt" ] || { sed "s/^/    out: /" "$T/out" | tail -6; false; }'
+# the lock of a sibling held: with copia (fe, as test-fast.sh takes it) and without (svc, as a counterproof on svc)
+caso_lock_fratello() { # <config> <lock> [script]: the lock held by another process -> exit 3 with that lock, nothing synced, no run
+  local h; semina16; AL0=$(albero_copia)
+  ( flock 9; exec sleep 30 ) 9>"$2" & h=$!
+  sleep 0.5
+  MAAT_CONFIG=$1 FIC_LOCK_WAIT=1 CPX=${3:-} cpr "$LR1"
+  kill "$h" 2>/dev/null; wait "$h" 2>/dev/null
+  [ "$(rc)" = 3 ] && grep -qF "esito=BLOCKED (mirror occupato oltre 1s (lock $2)" "$T/out" && [ "$(albero_copia)" = "$AL0" ] && [ ! -f "$FAKE_LOG.all" ]
+}
+check "  lock del fratello con copia tenuto -> exit 3 «mirror occupato» con quel lock, specchio identico, nessun runner" 'caso_lock_fratello "$T/radc.json" "$M/.fic-lock" || { sed "s/^/    out: /" "$T/out" | tail -4; false; }'
+MAAT_CONFIG=$T/radc.json cpr "$LR1"
+check "    liberato il lock, gira" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1" && grep -qx ran "$FAKE_LOG.all"'
+check "  nessun modulo con copia: lock del fratello svc tenuto -> exit 3 senza sincronizzare" 'caso_lock_fratello "$T/radn.json" "$SVCL" || { sed "s/^/    out: /" "$T/out" | tail -4; false; }'
+# one total deadline: the lock of the mirror root released 3 s after the run prints its count line (just before the
+# locks), that of svc held; FIC_LOCK_WAIT=6 -> the BLOCKED line on svc about 6 s after the count line (a deadline per
+# lock: 3 + 6 = 9 s); limit 7.5 s. Both moments are read from the output of the run (start-up and cleanup not timed).
+caso_scadenza() { # [script] -> 0 if exit 3 on the lock of svc within 7.5 s of the count line
+  local h1 h2 h3 dt
+  rm -f "$T/out" "$T/t-avvio" "$T/t-esito"
+  ( flock 9; until grep -q "da eseguire" "$T/out" 2>/dev/null; do sleep 0.05; done; date +%s%N > "$T/t-avvio"
+    exec sleep 3 ) 9>"$MR/.fic-lock" & h1=$!
+  ( flock 9; exec sleep 60 ) 9>"$SVCL" & h2=$!
+  ( until grep -q "esito=" "$T/out" 2>/dev/null; do sleep 0.05; done; date +%s%N > "$T/t-esito" ) & h3=$!
+  sleep 0.3
+  MAAT_CONFIG=$T/radn.json FIC_LOCK_WAIT=6 CPX=${1:-} cpr "$LR1"
+  sleep 0.2; kill "$h1" "$h2" "$h3" 2>/dev/null; wait "$h1" "$h2" "$h3" 2>/dev/null
+  dt=$(( ($(cat "$T/t-esito" 2>/dev/null || echo 0) - $(cat "$T/t-avvio" 2>/dev/null || echo 0)) / 1000000 ))
+  echo "dalla riga di avvio alla riga esito: $dt ms" > "$T/dt"
+  [ "$(rc)" = 3 ] && grep -qF "(lock $SVCL)" "$T/out" && [ "$dt" -gt 0 ] && [ "$dt" -lt 7500 ]
+}
+check "  due lock tenuti, FIC_LOCK_WAIT=6: exit 3 su svc entro 7,5 s (scadenza unica, non 3 + 6)" 'caso_scadenza || { echo "    $(cat "$T/dt")"; sed "s/^/    out: /" "$T/out" | tail -3; false; }'
+# C1: a run that leaves an orphan out of its group (setsid): when the counterproof is over, no lock is held
+caso_orfano() { # [script]
+  rm -f "$FAKE_LOG.orfano"
+  MAAT_CONFIG=$T/radc.json CPX=${1:-} cpr "$LRO"
+  local ok=0 o; o=$(cat "$FAKE_LOG.orfano" 2>/dev/null)
+  [ "$(rc)" = 0 ] && [ -n "$o" ] && kill -0 "$o" 2>/dev/null &&
+    flock -n "$MR/.fic-lock" true && flock -n "$SVCL" true && flock -n "$M/.fic-lock" true || ok=1
+  [ -z "$o" ] || kill "$o" 2>/dev/null
+  return $ok
+}
+check "  run orfano fuori dal suo gruppo (caso C1): finita la controprova nessun lock resta preso" 'caso_orfano || { sed "s/^/    out: /" "$T/out" | tail -4; false; }'
+# a module with copia at the root -> 64 with the new message (DA3)
+echo "{\"versione_schema\": 1, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", \"copia\": {\"test\": \"true {test}\"}, $CMDC}]}" > "$T/radcopia.json"
+MAAT_CONFIG=$T/radcopia.json cpr "$LR1"
+check "  modulo con copia alla radice -> 64 col messaggio nuovo, niente eseguito" '[ "$(rc)" = 64 ] && grep -q "radice_pacchetti del modulo tutto e la radice del repository: la copia vuole una cartella — modulo con copia alla radice, non supportato (1.8.0): per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
+# a tracked file named .fic-*: not copied at the root -> the manifest check blocks, with the reason (fail-closed)
+echo n > "$R/top/.fic-nota"; (cd "$R" && git add -A && git commit -qm fic-nota) > /dev/null 2>&1
+MAAT_CONFIG=$T/radc.json cpr "$LR1"
+check "  file tracciato .fic-* alla radice -> exit 3 «copia non allineata» col motivo" '[ "$(rc)" = 3 ] && grep -q "alla radice i nomi .fic-\* non vengono copiati" "$T/out" && grep -q "copia non allineata" "$T/out"'
+(cd "$R" && git rm -q top/.fic-nota && git commit -qm via-fic-nota) > /dev/null 2>&1
+# counterproofs: one plugin copy per rule (the exact text replaced once, otherwise the premise is red)
+mut_rep() { # <name> <text> <replacement> -> counterproof.sh of a plugin copy with <text> (exactly once) replaced; empty otherwise
+  local d=$T/mut16c-$1; mkplug "$d"
+  python3 - "$CP" "$d/scripts/counterproof.sh" "$2" "$3" <<'PY' && printf '%s' "$d/scripts/counterproof.sh"
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+if s.count(sys.argv[3]) != 1:
+    sys.exit(1)
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(sys.argv[3], sys.argv[4]))
+PY
+}
+m=$(mut_rep radice 'if not pac and x.get("copia"):' 'if not pac:')
+check "controprova: il rifiuto della radice ripristinato (if not pac) -> il caso radice è rosso" '[ -n "$m" ] && ! caso_radice "$m" && [ "$(rc)" = 64 ]'
+m=$(mut_rep git '".fic-*", "/.git"]' '".fic-*"]')
+check "controprova: /.git tolto dalle esclusioni -> lo specchio contiene .git: rosso" '[ -n "$m" ] && { caso_radice "$m"; [ -e "$MR/.git" ]; }'
+rm -rf "$MR/.git"
+m=$(mut_rep collega '"/" + (p[len(pac) + 1:] if pac else p)' '"/" + p[len(pac) + 1:]')
+check "controprova: :406 non corretta (primo carattere tagliato) -> la cartella deps del fratello sparisce: rosso" '[ -n "$m" ] && { caso_radice "$m"; [ ! -e "$MR/y/svc/deps/x" ]; }'
+m=$(mut_rep ancorata '[".fic-*", "/.git"]' '["/.fic-*", "/.git"]')
+check "controprova: esclusione .fic-* di nuovo ancorata -> .fic-deps del fratello sparisce: rosso" '[ -n "$m" ] && { caso_radice "$m"; [ ! -e "$M/.fic-deps" ]; }'
+echo "$FDEPS" > "$M/.fic-deps"
+m=$(mut_rep solo-radice 'for x in r["moduli"]:   # LOCK-TUTTI' 'for x in []:   # LOCK-TUTTI')
+check "controprova: solo il lock dello specchio preso -> col lock del fratello tenuto sincronizza: rosso" '[ -n "$m" ] && ! caso_lock_fratello "$T/radc.json" "$M/.fic-lock" "$m"'
+m=$(mut_rep solo-copia 'for x in r["moduli"]:   # LOCK-TUTTI' 'for x in [y for y in r["moduli"] if y.get("copia")]:   # LOCK-TUTTI')
+check "controprova: lock presi solo per i moduli con copia -> col lock di svc tenuto sincronizza: rosso" '[ -n "$m" ] && ! caso_lock_fratello "$T/radn.json" "$SVCL" "$m"'
+m=$(mut_rep scadenza 'RESTO=$(( WAIT_MS - ($(date +%s%N) - T_LOCK) / 1000000 ))   # SCADENZA-UNICA' 'RESTO=$WAIT_MS   # SCADENZA-UNICA')
+check "controprova: una scadenza per lock -> oltre 4 s: rosso" '[ -n "$m" ] && ! caso_scadenza "$m"'
+m=$(mut_rep chiudi 'for f in ${LOCKFDS[@]+"${LOCKFDS[@]}"}; do exec {f}>&-; done' 'for f in ${LOCKFDS[@]:0:1}; do exec {f}>&-; done')
+check "controprova: run_cmd chiude solo il primo lock -> l orfano tiene i lock dei fratelli: rosso" '[ -n "$m" ] && ! caso_orfano "$m"'
+caso_radice >/dev/null   # the mirror as the real script leaves it
 
 # 17. project root: from PROJECT_ROOT, never from the script location; without it (outside a repo) -> exit 64.
 #     Counterproof: ROOT again from $HERE/../.. -> the cases above are red.

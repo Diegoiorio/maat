@@ -82,6 +82,9 @@ check "  e rilascia il lock per spec" '[ ! -d "$T/run/plan.lock" ]'
 check "plan: FIC_PHASE=plan" 'grep -qx "FIC_PHASE=plan" "$T/01-plan.env"'
 check "hook passato con --settings" 'grep -qx -- "--settings" "$T/01-plan.args" && grep -q "guard.py" "$T/01-plan.args"'
 check "  --settings con guardia E hook Stop (stop-hook.py)" 'grep -F "\"PreToolUse\"" "$T/01-plan.args" | grep -q guard.py && grep -F "\"Stop\"" "$T/01-plan.args" | grep -q "stop-hook.py"'
+# 1.8.0 (D2): the guard also sees Agent and Task (an agent in background is denied in the sub-sessions)
+MATCHER=$(grep -F '"PreToolUse"' "$T/01-plan.args" | grep -o '"matcher": "[^"]*"' | head -1 | sed 's/^"matcher": "//; s/"$//')
+check "  matcher PreToolUse con Agent e Task (D2): $MATCHER" '(for t in Bash Edit Write Agent Task; do case "|$MATCHER|" in *"|$t|"*) ;; *) exit 1 ;; esac; done)'
 # pk08 (Linux): the Stop hook path is the real one, not «/stop-hook.py» (pwd -W missing outside Windows)
 STOPP=$(grep -F '"Stop"' "$T/01-plan.args" | grep -o '[^"\\ ]*stop-hook\.py' | head -1)
 check "  hook Stop: il file nel comando esiste ($STOPP)" '[ -n "$STOPP" ] && [ "$STOPP" != /stop-hook.py ] && [ -f "$STOPP" ]'

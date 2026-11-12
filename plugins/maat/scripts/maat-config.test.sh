@@ -51,6 +51,24 @@ cat > "$T/min/.claude/maat.json" <<'EOF'
 EOF
 MIN=$T/min/.claude/maat.json
 mc valida "$MIN" > "$T/out" 2>&1; check "maat.json minimo valido" '[ $? = 0 ]'
+check "  modulo alla radice senza copia: nessun avviso sulla copia alla radice" '! grep -q "copia con radice_pacchetti" "$T/out"'
+# 1.8.0 (D1-bis): moduli[].separatori_test, optional list of strings (the levels of the test names, nomi_test.py)
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": ["/", "::"]}]}' > "$T/sep.json"
+mc valida "$T/sep.json" > "$T/out" 2>&1; check "separatori_test: lista di stringhe valida" '[ $? = 0 ]'
+check "  leggi moduli.0.separatori_test" '[ "$(MAAT_CONFIG=$T/sep.json mc leggi moduli.0.separatori_test 2>/dev/null | tr -d "\r")" != "" ]'
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": "/"}]}' > "$T/sep-ko.json"
+mc valida "$T/sep-ko.json" > "$T/out" 2>&1; rc=$?
+check "separatori_test non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.separatori_test" "$T/out"'
+# 1.8.0 (A4, DA3): copia at the root of the repository -> valid (exit 0) with a warning on stderr, before the cycle
+cat > "$T/copia-radice.json" <<'EOF'
+{"versione_schema": 1,
+ "moduli": [{"nome": "app", "radice": ".", "comandi": {"test": "npm test -- {test}"}, "copia": {"test": "true {test}"}}]}
+EOF
+caso_copia_radice() { "$FIC_PY" "${1:-$MC}" valida "$T/copia-radice.json" > "$T/out" 2>"$T/err"; local rc=$?; cat "$T/err" >> "$T/out"
+  [ $rc = 0 ] && grep -qF "maat-config: $T/copia-radice.json: moduli.0 (app): copia con radice_pacchetti alla radice del repository non e' supportata (1.8.0); per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella" "$T/err"; }
+check "copia alla radice -> valido con l avviso (stderr) e il rimedio" 'caso_copia_radice'
+MAAT_LINGUA=en "$FIC_PY" "$MC" valida "$T/copia-radice.json" > "$T/out" 2>&1
+check "  en: the warning in English" 'grep -qF "moduli.0 (app): copia with radice_pacchetti at the root of the repository is not supported (1.8.0)" "$T/out"'
 leggi() { MAAT_CONFIG=$MIN mc leggi "$1" 2>"$T/out"; }
 check "default moduli.0.regola_test = accanto" '[ "$(leggi moduli.0.regola_test)" = accanto ]'
 check "default moduli.0.ambiente = nativo" '[ "$(leggi moduli.0.ambiente)" = nativo ]'
@@ -544,6 +562,9 @@ mutante() { # <name> <sed expression> -> path of the mutated reader; empty if th
   sed -e "$2" "$MC" > "$d/scripts/maat-config.py"
   cmp -s "$MC" "$d/scripts/maat-config.py" || printf '%s' "$d/scripts/maat-config.py"
 }
+m=$(mutante copia-radice 's/^        if m.get("copia") and norm(m.get("radice_pacchetti", m.get("radice", ""))) == "":$/        if False:/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"   # the catalog next to the mutant: the same text
+check "controprova (1.8.0, A4): senza l avviso della copia alla radice -> rosso" '[ -n "$m" ] && ! caso_copia_radice "$m"'
 m=$(mutante ap 's/elif ap is False:/elif False:/')
 check "controprova: senza additionalProperties false la chiave sconosciuta passa -> rosso" '[ -n "$m" ] && ! caso_sconosciuta "$m"'
 m=$(mutante s1 's/if m.get("regola_test") == "specchio" and "specchio" not in m:/if False:/')

@@ -257,6 +257,24 @@ driver-170.no_full_proof	no proof that the full plan branch ran (no spec-plan-re
 driver-170.review_not_approved	review {label}: Review status {rs}	review {label}: Review status {rs}
 maat-config-170.s11	piano.taglia needs "harness": ">=1.7" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	piano.taglia richiede "harness": ">=1.7" o successiva, cosi' una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
 
+# --- counterproof-180, maat-doctor-180, maat-config-180 (1.8.0, written by hand like driver-cmd: texts that v1.3.0
+# does not have, so outside the counterproof section of tools/lingua-conversioni/). counterproof.sh: A5 (the mode of
+# the mutated file, a link outside the module), A4 (a module at the root of the repository, without copia, syncs the
+# whole mirror and skips the .fic-* names; with copia it is refused with the remedy); maat-doctor.sh and
+# maat-config.py valida: a module with copia at the root is not supported.
+counterproof-180.mode_changed	mode or type of the file not restored: before {before}, after {after}	modo o tipo del file non ripristinato: prima {before}, dopo {after}
+counterproof-180.link_outside	link outside the module: {f} -> {real} (outside {root}), no mutation	collegamento fuori dal modulo: {f} -> {real} (fuori da {root}), nessuna mutazione
+counterproof-180.root_copy_fix	module with copia at the root, not supported (1.8.0): for the counterproof use a module without copia, or put radice_pacchetti in a subfolder	modulo con copia alla radice, non supportato (1.8.0): per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella
+counterproof-180.root_fic_name	at the root the names .fic-* are not copied (copy state and locks of every folder): a file of the project with that name makes the copy differ, rename it	alla radice i nomi .fic-* non vengono copiati (stato della copia e lock di ogni cartella): un file del progetto con quel nome rende la copia diversa, rinominalo
+maat-doctor-180.root_copy	module {nome}: copia with radice_pacchetti at the root of the repository is not supported (1.8.0): the counterproof stops with exit 64 and test-fast.sh refuses the copy	modulo {nome}: copia con radice_pacchetti alla radice del repository non e' supportata (1.8.0): la controprova si ferma con exit 64 e test-fast.sh rifiuta la copia
+maat-doctor-180.root_copy_fix	for the counterproof use a module without copia (it runs at the root), or put radice_pacchetti in a subfolder	per la controprova usa un modulo senza copia (alla radice gira), o metti radice_pacchetti in una sottocartella
+
+# --- stop-hook-180 (1.8.0, D2, written by hand): an Agent/Task launched asynchronously and not collected keeps the
+# sub-session from closing (stop-hook.py, once: a defence; guard.py denies the launch itself)
+stop-hook-180.agents	background agents not collected: 	agenti in background non raccolti: 
+stop-hook-180.agents_fix	wait for the reviewers' notifications, do not close the phase (and launch the next agents in the foreground: several Agent calls in the same message already run in parallel)	attendi le notifiche dei revisori, non chiudere la fase (e lancia i prossimi agenti in primo piano: più chiamate Agent nello stesso messaggio girano già in parallelo)
+maat-config-180.root_copy	{name}: moduli.{i} ({nome}): copia with radice_pacchetti at the root of the repository is not supported (1.8.0); for the counterproof use a module without copia, or put radice_pacchetti in a subfolder	{name}: moduli.{i} ({nome}): copia con radice_pacchetti alla radice del repository non e' supportata (1.8.0); per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

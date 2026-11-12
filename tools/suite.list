@@ -6,6 +6,7 @@
 tools/suite.test.sh
 maat-paths
 maat-config
+nomi_test
 messages
 gates
 finalize

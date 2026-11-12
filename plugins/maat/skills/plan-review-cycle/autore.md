@@ -93,6 +93,14 @@ token: `plan-check.sh` maps the English one to the Italian one, and prints the I
 LOW/MEDIUM/HIGH grading: no behaviour needs it. Lens L1 verifies the declaration like any
 `no implication` — under-declaring would silently skip both.
 
+**When to declare `permissions`:** when the change alters who may do what — authentication, authorization, roles,
+visibility by role (a new guard, a check moved or removed, a route that changes its audience, a token or session
+rule). **When not:** a parser, a depth limit, a file mode bit the product does not use for access control, a pure
+function of a library — the word «permission» appearing in the code does not make it a permission change. A section
+of the plan with nothing to say is still the line `<areas>: no implication` (or `nessuna implicazione`): the size of
+the cycle (`plan-check.sh taglia`, F11) ignores the security words of that list, and only of that list — the other
+sentences of the line, and a `permission rules` section with real content, still count.
+
 ## Test effort: `--tests=min|std|full`
 
 Parse `$ARGUMENTS` for `--tests=min|std|full`. Italian aliases count as the flag: "test minimi" /

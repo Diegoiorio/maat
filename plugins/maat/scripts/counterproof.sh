@@ -70,6 +70,19 @@
 #   module with copia among the mutations: that of the first module with copia in maat.json, otherwise of the first
 #   module of the mutations), taken with `flock -w "${FIC_LOCK_WAIT:-900}"`: it WAITS, and beyond the cap -> exit 3. NEVER a
 #   fallback to /mnt/c: there the test would run on the unmutated tree and give a false «not red».
+# - 1.8.0 (A4) a module at the ROOT of the repository (radice_pacchetti "" or "."), only WITHOUT `copia` (with `copia`
+#   -> exit 64: not in 1.8.0, maat-doctor and `maat-config.py valida` say it before the cycle). It is the whole mirror,
+#   shared by every module, so:
+#   - its sync excludes, besides the core list, the copy state and the locks of EVERY folder (`.fic-*` not
+#     anchored: a tracked file of the project named .fic-* is not copied either, and the manifest check gives
+#     BLOCKED, said in a line), `/.git` (from a worktree a file that points to the real repository), the cycles
+#     folder (`cartelle.lavoro`, anchored; also out of the manifest: OUT writes there during the run) and the
+#     `collega_nel_worktree` folders of every module, each anchored to its folder;
+#   - it takes <mirror>/.fic-lock AND <mirror>/<radice_pacchetti>/.fic-lock of EVERY module of maat.json (with or
+#     without copia: a counterproof on a module B holds the lock of B's folder, test-fast.sh that of its own), in the
+#     order of maat.json, without duplicates, under ONE total deadline FIC_LOCK_WAIT for all the waits; one not taken
+#     -> exit 3 «mirror occupato … (lock <path>)», nothing synced, the locks already taken released. Every run
+#     closes all the lock descriptors (an orphaned run keeps none).
 # - Without rsync or without flock (pk08, for example Git Bash on Windows without WSL; CHANGES THE CONTRACT of pk04b-2, which gave
 #   BLOCKED): counterproofs run anyway, with the fic-mirror.sh fallbacks, slower and declared in one line
 #   «counterproof: … di ripiego …». Copy: fic_sync (find + sha256 fingerprints + tar, same exclusions, --delete and
@@ -91,6 +104,11 @@
 #   only, restore (unlink + copy), then the hash of the module in the mirror compared again with the initial manifest. If
 #   it does not match -> exit 5 and it stops (a dirty mirror would falsify the following mutations). If the script dies
 #   halfway, the EXIT trap restores the in-flight file.
+#   1.8.0 (A5): the file is the REAL path, resolved once (a symbolic link inside the module copy is followed; one that
+#   leads outside it -> bloccato «collegamento fuori dal modulo», nothing mutated): backup, in-flight record, mutation,
+#   restore and the restore of the EXIT trap all work on it, so a link stays a link. The mutation keeps the mode (and,
+#   when allowed, the owner) of the file; after the restore the mode of the file and the type of the path (a link to
+#   the same target, if it was one) are compared with those of before: different -> exit 5, like the manifest.
 # - {python}: $FIC_PYTEST_PY if set (override); otherwise, for an `ambiente: wsl` module, the gates.sh
 #   search (moduli[].python, string or list, relative to the root; then piattaforma.python; then python3: the first
 #   that exists, here inside WSL) and none -> exit 3 «python WSL assente»; for a native module the reader's
@@ -113,8 +131,10 @@
 # SIGNALS
 # - TERM, INT (Ctrl-C), HUP: the trap fires at once (runs go in the background and are awaited with `wait`) and,
 #   in order, KILLs all descendants — workers, `timeout`, the runner command and its children — and the
-#   process groups opened by `timeout` (recorded by pid: they outlive the workers if a Ctrl-C kills those first),
-#   restores the in-flight file in the mirror, deletes the private copies $HOME/fic-cp.*; other signals during cleanup
+#   process groups opened by `timeout` (recorded by pid: they outlive the workers if a Ctrl-C kills those first;
+#   1.8.0: each run records its group itself, before it exists, so no run escapes the record), waits at most 5 s
+#   for the recorded groups to be empty, restores the in-flight file in the mirror, deletes the private copies
+#   $HOME/fic-cp.*; other signals during cleanup
 #   are ignored, so that they do not interrupt it halfway. It exits 143;
 #   the <id>.json already written stay, those not yet written are missing: the run is not complete.
 # - KILL (or the death of WSL) cannot be trapped: what may remain is a mutated file in the mirror (realigned by the
@@ -165,6 +185,9 @@ export PROJECT_ROOT=$ROOT MAAT_CONFIG_PY="$HERE/maat-config.py"
 # interpreter reads (C:/… for a Windows Python, the path as it is inside WSL)
 maat_msg_carica; maat_lingua -v MAAT_LINGUA; export MAAT_LINGUA
 MAAT_MSG_PY=$(maat_cygm "$HERE/maat_msg.py" 2>/dev/null || printf '%s' "$HERE/maat_msg.py"); export MAAT_MSG_PY
+# 1.8.0 (D1-bis): the relation of the test names, the same module as plan-check.sh rossi (NOMI_TEST_PY wins: tests)
+[ -n "${NOMI_TEST_PY:-}" ] || NOMI_TEST_PY=$(maat_cygm "$HERE/nomi_test.py" 2>/dev/null || printf '%s' "$HERE/nomi_test.py")
+export NOMI_TEST_PY
 missing=""
 for t in sha256sum timeout; do command -v "$t" >/dev/null 2>&1 || missing+="${missing:+, }$t"; done
 command -v rsync >/dev/null 2>&1 || command -v tar >/dev/null 2>&1 || missing+="${missing:+, }$(msg counterproof.rsync_tar)"
@@ -190,13 +213,16 @@ OUT=$(cd "$(dirname "$MJ")" && pwd)
 
 # Logic on JSON and reports, in Python (no jq in WSL). No single quote in here.
 PY='
-import importlib.util, json, os, posixpath, re, shutil, sys
+import importlib.util, json, os, posixpath, re, shutil, stat, sys
 import xml.etree.ElementTree as ET
 sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
 _s = importlib.util.spec_from_file_location("maat_msg", os.environ["MAAT_MSG_PY"])
 _m = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(_m)
 T = _m.T   # the catalog (lib/messages.tsv), the same as the bash side
+_s = importlib.util.spec_from_file_location("nomi_test", os.environ["NOMI_TEST_PY"])
+NT = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(NT)   # 1.8.0 (D1-bis): relazione() of the test names, shared with plan-check.sh rossi
 
 def die(msg):
     print("counterproof: " + msg, file=sys.stderr)
@@ -382,8 +408,8 @@ def prep(mj, root, tmp, out):
         if not SAFE_ID.match(nm):
             die(T("counterproof.bad_module_name", nm=nm))
         rad, pac = mc.norm(x["radice"]), mc.norm(x["radice_pacchetti"])
-        if not pac:
-            die(T("counterproof.pkg_is_root", nm=nm))
+        if not pac and x.get("copia"):   # 1.8.0 (A4): the root is allowed, only without `copia` (DA3)
+            die(T("counterproof.pkg_is_root", nm=nm) + " — " + T("counterproof-180.root_copy_fix"))
         try:
             gruppo = mc.relativa(rad, pac)
         except mc.Uscita as u:
@@ -397,15 +423,24 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "copia"), "1" if x.get("copia") else "")
         wtxt(os.path.join(d, "runner"), cp["runner"])
         # extra exclusions of the module: the collega_nel_worktree folders (installed dependencies), relative to the
-        # packages root, anchored
-        esc = []
-        for v in x.get("collega_nel_worktree", []):
-            v = {"percorso": v} if isinstance(v, str) else v
-            b = mc.cartella_di(x, v.get("cartella", "radice"))
-            p = mc.norm(posixpath.join(b, v["percorso"]) if b else v["percorso"])
-            if p != pac and mc.sotto(p, pac):
-                esc.append("/" + p[len(pac) + 1:])
+        # packages root, anchored. 1.8.0 (A4): a module at the root (pac "") is the whole mirror, shared by the other
+        # modules: its sync also excludes the copy state and the locks of every folder (.fic-*, NOT anchored), the
+        # .git of the repository (the .git file of a worktree points to the real repository), the cycles folder (OUT
+        # writes there during the run) and the collega_nel_worktree folders of EVERY module, each anchored to the
+        # repository root. Before, "/" + p[len(pac) + 1:] cut the first character when pac == "".
+        esc, lav = [], ""
+        if not pac:
+            lav = mc.norm((r.get("cartelle") or {}).get("lavoro") or "")
+            esc += [".fic-*", "/.git"] + (["/" + lav] if lav else [])   # ESCLUSIONI-RADICE
+        for x2 in ([x] if pac else r["moduli"]):
+            for v in x2.get("collega_nel_worktree", []):
+                v = {"percorso": v} if isinstance(v, str) else v
+                b = mc.cartella_di(x2, v.get("cartella", "radice"))
+                p = mc.norm(posixpath.join(b, v["percorso"]) if b else v["percorso"])
+                if p and p != pac and mc.sotto(p, pac):
+                    esc.append("/" + (p[len(pac) + 1:] if pac else p))   # COLLEGA-RADICE
         wtxt(os.path.join(d, "escludi"), "".join(e + "\n" for e in esc))
+        wtxt(os.path.join(d, "lavoro"), lav)
         wtxt(os.path.join(d, "preparati"), "".join(g + "\n" for g in x.get("preparati", [])))
         anche = [mc.norm(a) for a in x.get("copia_anche", []) if rel_ok(mc.norm(a))]
         wtxt(os.path.join(d, "anche"), "".join(a + "\n" for a in anche))
@@ -448,6 +483,7 @@ def prep(mj, root, tmp, out):
         wtxt(os.path.join(d, "tname"), nome)
         wtxt(os.path.join(d, "python"), val["python"] or "")
         wtxt(os.path.join(d, "tpl"), x["controprova"]["comando"])
+        wtxt(os.path.join(d, "separatori"), json.dumps(NT.separatori(trel, x.get("separatori_test"))))
         with open(os.path.join(d, "valori.json"), "w", encoding="utf-8") as fh:
             json.dump(val, fh, ensure_ascii=False)
     # lock: that of the module with copia among the mutations (the same as test-fast.sh); without one, that of the first module with
@@ -458,6 +494,18 @@ def prep(mj, root, tmp, out):
     elif usati:
         primo = next((x for x in r["moduli"] if x.get("copia") and mc.norm(x["radice_pacchetti"])), None)
         lock = mc.norm((primo or usati[0])["radice_pacchetti"])
+    locks = [lock]
+    # 1.8.0 (A4): a module at the root syncs the whole mirror with --delete, so it takes the lock of the mirror root
+    # AND that of the radice_pacchetti of EVERY module of maat.json (with or without copia: a counterproof on a
+    # module B holds the lock of the folder of B), always in the order of maat.json (two root counterproofs cannot
+    # deadlock), without duplicates
+    if any(not mc.norm(x["radice_pacchetti"]) for x in usati):
+        locks = [""]
+        for x in r["moduli"]:   # LOCK-TUTTI
+            k = mc.norm(x["radice_pacchetti"])
+            if k not in locks:
+                locks.append(k)
+    wtxt(os.path.join(tmp, "locks"), "".join(k + "\n" for k in locks))
     wtxt(os.path.join(tmp, "mods"), "".join(x["nome"] + "\n" for x in usati))
     wtxt(os.path.join(tmp, "copiamod"), con_copia[0] if con_copia else "")
     wtxt(os.path.join(tmp, "lockpkg"), lock)
@@ -492,20 +540,27 @@ def apply(path, cf, sf):
         print(T("counterproof.search_count", n=n))
         sys.exit(2)
     new = data.replace(cerca, sost, 1)
+    # 1.8.0 (A5): `path` is the real path (run_one resolves a link). unlink + write as before (a hardlink is split on
+    # purpose: never mutate a shared inode), then the mode and, when allowed, the owner of before: an executable
+    # script stays executable during the run
+    st = os.stat(path)
     os.unlink(path)
     with open(path, "wb") as fh:
         fh.write(new)
+    os.chmod(path, stat.S_IMODE(st.st_mode))
+    if hasattr(os, "chown"):
+        try:
+            os.chown(path, st.st_uid, st.st_gid)
+        except PermissionError:
+            pass
 
-def vitest_ids(a):
-    # names by which a test can be cited: fullName (ancestors + title, joined by a space), the title, and every
-    # suffix of the ancestor chain, joined by a space or by " > " as in FAILs; exact comparison, never
-    # by substring
-    anc, title = a.get("ancestorTitles") or [], a.get("title") or ""
-    ids = {a.get("fullName"), title}
-    for k in range(len(anc)):
-        for sep in (" ", " > "):
-            ids.add(sep.join(anc[k:] + [title]))
-    return ids
+def vitest_mio(a, tid):
+    # 1.8.0 (D1-bis): the test is the named one or one of its descendants (a `describe` named by the plan), by the
+    # structured chain ancestorTitles + title (nomi_test.relazione): the title, every suffix of the chain joined by
+    # " > " as in FAILs or by a space as in the full -t name; never a prefix with a space ("parse" is not the parent
+    # of "parse empty"), never by substring
+    segs = (a.get("ancestorTitles") or []) + [a.get("title") or ""]
+    return tid == a.get("fullName") or NT.relazione(tid, None, NT.SEP_VITEST, segmenti=segs) in ("uguale", "discendente")
 
 def classify_vitest(report, trel, tid, asserz):
     try:
@@ -517,7 +572,7 @@ def classify_vitest(report, trel, tid, asserz):
     if not files:
         return "rosso_raccolta", T("counterproof.not_collected"), ""
     fr = files[0]
-    targets = [a for a in fr.get("assertionResults", []) if tid in vitest_ids(a)]
+    targets = [a for a in fr.get("assertionResults", []) if vitest_mio(a, tid)]
     failed = [a for a in targets if a.get("status") == "failed"]
     if failed:
         msg = norm("\n".join(x for a in failed for x in (a.get("failureMessages") or [])))
@@ -541,7 +596,7 @@ def suite_red(msg, imp):
         return "rosso_import", T("counterproof.suite_import"), msg
     return "rosso_raccolta", T("counterproof.suite_collect"), msg
 
-def classify_pytest(report, trel, tid, asserz, rc, radp):
+def classify_pytest(report, trel, tid, asserz, rc, radp, seps):
     if rc in (4, 5):
         return "rosso_raccolta", T("counterproof.pytest_collect", rc=rc), ""
     try:
@@ -550,7 +605,7 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
         return "bloccato", T("counterproof.no_junit_report"), ""
     tid = tid[len(radp):] if radp and tid.startswith(radp) else tid
     mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
-    targets, coll = [], []
+    targets, coll, anc = [], [], []
     for c in root.iter("testcase"):
         cn, nm = c.get("classname") or "", c.get("name") or ""
         bad = [e for e in list(c) if e.tag in ("failure", "error")]
@@ -564,9 +619,17 @@ def classify_pytest(report, trel, tid, asserz, rc, radp):
         else:
             continue
         nodeid = trel + rest + "::" + nm
-        if nodeid == tid or nodeid.endswith("::" + tid):
-            skipped = any(e.tag == "skipped" for e in list(c))
+        # 1.8.0 (D1-bis): the named test, its parameters ([a]), the methods of a named class, the subtests -> the
+        # test; an ancestor (a folding adapter) only without them, and only with the leaf of the name in its text
+        rel = "uguale" if nodeid == tid else NT.relazione(tid, nodeid, seps)
+        skipped = any(e.tag == "skipped" for e in list(c))
+        if rel in ("uguale", "discendente"):
             targets.append((bad, skipped))
+        elif rel == "antenato":
+            anc.append((bad, skipped))
+    if not targets and anc:
+        leaf = NT.foglia(tid, seps)
+        targets = [(b, s) for b, s in anc if not b or any(leaf and leaf in (e.get("message") or "") + "\n" + (e.text or "") for e in b)]
     failed = [b for b, s in targets if b]
     if failed:
         msg = norm("\n".join((e.get("message") or "") + "\n" + (e.text or "") for b in failed for e in b))
@@ -597,7 +660,11 @@ def result(d, out, report, rc, ms, log, cmd, why):
     elif runner == "vitest":
         esito, motivo, msg = classify_vitest(report, trel, tid, asserz)
     elif runner == "pytest":
-        esito, motivo, msg = classify_pytest(report, trel, tid, asserz, rc, radp)
+        try:
+            seps = json.loads(rtxt(os.path.join(d, "separatori")))
+        except (OSError, ValueError):
+            seps = NT.separatori(trel)
+        esito, motivo, msg = classify_pytest(report, trel, tid, asserz, rc, radp, seps)
     else:
         esito, motivo, msg = classify_comando(rc)
     cp = {"rosso_asserzione": "PASS", "rosso_generico": "PASS", "bloccato": "BLOCKED"}.get(esito, "FAIL")
@@ -630,7 +697,9 @@ elif cmd == "result":
 '
 
 TMPD=$(mktemp -d)
-CPD=""; LOCKD=""   # LOCKD: the fallback lock (mkdir) taken by this process, to release in cleanup
+# LOCKDS: the fallback locks (mkdir) taken by this process, to release in cleanup; LOCKFDS: the descriptors of the
+# flock locks (1.8.0, A4: one per lock, a root module takes several), closed in every run (run_cmd)
+CPD=""; LOCKDS=(); LOCKFDS=()
 : > "$TMPD/inflight"
 # On a signal (TERM, INT, HUP -> normal exit -> EXIT trap), in this order: ALL descendants are killed
 # (workers, `timeout`, the runner command: `timeout` opens its own process group, so killing only the jobs
@@ -654,17 +723,37 @@ kill_runs() {  # the groups opened by `timeout`: they outlive the workers if tho
   [ -f "$TMPD/runpgids" ] || return 0
   while read -r p; do [ -n "$p" ] && kill -KILL -- "-$p" "$p" 2>/dev/null; done < "$TMPD/runpgids"
 }
+runs_gone() {  # 1.8.0 (C1): up to 5 s for the recorded groups to be empty (kill -0 on the group), killing again
+  local p k vivo
+  [ -f "$TMPD/runpgids" ] || return 0
+  for k in $(seq 1 25); do
+    vivo=0
+    while read -r p; do [ -n "$p" ] && kill -0 -- "-$p" 2>/dev/null && { vivo=1; break; }; done < "$TMPD/runpgids"
+    [ $vivo = 0 ] && return 0
+    kill_runs; sleep 0.2
+  done
+  return 1
+}
 cleanup() {
   # A second signal during cleanup would interrupt it halfway (copies and processes left behind): from here
   # on signals are ignored.
-  trap '' TERM INT HUP
+  CP_FINE=1; trap '' TERM INT HUP
+  : > "$TMPD/fine"   # before any read of runpgids: a run recorded after this does not start (run_cmd)
   kill_tree; kill_runs; kill_tree; wait 2>/dev/null
+  runs_gone   # ATTESA: no run still alive inside the copy deleted below
+  # inflight holds the real path (run_one, 1.8.0): a link mutated through its target stays a link
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
   [ -n "$CPD" ] && rm -rf "$CPD"
   rm -rf "$TMPD"
-  [ -z "$LOCKD" ] || fic_unlock_dir "$LOCKD" "$$"   # last: the mirror is already restored
+  for q in ${LOCKDS[@]+"${LOCKDS[@]}"}; do fic_unlock_dir "$q" "$$"; done   # last: the mirror is already restored
 }
-trap 'exit 143' TERM INT HUP
+# 1.8.0 (C1): the handler exits only once (CP_FINE). Before, a second TERM (two runs that signal at the same moment,
+# case 11b) arriving between `exit 143` and the first line of cleanup ran `exit 143` again inside the EXIT trap:
+# cleanup cut short, nothing killed, the copies left (seen on 11b: both groups of `timeout` alive and recorded, the
+# copy still there; a burst of TERM cut it short 39 times out of 40). A flag, not `trap ''` in the handler: bash
+# warns «run_pending_traps: bad value» on a signal pending while its trap becomes ignored.
+CP_FINE=""
+trap '[ -n "$CP_FINE" ] || { CP_FINE=1; exit 143; }' TERM INT HUP
 trap cleanup EXIT
 
 info=$("$FIC_PY" -c "$PY" prep "$MJ" "$ROOT" "$TMPD" "$OUT") || exit 64
@@ -697,8 +786,8 @@ excl_of() {  # <module> -> EX: the core list + the module's collega_nel_worktree
   while IFS= read -r x; do [ -n "$x" ] && EX+=("--exclude=$x"); done < "$TMPD/mod/$1/escludi"
 }
 CM=$(cat "$TMPD/copiamod")   # the module with copia among those of the mutations ("" if none)
-LOCKPKG=$(cat "$TMPD/lockpkg")
-LOCK="$MIR/$LOCKPKG/.fic-lock"
+# the locks to take, in order (prep): one, or (1.8.0, A4) with a module at the root the mirror root and every module
+mapfile -t LOCKPKGS < "$TMPD/locks"
 SRCC=""; DSTC=""
 [ -n "$CM" ] && { SRCC="$ROOT/${M_PAC[$CM]}"; DSTC="$MIR/${M_PAC[$CM]}"; }
 
@@ -723,15 +812,29 @@ if [ -n "$CM" ]; then
   fi
   [ -d "$DSTC/node_modules" ] && [ -f "$DSTC/.fic-deps" ] || blocked "$(msg counterproof.mirror_missing why="$why")"
 fi
-mkdir -p "$MIR/$LOCKPKG" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$LOCKPKG")"
 [ -z "$FALLBACK" ] || echo "counterproof: $(msg counterproof.fallback_slower fallback="$FALLBACK")"
-if [ -n "$FLOCK" ]; then
-  exec 9>"$LOCK"
-  flock -w "$WAIT" 9 || blocked "$(msg counterproof.busy wait="${WAIT}" lock="$LOCK")"
-else
-  fic_lock_dir "$LOCK.d" "$WAIT" || blocked "$(msg counterproof.busy_dir wait="${WAIT}" lock="$LOCK")"
-  LOCKD=$LOCK.d
-fi
+# 1.8.0 (A4): every lock with ONE total deadline FIC_LOCK_WAIT for all the waits together (not FIC_LOCK_WAIT per
+# lock), held until the end; one not taken in time -> BLOCKED «mirror occupato» with its path, exit 3, no sync; the
+# ones already taken are released (flock: at the exit; mkdir: by cleanup)
+WAIT_MS=$(awk -v w="$WAIT" 'BEGIN { printf "%d", w * 1000 }')
+T_LOCK=$(date +%s%N)
+for pk in "${LOCKPKGS[@]}"; do
+  LOCK="$MIR${pk:+/$pk}/.fic-lock"
+  mkdir -p "${LOCK%/.fic-lock}" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$pk")"
+  RESTO=$(( WAIT_MS - ($(date +%s%N) - T_LOCK) / 1000000 ))   # SCADENZA-UNICA
+  [ "$RESTO" -gt 0 ] || RESTO=0
+  if [ -n "$FLOCK" ]; then
+    exec {fd}>"$LOCK" || blocked "$(msg counterproof.mirror_mkdir mir="$MIR" pkg="$pk")"
+    LOCKFDS+=("$fd")
+    flock -w "$((RESTO / 1000)).$(printf '%03d' $((RESTO % 1000)))" "$fd" || blocked "$(msg counterproof.busy wait="${WAIT}" lock="$LOCK")"
+  else
+    fic_lock_dir "$LOCK.d" "$(( (RESTO + 999) / 1000 ))" || blocked "$(msg counterproof.busy_dir wait="${WAIT}" lock="$LOCK")"
+    LOCKDS+=("$LOCK.d")
+  fi
+done
+# the descriptors of the locks belong to this process only: closed in every run and worker (1.8.0, A4: all of them,
+# not only the first; a run orphaned by a signal, the C1 case, must not keep the locks of the other modules taken)
+chiudi_lock() { local f; for f in ${LOCKFDS[@]+"${LOCKFDS[@]}"}; do exec {f}>&-; done; }   # CHIUDI-LOCK
 
 if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
   # stale dependencies: automatic realignment under the lock (fic-mirror.sh, fic_deps_autorefresh), then the
@@ -742,7 +845,7 @@ if [ -n "$CM" ] && ! fic_deps_ok "$SRCC" "$DSTC"; then
   fic_deps_ok "$SRCC" "$DSTC" || blocked "$(msg counterproof.deps_still)"
 fi
 for m in "${MODS[@]}"; do
-  pk=${M_PAC[$m]}; src="$ROOT/$pk"; dst="$MIR/$pk"
+  pk=${M_PAC[$m]}; src="$ROOT${pk:+/$pk}"; dst="$MIR${pk:+/$pk}"   # pk "" (1.8.0, A4): the module at the root
   mkdir -p "$dst" || blocked "$(msg counterproof.mirror_mkdir_dst dst="$dst")"
   excl_of "$m"
   fic_sync --delete --checksum "${EX[@]}" "$src/" "$dst/" || blocked "$(msg counterproof.sync_failed pk="$pk")"
@@ -755,13 +858,18 @@ for m in "${MODS[@]}"; do
     mkdir -p "$MIR/$a" &&
       fic_sync --delete --checksum --exclude=node_modules "$ROOT/$a/" "$MIR/$a/" || blocked "$(msg counterproof.sync_failed pk="$a")"
   done < "$TMPD/mod/$m/anche"
+  # 1.8.0 (A4): at the root the cycles folder is out of the manifest too (OUT writes its <id>.json there)
+  lav=$(modv "$m" lavoro)
   git -c safe.directory='*' -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
-    manifest_list "$src" > "$TMPD/list.$m" && [ -s "$TMPD/list.$m" ] || blocked "$(msg counterproof.manifest_nc pk="$pk")"
+    manifest_list "$src" | awk -v p="$lav" 'p == "" || ($0 != p && index($0, p "/") != 1)' > "$TMPD/list.$m" &&
+    [ -s "$TMPD/list.$m" ] || blocked "$(msg counterproof.manifest_nc pk="$pk")"
   hashes "$src" "$TMPD/list.$m" > "$TMPD/src0.$m"
   hashes "$dst" "$TMPD/list.$m" > "$TMPD/base.$m"
   if ! cmp -s "$TMPD/src0.$m" "$TMPD/base.$m"; then
     echo "counterproof: $(msg counterproof.diff_origin pk="$pk")"; diff "$TMPD/src0.$m" "$TMPD/base.$m" | head -5
-    blocked "$(msg counterproof.copy_misaligned pk="$pk")"
+    # at the root the .fic-* names are never copied (copy state and locks of every folder): fail-closed, said
+    [ -n "$pk" ] || ! grep -Eq '(^|/)\.fic-' "$TMPD/list.$m" || echo "counterproof: $(msg counterproof-180.root_fic_name)"
+    blocked "$(msg counterproof.copy_misaligned pk="${pk:-.}")"
   fi
 done
 
@@ -779,25 +887,48 @@ run_cmd() {
   cwd="$mroot${M_RAD[$mod]:+/${M_RAD[$mod]}}"
   if [ -n "$cache" ] && [ "$(cat "$d/runner")" = vitest ]; then allow="$mroot/${M_PAC[$mod]}:$DSTC/node_modules:$DSTC/packages"; fi
   CMD="(cd $cwd && ${allow:+FIC_VITE_CACHE_DIR=$cache FIC_VITE_FS_ALLOW=$allow }$line)"
-  # 9>&-: the lock belongs to the main process only, not to the runs. `& wait`: a signal to the main process makes
-  # the trap fire at once, without waiting for the run to end. The pid of `timeout` (env does exec) is also the
-  # pgid of the group it opens: recorded in runpgids, the trap kills the whole group.
+  # chiudi_lock: the locks belong to the main process only, not to the runs (1.8.0, A4: every lock descriptor, not
+  # only fd 9 as before; with a module at the root they are several). `& wait`: a signal to the main process makes
+  # the trap fire at once, without waiting for the run to end. The subshell records ITS OWN pid in runpgids, then
+  # execs env, which execs `timeout`: the same pid, and `timeout` opens the group with pgid = pid, so the trap kills
+  # the whole group. 1.8.0 (C1): recorded BEFORE the run exists. Before, the parent recorded `$!` after the fork: a
+  # run that signalled counterproof.sh at once (the TERM reaches the subshell before its `echo`) left its group
+  # unrecorded, orphaned of init and out of reach of kill_tree, alive inside the copy being deleted. Then, after its
+  # record, the subshell starts the run only if cleanup has not begun ($TMPD/fine, written by cleanup BEFORE it reads
+  # runpgids): a subshell orphaned by the death of its worker, and recorded after cleanup's last read, gives up
+  # instead of starting a run that nobody would kill.
   (cd "$cwd" || exit 1
-   env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line" &
-   echo $! >> "$TMPD/runpgids"; wait $!) 9>&- > "$w/log" 2>&1 &
+   chiudi_lock
+   echo "$BASHPID" >> "$TMPD/runpgids"   # REGISTRA
+   [ -d "$TMPD" ] && [ ! -e "$TMPD/fine" ] || exit 143   # FINE
+   exec env ${allow:+"FIC_VITE_CACHE_DIR=$cache" "FIC_VITE_FS_ALLOW=$allow"} timeout -k 10 "$RUN_TIMEOUT" bash -c "$line") > "$w/log" 2>&1 &
   wait $!
 }
 
-restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <backup copy> <file>: unlink + copy
+restore() { rm -f "$2" && cp -p "$1" "$2"; }   # <backup copy> <file>: unlink + copy (the real path: a link stays a link)
+
+# 1.8.0 (A5): <path> <module copy root> → the real path of <path> (a symbolic link resolved, also one in a parent
+# folder), only if it is inside the module copy; exit 1 otherwise (the mutation would land outside the module)
+percorso_reale() {
+  local r b
+  r=$(realpath -- "$1" 2>/dev/null) && b=$(realpath -- "$2" 2>/dev/null) || return 1
+  case "$r" in "$b"/*) printf '%s' "$r" ;; *) return 1 ;; esac
+}
+# <real path> <path of the mutation> → «<mode> link:<target>» or «<mode> file»: compared before and after the restore
+modo_tipo() {
+  local t=file
+  [ -L "$2" ] && t="link:$(readlink -- "$2")"
+  printf '%s %s' "$(stat -c %a -- "$1" 2>/dev/null)" "$t"
+}
 
 # ONE mutation in a root that mirrors the repo: the mirror (step 1) or a private copy (step 2).
 # <mutation dir> <root> <work dir> [vite cacheDir]. Writes <id>.json, appends the result line to
 # <work dir>/results. Returns 5 if after the restore the root is not identical to the initial manifest.
 run_one() {
   local d=$1 mroot=$2 w=$3 cache=${4:-}
-  local f mod py rep line mf why rc t0 ms out cp esito ids
+  local f mod py rep line mf why rc t0 ms out cp esito ids mt0 mt1
   f=$(cat "$d/file"); mod=$(cat "$d/modulo"); py=$(cat "$d/python")
-  mf="$mroot/$f"
+  mf="$mroot/$f"   # 1.8.0 (A5): becomes the real path below, used by backup, inflight, apply and restore
   rm -f "$w/report" "$w/bak"; : > "$w/log"
   why=""; rc=0; CMD=""; t0=$(date +%s%N)
   # a Windows interpreter (.exe, launched from WSL) writes the report with a Windows path
@@ -809,7 +940,9 @@ run_one() {
     why="$(msg counterproof.cmd_not_expandable err="$(head -1 "$w/log")")"
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
     why="$(msg counterproof.file_missing_mirror f="$f")"
-  elif ! cp -p "$mf" "$w/bak"; then
+  elif ! mf=$(percorso_reale "$mroot/$f" "$mroot/${M_PAC[$mod]}"); then
+    why="$(msg counterproof-180.link_outside f="$f" real="$(realpath -- "$mroot/$f" 2>/dev/null)" root="${M_PAC[$mod]}")"
+  elif mt0=$(modo_tipo "$mf" "$mroot/$f"); ! cp -p "$mf" "$w/bak"; then
     why="$(msg counterproof.backup_failed f="$f")"
   else
     printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
@@ -824,6 +957,14 @@ run_one() {
     hashes "$mroot/${M_PAC[$mod]}" "$TMPD/list.$mod" > "$w/now.$mod"
     if ! cmp -s "$TMPD/base.$mod" "$w/now.$mod"; then
       echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"; diff "$TMPD/base.$mod" "$w/now.$mod" | head -5
+      return 5
+    fi
+    # 1.8.0 (A5): the manifest sees only the content; the mode of the file and the type of the path (still a link to
+    # the same target, if it was one) too, otherwise exit 5 like the integrity
+    mt1=$(modo_tipo "$mf" "$mroot/$f")
+    if [ "$mt1" != "$mt0" ]; then
+      echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"
+      echo "  $(msg counterproof-180.mode_changed before="$mt0" after="$mt1")"
       return 5
     fi
   fi
@@ -926,8 +1067,8 @@ if [ ${#PAR[@]} -gt 0 ]; then
   printf '%s\n' "${PAR[@]}" > "$TMPD/q.all"; echo 0 > "$TMPD/q.next"
   PIDS=()
   for i in $(seq 1 "$N"); do
-    ( w="$TMPD/w$i"; mkdir -p "$w"; : > "$w/results"; : > "$w/inflight"
-      while d=$(next_job) && [ -n "$d" ]; do run_one "$d" "$CPD/$i" "$w" "$CPD/$i/.fic-vite-cache" || exit $?; done ) 9>&- &
+    ( chiudi_lock; w="$TMPD/w$i"; mkdir -p "$w"; : > "$w/results"; : > "$w/inflight"
+      while d=$(next_job) && [ -n "$d" ]; do run_one "$d" "$CPD/$i" "$w" "$CPD/$i/.fic-vite-cache" || exit $?; done ) &
     PIDS+=($!)
   done
   for p in "${PIDS[@]}"; do wait "$p" || INTEG=1; done

@@ -35,7 +35,11 @@ never touched, so there is nothing to copy, restore or pair by hand:
    It takes the mirror's lock with a wait (`FIC_LOCK_WAIT`, default 900 s) and **never** falls back to
    `/mnt/c`; it syncs and verifies the mirror, runs each mutation's test alone, restores and re-hashes.
    Exact duplicates run once. Mutations of runner `vitest` under the `radice` of the module with `copia` run
-   **in parallel** on private copies when memory allows (gradino 2); the others run serially in the mirror;
+   **in parallel** on private copies when memory allows (gradino 2); the others run serially in the mirror.
+   A module at the **repository root** (`"radice": "."`, 1.8.0) runs too, if it has no `copia`: it syncs the whole
+   mirror (never `.git`, the cycles folder, the `.fic-*` copy state or the `collega_nel_worktree` folders of the other
+   modules) and takes the lock of every module first, under one wait. A module **with** `copia` at the root is still
+   refused (exit 64): that is the limit left, said by `maat-doctor` before the cycle;
 4. **pass the `<id>.json` files to the review** — their `esito`, `controprova`, `messaggio` and
    `output_coda` are the observed output. Only `rosso_asserzione` is a full proof (`PASS`); `rosso_generico`
    (module runner `comando`: the command exited non-zero, no report says on which assertion) is `PASS` too but

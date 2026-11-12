@@ -123,7 +123,7 @@ project. From Git Bash:
 bash plugins/maat/scripts/<name>.test.sh
 ```
 
-- Short: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
+- Short: `maat-paths`, `maat-config`, `nomi_test` (1.8.0: the relation of the test names), `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
   `harness-merge`, `guard`, `stop-hook`, `session-start`, `phase-usage`, `blocks-independent`, `phase-events`,
   `test-review-surface.sh`, `plan-check`,
   `senza-wsl` (pk08: Windows without WSL, PATH without `wsl`/`wsl.exe`; about 5 minutes, two `run-phase.sh` phases),
@@ -287,7 +287,13 @@ with the bash engine.
 check to require on `main`. `concurrency`: on a branch a new push stops the run of the same event and branch still
 going; on `main` and on tags every commit has its own run, never cancelled. Limits per job (about 1.5 × the longest
 measured job, rounded up to 5 minutes): Linux 25 minutes, Windows 40 (worst job 1546 s), macOS 30 (longest 984 s,
-with the Homebrew setup). **Windows**:
+with the Homebrew setup). Since 1.8.0 each job also sets `MAAT_SUITE_TIMEOUT`, the limit of each suite in
+`tools/suite.sh`, below the job's: 1200 s on Linux and macOS, 1800 s on Windows (`tools/suite.test.sh` checks that
+every job of the groups sets it below `timeout-minutes` × 60). A suite that hangs then ends with `rc=124` and a line
+`TIMEOUT <entry> dopo <s> s` followed by the last 20 lines of its log, and the job goes on with the next suite instead
+of dying without saying which one. In the log of every job, a line `suite: avvio <entry>` before each suite; after a
+red suite, its `^FAIL` lines (at most 10) are printed and written in `riepilogo.txt` under its line, so the case
+that failed is read in the job log, without downloading the artifact. **Windows**:
 Git Bash of the runner, `FIC_PYTHON` = the Python 3.10 of `setup-python` (otherwise `py -3` would choose the newest),
 the `jsonschema` venv in `Scripts/python.exe`, `core.autocrlf false`, `TEMP` rewritten in its long form (the runner
 gives `C:\Users\RUNNER~1\…`, which Python expands and bash does not). The whole Windows run goes at every push: the
@@ -549,6 +555,7 @@ Seven small git repositories, built from models, with 65 specs and 49 counted js
 | `oracolo.sh --motore bash\|predefinito` | `oracolo.sh` | the engine of `cycle-state.sh` of the OLD side: `FIC_DRIVER=0` (default) or unset; the new side always decides with its default engine |
 | `--rigenera` with `MAAT_RIF_REPO` | `comandi-equivalenza.test.sh` | rewrites the frozen reference from the private history (see «The commands of the gates») |
 | `suite.sh --gruppo <k>/<n>` | `tools/suite.sh` | group k of `tools/suite-gruppi.list` only (CI, parallel run) |
+| `MAAT_SUITE_TIMEOUT` | `tools/suite.sh` | the limit of each suite in seconds (default 5400; the CI: 1200 on Linux and macOS, 1800 on Windows); over it `rc=124` and a `TIMEOUT` line; not a positive integer → exit 2 |
 | `MAAT_LINUX_CLONI`, `MAAT_PARALLELO_FORZA=1`, `MAAT_PARALLELO_LOCK` | `suite-parallelo.sh`, `giro-completo.sh --linux-parallelo` | the clones, one per group; skip the check of the processes; the lock file |
 | `--linux-parallelo`, `--windows-breve` | `giro-completo.sh` | the Linux part in parallel; the short proof on Windows (`tools/prova-breve-windows.list`) |
 
