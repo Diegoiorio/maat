@@ -2819,6 +2819,20 @@ def cmd_rossi(M, root, run, ev):
                 failed = [x for x in anc_bad if leaf and leaf in x]
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
+    # 1.8.0 (D3, B11): a VALID probe (sonde(): its key declassified by a resume registered in driver.log, the first probe
+    # of that key) decides its row: red with the expected text, at a position -> limite_dimostrato (the human decision,
+    # now proven: STOP, exit 1 as every STOP; classifica reads the class from rossi.json); green on the base ->
+    # sonda_smentita (not a STOP: the claim is false, the test stays as a regression test); otherwise the rules above.
+    # Any other probe line is ignored: its row is a normal row (green = verde, STOP).
+    sv, _se, sw = sonde(M, run)
+    for w in sw:
+        print("AVVISO: " + w)
+    for tid, s in sorted(sv.items()):
+        es, why, msg, pos = out.get(tid, ("", "", "", None))
+        if es in ("dimostrato", "rosso_diverso", "rosso_senza_asserzione") and pos and nrm(s["atteso"]) in msg:  # LIMITE-DIMOSTRATO
+            out[tid] = ("limite_dimostrato", _msg.T("plan-check-180.red_limit", k=s["decisione"], a=s["affermazione"][:200]), msg, pos)
+        elif es == "verde":  # SONDA-SMENTITA
+            out[tid] = ("sonda_smentita", _msg.T("plan-check-180.red_disproved", k=s["decisione"], a=s["affermazione"][:200]), msg, pos)
     # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
     # or an existing test asserting the ABSENCE of a value the plan adds (### Stringhe e data-test)
     def related(f):
@@ -2868,7 +2882,7 @@ def cmd_rossi(M, root, run, ev):
         print("rosso %s: %s%s \u2014 %s%s" % (tid, es, (" " + pos) if pos else "", why, (" \u2014 " + msg[:200]) if msg else ""))
     for c in confl:
         print("conflitto: " + c)
-    bad = [t for t in M["order"] if t in out and out[t][0] != "dimostrato"]
+    bad = [t for t in M["order"] if t in out and out[t][0] not in ("dimostrato", "sonda_smentita")]
     if blocked:
         esito, riass = "BLOCKED", _msg.T("plan-check.red_sum_blocked") + ": " + "; ".join(blocked)
     elif bad or confl:
@@ -2878,10 +2892,15 @@ def cmd_rossi(M, root, run, ev):
         esito, riass = "STOP", "; ".join(parts)
     else:
         esito, riass = "OK", _msg.T("plan-check.red_sum_ok", n=len(out), k=len(M["order"]))
+        sm = [t for t in M["order"] if t in out and out[t][0] == "sonda_smentita"]
+        if sm:
+            riass += " \u00b7 " + _msg.T("plan-check-180.red_sum_disproved", t=", ".join(sm))
+    # «sonda» (B11): the valid probe of a row, {decisione, affermazione, atteso, riga}: the review prompt shows the claim
     jsave(os.path.join(run, "test-red", "rossi.json"), {
         "esito": esito, "riassunto": riass, "evidence": ev, "conflitti": confl,
-        "test": {t: {"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
-                     "file": tests[t]["path"], "nome": tests[t]["name"]} for t, v in out.items()}})
+        "test": {t: dict({"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
+                          "file": tests[t]["path"], "nome": tests[t]["name"]}, **({"sonda": sv[t]} if t in sv else {}))
+                 for t, v in out.items()}})
     print("rossi: esito=%s \u2014 %s" % (esito, riass))
     return {"OK": 0, "STOP": 1}.get(esito, 3)
 

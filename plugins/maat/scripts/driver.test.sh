@@ -1220,7 +1220,14 @@ rossi tr-vecchio STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","moti
 clp tr-asserto test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-asserto STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"SyntaxError: invalid syntax","posizione":null,"file":"a","nome":"b"}}' '[]'
 clp tr-limite test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
-rossi tr-limite STOP "T5 limite_dimostrato" '{"T5":{"esito":"limite_dimostrato","motivo":"probe","messaggio":"TooDeeplyNested","posizione":null,"file":"a","nome":"b"}}' '[]'
+rossi tr-limite STOP "T5 limite_dimostrato" '{"T5":{"esito":"limite_dimostrato","motivo":"probe","messaggio":"TooDeeplyNested","sonda":{"decisione":"c0ffee03","affermazione":"the nesting limit","atteso":"TooDeeplyNested","riga":9},"posizione":null,"file":"a","nome":"b"}}' '[]'
+regcl() { # <name> <key>: a registered .ripresa (01-plan) declassifying <key> in the run dir of a case (B11)
+  printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: $2" > "$CL/$1.run/log/01-plan.ripresa"
+  printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$CL/$1.run/log/01-plan.ripresa" | cut -c1-12)" > "$CL/$1.run/driver.log"
+}
+regcl tr-limite c0ffee03   # (B11) a limite_dimostrato proves the decision only with its registered resume
+clp tr-limfalso test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-limfalso STOP "T5 limite_dimostrato" '{"T5":{"esito":"limite_dimostrato","motivo":"probe","messaggio":"TooDeeplyNested","sonda":{"decisione":"c0ffee03","affermazione":"the nesting limit","atteso":"TooDeeplyNested","riga":9},"posizione":null,"file":"a","nome":"b"}}' '[]'
 clp tr-conflitto test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-conflitto STOP "conflict" '{"T1":{"esito":"rosso_raccolta","motivo":"c","messaggio":"undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '["tests/test_old.py:3 asserts the absence of x"]'
 clp tr-dev test-red 0 "PHASE RESULT test-red: STOP — JSON: deviazioni" "$(ok_json test-red OK '["passo 2 adattato"]' nessuno)" "$AP"
@@ -1238,7 +1245,7 @@ rossi tr-blocked BLOCKED "no runner" '{}' '[]'
 clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
 clp plan-ok-nhd plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$NH"
 clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
-CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
 cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
 clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
 CLO=$(cla "$DRV")
@@ -1274,6 +1281,8 @@ clmut valida 's/^\( *\)if all(e\[1\] for e in esami):  # DECISIONE-VALIDA$/\1if 
 clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO$/\1if v.get("esito") == "rosso_simbolo":/' tr-simbolo "UMANO stop log/01-test-red.esito"
 clmut rifiutata 's/^\( *\)if fuori:  # DEVIAZIONE-RIFIUTATA$/\1if False:/' tr-devrif "RIPRENDIBILE aperti log/01-test-red.jsonl"
 clmut piano-ok 's/^\( *\)if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK$/\1if False:/' plan-ok-draft "OK ok log/01-plan.esito"
+check "classifica (B11): limite_dimostrato con la sonda di una ripresa registrata → UMANO limite; senza la ripresa (rossi.json scritto dalla fase) → UMANO stop" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-limfalso)" = "UMANO stop log/01-test-red.esito" ]'
+clmut limite 's/^\( *\)and isinstance(v.get("sonda"), dict) and v\["sonda"\].get("decisione") in dk\]  # LIMITE-CON-RIPRESA$/\1]/' tr-limfalso "UMANO limite test-red/rossi.json"
 clmut vecchio 's/^\( *\)return None  # ROSSI-DI-QUESTA-FASE$/\1pass/' tr-vecchio "RIPRENDIBILE simbolo test-red/rossi.json"
 NHS="PHASE RESULT plan: STOP — decisione"
 CMDP='python3 tools/depth.py 100000'
@@ -1337,7 +1346,7 @@ clmut taglio 's/^\( *\)if rc == 1 and "Scheletro: SOPRA IL TETTO" in out:  # TAG
 clmut ambito 's/^\( *\)if not any(c in t for c in citabili):  # AMBITO-CITATO$/\1if False:/' s-inventata "UMANO decisione s-inventata.md"
 clmut tipo 's/^\( *\)if not vale:  # CONTROLLO-DEL-TIPO$/\1if False:/' p-nessuna "UMANO decisione p-nessuna.md"
 rm -f "$T"/drv-jsonl.py "$T"/drv-stampa.py "$T"/drv-budget.py "$T"/drv-taglio.py "$T"/drv-ambito.py "$T"/drv-tipo.py
-rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py
+rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py "$T"/drv-limite.py
 
 
 # --- 15. (1.8.0, B9) the resumes in run: a fake run-phase.sh whose phases end STOP as run-phase writes them (.exit 0,
@@ -1514,6 +1523,22 @@ chmod +x "$T/cs-rev"
 rrun ok FIC_CYCLE_STATE="$T/cs-rev" FIC_MAX_FASI=1
 check "  la review successiva riceve «DECISIONE NON VERIFICATA (driver): 01-plan · …» nel prompt" 'grep -q "^DECISIONE NON VERIFICATA (driver): 01-plan · decisione umana: spec — .* — una decisione umana del piano che nessuno script ha verificato" "$FAKE_CALLS.02-review.prompt"'
 rm -f "$T/cs-rev"
+# (B11, D3) a probe disproved in test-red: the review prompt shows the declassified claim next to the row of the probe
+rnuovo APPROVED; mkdir -p "$RR/log" "$RR/test-red"
+printf '%s\n' "PHASE RESULT test-red: OK — rossi" "state=x" > "$RR/log/01-test-red.esito"; echo 0 > "$RR/log/01-test-red.exit"
+printf '{"esito":"OK","riassunto":"2 ok","evidence":"x","conflitti":[],"test":{"T5":{"esito":"sonda_smentita","motivo":"m","messaggio":"","posizione":null,"file":"a","nome":"b","sonda":{"decisione":"c0ffee04","affermazione":"the 16-bit counter cannot hold 100000 levels","atteso":"TooDeeplyNested","riga":9}}}}\n' > "$RR/test-red/rossi.json"
+printf 'rossi: esito=OK — 2 ok\n' > "$RR/log/01-test-red.rossi"
+cat > "$T/cs-rev2" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "State: rev-fisso" "Next: REVIEW — finto"
+EOF
+chmod +x "$T/cs-rev2"
+rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
+check "review (B11): il prompt mostra la sonda smentita accanto alla riga: «SONDA SMENTITA (driver): T5 — <affermazione> — decisione <chiave> — …»" 'grep -q "^SONDA SMENTITA (driver): T5 — the 16-bit counter cannot hold 100000 levels — decisione c0ffee04 — una sonda di test-red ha smentito" "$FAKE_CALLS.02-review.prompt"'
+printf 'rossi: esito=OK — altro\n' > "$RR/log/01-test-red.rossi"; rm -rf "$RR/log/02-review"* "$RR/prompts"
+rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
+check "  un rossi.json che non e' quello dell'ultimo test-red (la riga di .rossi non torna) non entra nel prompt" '! grep -q "SONDA SMENTITA" "$FAKE_CALLS.02-review.prompt"'
+rm -f "$T/cs-rev2"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"

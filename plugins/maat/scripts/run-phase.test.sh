@@ -799,6 +799,26 @@ check "  nessuna impronta dei test registrata, cycle-state STOP" '! grep -q "· 
 mkspec
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 75-test-red
 check "test-red con un test verde → STOP" 'sed -n 1p "$TRUN/log/75-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
+# 1.8.0 (B11, D3): the probe in verify_red. A valid probe (its key declassified by a resume registered in driver.log):
+# red with the expected text → STOP «limite dimostrato» (exit as today; classifica reads the class from rossi.json);
+# green → OK with an AVVISO «sonda smentita» (the review sees it), test-red closes as usual.
+mksonda() { # mkspec + the probe line on T1 (expected «assert 0 == 3»), the basis recomputed, the resume registered
+  mkspec
+  printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: c0ffee02 — se vera: «assert 0 == 3»" >> "$TSP"
+  local b; b=$(bash "$PCK" basis "$TSP" | sed -n 's/^Basis: //p')
+  sed -i "s/^Approved basis: .*/Approved basis: $b/" "$TSP"
+  mkdir -p "$TRUN/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: c0ffee02" > "$TRUN/log/01-plan.ripresa"
+  printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=c0ffee02 · sha=%s\n' "$(sha256sum < "$TRUN/log/01-plan.ripresa" | cut -c1-12)" > "$TRUN/driver.log"
+}
+mksonda
+FAKE_CMD="$WRITE_RED" trun 76-test-red
+check "test-red con una sonda valida rossa col testo atteso → STOP «limite dimostrato in test-red (T1)», limite_dimostrato in rossi.json" 'sed -n 1p "$TRUN/log/76-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — limite dimostrato in test-red (T1)" && grep -q "\"esito\": \"limite_dimostrato\"" "$TRUN/test-red/rossi.json"'
+mksonda
+FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 77-test-red
+check "test-red con una sonda valida verde sulla base → OK (sonda_smentita), AVVISO «sonda smentita in test-red: T1»" '[ "$(sed -n 1p "$TRUN/log/77-test-red.esito")" = "ESITO FASE x: OK — finto" ] && grep -q "AVVISO: sonda smentita in test-red: T1" "$TRUN/log/77-test-red.esito" && grep -q "\"esito\": \"sonda_smentita\"" "$TRUN/test-red/rossi.json"'
+mksonda; rm -f "$TRUN/driver.log"
+FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 78-test-red
+check "test-red: la stessa sonda con il .ripresa non registrato → ignorata, verde = STOP (non sovra-accetta)" 'sed -n 1p "$TRUN/log/78-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
 check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py$" && [ ! -f "$T/75b-test-red.gates-args" ]'

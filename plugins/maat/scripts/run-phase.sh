@@ -1018,10 +1018,17 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
     if [ -z "$ev" ] || [ "$ev" = - ]; then why="$(msg run-phase.red_no_evidence rc="$rc" label="$label")"
     else
       bash "$PC" rossi "$SPEC_F" --evidence "$ev" --run-dir "$dir" > "$ro" 2>&1; rc=$?
+      # 1.8.0 (B11, D3): the probes of rossi. limite_dimostrato: the STOP says the limit is proven (exit as every
+      # STOP: classifica reads the class UMANO from rossi.json); sonda_smentita: not a STOP, an AVVISO (the review sees it)
+      local lim sm
+      lim=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): limite_dimostrato.*/\1/p' | paste -sd, - | sed 's/,/, /g')
+      sm=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): sonda_smentita.*/\1/p' | paste -sd, - | sed 's/,/, /g')
+      [ -n "$sm" ] && avviso "AVVISO: $(msg run-phase-180.probe_disproved tests="$sm")"
       case $rc in
         0) ;;
         1) why=$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=STOP — //p' | tail -1)
-           why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")" ;;
+           if [ -n "$lim" ]; then why="$(msg run-phase-180.red_limit tests="$lim" label="$label")"  # LIMITE-NELLO-STOP
+           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")"; fi ;;
         *) why="$(msg run-phase.red_blocked det="$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1)" label="$label")" ;;
       esac
     fi

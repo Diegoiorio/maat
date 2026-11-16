@@ -286,6 +286,15 @@ plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignor
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
 
+# B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
+# review prompt shows a disproved claim next to its row (driver.py)
+plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})
+plan-check-180.red_disproved	green on the base: the probe disproves the declassified claim (decision {k}: {a})	verde sulla base: la sonda smentisce l'affermazione declassata (decisione {k}: {a})
+plan-check-180.red_sum_disproved	probes disproved: {t}	sonde smentite: {t}
+run-phase-180.red_limit	limit proven in test-red ({tests}): a human decision with its proof (log/{label}.rossi, test-red/rossi.json)	limite dimostrato in test-red ({tests}): una decisione umana con la sua prova (log/{label}.rossi, test-red/rossi.json)
+run-phase-180.probe_disproved	probe disproved in test-red: {tests} (the declassified claim is false; the review sees it)	sonda smentita in test-red: {tests} (l'affermazione declassata e' falsa; la review la vede)
+driver-180.review_disproved	a probe of test-red disproved this claim: judge whether the row really proves it false	una sonda di test-red ha smentito questa affermazione: giudica se la riga la smentisce davvero
+
 # --- transcript-180, driver-180 (1.8.0, B8, written by hand): transcript.py (a Bash call and its result, an agent call
 # with its input and result, the count of the results of a reviewer, on the main session of a phase log) and
 # driver.py classifica (the class of a finished phase: the cause that the driver will show, B9)

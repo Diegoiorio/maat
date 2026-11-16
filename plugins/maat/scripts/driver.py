@@ -1347,7 +1347,9 @@ def classifica(fase, run_fs, label, spec_fs):
             return Classe("UMANO", "decisione", causa, spec_fs, tuple(e[2] for e in esami))
     if fase == "test-red":
         tt = (rossi or {}).get("test") if isinstance((rossi or {}).get("test"), dict) else {}
-        lim = [t for t, v in sorted(tt.items()) if isinstance(v, dict) and v.get("esito") == "limite_dimostrato"]
+        dk = set(k for _l, r in riprese(run_fs)[0] for k in r.get("declassata") or []) if tt else set()
+        lim = [t for t, v in sorted(tt.items()) if isinstance(v, dict) and v.get("esito") == "limite_dimostrato"
+               and isinstance(v.get("sonda"), dict) and v["sonda"].get("decisione") in dk]  # LIMITE-CON-RIPRESA
         if lim:
             return Classe("UMANO", "limite", T("driver-180.c_limit", tests=", ".join(lim)), "test-red/rossi.json")
         if rossi and rossi.get("conflitti"):
@@ -2430,6 +2432,15 @@ def cmd_run(argv):
         rip = ripresa_in_corso(run_fs, fase, state) if rmax > 0 else None   # resumes off: never the line  # RIGA-SE-ATTIVE
         if rip:   # 1.8.0: the relaunch of a stopped phase, with the file of its open findings
             extra += riga_ripresa(rip, spec_fs)
+        if fase == "review":   # B11: a probe disproved in test-red: the declassified claim next to its row
+            trl = _labels(run_fs, r"-test-red$")
+            ro = _rossi_di(run_fs, trl[-1]) if trl else None
+            for tid, v in sorted(((ro or {}).get("test") or {}).items() if isinstance((ro or {}).get("test"), dict) else []):
+                s = v.get("sonda") if isinstance(v, dict) and v.get("esito") == "sonda_smentita" else None
+                if isinstance(s, dict):
+                    extra += "SONDA SMENTITA (driver): %s — %s — decisione %s — %s\n" % (
+                        tid, " ".join(str(s.get("affermazione")).split())[:300], s.get("decisione"),
+                        T("driver-180.review_disproved"))
         if fase == "review":   # B10: the human decisions of the plan that no script verified, for the reviewer
             for l in (_read(os.path.join(run_fs, "driver.log")) or "").replace("\r", "").split("\n"):
                 if " " + NON_VERIFICATA_RIGA in l:

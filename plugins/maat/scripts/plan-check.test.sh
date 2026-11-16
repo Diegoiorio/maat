@@ -1013,6 +1013,40 @@ expect 0 "^AVVISO: la tabella del piano di test non ha righe" "rossi: tabella se
 JU_DIV='<testcase classname="tests.test_calc" name="test_somma"><failure message="assert 1 == 3">E  assert 1 == 3</failure></testcase>'
 mkev "$T/ev-div" "$JU_DIV" FAIL "$FE_RED" FAIL
 expect 1 "^rosso T1: rosso_diverso" "rossi: rosso su un'altra asserzione = STOP" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-div" --run-dir "$T/rr.run"
+# 1.8.0 (B11, D3): rossi runs the probe. Valid probe (its key declassified by a registered resume): red with the expected
+# text → limite_dimostrato (STOP, exit 1 as every STOP: the class UMANO is read by classifica from rossi.json); green →
+# sonda_smentita, exit 0; red on another text → rosso_diverso. Any other probe is ignored: its row is a normal row.
+KR=c0ffee01
+regrip2() { # <run dir> <key> [nolog]
+  rm -rf "$1"; mkdir -p "$1/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: $2" > "$1/log/01-plan.ripresa"
+  if [ "${3:-}" = nolog ]; then : > "$1/driver.log"
+  else printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$1/log/01-plan.ripresa" | cut -c1-12)" > "$1/driver.log"; fi
+}
+{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «assert 0 == 3»"; } > "$T/f2s.md"
+regrip2 "$T/fs.run" $KR
+expect 1 "^rosso T1: limite_dimostrato modules/api/tests/test_calc.py:4" "rossi sonda: rosso col testo atteso = limite_dimostrato, STOP con exit 1" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-ok" --run-dir "$T/fs.run"
+expect 0 '"esito": "limite_dimostrato"' "rossi sonda: limite_dimostrato in rossi.json" -- cat "$T/fs.run/test-red/rossi.json"
+expect 0 "\"decisione\": \"$KR\"" "rossi sonda: rossi.json porta la sonda (decisione, affermazione, testo atteso)" -- cat "$T/fs.run/test-red/rossi.json"
+expect 0 "^rosso T1: sonda_smentita" "rossi sonda: verde sulla base = sonda_smentita, exit 0" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+expect 0 "^rossi: esito=OK — .*sonde smentite: T1" "rossi sonda: esito OK, il riassunto nomina la sonda smentita" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+expect 1 "^rosso T1: rosso_diverso" "rossi sonda: rosso su un altro testo = rosso_diverso" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-div" --run-dir "$T/fs.run"
+# over-acceptance: no .ripresa for the key, or a .ripresa that a phase wrote (no line in driver.log): the probe is ignored
+rm -rf "$T/fs0.run"
+expect 1 "^rosso T1: verde " "rossi: sonda senza .ripresa corrispondente, verde sulla base = verde, STOP" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs0.run"
+regrip2 "$T/fs1.run" $KR nolog
+expect 1 "^rosso T1: verde " "rossi: .ripresa con la chiave giusta ma senza la riga in driver.log = sonda ignorata, verde, STOP" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs1.run"
+expect 1 "^AVVISO: .*01-plan.ripresa non registrato in driver.log: ignorato" "rossi: il .ripresa non registrato e' detto in un AVVISO" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs1.run"
+regrip2 "$T/fs2.run" 0badbeef
+expect 1 "^rosso T1: verde " "rossi: .ripresa registrato con un'altra chiave = sonda ignorata (uguaglianza esatta della chiave)" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs2.run"
+if mutpc smentita 's/^        elif es == "verde":  # SONDA-SMENTITA$/        elif False:/'; then
+  expect 1 "^rosso T1: verde " "controprova: sonda ignorata → il verde da' verde e STOP (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-smentita/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+else echo "FAIL [controprova sonda smentita: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc chiave 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        elif False:/'; then
+  expect 0 "^rosso T1: sonda_smentita" "controprova: senza il controllo della ripresa la sonda inventata passa (sovra-accettazione: rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-chiave/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs0.run"
+else echo "FAIL [controprova chiave della sonda: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc limite 's/^        if es in ("dimostrato", "rosso_diverso", "rosso_senza_asserzione") and pos and nrm(s\["atteso"\]) in msg:  # LIMITE-DIMOSTRATO$/        if False:/'; then
+  expect 0 "^rosso T1: dimostrato " "controprova: senza la regola del limite il rosso col testo atteso resta dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-limite/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-ok" --run-dir "$T/fs.run"
+else echo "FAIL [controprova limite: la mutazione non si applica]"; fail=$((fail+1)); fi
 mkev "$T/ev-suite" "$JU_RED" FAIL " FAIL  tests/fmt.test.ts [ tests/fmt.test.ts ]
 Error: Failed to resolve import \"../utils/fmt\" from \"tests/fmt.test.ts\". Does the file exist?
 vitest-fast: esito=FAIL luogo=copia" FAIL
