@@ -254,6 +254,22 @@ if [ "$WIN" = 1 ]; then
     . "$HERE/python.sh" >/dev/null 2>&1   # in a subshell: python.sh does not change the shell of the test
     echo "    wsl per shutil.which con il PATH senza wsl: $(PATH="$T/bin:$PATH_SENZA_WSL" "$FIC_PY" -c 'import shutil; print(shutil.which("wsl"), shutil.which("wsl.exe"))' 2>&1)" )
   check "--piattaforma con PATH senza wsl -> windows-senza-wsl" 'caso_piattaforma'
+  # the Python decision of senza_wsl (SENZA-WSL-PY): a folder first in the PATH with a wsl that only Python sees, as
+  # the alias of those runners (wsl.cmd: shutil.which finds it through PATHEXT, the doctor too; `-e` and the listing of
+  # bash look for wsl and wsl.exe only). Counterproof: senza_wsl without that line keeps the folder, the doctor finds
+  # that wsl (it exits 0) and WSL is not missing -> red
+  mkdir -p "$T/wsl-solo-py"; printf '@exit /b 0\r\n' > "$T/wsl-solo-py/wsl.cmd"
+  caso_solo_py() { # <function computing the PATH without wsl>
+    local p; p=$(PATH="$T/wsl-solo-py:$PATH" "$1")
+    DPATH=$p doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"
+  }
+  check "  un wsl che vede solo Python (wsl.cmd in testa al PATH): la cartella tolta, exit 0 con «WSL assente»" \
+    '! [ -e "$T/wsl-solo-py/wsl.exe" ] && ! [ -e "$T/wsl-solo-py/wsl" ] && ! ls -A "$T/wsl-solo-py" | grep -qixE "wsl(\.exe)?" &&
+     [ -n "$(PATH="$T/wsl-solo-py" "$FIC_PY" -c "import shutil; print(shutil.which(\"wsl\") or \"\")")" ] && caso_solo_py senza_wsl'
+  MUT=$(sed -n '/^senza_wsl() {$/,/^}$/p' "$HERE/maat-doctor.test.sh" | sed '1s/^senza_wsl()/senza_wsl_mut()/; s/^\( *\)\[ .* || continue   # SENZA-WSL-PY$/\1:   # SENZA-WSL-PY tolto/')
+  eval "$MUT"
+  check "controprova: senza_wsl senza la decisione di Python (SENZA-WSL-PY) -> la cartella resta, WSL non manca: rosso" \
+    'printf "%s\n" "$MUT" | grep -q "SENZA-WSL-PY tolto" && ! printf "%s\n" "$MUT" | grep -q "|| continue   # SENZA-WSL-PY$" && ! caso_solo_py senza_wsl_mut && ! ha "WSL assente"'
 else
   echo "SALTATO [WSL assente, --piattaforma windows-senza-wsl]: la piattaforma non è Windows (uname/OSTYPE)"
   DPATH=$PATH doc -- --piattaforma
