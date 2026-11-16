@@ -1113,8 +1113,9 @@ cl = sys.argv[2]
 for a in sys.argv[3:]:
     nome, fase = a.split(":")
     r = d.classifica(fase, os.path.join(cl, nome + ".run"), "01-" + fase, os.path.join(cl, nome + ".md"))
-    assert r.classe in d.CLASSI and tuple(r) == (r.classe, r.regola, r.causa, r.prova)
-    sys.stdout.buffer.write(("%s\t%s\t%s\t%s\t%s\n" % (nome, r.classe, r.regola, r.prova.replace(os.sep, "/").rsplit("/", 1)[-1] if r.prova.endswith(".md") else r.prova, r.causa)).encode("utf-8"))
+    assert r.classe in d.CLASSI and tuple(r)[:4] == (r.classe, r.regola, r.causa, r.prova)
+    dd = "|".join(getattr(r, "decisioni", ("(campo assente)",)))   # B8 review: the decision texts
+    sys.stdout.buffer.write(("%s\t%s\t%s\t%s\t%s\t%s\n" % (nome, r.classe, r.regola, r.prova.replace(os.sep, "/").rsplit("/", 1)[-1] if r.prova.endswith(".md") else r.prova, dd, r.causa)).encode("utf-8"))
 EOF
 clp() { # <name> <phase> <exit> <esito line> <result.json|-> <Plan status line> [more lines of the spec]
   local n=$1 f=$2 d=$CL/$1.run/log; mkdir -p "$d"
@@ -1191,8 +1192,17 @@ clp tr-okdev test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_j
 printf 'test-data: T4 — other fixture names — routes collide\tACCEPT\t0123abcd\n' > "$CL/tr-okdev.run/log/01-test-red.deviazioni-test"
 clp tr-devno test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_json test-red OK '["dati-test: T4 — other fixture names — routes collide"]' nessuno)" "$AP"
 printf 'dati-test: T4 — other fixture names — routes collide\tSTOP — requisito non coperto\t0123abcd\n' > "$CL/tr-devno.run/log/01-test-red.deviazioni-test"
+# (B8 review) a rejected test-data deviation with an open agent; a valid Open decision with an open agent; rossi
+# BLOCKED; a plan OK line on a plan still DRAFT or NEEDS HUMAN DECISION
+clp tr-devrif test-red 0 "PHASE RESULT test-red: STOP — judge said no" "$(ok_json test-red STOP '["test-data: T4 — other fixture names — routes collide"]' nessuno)" "$AP"; bg tr-devrif test-red
+printf 'test-data: T4 — other fixture names — routes collide\tSTOP — requisito non coperto\t0123abcd\n' > "$CL/tr-devrif.run/log/01-test-red.deviazioni-test"
+clp nhd-aperti plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: budget — four iterations used"; bg nhd-aperti plan
+clp tr-blocked test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-blocked BLOCKED "no runner" '{}' '[]'
+clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
+clp plan-ok-nhd plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$NH"
 clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
-CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
 cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
 clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
 CLO=$(cla "$DRV")
@@ -1210,6 +1220,10 @@ check "classifica (c): rossi.json di un test-red precedente (la riga di .rossi n
 check "classifica UMANO provato in test-red: limite_dimostrato, conflitto con la suite (prima del simbolo mancante), deviazione non test-data" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-conflitto)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-dev)" = "UMANO deviazione log/01-test-red.result.json" ]'
 check "classifica OK-DEVIAZIONE: test-red OK con la test-data accettata in .deviazioni-test (e una difensiva); verdetto STOP → UMANO" '[ "$(clv tr-okdev)" = "OK-DEVIAZIONE deviazione-test log/01-test-red.deviazioni-test" ] && [ "$(clv tr-devno)" = "UMANO deviazione-test log/01-test-red.result.json" ]'
 check "classifica: review con Review status NEEDS HUMAN DECISION → UMANO" '[ "$(clv rev-nhd)" = "UMANO review rev-nhd.md" ]'
+cld() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $5 }'; }   # <name> → the decision texts
+check "classifica (review B8): deviazione test-data rifiutata con un agente aperto → UMANO (prima di (d)); decisione valida con un agente aperto → UMANO" '[ "$(clv tr-devrif)" = "UMANO deviazione-test log/01-test-red.result.json" ] && [ "$(clv nhd-aperti)" = "UMANO decisione nhd-aperti.md" ]'
+check "classifica (review B8): rossi BLOCKED → TECNICO; riga OK di un piano DRAFT o NEEDS HUMAN DECISION → UMANO (fail-closed)" '[ "$(clv tr-blocked)" = "TECNICO blocked test-red/rossi.json" ] && [ "$(clv plan-ok-draft)" = "UMANO piano plan-ok-draft.md" ] && [ "$(clv plan-ok-nhd)" = "UMANO piano plan-ok-nhd.md" ]'
+check "classifica (review B8): il campo decisioni porta il testo delle Open decision (valide per UMANO, non valide per RIPRENDIBILE)" '[ "$(cld nhd-budget)" = "four iterations used, three majors still open" ] && [ "$(cld nhd-tipo)" = "the counter looks too small" ] && [ "$(cld nhd-forma)" = "the counter looks too small" ] && [ "$(cld nhd-mista)" = "and a guess" ] && [ -z "$(cld draft)" ]'
 clmut() { # <name> <sed> <case> <expected class rule proof of the mutated driver>
   if tmut "$1" "$2"; then
     CLO=$(cla "$T/drv-$1.py")
@@ -1222,8 +1236,10 @@ clmut draft 's/^\( *\)if fase == "plan" and stato.startswith("DRAFT"):  # RIPRES
 clmut ancora 's/^\( *\)if tipo == "spec" and a:  # SPEC-CON-ANCORA$/\1if False:/' nhd-ancora "UMANO decisione nhd-ancora.md"
 clmut valida 's/^\( *\)if all(v\[0\] for v in vv):  # DECISIONE-VALIDA$/\1if any(v[0] for v in vv):/' nhd-mista "UMANO decisione nhd-mista.md"
 clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO$/\1if v.get("esito") == "rosso_simbolo":/' tr-simbolo "UMANO stop log/01-test-red.esito"
+clmut rifiutata 's/^\( *\)if fuori:  # DEVIAZIONE-RIFIUTATA$/\1if False:/' tr-devrif "RIPRENDIBILE aperti log/01-test-red.jsonl"
+clmut piano-ok 's/^\( *\)if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK$/\1if False:/' plan-ok-draft "OK ok log/01-plan.esito"
 clmut vecchio 's/^\( *\)return None  # ROSSI-DI-QUESTA-FASE$/\1pass/' tr-vecchio "RIPRENDIBILE simbolo test-red/rossi.json"
-rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py
+rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

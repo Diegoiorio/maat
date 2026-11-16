@@ -972,7 +972,9 @@ def result_errors(path, fase):
 #                  limite_dimostrato or a conflict with the suite, a deviation neither difensiva nor test-data · review
 #                  Review status NEEDS HUMAN DECISION
 #   OK-DEVIAZIONE  test-red OK whose test-data deviations are all accepted in log/<label>.deviazioni-test
-#   OK             a PHASE RESULT OK line whose result.json holds (the rule of _json_rule); not holding -> UMANO
+#                  · test-red STOP with a test-data deviation not accepted in log/<label>.deviazioni-test
+#   OK             a PHASE RESULT OK line whose result.json holds (the rule of _json_rule); not holding -> UMANO; a plan
+#                  OK line while Plan status is DRAFT or NEEDS HUMAN DECISION -> UMANO (fail-closed)
 #   RIPRENDIBILE   only on a STOP: (a) plan with Plan status DRAFT; (b) plan NEEDS HUMAN DECISION with an Open
 #                  decision absent or not valid; (c) test-red: rossi of this label with a missing symbol; (d) ONLY plan
 #                  and test-red: the jsonl shows an agent or a background job still open at a closing of the session
@@ -983,7 +985,9 @@ def result_errors(path, fase):
 # code anchor path:line is not valid (it is a `proof`). `regola` is a token for the driver and the tests (same in every
 # language), `causa` the text for a person, `prova` the file that shows it (relative to the run dir, or the spec).
 CLASSI = ("OK", "OK-DEVIAZIONE", "RIPRENDIBILE", "UMANO", "TECNICO")
-Classe = collections.namedtuple("Classe", "classe regola causa prova")
+# decisioni (B8 review): for the rule `decisione`, the <text> of the Open decisions concerned (the valid ones for UMANO,
+# the not valid ones for RIPRENDIBILE: the whole value when it is not in the form <type> — <text>), else ()
+Classe = collections.namedtuple("Classe", "classe regola causa prova decisioni", defaults=((),))
 TEST_DATA = ("test-data: ", "dati-test: ")
 FASI_VALIDA = ("plan", "test-red", "implement", "review", "fix")   # the phases whose outcome passes through `valida`
 FASI_RIPRESA = ("plan", "test-red")   # (d): the only phases with a resume procedure
@@ -1039,6 +1043,12 @@ def _stato_piano(spec_fs):
             dd = [m.group(1) for x in zona[i + 1:] for m in [DECISIONE_RX.match(x)] if m]
             return l[len("Plan status:"):].strip(" \t"), dd
     return "", []
+
+
+def _testo_decisione(v):
+    """the <text> of an Open decision value: the part after «<type> — », the whole value without that form"""
+    m = DECISIONE_CORPO.match(v)
+    return m.group(2) if m else v
 
 
 def _decisione(v):
@@ -1119,7 +1129,7 @@ def classifica(fase, run_fs, label, spec_fs):
         vv = [_decisione(d) for d in decs]
         if all(v[0] for v in vv):  # DECISIONE-VALIDA
             return Classe("UMANO", "decisione", T("driver-180.c_decision", d="; ".join(
-                "%s — %s" % (v[0], v[1][:200]) for v in vv if v[0])), spec_fs)
+                "%s — %s" % (v[0], v[1][:200]) for v in vv if v[0])), spec_fs, tuple(v[1] for v in vv if v[0]))
     if fase == "test-red":
         tt = (rossi or {}).get("test") if isinstance((rossi or {}).get("test"), dict) else {}
         lim = [t for t, v in sorted(tt.items()) if isinstance(v, dict) and v.get("esito") == "limite_dimostrato"]
@@ -1131,6 +1141,11 @@ def classifica(fase, run_fs, label, spec_fs):
         if altre:
             return Classe("UMANO", "deviazione", T("driver-180.c_deviation", d="; ".join(altre)[:300]),
                           rel(".result.json"))
+        if stop and td:   # a test-data deviation the judge did not accept, on a STOP: before (c) and (d)
+            fuori = [d for d in td if d not in _accettate(log(".deviazioni-test"))]
+            if fuori:  # DEVIAZIONE-RIFIUTATA
+                return Classe("UMANO", "deviazione-test", T("driver-180.c_dev_not_accepted", d="; ".join(fuori)[:300]),
+                              rel(".result.json"))
     if fase == "review":
         rs = next((l[len("Review status:"):].strip() for l in _review_lines(_read(spec_fs) or "")
                    if l.startswith("Review status:")), "")
@@ -1138,6 +1153,8 @@ def classifica(fase, run_fs, label, spec_fs):
             return Classe("UMANO", "review", "Review status: NEEDS HUMAN DECISION", spec_fs)
     # --- OK-DEVIAZIONE, OK ---
     if ok:
+        if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK
+            return Classe("UMANO", "piano", T("driver-180.c_plan_ok", s=stato[:100]), spec_fs)
         if fase == "test-red" and td:
             acc = _accettate(log(".deviazioni-test"))
             fuori = [d for d in td if d not in acc]
@@ -1155,7 +1172,8 @@ def classifica(fase, run_fs, label, spec_fs):
         return Classe("RIPRENDIBILE", "draft", T("driver-180.c_draft"), rel(".result.json"))
     if fase == "plan" and nhd:
         why = T("driver-180.c_dec_absent") if not decs else next(v[2] for v in map(_decisione, decs) if not v[0])
-        return Classe("RIPRENDIBILE", "decisione", why, spec_fs)
+        return Classe("RIPRENDIBILE", "decisione", why, spec_fs,
+                      tuple(_testo_decisione(d) for d in decs if not _decisione(d)[0]))
     if fase == "test-red" and rossi:
         nt = _modulo("nomi_test", "nomi_test.py")
         sim = []

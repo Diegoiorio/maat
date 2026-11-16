@@ -152,5 +152,5 @@ scripts/counterproof.sh	^"(uguale|discendente|antenato)"$	valori di nomi_test.re
 scripts/plan-check.sh	nessuna implicazione	token del modello del piano («<aree>: nessuna implicazione», autore.md), letto da size_negated in ogni lingua
 
 # --- 1.8.0 (B8): classifica of driver.py, the class of a finished phase
-scripts/driver.py	^"(OK-DEVIAZIONE|deviazione|deviazione-test)"$	classe e regole di classifica (CLASSI, Classe.regola): token fra driver.py, il ciclo (B9) e driver.test.sh, uguali in ogni lingua
+scripts/driver.py	^"(OK-DEVIAZIONE|deviazione|deviazione-test|piano)"$	classe e regole di classifica (CLASSI, Classe.regola): token fra driver.py, il ciclo (B9) e driver.test.sh, uguali in ogni lingua
 scripts/driver.py	\.rossi\b|rossi\.json|rossi: esito=|\.deviazioni-test	nomi di file del run dir (log/<label>.rossi, test-red/rossi.json, log/<label>.deviazioni-test) e prefisso della riga di plan-check.sh rossi, letti da classifica

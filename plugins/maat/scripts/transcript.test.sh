@@ -10,8 +10,11 @@
 # conta — the results of a subagent_type over several jsonl, main sessions only (no sidechain, no error, no
 # asynchronous launch); a file unreadable -> exit 2. aperti_alla_chiusura — an agent launched in background and still
 # open when the session is woken up again -> open; foreground agents, a background job collected before the closing ->
-# none. Counterproofs at the end: main-session filter removed, command compared by containment, the result not
-# required for conta -> their cases red.
+# none; (B8 review) a text that only looks like a receipt opens nothing, a `result` event is a closing, a sub-agent's job
+# and notification do not count, BashOutput/TaskOutput/KillShell close; the receipt of a background Bash is not its
+# result. Counterproofs at the end: main-session filter removed, command compared by containment, the result not
+# required for conta, the Bash receipt accepted, jobs opened by text, no closing on `result`, notifications of every
+# session -> their cases red.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 TRX=${TRX:-$HERE/transcript.py}
@@ -137,11 +140,56 @@ EOF
   printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"b2","content":"Command running in background with ID: bx2"}]}}'
   printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]}}'
 } > "$T/job.jsonl"
-apri() { "$FIC_PY" "$(nat "$T/ap.py")" "$(nat "$1")" "$(nat "$T/sfondo.jsonl")" "$(nat "$T/primo-piano.jsonl")" "$(nat "$T/job.jsonl")" 2>&1 | tr -d '\r'; }
+# (B8 review) jobs opened only by the call: a foreground Bash that prints the receipt text and a foreground agent whose
+# reply begins with «Async agent launched» open nothing
+{ printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"f1","name":"Bash","input":{"command":"cat old.log"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"f1","content":"Command running in background with ID: fk1"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"f2","name":"Agent","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"f2","content":"Async agent launched successfully.\nagentId: fk2 (quoted by the reviewer)"}]}}'
+} > "$T/finti.jsonl"
+# a `result` event is a closing: the agent notified only after it was open at that closing
+{ printf '%s\n' '{"type":"system","subtype":"init"}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"r1","name":"Agent","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens","run_in_background":true}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"r1","content":"Async agent launched successfully.\nagentId: ag7 (internal ID)"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","result":"PHASE RESULT plan: STOP"}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":"<task-notification><task-id>ag7</task-id><status>completed</status></task-notification>"}}'
+} > "$T/result.jsonl"
+# the main-session filter: a sub-agent's own background job never collected does not count, and a notification in a
+# sub-agent's message does not close the main session's job
+{ printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"m1","name":"Bash","input":{"command":"make long","run_in_background":true}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"m1","content":"Command running in background with ID: bx5"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":"tu_s","message":{"content":[{"type":"tool_use","id":"s1","name":"Bash","input":{"command":"sleep 9","run_in_background":true}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"tu_s","message":{"content":[{"type":"tool_result","tool_use_id":"s1","content":"Command running in background with ID: sub1"}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"tu_s","message":{"content":"<task-notification><task-id>bx5</task-id><status>completed</status></task-notification>"}}'
+} > "$T/sotto.jsonl"
+# closed through BashOutput (final status), TaskOutput (final status) and KillShell
+{ for k in k1 k2 k3; do
+    printf '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"c%s","name":"Bash","input":{"command":"job %s","run_in_background":true}}]}}\n' "$k" "$k"
+    printf '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"c%s","content":"Command running in background with ID: %s"}]}}\n' "$k" "$k"
+  done
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"o1","name":"BashOutput","input":{"bash_id":"k1"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"o1","content":"<status>completed</status><exit_code>0</exit_code>"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"o2","name":"TaskOutput","input":{"task_id":"k2"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"o2","content":"<status>failed</status>"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"o3","name":"KillShell","input":{"shell_id":"k3"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"o3","content":"killed"}]}}'
+} > "$T/raccolti.jsonl"
+apri() { "$FIC_PY" "$(nat "$T/ap.py")" "$(nat "$1")" "$(nat "$T/sfondo.jsonl")" "$(nat "$T/primo-piano.jsonl")" "$(nat "$T/job.jsonl")" \
+  "$(nat "$T/finti.jsonl")" "$(nat "$T/result.jsonl")" "$(nat "$T/sotto.jsonl")" "$(nat "$T/raccolti.jsonl")" 2>&1 | tr -d '\r'; }
 o=$(apri "$TRX")
 check "aperti: tre revisori in background, la sessione risvegliata con due ancora aperti → ag1,ag2 (anche se alla fine sono tutti notificati)" 'printf "%s\n" "$o" | grep -qx "sfondo.jsonl	ag1,ag2"' "$o"
 check "aperti: revisori in primo piano e un job in background raccolto prima della chiusura → nessuno" 'printf "%s\n" "$o" | grep -qx "primo-piano.jsonl	-"' "$o"
 check "aperti: un job Bash in background mai raccolto, transcript di sessione (chiusura = fine del file) → bx2" 'printf "%s\n" "$o" | grep -qx "job.jsonl	bx2"' "$o"
+check "aperti: un Bash in primo piano che stampa la ricevuta e un agente in primo piano che risponde «Async agent launched» → nessuno" 'printf "%s\n" "$o" | grep -qx "finti.jsonl	-"' "$o"
+check "aperti: l evento result e una chiusura (l agente notificato solo dopo) → ag7" 'printf "%s\n" "$o" | grep -qx "result.jsonl	ag7"' "$o"
+check "aperti: il job di un sotto-agente non conta e la sua notifica non chiude il job principale → bx5" 'printf "%s\n" "$o" | grep -qx "sotto.jsonl	bx5"' "$o"
+check "aperti: chiusi da BashOutput e TaskOutput con uno stato finale e da KillShell → nessuno" 'printf "%s\n" "$o" | grep -qx "raccolti.jsonl	-"' "$o"
+# bash: the receipt of a background run is not its output (the call asked for the background, or the receipt text)
+{ printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"g1","name":"Bash","input":{"command":"make probe","run_in_background":true}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"g1","content":"Command running in background with ID: bp1"}]}}'
+} > "$T/ricevuta.jsonl"
+tr_ "$TRX" bash "make probe" "running in background" < "$T/ricevuta.jsonl" > "$T/o" 2>&1; rc=$?
+check "bash: la ricevuta di un lancio in background non e' il risultato del comando → non trovato" '[ $rc -eq 1 ]' "$(cat "$T/o")"
 
 # --- counterproofs: a mutated copy of the module, its cases go red ---
 mutx() { # <name> <marker> <replacement line> → $T/mut-<name>.py (1 if the marker is not on exactly one line)
@@ -171,5 +219,19 @@ if mutx contato "# RISULTATO-CONTATO" "True for _x in [0]):"; then
   check "controprova: conta senza il controllo del risultato → il lancio asincrono e l'errore contano (5, rosso)" '[ "$(printf "%s" "$o" | tr -d "\r")" = 5 ]' "$o"
 else check "controprova conta: la mutazione si applica" false; fi
 
+if mutx ricevuta "# RICEVUTA-BASH" "pass"; then
+  tr_ "$T/mut-ricevuta.py" bash "make probe" "running in background" < "$T/ricevuta.jsonl" > "$T/o" 2>&1; rc=$?
+  check "controprova: la ricevuta del Bash in background accettata come risultato → trovato (rosso)" '[ $rc -eq 0 ]' "$(cat "$T/o")"
+else check "controprova ricevuta: la mutazione si applica" false; fi
+mutap() { # <name> <marker> <replacement> <file> <expected of the mutant>
+  if mutx "$1" "$2" "$3"; then
+    o=$(apri "$T/mut-$1.py"); MF=$4 MA=$5
+    check "controprova aperti ($1): $4 diventa «$5» (rosso)" 'printf "%s\n" "$o" | grep -qx "$MF	$MA"' "$o"
+  else check "controprova aperti ($1): la mutazione si applica" false; fi
+}
+mutap bashtesto "# BASH-APERTO-DALLA-CHIAMATA" 'if nome == "Bash":' finti.jsonl fk1
+mutap agentetesto "# AGENTE-APERTO-DALLA-CHIAMATA" 'or AGENT_BG_RE.search(t[:300]) or tur.get("status") == "async_launched"):' finti.jsonl fk2
+mutap result "# CHIUSURA-RESULT" 'if False:' result.jsonl -
+mutap notifiche "# NOTIFICHE-PRINCIPALE" 'if False:' sotto.jsonl sub1
 echo "transcript.test.sh: $pass ok, $fail falliti"
 [ "$fail" = 0 ]

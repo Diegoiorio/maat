@@ -299,6 +299,7 @@ driver-180.c_dec_type	Open decision with a type outside the list: {t}	Decisione 
 driver-180.c_dec_anchor	Open decision of type spec with a code anchor ({a}): it is a proof	Decisione aperta di tipo spec con un'àncora di codice ({a}): è una prova
 driver-180.c_symbol	missing stubs: {s}	stub mancanti: {s}
 driver-180.c_open	agents or background jobs not collected at the closing of the session: {ids}	agenti o job in background non raccolti alla chiusura della sessione: {ids}
+driver-180.c_plan_ok	OK line of a plan phase whose Plan status is {s}: not approved	riga OK di una fase plan con Plan status {s}: non approvato
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]

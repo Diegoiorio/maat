@@ -18,7 +18,8 @@ the messages of a sub-agent) is not the main session and never counts, neither a
 Texts: CRs dropped from the haystack and from the texts searched (<comando> is compared as it is, byte for byte). An
 empty <estratto>, input text or result text is a usage error: an empty string is contained in everything.
 A RESULT is a tool_result of the main session with the tool_use_id of the call. For an agent it is never the launch
-receipt of an asynchronous agent ("Async agent launched", tool_use_result.status async_launched: no verdict in it); for
+receipt of an asynchronous agent ("Async agent launched", tool_use_result.status async_launched: no verdict in it), for
+Bash never the receipt of a background run (input.run_in_background true, or "running in background with ID:"); for
 `conta` an is_error result does not count either (the reviewer did not answer).
 
 Exits: bash, agente: 0 found (stdout: one line with the lines of the call and of the result), 1 not found, 2 usage or
@@ -28,8 +29,10 @@ a file is no proof).
 Imported (driver.py classifica, 1.8.0 B8; the checks of B10/B13), the same rules: righe(path), bash_trovato(righe, …),
 agente_trovato(righe, …), conta_risultati(paths, tipo), aperti_alla_chiusura(righe) — the agents and background jobs
 of the main session still open at a CLOSING of the session: a `system/init` after the first (the session woken up
-again: the previous turn had closed), a `result` event, the end of the file. Opened by: a Bash result "running in
-background with ID: <id>", an Agent/Task result "Async agent launched … agentId: <id>"; closed by: a
+again: the previous turn had closed), a `result` event, the end of the file. Opened by: a Bash call with input.run_in_background true (the id from
+its result "running in background with ID: <id>"), an Agent/Task call with input.run_in_background true or whose result
+the tool marks tool_use_result.status async_launched (the id from "agentId: <id>"): a text alone never opens a job.
+Closed, by events of the main session only, by: a
 `<task-notification>` with that <task-id> and a final <status>, a `system` task_notification/task_updated event
 with that task_id and a final status, a BashOutput/TaskOutput showing a final status, TaskStop/KillShell on the id.
 This file uses no syntax newer than Python 3.7 (as driver.py, which imports it). Test: transcript.test.sh.
@@ -108,9 +111,12 @@ def chiamate(rr):
             elif tipo == "user" and b.get("type") == "tool_result" and b.get("tool_use_id") in per_id:
                 t = testo(b.get("content"))
                 tur = ev.get("tool_use_result")
+                c = per_id[b["tool_use_id"]]
                 asin = bool(AGENT_BG_RE.search(t[:300])) or (isinstance(tur, dict) and (
                     tur.get("status") == "async_launched" or tur.get("isAsync") is True))
-                per_id[b["tool_use_id"]]["results"].append((n, t, b.get("is_error") is True, asin))
+                # for Bash the receipt of a background run is not its output
+                asin = asin if c["name"] != "Bash" else (c["input"].get("run_in_background") is True or bool(BG_RE.search(t[:300])))  # RICEVUTA-BASH
+                c["results"].append((n, t, b.get("is_error") is True, asin))
     return ordine
 
 
@@ -121,8 +127,8 @@ def bash_trovato(rr, comando, estratto):
     for c in chiamate(rr):
         if c["name"] != "Bash" or c["input"].get("command") != comando:  # COMANDO-ESATTO
             continue
-        for n, t, _err, _asin in c["results"]:
-            if e in t:  # ESTRATTO-NEL-RISULTATO
+        for n, t, _err, asin in c["results"]:
+            if not asin and e in t:  # ESTRATTO-NEL-RISULTATO
                 return c["line"], n
     return None
 
@@ -173,10 +179,12 @@ def aperti_alla_chiusura(rr):
             if init > 1:   # the session woken up again: its previous turn had closed
                 chiusura()
             continue
-        if tipo == "result":
+        if tipo == "result":  # CHIUSURA-RESULT
             chiusura()
             continue
-        for s in _stringhe(ev):
+        if not principale(ev):   # the notifications too: only the main session's own events  # NOTIFICHE-PRINCIPALE
+            continue
+        for s in (_stringhe(ev) if tipo in ("user", "system") else ()):
             if "<task-notification>" in s:
                 for tid, body in NOTIF_RE.findall(s):
                     if DONE_RE.search(body):
@@ -189,8 +197,6 @@ def aperti_alla_chiusura(rr):
             if st in FINALI:
                 chiusi.add(str(ev["task_id"]))
             continue
-        if not principale(ev):
-            continue
         for b in _blocchi(ev):
             if tipo == "assistant" and b.get("type") == "tool_use":
                 nome, inp = b.get("name") or "", b.get("input") if isinstance(b.get("input"), dict) else {}
@@ -201,11 +207,15 @@ def aperti_alla_chiusura(rr):
                 nome, inp = usi.get(b.get("tool_use_id"), ("", {}))
                 t = testo(b.get("content"))
                 tur = ev.get("tool_use_result") if isinstance(ev.get("tool_use_result"), dict) else {}
-                if nome == "Bash":
+                # opened only by a call that asked for the background, or by a launch the tool itself marks
+                # async_launched: a text in an output never opens a job
+                if nome == "Bash" and inp.get("run_in_background") is True:  # BASH-APERTO-DALLA-CHIAMATA
                     m = BG_RE.search(t[:300])
-                    if m and m.group(1) not in aperti:
-                        aperti.append(m.group(1))
-                elif nome in AGENT_TOOLS and (AGENT_BG_RE.search(t[:300]) or tur.get("status") == "async_launched"):
+                    j = m.group(1) if m else str(tur.get("backgroundTaskId") or "")
+                    if j and j not in aperti:
+                        aperti.append(j)
+                elif nome in AGENT_TOOLS and (inp.get("run_in_background") is True
+                                              or tur.get("status") == "async_launched"):  # AGENTE-APERTO-DALLA-CHIAMATA
                     m = AGENT_ID_RE.search(t[:1000])
                     j = m.group(1) if m else str(tur.get("agentId") or "")
                     if j and j not in aperti:
