@@ -275,6 +275,31 @@ stop-hook-180.agents	background agents not collected: 	agenti in background non 
 stop-hook-180.agents_fix	wait for the reviewers' notifications, do not close the phase (and launch the next agents in the foreground: several Agent calls in the same message already run in parallel)	attendi le notifiche dei revisori, non chiudere la fase (e lancia i prossimi agenti in primo piano: più chiamate Agent nello stesso messaggio girano già in parallelo)
 maat-config-180.root_copy	{name}: moduli.{i} ({nome}): copia with radice_pacchetti at the root of the repository is not supported (1.8.0); for the counterproof use a module without copia, or put radice_pacchetti in a subfolder	{name}: moduli.{i} ({nome}): copia con radice_pacchetti alla radice del repository non e' supportata (1.8.0); per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella
 
+# --- transcript-180, driver-180 (1.8.0, B8, written by hand): transcript.py (a Bash call and its result, an agent call
+# with its input and result, the count of the results of a reviewer, on the main session of a phase log) and
+# driver.py classifica (the class of a finished phase: the cause that the driver will show, B9)
+transcript-180.usage	usage: transcript.py bash <command> <excerpt> < <jsonl> | agente <subagent_type> <input text>… <result text> < <jsonl> | conta <subagent_type> <jsonl>… (empty texts not allowed)	uso: transcript.py bash <comando> <estratto> < <jsonl> | agente <subagent_type> <testo d'input>… <testo di risultato> < <jsonl> | conta <subagent_type> <jsonl>… (testi vuoti non ammessi)
+transcript-180.found	found in the main session: call at line {call}, result at line {res}	trovato nella sessione principale: chiamata alla riga {call}, risultato alla riga {res}
+transcript-180.not_found	not found in the main session	non trovato nella sessione principale
+transcript-180.unreadable	transcript unreadable: {f}: {e}	transcript illeggibile: {f}: {e}
+driver-180.c_exit	the phase ended with exit {rc}	la fase è finita con exit {rc}
+driver-180.c_esito	no PHASE RESULT line in {f}	nessuna riga PHASE RESULT in {f}
+driver-180.c_no_result	output not valid (no result.json): {esito}	uscita non valida (nessun result.json): {esito}
+driver-180.c_blocked	gates BLOCKED: {esito}	gate BLOCKED: {esito}
+driver-180.c_decision	human decision: {d}	decisione umana: {d}
+driver-180.c_limit	limit proven in test-red: {tests}	limite dimostrato in test-red: {tests}
+driver-180.c_conflict	conflict with the suite: {c}	conflitto con la suite: {c}
+driver-180.c_deviation	deviation outside the defensive and test-data families: {d}	deviazione fuori dalle famiglie difensiva e test-data: {d}
+driver-180.c_ok_dev	{n} test deviations accepted by the judge	{n} deviazioni di test accettate dal giudice
+driver-180.c_dev_not_accepted	test deviation not accepted: {d}	deviazione di test non accettata: {d}
+driver-180.c_draft	plan not approved (DRAFT)	piano non approvato (DRAFT)
+driver-180.c_dec_absent	NEEDS HUMAN DECISION without an Open decision: line	NEEDS HUMAN DECISION senza una riga Decisione aperta:
+driver-180.c_dec_form	Open decision not in the form <type> — <text>: {d}	Decisione aperta non nella forma <tipo> — <testo>: {d}
+driver-180.c_dec_type	Open decision with a type outside the list: {t}	Decisione aperta con un tipo fuori lista: {t}
+driver-180.c_dec_anchor	Open decision of type spec with a code anchor ({a}): it is a proof	Decisione aperta di tipo spec con un'àncora di codice ({a}): è una prova
+driver-180.c_symbol	missing stubs: {s}	stub mancanti: {s}
+driver-180.c_open	agents or background jobs not collected at the closing of the session: {ids}	agenti o job in background non raccolti alla chiusura della sessione: {ids}
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

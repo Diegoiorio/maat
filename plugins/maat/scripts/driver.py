@@ -10,6 +10,8 @@
                                                1.5.1 `equiv --impronta`. `equiv` and `certificato` (the proof against
                                                the bash engine) are gone in 1.6.0: the proof is the expected outputs
                                                of the public corpus, tools/esempi-equiv/attese/
+    (1.8.0, B8) classifica(fase, run_fs, label, spec_fs): the class of a finished phase (OK, OK-DEVIAZIONE,
+                                               RIPRENDIBILE, UMANO, TECNICO), a function only: not called by `run` yet
     driver.py righe [<cap>]                    instruction lines loaded per phase; exit 1 if the BASE load of one
                                                exceeds the cap (default 300); separately, with no cap, the conditional files,
                                                the load with plan writing (autore.md) and that of the sub-agents
@@ -73,6 +75,7 @@ FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK 
 FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
 Test: driver.test.sh.
 """
+import collections
 import datetime
 import fnmatch
 import hashlib
@@ -956,6 +959,228 @@ def result_errors(path, fase):
     if not errs and isinstance(obj, dict) and obj.get("fase") != fase:
         errs = [T("driver.result_phase", fase=repr(obj.get("fase")), phase=fase)]
     return errs
+
+
+# ─────────────────────────────────────────────────────────────── the class of a finished phase (1.8.0, B8)
+# classifica(fase, run_fs, label, spec_fs) -> Classe(classe, regola, causa, prova): PURE, only files (log/<label>.exit,
+# .esito, .result.json, .gates, .rossi, .jsonl, .deviazioni-test, test-red/rossi.json, the spec). B8 is the function
+# alone: the cycle does not call it yet (B9 wires it). Evaluation order, the first that holds (spec §Tassonomia):
+#   TECNICO        .exit missing or != 0 · no PHASE RESULT line in .esito · a phase with `valida` (plan, test-red,
+#                  implement, review, fix) ended STOP without result.json (invalid output) · result.json invalid ·
+#                  gates or rossi BLOCKED
+#   UMANO proven   plan NEEDS HUMAN DECISION with every `Open decision:` valid · test-red: rossi of this label with a
+#                  limite_dimostrato or a conflict with the suite, a deviation neither difensiva nor test-data · review
+#                  Review status NEEDS HUMAN DECISION
+#   OK-DEVIAZIONE  test-red OK whose test-data deviations are all accepted in log/<label>.deviazioni-test
+#   OK             a PHASE RESULT OK line whose result.json holds (the rule of _json_rule); not holding -> UMANO
+#   RIPRENDIBILE   only on a STOP: (a) plan with Plan status DRAFT; (b) plan NEEDS HUMAN DECISION with an Open
+#                  decision absent or not valid; (c) test-red: rossi of this label with a missing symbol; (d) ONLY plan
+#                  and test-red: the jsonl shows an agent or a background job still open at a closing of the session
+#                  (transcript.py aperti_alla_chiusura). In implement, review, fix the same case stays UMANO.
+#   UMANO          every other STOP (fail-closed)
+# Open decision (D3, the format; the mechanical checks of the types are B10): «Open decision: <type> — <text>»
+# (Decisione aperta:), in the plan zone below Plan status, the type in TIPI_DECISIONE (either language); `spec` with a
+# code anchor path:line is not valid (it is a `proof`). `regola` is a token for the driver and the tests (same in every
+# language), `causa` the text for a person, `prova` the file that shows it (relative to the run dir, or the spec).
+CLASSI = ("OK", "OK-DEVIAZIONE", "RIPRENDIBILE", "UMANO", "TECNICO")
+Classe = collections.namedtuple("Classe", "classe regola causa prova")
+TEST_DATA = ("test-data: ", "dati-test: ")
+FASI_VALIDA = ("plan", "test-red", "implement", "review", "fix")   # the phases whose outcome passes through `valida`
+FASI_RIPRESA = ("plan", "test-red")   # (d): the only phases with a resume procedure
+TIPI_DECISIONE = {"cut": "cut", "taglio": "cut", "budget": "budget", "scope": "scope", "ambito": "scope",
+                  "proof": "proof", "prova": "proof", "recurrence": "recurrence", "ricorrenza": "recurrence",
+                  "dispute": "dispute", "disputa": "dispute", "partial": "partial", "parziale": "partial",
+                  "spec": "spec"}
+DECISIONE_RX = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:Open decision|Decisione aperta):[ \t]*(.*?)[ \t]*$")
+DECISIONE_CORPO = re.compile(r"^(\S+)[ \t]+—[ \t]+(\S.*)$")
+ANCORA_RX = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z0-9]+:[0-9]+")   # a code anchor path:line
+_MODULI = {}
+
+
+def _modulo(nome, file):
+    """a script of the harness next to the driver (ROOT/scripts), imported once"""
+    if nome not in _MODULI:
+        import importlib.util
+        sp = importlib.util.spec_from_file_location(nome, os.path.join(HERE, file))
+        m = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(m)
+        _MODULI[nome] = m
+    return _MODULI[nome]
+
+
+def _zona_piano(spec_fs):
+    """the lines of the plan zone of the spec outside the fences (the zone "plan" of plan-check.sh annotate: not the
+    changelog, not the review)"""
+    res, zone, inf = [], "above", False
+    for l in _records((_read(spec_fs) or "").replace("\r", "")):
+        fence = bool(FENCE.match(l))
+        if not inf and not fence:
+            if zone == "above" and re.match(r"## (Piano di implementazione|Implementation plan)", l):
+                zone = "plan"
+            elif zone in ("plan", "changelog") and re.match(r"## (Review implementazione|Implementation review)", l):
+                zone = "review"
+            elif zone == "plan" and re.match(r"###[ \t]+([0-9]+\.[ \t]*)?(Changelog revisione piano|Plan review changelog)", l):
+                zone = "changelog"
+            elif zone == "changelog" and re.match(r"##?#?[ \t]", l):
+                zone = "plan"
+        if fence:
+            inf = not inf
+            continue
+        if zone == "plan" and not inf:
+            res.append(l)
+    return res
+
+
+def _stato_piano(spec_fs):
+    """(Plan status value, [the Open decision lines below it, their value]) of the plan zone"""
+    zona = _zona_piano(spec_fs)
+    for i, l in enumerate(zona):
+        if l.startswith("Plan status:"):
+            dd = [m.group(1) for x in zona[i + 1:] for m in [DECISIONE_RX.match(x)] if m]
+            return l[len("Plan status:"):].strip(" \t"), dd
+    return "", []
+
+
+def _decisione(v):
+    """(canonical type, text, "") of a valid Open decision, or (None, None, cause of the invalidity)"""
+    m = DECISIONE_CORPO.match(v)
+    if not m:
+        return None, None, T("driver-180.c_dec_form", d=v[:200])
+    tipo = TIPI_DECISIONE.get(m.group(1).strip("`*").lower())
+    if not tipo:
+        return None, None, T("driver-180.c_dec_type", t=m.group(1)[:60])
+    a = ANCORA_RX.search(m.group(2))
+    if tipo == "spec" and a:  # SPEC-CON-ANCORA
+        return None, None, T("driver-180.c_dec_anchor", a=a.group(0))
+    return tipo, m.group(2), ""
+
+
+def _rossi_di(run_fs, label):
+    """test-red/rossi.json if it is the one of this label (its line «rossi: esito=…» is the last one of
+    log/<label>.rossi), else None: a rossi.json of an earlier test-red is never read for this one"""
+    ro = _read(os.path.join(run_fs, "log", label + ".rossi"))
+    if ro is None:
+        return None
+    try:
+        d = json.load(open(os.path.join(run_fs, "test-red", "rossi.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rr = [l for l in ro.replace("\r", "").split("\n") if l.startswith("rossi: esito=")]
+    if not isinstance(d, dict) or not rr or rr[-1] != "rossi: esito=%s — %s" % (d.get("esito"), d.get("riassunto")):
+        return None  # ROSSI-DI-QUESTA-FASE
+    return d
+
+
+def _accettate(p):
+    """the deviation texts of log/<label>.deviazioni-test (B13: «<text>\\t<verdict>\\t<sha256 of the diff>», one per
+    line) whose verdict is ACCEPT, whitespace compressed"""
+    acc = set()
+    for l in (_read(p) or "").replace("\r", "").split("\n"):
+        f = l.split("\t")
+        if len(f) >= 2 and f[1].strip().startswith("ACCEPT"):
+            acc.add(" ".join(f[0].split()))
+    return acc
+
+
+def classifica(fase, run_fs, label, spec_fs):
+    log = lambda s: os.path.join(run_fs, "log", label + s)
+    rel = lambda s: "log/" + label + s
+    one = lambda s: " ".join(str(s).split())
+    # --- TECNICO ---
+    ex = (_read(log(".exit")) or "").strip()
+    if ex != "0":
+        return Classe("TECNICO", "exit", T("driver-180.c_exit", rc=ex or "-"), rel(".exit"))
+    esito = _first_line(log(".esito"))
+    ok, stop = bool(re.match(RIGA_OK, esito)), bool(re.match(RIGA_STOP, esito))
+    if not ok and not stop:
+        return Classe("TECNICO", "esito", T("driver-180.c_esito", f=rel(".esito")), rel(".esito"))
+    rj = log(".result.json")
+    obj = None
+    if os.path.isfile(rj):
+        errs = result_errors(rj, fase)
+        if errs:
+            return Classe("TECNICO", "result", T("driver.result_invalid", label=label, errs="; ".join(errs[:3])),
+                          rel(".result.json"))
+        obj = json.load(open(rj, encoding="utf-8"))
+    elif fase in FASI_VALIDA:   # valida writes result.json for every valid output: none = output not valid
+        return Classe("TECNICO", "result", T("driver-180.c_no_result", esito=esito[:300]), rel(".esito"))
+    g = [l for l in (_read(log(".gates")) or "").replace("\r", "").split("\n") if l.startswith("gates: esito=")]
+    rossi = _rossi_di(run_fs, label) if fase == "test-red" else None
+    if (g and g[-1].startswith("gates: esito=BLOCKED")) or (rossi and rossi.get("esito") == "BLOCKED"):
+        return Classe("TECNICO", "blocked", T("driver-180.c_blocked", esito=esito[:300]),
+                      rel(".gates") if g and g[-1].startswith("gates: esito=BLOCKED") else "test-red/rossi.json")
+    devs = [one(x) for x in (obj or {}).get("deviazioni") or [] if str(x).strip()]
+    td = [d for d in devs if d.startswith(TEST_DATA)]
+    altre = [d for d in devs if not d.startswith(DIFENSIVA) and not d.startswith(TEST_DATA)]
+    stato, decs = _stato_piano(spec_fs) if fase == "plan" else ("", [])
+    nhd = stato.startswith("NEEDS HUMAN DECISION")
+    # --- UMANO proven ---
+    if fase == "plan" and nhd and decs:
+        vv = [_decisione(d) for d in decs]
+        if all(v[0] for v in vv):  # DECISIONE-VALIDA
+            return Classe("UMANO", "decisione", T("driver-180.c_decision", d="; ".join(
+                "%s — %s" % (v[0], v[1][:200]) for v in vv if v[0])), spec_fs)
+    if fase == "test-red":
+        tt = (rossi or {}).get("test") if isinstance((rossi or {}).get("test"), dict) else {}
+        lim = [t for t, v in sorted(tt.items()) if isinstance(v, dict) and v.get("esito") == "limite_dimostrato"]
+        if lim:
+            return Classe("UMANO", "limite", T("driver-180.c_limit", tests=", ".join(lim)), "test-red/rossi.json")
+        if rossi and rossi.get("conflitti"):
+            return Classe("UMANO", "conflitto", T("driver-180.c_conflict", c=one(rossi["conflitti"][0])[:300]),
+                          "test-red/rossi.json")
+        if altre:
+            return Classe("UMANO", "deviazione", T("driver-180.c_deviation", d="; ".join(altre)[:300]),
+                          rel(".result.json"))
+    if fase == "review":
+        rs = next((l[len("Review status:"):].strip() for l in _review_lines(_read(spec_fs) or "")
+                   if l.startswith("Review status:")), "")
+        if rs.startswith("NEEDS HUMAN DECISION"):
+            return Classe("UMANO", "review", "Review status: NEEDS HUMAN DECISION", spec_fs)
+    # --- OK-DEVIAZIONE, OK ---
+    if ok:
+        if fase == "test-red" and td:
+            acc = _accettate(log(".deviazioni-test"))
+            fuori = [d for d in td if d not in acc]
+            if not fuori and not altre and obj.get("esito") == "OK" and one(obj.get("bloccato_su")).lower() in NESSUNO:
+                return Classe("OK-DEVIAZIONE", "deviazione-test", T("driver-180.c_ok_dev", n=len(td)),
+                              rel(".deviazioni-test"))
+            return Classe("UMANO", "deviazione-test", T("driver-180.c_dev_not_accepted", d="; ".join(fuori or td)[:300]),
+                          rel(".result.json"))
+        jr = _json_rule(rj) if obj is not None else "OK|"
+        if not jr.startswith("OK|"):   # an OK line that its result.json does not hold (fail-closed)
+            return Classe("UMANO", "json", jr.split("|", 1)[-1] or esito[:300], rel(".result.json"))
+        return Classe("OK", "ok", esito[:300], rel(".esito"))
+    # --- RIPRENDIBILE (STOP only) ---
+    if fase == "plan" and stato.startswith("DRAFT"):  # RIPRESA-DRAFT
+        return Classe("RIPRENDIBILE", "draft", T("driver-180.c_draft"), rel(".result.json"))
+    if fase == "plan" and nhd:
+        why = T("driver-180.c_dec_absent") if not decs else next(v[2] for v in map(_decisione, decs) if not v[0])
+        return Classe("RIPRENDIBILE", "decisione", why, spec_fs)
+    if fase == "test-red" and rossi:
+        nt = _modulo("nomi_test", "nomi_test.py")
+        sim = []
+        for t, v in sorted(((rossi.get("test") or {}) if isinstance(rossi.get("test"), dict) else {}).items()):
+            if not isinstance(v, dict):
+                continue
+            m = nt.simbolo_mancante("%s\n%s" % (v.get("messaggio") or "", v.get("motivo") or "")) \
+                if v.get("esito") in ("rosso_raccolta", "rosso_import", "rosso_simbolo") else None
+            if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO
+                sim.append("%s: %s" % (t, m[2] if m else one(v.get("messaggio") or v.get("motivo") or "")[:120]))
+        if sim:
+            return Classe("RIPRENDIBILE", "simbolo", T("driver-180.c_symbol", s="; ".join(sim)[:400]),
+                          "test-red/rossi.json")
+    if fase in FASI_RIPRESA:  # RIPRESA-SOLO-PLAN-TEST-RED
+        tr = _modulo("transcript", "transcript.py")
+        try:
+            ap = tr.aperti_alla_chiusura(tr.righe(log(".jsonl")))
+        except OSError:
+            ap = []
+        if ap:
+            return Classe("RIPRENDIBILE", "aperti", T("driver-180.c_open", ids=", ".join(ap)), rel(".jsonl"))
+    if fase == "test-red" and td:
+        return Classe("UMANO", "deviazione-test", T("driver-180.c_dev_not_accepted", d="; ".join(td)[:300]),
+                      rel(".result.json"))
+    return Classe("UMANO", "stop", esito[:300], rel(".esito"))
 
 
 # ─────────────────────────────────────────────────────────────── implement batches and lanes (step 5)

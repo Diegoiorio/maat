@@ -23,6 +23,8 @@
 #  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
 #  12 (1.5.1) the internal readers of cycle-state.sh in the real run-phase.sh: a STOP of its wrapper is a STOP outcome
 #     or a phase not launched, never an OK outcome with state= empty (end of a phase, start and review of a ring, closing)
+#  13 (1.7.0) the size of the cycle · 14 (1.8.0) classifica: the five classes of a finished phase, unit cases on
+#     synthetic run dirs, (d) only for plan and test-red, with counterproofs
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -1097,6 +1099,131 @@ if tmut ok 's/^        if not rs.startswith("APPROVED"):  # REVIEW-SOLO-APPROVED
 else check "controprova review ok: la mutazione si applica" false; fi
 rm -rf "$RT" "$ST" "$FAKE_CALLS"* src/test_t.py src/fuori.py src/n[0-9]*.py; git checkout -q -- src
 
+
+# --- 14. (1.8.0, B8) classifica(fase, run_fs, label, spec_fs): the class of a finished phase, a function only (the cycle
+# does not call it yet, B9). Synthetic run dirs: <name>.run/log/01-<phase>.* and the spec <name>.md. Each case prints
+# «<name> <class> <rule> <proof>»; the counterproofs mutate the driver (tmut) and their case goes red.
+CL=$T/cl; mkdir -p "$CL"
+cat > "$T/cl.py" <<'EOF'
+import importlib.util, os, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("drv_cl", sys.argv[1]); d = importlib.util.module_from_spec(s)
+s.loader.exec_module(d)
+cl = sys.argv[2]
+for a in sys.argv[3:]:
+    nome, fase = a.split(":")
+    r = d.classifica(fase, os.path.join(cl, nome + ".run"), "01-" + fase, os.path.join(cl, nome + ".md"))
+    assert r.classe in d.CLASSI and tuple(r) == (r.classe, r.regola, r.causa, r.prova)
+    sys.stdout.buffer.write(("%s\t%s\t%s\t%s\t%s\n" % (nome, r.classe, r.regola, r.prova.replace(os.sep, "/").rsplit("/", 1)[-1] if r.prova.endswith(".md") else r.prova, r.causa)).encode("utf-8"))
+EOF
+clp() { # <name> <phase> <exit> <esito line> <result.json|-> <Plan status line> [more lines of the spec]
+  local n=$1 f=$2 d=$CL/$1.run/log; mkdir -p "$d"
+  printf '%s
+' "$3" > "$d/01-$f.exit"; printf '%s
+state=abc
+' "$4" > "$d/01-$f.esito"
+  [ "$5" = - ] || printf '%s
+' "$5" > "$d/01-$f.result.json"
+  printf '# Spec
+
+FR1. something.
+
+## Piano di implementazione
+
+%s
+' "$6" > "$CL/$n.md"
+  shift 6; [ $# -eq 0 ] || printf '%s
+' "$@" >> "$CL/$n.md"
+  : > "$d/01-$f.jsonl"
+}
+bg() { # <name> <phase>: the jsonl of a session that launched an agent in background and was woken up with it open
+  printf '%s\n' '{"type":"system","subtype":"init"}' \
+    '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"l1","name":"Agent","input":{"subagent_type":"maat:spec-plan-reviewer","prompt":"lens","run_in_background":true}}]}}' \
+    '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"Async agent launched successfully.\nagentId: agx1 (internal ID)"}]}}' \
+    '{"type":"system","subtype":"init"}' \
+    '{"type":"result","subtype":"success","result":"STOP"}' > "$CL/$1.run/log/01-$2.jsonl"
+}
+rossi() { # <name> <esito> <riassunto> <json of "test"> <json of "conflitti"> [riassunto of the .rossi line, if different]
+  mkdir -p "$CL/$1.run/test-red"
+  printf '{"esito":"%s","riassunto":"%s","evidence":"x","conflitti":%s,"test":%s}\n' "$2" "$3" "$5" "$4" > "$CL/$1.run/test-red/rossi.json"
+  printf 'rosso T1: ...\nrossi: esito=%s — %s\nstubs: ok\n' "$2" "${6:-$3}" > "$CL/$1.run/log/01-test-red.rossi"
+}
+OKI=$(ok_json implement OK '[]' nessuno); STI=$(ok_json implement STOP '[]' nessuno)
+OKP=$(ok_json plan OK '[]' nessuno); STP=$(ok_json plan STOP '[]' "decisione umana")
+STR=$(ok_json test-red STOP '[]' nessuno); STV=$(ok_json review STOP '[]' nessuno)
+AP='Plan status: APPROVED'; DR='Plan status: DRAFT'; NH='Plan status: NEEDS HUMAN DECISION'
+clp tec-exit plan 4 "PHASE RESULT plan: STOP — lock" - "$DR"
+clp tec-esito implement 0 "the phase said nothing useful" "$OKI" "$AP"
+clp tec-nores implement 0 "PHASE RESULT implement: STOP — uscita non valida: nessun blocco JSON" - "$AP"
+clp tec-fase implement 0 "PHASE RESULT implement: OK — fatto" "$(ok_json review OK '[]' nessuno)" "$AP"
+clp tec-gates test-red 0 "PHASE RESULT test-red: STOP — gates" "$STR" "$AP"; echo "gates: esito=BLOCKED (no runner) chiave=- evidence=-" > "$CL/tec-gates.run/log/01-test-red.gates"
+clp ok implement 0 "PHASE RESULT implement: OK — fatto" "$OKI" "$AP"
+clp ok-json implement 0 "PHASE RESULT implement: OK — fatto" "$(ok_json implement OK '["passo 8 adattato"]' nessuno)" "$AP"
+clp draft plan 0 "PHASE RESULT plan: STOP — round 1 not collected" "$STP" "$DR"
+clp nhd-budget plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "" "Open decision: budget — four iterations used, three majors still open"
+clp nhd-prova plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "- Decisione aperta: prova — il contatore a 16 bit non regge 100000 livelli"
+clp nhd-spec plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — FR2 can be read in two ways and the code does not settle it"
+clp nhd-assente plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH"
+clp nhd-tipo plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: hunch — the counter looks too small"
+clp nhd-forma plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: the counter looks too small"
+clp nhd-ancora plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — the push in src/x.rs:12 cannot go deeper"
+clp nhd-recinto plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" '```' "Open decision: budget — inside a fence" '```' "### Changelog revisione piano" "Open decision: budget — in the changelog"
+clp nhd-mista plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: budget — four iterations used" "Open decision: hunch — and a guess"
+clp plan-aperti plan 0 "PHASE RESULT plan: STOP — reviews pending" "$STP" "$AP"; bg plan-aperti plan
+clp plan-stop plan 0 "PHASE RESULT plan: STOP — something else" "$STP" "$AP"
+clp impl-aperti implement 0 "PHASE RESULT implement: STOP — agents pending" "$STI" "$AP"; bg impl-aperti implement
+clp rev-aperti review 0 "PHASE RESULT review: STOP — agents pending" "$STV" "$AP"; bg rev-aperti review
+clp tr-aperti test-red 0 "PHASE RESULT test-red: STOP — judge pending" "$STR" "$AP"; bg tr-aperti test-red
+clp tr-simbolo test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-simbolo STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"},"T2":{"esito":"dimostrato","motivo":"ok","messaggio":"","posizione":null,"file":"a","nome":"b"}}' '[]'
+clp tr-token test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-token STOP "T1 rosso_simbolo" '{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"error[E0425]: cannot find value","posizione":null,"file":"a.rs","nome":"t"}}' '[]'
+clp tr-vecchio test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-vecchio STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '[]' "T1 verde"
+clp tr-asserto test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-asserto STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"SyntaxError: invalid syntax","posizione":null,"file":"a","nome":"b"}}' '[]'
+clp tr-limite test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-limite STOP "T5 limite_dimostrato" '{"T5":{"esito":"limite_dimostrato","motivo":"probe","messaggio":"TooDeeplyNested","posizione":null,"file":"a","nome":"b"}}' '[]'
+clp tr-conflitto test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-conflitto STOP "conflict" '{"T1":{"esito":"rosso_raccolta","motivo":"c","messaggio":"undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '["tests/test_old.py:3 asserts the absence of x"]'
+clp tr-dev test-red 0 "PHASE RESULT test-red: STOP — JSON: deviazioni" "$(ok_json test-red OK '["passo 2 adattato"]' nessuno)" "$AP"
+clp tr-okdev test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_json test-red OK '["test-data: T4 — other fixture names — routes collide", "difensiva: a.py:3 — ramo"]' nessuno)" "$AP"
+printf 'test-data: T4 — other fixture names — routes collide\tACCEPT\t0123abcd\n' > "$CL/tr-okdev.run/log/01-test-red.deviazioni-test"
+clp tr-devno test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_json test-red OK '["dati-test: T4 — other fixture names — routes collide"]' nessuno)" "$AP"
+printf 'dati-test: T4 — other fixture names — routes collide\tSTOP — requisito non coperto\t0123abcd\n' > "$CL/tr-devno.run/log/01-test-red.deviazioni-test"
+clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review"
+cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
+clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
+CLO=$(cla "$DRV")
+check "classifica: la funzione si importa e risponde su tutti i casi" '[ "$(printf "%s\n" "$CLO" | grep -c "	")" = "$(echo $CASI | wc -w)" ] && ! grep -q Traceback "$T/cl.out"'
+check "classifica TECNICO: .exit 4 (lock) · nessuna riga PHASE RESULT · STOP senza result.json · result.json di un'altra fase · gates BLOCKED" '[ "$(clv tec-exit)" = "TECNICO exit log/01-plan.exit" ] && [ "$(clv tec-esito)" = "TECNICO esito log/01-implement.esito" ] && [ "$(clv tec-nores)" = "TECNICO result log/01-implement.esito" ] && [ "$(clv tec-fase)" = "TECNICO result log/01-implement.result.json" ] && [ "$(clv tec-gates)" = "TECNICO blocked log/01-test-red.gates" ]'
+check "classifica OK: riga OK e result.json coerente → OK; riga OK ma deviazioni nel result.json → UMANO (fail-closed)" '[ "$(clv ok)" = "OK ok log/01-implement.esito" ] && [ "$(clv ok-json)" = "UMANO json log/01-implement.result.json" ]'
+check "classifica (a): plan STOP con Plan status DRAFT → RIPRENDIBILE, la prova e' log/01-plan.result.json (i rilievi aperti)" '[ "$(clv draft)" = "RIPRENDIBILE draft log/01-plan.result.json" ] && printf "%s\n" "$CLO" | grep -q "^draft	.*	piano non approvato (DRAFT)$"'
+check "classifica: NEEDS HUMAN DECISION con Open decision valida (budget, «- Decisione aperta: prova», spec senza ancora) → UMANO, la prova e' la spec" '[ "$(clv nhd-budget)" = "UMANO decisione nhd-budget.md" ] && [ "$(clv nhd-prova)" = "UMANO decisione nhd-prova.md" ] && [ "$(clv nhd-spec)" = "UMANO decisione nhd-spec.md" ] && printf "%s\n" "$CLO" | grep -q "^nhd-prova	.*	decisione umana: proof — il contatore"'
+check "classifica (b): NEEDS HUMAN DECISION senza riga, tipo fuori lista, forma senza «—», spec con un ancora src/x.rs:12 → RIPRENDIBILE" '[ "$(clv nhd-assente)" = "RIPRENDIBILE decisione nhd-assente.md" ] && [ "$(clv nhd-tipo)" = "RIPRENDIBILE decisione nhd-tipo.md" ] && [ "$(clv nhd-forma)" = "RIPRENDIBILE decisione nhd-forma.md" ] && [ "$(clv nhd-ancora)" = "RIPRENDIBILE decisione nhd-ancora.md" ] && printf "%s\n" "$CLO" | grep -q "^nhd-ancora	.*(src/x.rs:12)"'
+check "classifica (b): una riga in un recinto o nel changelog non conta; una valida e una fuori lista → RIPRENDIBILE" '[ "$(clv nhd-recinto)" = "RIPRENDIBILE decisione nhd-recinto.md" ] && [ "$(clv nhd-mista)" = "RIPRENDIBILE decisione nhd-mista.md" ]'
+check "classifica (d): plan e test-red STOP con un agente in background aperto alla chiusura → RIPRENDIBILE (prova: il jsonl); plan STOP senza → UMANO" '[ "$(clv plan-aperti)" = "RIPRENDIBILE aperti log/01-plan.jsonl" ] && [ "$(clv tr-aperti)" = "RIPRENDIBILE aperti log/01-test-red.jsonl" ] && [ "$(clv plan-stop)" = "UMANO stop log/01-plan.esito" ] && printf "%s\n" "$CLO" | grep -q "^plan-aperti	.*: agx1$"'
+check "classifica (d) solo plan e test-red: implement e review STOP con lo stesso agente non raccolto → UMANO, STOP finale" '[ "$(clv impl-aperti)" = "UMANO stop log/01-implement.esito" ] && [ "$(clv rev-aperti)" = "UMANO stop log/01-review.esito" ]'
+check "classifica (c): rossi di questa fase con un simbolo mancante (rosso_raccolta «undefined: MaxDepth», token rosso_simbolo) → RIPRENDIBILE" '[ "$(clv tr-simbolo)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && [ "$(clv tr-token)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && printf "%s\n" "$CLO" | grep -q "^tr-simbolo	.*stub mancanti: T1: undefined: MaxDepth$"'
+check "classifica (c): rossi.json di un test-red precedente (la riga di .rossi non torna) o un errore che non e' un simbolo → UMANO" '[ "$(clv tr-vecchio)" = "UMANO stop log/01-test-red.esito" ] && [ "$(clv tr-asserto)" = "UMANO stop log/01-test-red.esito" ]'
+check "classifica UMANO provato in test-red: limite_dimostrato, conflitto con la suite (prima del simbolo mancante), deviazione non test-data" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-conflitto)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-dev)" = "UMANO deviazione log/01-test-red.result.json" ]'
+check "classifica OK-DEVIAZIONE: test-red OK con la test-data accettata in .deviazioni-test (e una difensiva); verdetto STOP → UMANO" '[ "$(clv tr-okdev)" = "OK-DEVIAZIONE deviazione-test log/01-test-red.deviazioni-test" ] && [ "$(clv tr-devno)" = "UMANO deviazione-test log/01-test-red.result.json" ]'
+check "classifica: review con Review status NEEDS HUMAN DECISION → UMANO" '[ "$(clv rev-nhd)" = "UMANO review rev-nhd.md" ]'
+clmut() { # <name> <sed> <case> <expected class rule proof of the mutated driver>
+  if tmut "$1" "$2"; then
+    CLO=$(cla "$T/drv-$1.py")
+    CLC=$3 CLA=$4
+    check "controprova classifica ($1): $3 diventa «$4» (rosso)" '[ "$(clv "$CLC")" = "$CLA" ]'
+  else check "controprova classifica ($1): la mutazione si applica" false; fi
+}
+clmut solo-plan 's/^\( *\)if fase in FASI_RIPRESA:  # RIPRESA-SOLO-PLAN-TEST-RED$/\1if True:/' impl-aperti "RIPRENDIBILE aperti log/01-implement.jsonl"
+clmut draft 's/^\( *\)if fase == "plan" and stato.startswith("DRAFT"):  # RIPRESA-DRAFT$/\1if False:/' draft "UMANO stop log/01-plan.esito"
+clmut ancora 's/^\( *\)if tipo == "spec" and a:  # SPEC-CON-ANCORA$/\1if False:/' nhd-ancora "UMANO decisione nhd-ancora.md"
+clmut valida 's/^\( *\)if all(v\[0\] for v in vv):  # DECISIONE-VALIDA$/\1if any(v[0] for v in vv):/' nhd-mista "UMANO decisione nhd-mista.md"
+clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO$/\1if v.get("esito") == "rosso_simbolo":/' tr-simbolo "UMANO stop log/01-test-red.esito"
+clmut vecchio 's/^\( *\)return None  # ROSSI-DI-QUESTA-FASE$/\1pass/' tr-vecchio "RIPRENDIBILE simbolo test-red/rossi.json"
+rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]
