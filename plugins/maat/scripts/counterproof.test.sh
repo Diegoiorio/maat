@@ -515,8 +515,8 @@ pulisci11
 
 # 11d. (1.8.0, C1) a burst of TERM (FAKE_KILL_RAFFICA: 200 signals after the first, as from the two runs of 11b at the
 #      same moment) does not cut cleanup short: the handler exits once. Step 1 (the mirror file restored by cleanup)
-#      and step 2 (no survivor, no copy). Counterproof: the handler of 1.7 (`exit 143` at every signal) → cleanup cut
-#      short; seen 39 times out of 40, so up to three rounds, red if one is.
+#      and step 2 (no survivor, no copy). Its counterproof is 11e: the burst lands in the window of the 1.7 handler only
+#      by chance (39 times out of 40 idle, less under load), the pause of 11e makes it certain.
 caso_raffica() {  # <script>
   local s=$1
   FAKE_KILL="$s" FAKE_KILL_RAFFICA=1 CPX="$s" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
@@ -528,12 +528,62 @@ caso_raffica() {  # <script>
 }
 check_par "11d raffica di TERM: la pulizia non si interrompe (mirror ripristinato, lock libero; nel gradino 2 nessun superstite, nessuna copia)" 'caso_raffica "$CP" || { diag11; false; }'
 pulisci11
-m=$(mut_cp gestore-17 'import sys
+# 11e. (1.8.0, CI) the window of that race made certain: in a copy of the plugin, cleanup starts with a pause
+#      (FAKE_PAUSA_PULIZIA=<prefix>, a line only the copies have: «<pid>» in <prefix>.pronto, then it waits for
+#      <prefix>.via, at most 30 s, in steps of 0.05 s) — the moment between `exit 143` of the handler and the first line
+#      of cleanup. The test, from the background, waits for .pronto, sends the second TERM to that pid, and only then
+#      writes .via: bash runs a pending trap at the end of the `sleep` it is in, before the test of .via, so the second
+#      signal is always handled inside the window, under any load. The 1.8.0 handler ignores it (cleanup goes on: step
+#      1 the mirror file restored, step 2 no survivor, no copy); the counterproof, the 1.7 handler (`exit 143` at every
+#      signal) with the same pause, exits inside the EXIT trap and cuts cleanup short: red at every round. Before
+#      (1.8.0 up to fbcde0a) the counterproof relied on a burst of TERM landing in the window: under load it missed it.
+pausa_py='import sys
 t = open(sys.argv[1]).read()
-a = "trap '"'"'[ -n \"$CP_FINE\" ] || { CP_FINE=1; exit 143; }'"'"' TERM INT HUP"
-open(sys.argv[2], "w").write(t.replace(a, "trap '"'"'exit 143'"'"' TERM INT HUP", 1))')
-r11d=0; for _ in 1 2 3; do caso_raffica "$m" || { r11d=1; break; }; done
-check_par "controprova: il gestore della 1.7 (exit 143 a ogni segnale) → la raffica interrompe la pulizia: rosso" '[ -n "$m" ] && [ $r11d = 1 ]'
+a = "cleanup() {\n"
+h = ("  [ -z \"${FAKE_PAUSA_PULIZIA:-}\" ] || { echo $$ > \"$FAKE_PAUSA_PULIZIA.pronto\"; k=0; "
+     "until [ -e \"$FAKE_PAUSA_PULIZIA.via\" ] || [ $k -ge 600 ]; do sleep 0.05; k=$((k + 1)); done; }   # PAUSA-PULIZIA\n")
+assert t.count(a) == 1
+t = t.replace(a, a + h, 1)
+if len(sys.argv) > 3:
+    g = "trap '"'"'[ -n \"$CP_FINE\" ] || { CP_FINE=1; exit 143; }'"'"' TERM INT HUP"
+    assert t.count(g) == 1
+    t = t.replace(g, "trap '"'"'exit 143'"'"' TERM INT HUP", 1)
+open(sys.argv[2], "w").write(t)'
+mut_cp_args() { local d=$T/mut11-$1; mkplug "$d"; shift
+  python3 -c "$pausa_py" "$CP" "$d/scripts/counterproof.sh" "$@" && ! cmp -s "$CP" "$d/scripts/counterproof.sh" && printf '%s' "$d/scripts/counterproof.sh"; }
+secondo_term() { # <prefix>: from the background, the second TERM inside the pause of cleanup (see above)
+  rm -f "$1.pronto" "$1.via" "$1.inviato"
+  ( k=0; until [ -s "$1.pronto" ] || [ $k -ge 600 ]; do sleep 0.1; k=$((k + 1)); done
+    p=$(cat "$1.pronto" 2>/dev/null)
+    [ -n "$p" ] && kill -TERM "$p" 2>/dev/null && : > "$1.inviato"
+    : > "$1.via" ) > /dev/null 2>&1 &
+  ST_PID=$!
+}
+caso_finestra() {  # <script>: 0 if cleanup survives the second TERM inside its window, in step 1 and in step 2
+  local s=$1 f=$T/pausa
+  secondo_term "$f"
+  FAKE_KILL="$s" FAKE_PAUSA_PULIZIA="$f" CPX="$s" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
+  wait "$ST_PID" 2>/dev/null
+  [ -e "$f.inviato" ] || { FINESTRA="passo 1: il secondo TERM non è partito"; return 2; }
+  [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && flock -n "$M/.fic-lock" true ||
+    { FINESTRA="passo 1: pulizia interrotta"; return 1; }
+  rm -f "$FAKE_LOG.pids"; secondo_term "$f"
+  FAKE_KILL="$s" FAKE_KILL_SLEEP=30 FAKE_PAUSA_PULIZIA="$f" FIC_CP_PARALLEL=2 CPX="$s" \
+    cpr "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
+  wait "$ST_PID" 2>/dev/null
+  [ -e "$f.inviato" ] || { FINESTRA="passo 2: il secondo TERM non è partito"; return 2; }
+  [ "$(rc)" = 143 ] && [ -z "$(alive)" ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ "$(mir_hash)" = "$MIR1" ] ||
+    { FINESTRA="passo 2: superstiti, copie o mirror cambiato"; return 1; }
+}
+m=$(mut_cp_args pausa)
+check "  premessa 11e: la pausa all inizio della pulizia, solo nella copia del plugin" '[ -n "$m" ] && grep -q "# PAUSA-PULIZIA$" "$m" && ! grep -q "FAKE_PAUSA_PULIZIA" "$CP"'
+FINESTRA=; caso_finestra "$m"; r=$?
+check_par "11e secondo TERM dentro la finestra fra exit 143 e la pulizia → la pulizia va avanti (passo 1 e passo 2)" '[ -n "$m" ] && [ $r = 0 ] || { echo "    esito $r: $FINESTRA"; diag11; false; }'
+pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"
+m=$(mut_cp_args gestore-17 17)
+FINESTRA=; caso_finestra "$m"; r=$?
+check_par "controprova: il gestore della 1.7 (exit 143 a ogni segnale), stesso secondo TERM nella finestra → pulizia interrotta: rosso" \
+  '[ -n "$m" ] && grep -q "^trap '"'"'exit 143'"'"' TERM INT HUP$" "$m" && [ $r = 1 ] || { echo "    esito $r: $FINESTRA"; false; }'
 pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"   # the mirror as before the counterproof
 
 # 12. from a worktree (pt03): same rule as test-fast.sh — copy ~/fic-mirror-<hash> (seeded from
