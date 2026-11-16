@@ -16,7 +16,35 @@ PLUGIN=$(dirname "$HERE")
 CP=${CP:-$HERE/counterproof.sh}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 n=0; fail=0
-check() { n=$((n + 1)); if eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi; }
+# 1.8.0 (CI): every run of counterproof.sh goes through limitato: a line «caso: riga <n> (<function>) <time>» on stderr
+# before it (the log of tools/suite.sh, whose TIMEOUT prints its last 20 lines: the case that hangs is named) and a
+# deadline of CP_CASO_LIMITE seconds (FIC_LOCK_WAIT 60 + FIC_CP_TIMEOUT 120 + a margin; a run of the fakes takes
+# seconds). Over it: TERM, KILL 10 s later, «TIMEOUT caso: …» on stderr, and the next check FAILs with that line,
+# instead of the suite hanging until the limit of tools/suite.sh (CI of 1.8.0, Linux: rc=124 after 1016 s, empty log)
+CP_CASO_LIMITE=${CP_CASO_LIMITE:-240}
+check() {
+  n=$((n + 1))
+  if [ -s "$T/scaduto" ]; then fail=$((fail + 1)); echo "FAIL: $1 ($(cat "$T/scaduto"))"; rm -f "$T/scaduto"
+  elif eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi
+}
+limitato() { # <out> <command…>: the command with stdout and stderr in <out>, at most CP_CASO_LIMITE s; exit in $T/rc
+  local o=$1 p w c i=1
+  shift
+  while [[ ${FUNCNAME[i]:-} == cpr* || ${FUNCNAME[i]:-} == cpb ]]; do i=$((i + 1)); done   # the line that called cpr/cpb
+  c="riga ${BASH_LINENO[i - 1]} (${FUNCNAME[i]:-main})"
+  echo "caso: $c $(date +%T)" >&2
+  "$@" > "$o" 2>&1 &
+  p=$!
+  ( trap 'kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$CP_CASO_LIMITE" & s=$!; wait "$s" || exit 0
+    echo "TIMEOUT caso: $c dopo $CP_CASO_LIMITE s" > "$T/scaduto"
+    kill -TERM "$p" 2>/dev/null; sleep 10 & s=$!; wait "$s" || exit 0
+    kill -KILL "$p" 2>/dev/null ) > /dev/null 2>&1 &   # GUARDIANO
+  w=$!
+  wait "$p"; echo $? > "$T/rc"
+  kill -TERM "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  [ ! -s "$T/scaduto" ] || cat "$T/scaduto" >&2
+}
 # 1.6.0: the cases of step 2 in parallel want N >= 2, and counterproof.sh caps N at nproc/2: on a machine with fewer
 # than 4 CPUs (the macOS runner of the CI: 3) step 2 is rightly serial, and those cases are SALTATO, declared
 NPROC=$(nproc 2>/dev/null || echo 0)
@@ -151,12 +179,30 @@ OUT=$R/run/counterproof
 ( . "$HERE/fic-mirror.sh" && fic_mirror_init "$R" && fic_deps_refresh "$A" "$FIC_MIRROR/modules/app" ) > /dev/null 2>&1
 
 # CPX: a script other than $CP (a copy of the plugin with one changed file), for a single case
-cpr() { rm -f "$FAKE_LOG.all"; PROJECT_ROOT=${CPR_ROOT:-$R} bash "${CPX:-$CP}" "$1" > "$T/out" 2>&1; echo $? > "$T/rc"; }
+cpr() { rm -f "$FAKE_LOG.all"; limitato "$T/out" env PROJECT_ROOT="${CPR_ROOT:-$R}" bash "${CPX:-$CP}" "$1"; }
 rc() { cat "$T/rc"; }
 field() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[2]]; print("" if v is None else v)' "$OUT/$1.json" "$2" 2>/dev/null; }
 wt_hash() { (cd "$R" && find . -path ./.git -prune -o -path ./run -prune -o -type f -print | LC_ALL=C sort | xargs sha256sum) | sha256sum; }
 mir_hash() { (cd "$HOME/fic-mirror" && find . -name node_modules -prune -o -type f ! -name '.fic-*' -print | LC_ALL=C sort | xargs sha256sum) | sha256sum; }
-mj() { printf '%s\n' "$2" > "$OUT/$1"; echo "$OUT/$1"; }
+# mj <name> <json>: the input list, written as in-<name> next to the outcomes (counterproof.sh writes <id>.json in the
+# folder of its input). 1.8.0 (CI): before, the input was <name> and pyp.json, vtd.json, … differed from the outcome of
+# their id (PYP.json, VTD.json) only by case: on a case-insensitive filesystem (macOS, Windows) the same file, deleted
+# by the run before the first one and then overwritten by the outcome (the red of macOS). The «in-» prefix keeps them
+# apart, and mj records in $T/mj-collisioni every input that still equals an <id>.json of its list, ignoring case
+# (checked at the end of the suite).
+mj() {
+  printf '%s\n' "$2" > "$OUT/in-$1"
+  python3 -c 'import json, sys
+n = sys.argv[1].lower()
+try:
+    ids = [str(e.get("id")) for e in json.loads(sys.argv[2]) if isinstance(e, dict)]
+except ValueError:
+    ids = []
+for i in ids:
+    if (i + ".json").lower() == n:
+        print("%s = %s.json" % (n, i))' "in-$1" "$2" >> "$T/mj-collisioni"
+  echo "$OUT/in-$1"
+}
 mkplug() { # <dir>: copy of the plugin (scripts, lib, schemas, .claude-plugin) with $CP as counterproof.sh
   mkdir -p "$1/scripts"; cp -r "$PLUGIN/.claude-plugin" "$PLUGIN/schemas" "$1/"
   cp "$HERE"/*.sh "$HERE"/*.py "$1/scripts/"; cp -r "$HERE/lib" "$1/scripts/"; cp "$CP" "$1/scripts/counterproof.sh"
@@ -272,7 +318,7 @@ check "secondo scrittore durante il gradino 2 -> attende e resta fuori (exit 3),
 check "  il secondo non ha eseguito nulla e non ha cambiato il mirror" '[ ! -e "$T/second/S1.json" ] && [ "$(mir_hash)" = "$MIRS" ]'
 
 # 2. lock held beyond the cap -> exit 3, nothing run, no fallback
-( flock 9; sleep 5 ) 9>"$M/.fic-lock" & holder=$!
+( flock -w 30 9 || exit 1; sleep 5 ) 9>"$M/.fic-lock" & holder=$!
 sleep 1
 FIC_LOCK_WAIT=1 cpr "$LIST"
 check "lock occupato oltre il tetto -> exit 3, BLOCKED" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (mirror occupato" "$T/out"'
@@ -280,7 +326,7 @@ check "  nessun runner lanciato (ne mirror ne /mnt/c)" '[ ! -f "$FAKE_LOG.all" ]
 wait $holder
 
 # 3. lock held but released within the cap -> waits and runs
-( flock 9; sleep 2 ) 9>"$M/.fic-lock" & holder=$!
+( flock -w 30 9 || exit 1; sleep 2 ) 9>"$M/.fic-lock" & holder=$!
 sleep 1
 FIC_LOCK_WAIT=20 cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
 check "lock liberato entro il tetto -> attende ed esegue" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1"'
@@ -344,16 +390,18 @@ PYP=$(mj pyp.json "[$(entry PYP modules/api/app/core.py 'UNO = 1' 'UNO = 1  # RO
 PYC=$(mj pyc.json "[$(entry PYC modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::TestC' 'assert 2 == 1')]")
 VTD=$(mj vtd.json "[$(entry VTD $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma')]")
 # 1.8.0 (CI): each <id>.json removed before its run, so an outcome is never the one of the run before (a run that
-# writes nothing gives an empty outcome); $T/nomi keeps, per case, the outcome, the exit and the last line of the run
-caso_nomi() { # [NOMI_TEST_PY]: the three cases -> 0 if all rosso_asserzione
-  local a b c
-  rm -f "$OUT/PYP.json"; NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; a=$(field PYP esito)
-  echo "PYP=${a:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" > "$T/nomi"
-  rm -f "$OUT/PYC.json"; NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; b=$(field PYC esito)
-  echo "PYC=${b:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" >> "$T/nomi"
-  rm -f "$OUT/VTD.json"; NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; c=$(field VTD esito)
-  echo "VTD=${c:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" >> "$T/nomi"
-  [ "$a $b $c" = "rosso_asserzione rosso_asserzione rosso_asserzione" ]
+# writes nothing gives an empty outcome); $T/nomi keeps, per case, the outcome, the exit and the last line of the run,
+# NOMI_ESITI the three outcomes («-» for none), NOMI_RC the three exits
+caso_nomi() { # [NOMI_TEST_PY]: the three cases -> 0 if all rosso_asserzione with exit 0
+  local a b c ra rb rv
+  rm -f "$OUT/PYP.json"; NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; a=$(field PYP esito); ra=$(rc)
+  echo "PYP=${a:-(nessuno)} rc=$ra · $(tail -1 "$T/out")" > "$T/nomi"
+  rm -f "$OUT/PYC.json"; NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; b=$(field PYC esito); rb=$(rc)
+  echo "PYC=${b:-(nessuno)} rc=$rb · $(tail -1 "$T/out")" >> "$T/nomi"
+  rm -f "$OUT/VTD.json"; NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; c=$(field VTD esito); rv=$(rc)
+  echo "VTD=${c:-(nessuno)} rc=$rv · $(tail -1 "$T/out")" >> "$T/nomi"
+  NOMI_ESITI="${a:--} ${b:--} ${c:--}"; NOMI_RC="$ra $rb $rv"
+  [ "$NOMI_ESITI" = "rosso_asserzione rosso_asserzione rosso_asserzione" ] && [ "$NOMI_RC" = "0 0 0" ]
 }
 check "pytest test_uno[a] e classe TestC, vitest su un describe -> rosso_asserzione (D1-bis)" 'caso_nomi || { sed "s/^/    /" "$T/nomi"; false; }'
 cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
@@ -364,8 +412,12 @@ a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
 assert s.count(a) == 1
 open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
 PY
-check "controprova: relazione ridotta all uguaglianza -> i tre casi non sono rosso_asserzione: rosso" \
-  'grep -qF "    return \"altro\"" "$T/nomi-uguale.py" && ! caso_nomi "$T/nomi-uguale.py" || { sed "s/^/    /" "$T/nomi"; false; }'
+# the counterproof wants the outcome the mutation causes, in all three cases: exact names only -> the named test is not
+# in the report -> rosso_raccolta (as case 8), FAIL, exit 1. Not just «not rosso_asserzione»: a run that writes nothing,
+# bloccato, exit 64 or a busy mirror passed that too (the CI of 1.8.0 on a case-insensitive filesystem: three exits 64)
+check "controprova: relazione ridotta all uguaglianza -> i tre casi rosso_raccolta con exit 1: rosso" \
+  '{ grep -qF "    return \"altro\"" "$T/nomi-uguale.py" && ! caso_nomi "$T/nomi-uguale.py" &&
+     [ "$NOMI_ESITI" = "rosso_raccolta rosso_raccolta rosso_raccolta" ] && [ "$NOMI_RC" = "1 1 1" ]; } || { sed "s/^/    /" "$T/nomi"; false; }'
 
 # 10. invalid input -> 64, nothing run
 cpr "$(mj bad.json "[$(entry X modules/api/app/core.py 'UNO = 1' 'UNO = 2')]")"
@@ -374,7 +426,7 @@ cpr "$(mj bad2.json '[{"id":"X","file":"modules/app/apps/admin/src.ts"}]')"
 check "voce incompleta -> 64" '[ "$(rc)" = 64 ]'
 cpr "$(mj bad3.json "[$(entry X $V/src.ts 'x = 1' 'x = 2'),$(entry X $V/other.ts 'y = 1' 'y = 2')]")"
 check "id duplicato -> 64" '[ "$(rc)" = 64 ] && grep -q "id duplicato" "$T/out"'
-MAAT_LINGUA=en cpr "$OUT/bad3.json"
+MAAT_LINGUA=en cpr "$OUT/in-bad3.json"
 check "en: id duplicato -> 64, the reason in English from the embedded Python" '[ "$(rc)" = 64 ] && grep -qx "counterproof: id X: duplicate id" "$T/out"'
 
 # 10b. L2 (harness-pt11): "absorbed" entry -> not run, <id>.json with outcome `assorbita`; absorbed only -> exit 0,
@@ -387,7 +439,7 @@ cpr "$(mj ab2.json "[$AB]")"
 check "solo assorbite -> exit 0, nessun runner" '[ "$(rc)" = 0 ] && [ ! -f "$FAKE_LOG.all" ] && tail -1 "$T/out" | grep -q "esito=PASS prove=0/0 .*assorbite=1" && [ "$(field AB1 esito)" = assorbita ]'
 cpr "$(mj ab3.json "[$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d["assorbita"]="si"; print(json.dumps(d))' "$(entry AB2 $V/src.ts 'x = 1' 'x = 2')")]")"
 check "assorbita non booleana -> 64" '[ "$(rc)" = 64 ]'
-check "opzione al posto del path -> 64" 'PROJECT_ROOT=$R bash "$CP" --help >/dev/null 2>&1; [ $? -eq 64 ]'
+check "opzione al posto del path -> 64" 'limitato /dev/null env PROJECT_ROOT="$R" bash "$CP" --help; [ "$(rc)" -eq 64 ]'
 
 # 11. death halfway through the run: the trap puts the mirror file back
 MIR1=$(mir_hash)
@@ -496,7 +548,7 @@ mkdir -p "$W/run/counterproof"
 printf '[%s]\n' "$(entry W1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')" > "$W/run/counterproof/mutations.json"
 MIRW=$(mir_hash)
 rm -f "$FAKE_LOG.all"
-FAKE_LOCKFILE=$WM/.fic-lock PROJECT_ROOT=$W bash "$CP" "$W/run/counterproof/mutations.json" > "$T/out" 2>&1; echo $? > "$T/rc"
+limitato "$T/out" env FAKE_LOCKFILE="$WM/.fic-lock" PROJECT_ROOT="$W" bash "$CP" "$W/run/counterproof/mutations.json"
 check "worktree: gira nella copia ~/fic-mirror-<hash> del worktree, seminata" '[ "$(rc)" = 0 ] && grep -q "^cwd=$WM/apps/admin " "$FAKE_LOG.all" && [ -d "$WM/node_modules/dep" ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1"'
 check "  la mutazione vista e' sul codice del worktree" 'grep -q "seen=export const x = 2 // ROSSO // del worktree" "$FAKE_LOG.all"'
 check "  sotto il lock della copia del worktree" 'grep -q "^lock=occupato" "$FAKE_LOG.all"'
@@ -600,7 +652,7 @@ path_senza() { # <folder> <name…>: the PATH with the folders containing one of
   printf '%s' "$out"
 }
 cpb() { # <PATH> <list> [script]: like cpr, with the given PATH
-  rm -f "$FAKE_LOG.all"; PATH=$1 PROJECT_ROOT=$R "$BASH" "${3:-$CP}" "$2" > "$T/out" 2>&1; echo $? > "$T/rc"
+  rm -f "$FAKE_LOG.all"; limitato "$T/out" env PATH="$1" PROJECT_ROOT="$R" "$BASH" "${3:-$CP}" "$2"
 }
 diverge() { # the same drift of the copy before every round
   echo 'export const x = 0 // stantio' > "$M/apps/admin/src.ts"
@@ -636,26 +688,26 @@ check "  la mutazione l ha vista il runner nel mirror" 'grep -q "seen=export con
 # fallback lock held by a live process -> waits, beyond the cap exit 3; then orphaned (dead pid) -> taken over
 sleep 30 & vivo=$!
 mkdir "$M/.fic-lock.d" && echo "$vivo" > "$M/.fic-lock.d/pid"
-FIC_LOCK_WAIT=1 cpb "$PX" "$OUT/one.json"
+FIC_LOCK_WAIT=1 cpb "$PX" "$OUT/in-one.json"
 check "  lock di ripiego di un processo vivo -> exit 3 «mirror occupato», niente eseguito, lock intatto" '[ "$(rc)" = 3 ] && grep -qF "esito=BLOCKED (mirror occupato oltre 1s (lock $M/.fic-lock.d)" "$T/out" && [ ! -f "$FAKE_LOG.all" ] && [ "$(cat "$M/.fic-lock.d/pid")" = "$vivo" ]'
 kill "$vivo"; wait "$vivo" 2>/dev/null
-FIC_LOCK_WAIT=5 cpb "$PX" "$OUT/one.json"
+FIC_LOCK_WAIT=5 cpb "$PX" "$OUT/in-one.json"
 check "  lock orfano (pid morto) -> ripreso, prova eseguita, lock rilasciato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1" && [ ! -e "$M/.fic-lock.d" ] && [ ! -e "$M/.fic-lock.d.rec" ]'
 # step 2: private copies with the fallback, worker queue with the mkdir lock
 FIC_CP_PARALLEL=2 cpb "$PX" "$(mj pk.json "[$(entry PK1 $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(entry PK2 $V/other.ts 'y = 1' 'y = 2 // ROSSO')]")"
 check_par "  gradino 2 senza rsync e flock: stessi esiti, ogni mutazione una volta, copie cancellate, lock rilasciato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=2/2 .*luogo=copie(2)" && [ "$(field PK1 esito)" = rosso_asserzione ] && [ "$(field PK2 esito)" = rosso_asserzione ] && [ "$(grep -c "args=vitest" "$FAKE_LOG.all")" = 2 ] && ! ls -d "$HOME"/fic-cp.* >/dev/null 2>&1 && [ ! -e "$M/.fic-lock.d" ]'
 # signal halfway through the run: the trap restores the mirror and releases the fallback lock
-FAKE_KILL="$CP" cpb "$PX" "$OUT/one.json"
+FAKE_KILL="$CP" cpb "$PX" "$OUT/in-one.json"
 check "  segnale durante il run -> exit 143, mirror ripristinato, lock di ripiego rilasciato" '[ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ]'
 [ "$(rc)" = 143 ] && grep -qx "export const x = 1" "$M/apps/admin/src.ts" && [ ! -e "$M/.fic-lock.d" ] ||   # detail of a red
   { echo "    rc=$(rc) src.ts=$(cat "$M/apps/admin/src.ts" 2>&1) lock=$(ls -la "$M/.fic-lock.d" 2>&1 | tr '\n' ' ') pid=$(cat "$M/.fic-lock.d/pid" 2>&1)"
     sed 's/^/    out: /' "$T/out" | tail -15; sed 's/^/    npx: /' "$FAKE_LOG.all" 2>/dev/null | tail -8; }
 # tools without fallback
 for v in "sha256sum|rsync flock sha256sum" "timeout|timeout" "rsync e tar|rsync tar flock"; do
-  cpb "$(path_senza "$T/bin-${v#*|}" ${v#*|})" "$OUT/one.json"
+  cpb "$(path_senza "$T/bin-${v#*|}" ${v#*|})" "$OUT/in-one.json"
   check "senza ${v%%|*} -> exit 3, «controprove non disponibili: manca ${v%%|*}», niente eseguito" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (controprove non disponibili: manca ${v%%|*})" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
 done
-MAAT_LINGUA=en cpb "$(path_senza "$T/bin-sha256sum-en" rsync flock sha256sum)" "$OUT/one.json"
+MAAT_LINGUA=en cpb "$(path_senza "$T/bin-sha256sum-en" rsync flock sha256sum)" "$OUT/in-one.json"
 check "en: senza sha256sum -> exit 3, prefisso «esito=BLOCKED (» congelato, motivo in inglese" '[ "$(rc)" = 3 ] && grep -qx "counterproof: esito=BLOCKED (counterproofs not available: missing sha256sum) luogo=-" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
 # (1.8.0, A4: the known limit «radice_pacchetti = repository root -> 64» is gone, the root cases are in 16c)
 # counterproofs by mutation (plugin copies with fic-mirror.sh or counterproof.sh mutated)
@@ -671,7 +723,7 @@ m=$(mut16 senza-rilascio fic-mirror.sh 's/^  \[ "\$(cat "\$d\/pid" 2>\/dev\/null
 check "controprova: lock mkdir mai rilasciato -> la cartella resta, rosso" '[ -n "$m" ] && ! caso_ripiego "$m" && [ -d "$M/.fic-lock.d" ]'
 rm -rf "$M/.fic-lock.d"
 m=$(mut16 senza-strumenti counterproof.sh 's/^for t in sha256sum timeout; do/for t in ; do/')
-cpb "$(path_senza "$T/bin-sha256sum-m" rsync flock sha256sum)" "$OUT/one.json" "$m"
+cpb "$(path_senza "$T/bin-sha256sum-m" rsync flock sha256sum)" "$OUT/in-one.json" "$m"
 check "controprova: strumenti non controllati -> niente «manca sha256sum», rosso" '[ -n "$m" ] && ! grep -q "manca sha256sum" "$T/out"'
 caso_ripiego >/dev/null   # copy realigned after the mutants
 rm -rf "$M/apps/admin/node_modules/tieni" "$M/apps/admin/vuota-estranea" "$MA/__pycache__"
@@ -742,9 +794,16 @@ mkdir -p "$R/top"
 echo 'UNO=1' > "$R/top/core.txt"
 printf 'echo ran >> "$FAKE_LOG.all"\ngrep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/top/t.sh"
 # the orphan: a sleep in a session of its own, by Python's os.setsid (macOS has no setsid command: the CI of 1.8.0 was
-# red there, the orphan never started); it keeps the descriptors it inherits, like `setsid sleep`
+# red there, the orphan never started); it keeps the descriptors it inherits, like `setsid sleep`. Its pid is written
+# by Python itself, after os.setsid() and before the exec (the same pid then sleeps): the file exists only if the
+# orphan really left the group (Python starts slower than `setsid`), and caso_orfano wants it
 cat > "$R/top/t-o.sh" <<'EOF'
-python3 -c 'import os; os.setsid(); os.execvp("sleep", ["sleep", "27"])' > /dev/null 2>&1 < /dev/null & echo $! > "$FAKE_LOG.orfano"
+python3 -c 'import os, sys
+os.setsid()
+with open(sys.argv[1] + ".tmp", "w") as f:
+    f.write("%d\n" % os.getpid())
+os.replace(sys.argv[1] + ".tmp", sys.argv[1])
+os.execvp("sleep", ["sleep", "27"])' "$FAKE_LOG.orfano" > /dev/null 2>&1 < /dev/null &
 grep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }
 exit 0
 EOF
@@ -787,12 +846,12 @@ mkdir -p "$W/top" && cp "$R/top/core.txt" "$R/top/t.sh" "$W/top/"
 WMR=${WM%/modules/app}
 printf '[%s]\n' "$(tr16 RW1 'UNO=1 ROSSO')" > "$W/run/counterproof/radw.json"
 rm -f "$FAKE_LOG.all"
-MAAT_CONFIG=$T/radc.json PROJECT_ROOT=$W bash "$CP" "$W/run/counterproof/radw.json" > "$T/out" 2>&1; echo $? > "$T/rc"
+limitato "$T/out" env MAAT_CONFIG="$T/radc.json" PROJECT_ROOT="$W" bash "$CP" "$W/run/counterproof/radw.json"
 check "  da un worktree: gira nella copia del worktree, il file .git non è copiato" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1" && [ -f "$W/.git" ] && [ ! -e "$WMR/.git" ] && [ -f "$WMR/top/core.txt" ] || { sed "s/^/    out: /" "$T/out" | tail -6; false; }'
 # the lock of a sibling held: with copia (fe, as test-fast.sh takes it) and without (svc, as a counterproof on svc)
 caso_lock_fratello() { # <config> <lock> [script]: the lock held by another process -> exit 3 with that lock, nothing synced, no run
   local h; semina16; AL0=$(albero_copia)
-  ( flock 9; exec sleep 30 ) 9>"$2" & h=$!
+  ( flock -w 30 9 || exit 1; exec sleep 30 ) 9>"$2" & h=$!
   sleep 0.5
   MAAT_CONFIG=$1 FIC_LOCK_WAIT=1 CPX=${3:-} cpr "$LR1"
   kill "$h" 2>/dev/null; wait "$h" 2>/dev/null
@@ -808,10 +867,10 @@ check "  nessun modulo con copia: lock del fratello svc tenuto -> exit 3 senza s
 caso_scadenza() { # [script] -> 0 if exit 3 on the lock of svc within 7.5 s of the count line
   local h1 h2 h3 dt
   rm -f "$T/out" "$T/t-avvio" "$T/t-esito"
-  ( flock 9; until grep -q "da eseguire" "$T/out" 2>/dev/null; do sleep 0.05; done; date +%s%N > "$T/t-avvio"
+  ( flock -w 30 9 || exit 1; k=0; until grep -q "da eseguire" "$T/out" 2>/dev/null || [ $k -ge 1200 ]; do sleep 0.05; k=$((k + 1)); done; date +%s%N > "$T/t-avvio"
     exec sleep 3 ) 9>"$MR/.fic-lock" & h1=$!
-  ( flock 9; exec sleep 60 ) 9>"$SVCL" & h2=$!
-  ( until grep -q "esito=" "$T/out" 2>/dev/null; do sleep 0.05; done; date +%s%N > "$T/t-esito" ) & h3=$!
+  ( flock -w 30 9 || exit 1; exec sleep 60 ) 9>"$SVCL" & h2=$!
+  ( k=0; until grep -q "esito=" "$T/out" 2>/dev/null || [ $k -ge 1200 ]; do sleep 0.05; k=$((k + 1)); done; date +%s%N > "$T/t-esito" ) & h3=$!
   sleep 0.3
   MAAT_CONFIG=$T/radn.json FIC_LOCK_WAIT=6 CPX=${1:-} cpr "$LR1"
   sleep 0.2; kill "$h1" "$h2" "$h3" 2>/dev/null; wait "$h1" "$h2" "$h3" 2>/dev/null
@@ -821,16 +880,21 @@ caso_scadenza() { # [script] -> 0 if exit 3 on the lock of svc within 7.5 s of t
 }
 check "  due lock tenuti, FIC_LOCK_WAIT=6: exit 3 su svc entro 7,5 s (scadenza unica, non 3 + 6)" 'caso_scadenza || { echo "    $(cat "$T/dt")"; sed "s/^/    out: /" "$T/out" | tail -3; false; }'
 # C1: a run that leaves an orphan out of its group (setsid): when the counterproof is over, no lock is held
+# -> 0: the orphan detached (its pid file, written after os.setsid), alive, no lock held; 1: detached and alive, a lock
+# held; 2: a case that tested nothing (the run not PASS, no pid file within 10 s, the orphan dead)
 caso_orfano() { # [script]
   rm -f "$FAKE_LOG.orfano"
   MAAT_CONFIG=$T/radc.json CPX=${1:-} cpr "$LRO"
-  local ok=0 o; o=$(cat "$FAKE_LOG.orfano" 2>/dev/null)
-  [ "$(rc)" = 0 ] && [ -n "$o" ] && kill -0 "$o" 2>/dev/null &&
-    flock -n "$MR/.fic-lock" true && flock -n "$SVCL" true && flock -n "$M/.fic-lock" true || ok=1
+  local ok=2 o="" k=0
+  while [ ! -s "$FAKE_LOG.orfano" ] && [ $k -lt 100 ]; do sleep 0.1; k=$((k + 1)); done
+  o=$(cat "$FAKE_LOG.orfano" 2>/dev/null)
+  if [ "$(rc)" = 0 ] && [ -n "$o" ] && kill -0 "$o" 2>/dev/null; then
+    ok=1; flock -n "$MR/.fic-lock" true && flock -n "$SVCL" true && flock -n "$M/.fic-lock" true && ok=0
+  fi
   [ -z "$o" ] || kill "$o" 2>/dev/null
   return $ok
 }
-check "  run orfano fuori dal suo gruppo (caso C1): finita la controprova nessun lock resta preso" 'caso_orfano || { sed "s/^/    out: /" "$T/out" | tail -4; false; }'
+check "  run orfano fuori dal suo gruppo (caso C1): finita la controprova nessun lock resta preso" 'caso_orfano || { echo "    esito $? (1 = un lock preso, 2 = orfano non staccato o run non PASS)"; sed "s/^/    out: /" "$T/out" | tail -4; false; }'
 # a module with copia at the root -> 64 with the new message (DA3)
 echo "{\"versione_schema\": 1, \"moduli\": [{\"nome\": \"tutto\", \"radice\": \".\", \"copia\": {\"test\": \"true {test}\"}, $CMDC}]}" > "$T/radcopia.json"
 MAAT_CONFIG=$T/radcopia.json cpr "$LR1"
@@ -868,13 +932,13 @@ check "controprova: lock presi solo per i moduli con copia -> col lock di svc te
 m=$(mut_rep scadenza 'RESTO=$(( WAIT_MS - ($(date +%s%N) - T_LOCK) / 1000000 ))   # SCADENZA-UNICA' 'RESTO=$WAIT_MS   # SCADENZA-UNICA')
 check "controprova: una scadenza per lock -> oltre 4 s: rosso" '[ -n "$m" ] && ! caso_scadenza "$m"'
 m=$(mut_rep chiudi 'for f in ${LOCKFDS[@]+"${LOCKFDS[@]}"}; do exec {f}>&-; done' 'for f in ${LOCKFDS[@]:0:1}; do exec {f}>&-; done')
-check "controprova: run_cmd chiude solo il primo lock -> l orfano tiene i lock dei fratelli: rosso" '[ -n "$m" ] && ! caso_orfano "$m"'
+check "controprova: run_cmd chiude solo il primo lock -> l orfano, staccato e vivo, tiene i lock dei fratelli: rosso" '[ -n "$m" ] && { caso_orfano "$m"; [ $? = 1 ]; }'
 caso_radice >/dev/null   # the mirror as the real script leaves it
 
 # 17. project root: from PROJECT_ROOT, never from the script location; without it (outside a repo) -> exit 64.
 #     Counterproof: ROOT again from $HERE/../.. -> the cases above are red.
 mkdir -p "$T/nogit"
-(cd "$T/nogit" && env -u PROJECT_ROOT -u FIC_REPO bash "$CP" "$OUT/one.json" > "$T/out" 2>&1; echo $? > "$T/rc")
+(cd "$T/nogit" && limitato "$T/out" env -u PROJECT_ROOT -u FIC_REPO bash "$CP" "$OUT/in-one.json")
 check "PROJECT_ROOT non risolvibile -> exit 64" '[ "$(rc)" = 64 ] && grep -q "radice del progetto non risolta" "$T/out"'
 
 # 18. {python} of the be module (wsl environment): without FIC_PYTEST_PY, gates.sh's search among the module's candidates
@@ -882,9 +946,37 @@ check "PROJECT_ROOT non risolvibile -> exit 64" '[ "$(rc)" = 64 ] && grep -q "ra
 FIC_PYTEST_PY= cpr "$(mj pyw.json "[$(entry PW modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")"
 check "python WSL assente fra i candidati del modulo -> exit 3, niente eseguito" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (python WSL assente: $API/.venv312/bin/python $API/.venv/bin/python)" "$T/out" && [ ! -f "$FAKE_LOG.all" ]'
 mkdir -p "$API/.venv/bin" && cp "$BIN/fakepy" "$API/.venv/bin/python" && chmod +x "$API/.venv/bin/python"
-FIC_PYTEST_PY= cpr "$OUT/pyw.json"
+FIC_PYTEST_PY= cpr "$OUT/in-pyw.json"
 check "  il primo candidato che esiste (.venv/bin/python) esegue il test" '[ "$(rc)" = 0 ] && [ "$(field PW esito)" = rosso_asserzione ] && field PW comando | grep -q "$API/.venv/bin/python -B -m pytest"'
 rm -rf "$API/.venv"
+
+# the deadline of limitato (CI of 1.8.0: a hang of the suite on Linux, rc=124 at 1016 s, nothing in its log): a run
+# that hangs (a script sleeping 6 s, CP_CASO_LIMITE=2) ends by TERM within about 2 s, «TIMEOUT caso: riga <n>» recorded,
+# the line «caso: riga <n>» printed before it. Counterproof: limitato without its watchdog -> the run lasts 6 s, nothing
+# recorded
+printf '#!/usr/bin/env bash\nexec sleep 6\n' > "$T/appeso.sh"
+caso_appeso() { # [function]: 0 if the hanging run was cut within 4 s, recorded and named
+  local t0 dt
+  rm -f "$T/scaduto"; t0=$(date +%s)
+  CP_CASO_LIMITE=2 CPX=$T/appeso.sh "${1:-cpr}" "$OUT/in-one.json" 2> "$T/appeso.err"
+  dt=$(( $(date +%s) - t0 ))
+  grep -q '^TIMEOUT caso: riga [0-9]* (caso_appeso) dopo 2 s$' "$T/scaduto" 2>/dev/null &&
+    grep -q '^caso: riga [0-9]* (caso_appeso) ' "$T/appeso.err" && [ "$dt" -le 4 ] && [ "$(rc)" = 143 ]
+}
+caso_appeso; r=$?; rm -f "$T/scaduto"
+check "un run appeso (6 s, CP_CASO_LIMITE=2) -> TERM entro 4 s, «TIMEOUT caso: riga …» registrato, «caso: riga …» prima" '[ $r = 0 ] || { sed "s/^/    /" "$T/appeso.err"; false; }'
+MUTL=$(sed -n '/^limitato() {/,/^}$/p' "$HERE/counterproof.test.sh" | sed '1s/^limitato()/limitato_mut()/; /^  ( trap /,/   # GUARDIANO$/d; s/^  w=\$!$/  w=   # GUARDIANO tolto/')
+eval "$MUTL"
+cpr_mut() { rm -f "$FAKE_LOG.all"; limitato_mut "$T/out" env PROJECT_ROOT="${CPR_ROOT:-$R}" bash "${CPX:-$CP}" "$1"; }
+caso_appeso cpr_mut; r=$?; rm -f "$T/scaduto"
+check "controprova: limitato senza il suo guardiano -> il run appeso dura 6 s, nulla registrato: rosso" \
+  'printf "%s\n" "$MUTL" | grep -q "GUARDIANO tolto" && ! printf "%s\n" "$MUTL" | grep -q "sleep \"\$CP_CASO_LIMITE\"" && [ $r != 0 ]'
+
+# the inputs of mj never the outcome of one of their ids, ignoring case (CI of 1.8.0: pyp.json = PYP.json on macOS).
+# Counterproof: an input whose name is the outcome of its id (in-zz.json with the id «IN-ZZ») is recorded
+check "nessun input di mj coincide, ignorando le maiuscole, con l <id>.json di una sua voce" '[ ! -s "$T/mj-collisioni" ] || { sed "s/^/    /" "$T/mj-collisioni"; false; }'
+mj zz.json '[{"id": "IN-ZZ"}]' > /dev/null
+check "controprova: in-zz.json con l id IN-ZZ -> registrato fra le collisioni" 'grep -qx "in-zz.json = IN-ZZ.json" "$T/mj-collisioni"'
 
 echo "counterproof.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

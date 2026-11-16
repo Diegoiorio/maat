@@ -559,6 +559,7 @@ Seven small git repositories, built from models, with 65 specs and 49 counted js
 | `suite.sh --gruppo <k>/<n>` | `tools/suite.sh` | group k of `tools/suite-gruppi.list` only (CI, parallel run) |
 | `MAAT_SUITE_TIMEOUT` | `tools/suite.sh` | the limit of each suite in seconds (default 5400; the CI: 1200 on Linux and macOS, 1800 on Windows); over it `rc=124` and a `TIMEOUT` line; not a positive integer → exit 2 |
 | `MAAT_GRUPPO_TIMEOUT` | `tools/suite.sh` | the limit of the whole run in seconds (default none; the CI: at least 300 below each job's); a suite gets at most what is left, the suites after its end `NON ESEGUITA` and exit 1; not a positive integer → exit 2 |
+| `CP_CASO_LIMITE` | `counterproof.test.sh` | the deadline of each run of `counterproof.sh` in the suite, in seconds (default 240); each run is preceded by a line `caso: riga <n> (<function>) <time>` on stderr, and over the deadline it gets TERM, the line `TIMEOUT caso: …` and the next check FAILs with it (a hang names its case in the `TIMEOUT` tail of `tools/suite.sh`) |
 | `MAAT_LINUX_CLONI`, `MAAT_PARALLELO_FORZA=1`, `MAAT_PARALLELO_LOCK` | `suite-parallelo.sh`, `giro-completo.sh --linux-parallelo` | the clones, one per group; skip the check of the processes; the lock file |
 | `--linux-parallelo`, `--windows-breve` | `giro-completo.sh` | the Linux part in parallel; the short proof on Windows (`tools/prova-breve-windows.list`) |
 
