@@ -22,10 +22,13 @@ n=0; fail=0
 # seconds). Over it: TERM, KILL 10 s later, «TIMEOUT caso: …» on stderr, and the next check FAILs with that line,
 # instead of the suite hanging until the limit of tools/suite.sh (CI of 1.8.0, Linux: rc=124 after 1016 s, empty log)
 CP_CASO_LIMITE=${CP_CASO_LIMITE:-240}
-check() {
+check() { # a run over its deadline, before the check or inside its condition (a cpr in a case function), FAILs it
+  local prima=""
   n=$((n + 1))
-  if [ -s "$T/scaduto" ]; then fail=$((fail + 1)); echo "FAIL: $1 ($(cat "$T/scaduto"))"; rm -f "$T/scaduto"
-  elif eval "$2"; then :; else fail=$((fail + 1)); echo "FAIL: $1"; fi
+  [ ! -s "$T/scaduto" ] || { prima=$(cat "$T/scaduto"); rm -f "$T/scaduto"; }
+  if [ -z "$prima" ] && eval "$2" && [ ! -s "$T/scaduto" ]; then :
+  else fail=$((fail + 1)); prima=${prima:-$(cat "$T/scaduto" 2>/dev/null)}; echo "FAIL: $1${prima:+ ($prima)}"; fi
+  rm -f "$T/scaduto"
 }
 limitato() { # <out> <command…>: the command with stdout and stderr in <out>, at most CP_CASO_LIMITE s; exit in $T/rc
   local o=$1 p w c i=1
@@ -585,6 +588,45 @@ FINESTRA=; caso_finestra "$m"; r=$?
 check_par "controprova: il gestore della 1.7 (exit 143 a ogni segnale), stesso secondo TERM nella finestra → pulizia interrotta: rosso" \
   '[ -n "$m" ] && grep -q "^trap '"'"'exit 143'"'"' TERM INT HUP$" "$m" && [ $r = 1 ] || { echo "    esito $r: $FINESTRA"; false; }'
 pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"   # the mirror as before the counterproof
+
+# 11f. (1.8.0, CI) cleanup has a deadline for the children of the main process (figli_morti, at most 5 s). Before, its
+#      kills ended with a bare `wait`: one child still alive there held the counterproof forever, TERM ignored (CI of
+#      ba82a71, Linux: 11b and the counterproof of 11c cut by the deadline of the test at 240 s, `Killed`). In a copy of
+#      the plugin a child of the main process is started right before that point (FAKE_FIGLIO_TARDIVO=<file>: a
+#      `sleep 300`, its pid in <file>; a line only the copies have), as a child that the kills did not reach: the
+#      death halfway of 11 still ends with exit 143 within 15 s, the mirror restored, that child dead. Counterproof:
+#      the bare `wait` back in place of figli_morti -> the run waits for the child: cut by the deadline (20 s here), red.
+tardivo_py='import sys
+t = open(sys.argv[1]).read()
+a = "  figli_morti   # FIGLI-ENTRO\n"
+h = "  [ -z \"${FAKE_FIGLIO_TARDIVO:-}\" ] || { sleep 300 & echo $! > \"$FAKE_FIGLIO_TARDIVO\"; }   # FIGLIO-TARDIVO\n"
+assert t.count(a) == 1
+t = t.replace(a, h + (a if len(sys.argv) < 4 else "  wait 2>/dev/null   # FIGLI-ENTRO tolto\n"), 1)
+open(sys.argv[2], "w").write(t)'
+mut_tardivo() { local d=$T/mut11-$1; mkplug "$d"; shift
+  python3 -c "$tardivo_py" "$CP" "$d/scripts/counterproof.sh" "$@" && ! cmp -s "$CP" "$d/scripts/counterproof.sh" && printf '%s' "$d/scripts/counterproof.sh"; }
+caso_tardivo() {  # <script> -> 0: exit 143 within 15 s, no deadline hit, the mirror restored, the late child dead
+  local s=$1 t0 dt q st
+  rm -f "$T/tardivo" "$T/scaduto"; t0=$(date +%s)
+  CP_CASO_LIMITE=20 FAKE_KILL="$s" FAKE_FIGLIO_TARDIVO=$T/tardivo CPX="$s" cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")" 2> "$T/tardivo.err"
+  dt=$(( $(date +%s) - t0 )); q=$(cat "$T/tardivo" 2>/dev/null)
+  st=$([ -n "$q" ] && ps -o stat= -p "$q" 2>/dev/null)
+  [ -n "$q" ] && kill -KILL "$q" 2>/dev/null   # never left running, whatever the outcome
+  TARDIVO="rc=$(rc) ${dt}s figlio=${q:-nessuno} stato=${st:-morto} $(cat "$T/scaduto" 2>/dev/null)"
+  [ -n "$q" ] || return 2   # the hook never ran: the case tested nothing
+  [ ! -s "$T/scaduto" ] && [ "$(rc)" = 143 ] && [ "$dt" -le 15 ] && { [ -z "$st" ] || [ "${st#Z}" != "$st" ]; } &&
+    grep -qx "export const x = 1" "$M/apps/admin/src.ts"
+}
+m=$(mut_tardivo tardivo)
+check "  premessa 11f: il figlio tardivo solo nella copia del plugin" '[ -n "$m" ] && grep -q "# FIGLIO-TARDIVO$" "$m" && ! grep -q "FAKE_FIGLIO_TARDIVO" "$CP"'
+caso_tardivo "$m"; r=$?; rm -f "$T/scaduto"
+check "11f un figlio del processo principale ancora vivo alla fine della pulizia -> exit 143 entro 15 s, mirror ripristinato, figlio ucciso" '[ $r = 0 ] || { echo "    esito $r: $TARDIVO"; sed "s/^/    /" "$T/tardivo.err" | tail -3; false; }'
+cp "$AD/src.ts" "$M/apps/admin/src.ts"
+m=$(mut_tardivo wait-nudo vecchio)
+caso_tardivo "$m"; r=$?; rm -f "$T/scaduto"
+check "controprova: il wait senza scadenza al posto di figli_morti -> il run aspetta il figlio fino alla scadenza: rosso" \
+  '[ -n "$m" ] && grep -q "FIGLI-ENTRO tolto" "$m" && [ $r = 1 ] && printf "%s" "$TARDIVO" | grep -q "TIMEOUT caso" || { echo "    esito $r: $TARDIVO"; false; }'
+pulisci11; cp "$AD/src.ts" "$M/apps/admin/src.ts"; cp "$AD/other.ts" "$M/apps/admin/other.ts"
 
 # 12. from a worktree (pt03): same rule as test-fast.sh — copy ~/fic-mirror-<hash> (seeded from
 #     ~/fic-mirror) and ITS lock; the worktree code never enters the main tree's copy.

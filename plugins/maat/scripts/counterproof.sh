@@ -734,12 +734,33 @@ runs_gone() {  # 1.8.0 (C1): up to 5 s for the recorded groups to be empty (kill
   done
   return 1
 }
+figli_morti() {  # 1.8.0 (CI): up to 5 s for the children of this process to be dead (gone or zombie), killing again.
+  # Before, cleanup ended its kills with a bare `wait`: no deadline, so one child of the main process still alive at
+  # that point (whatever kept it: a child the pgrep of kill_tree did not list, a job bash still counted) held the
+  # counterproof forever, with TERM ignored (CI of 1.8.0, Linux: a signal during step 2, cut at 240 s by the test).
+  # The children are listed into a file, not through $( ): a command substitution would be a child itself. The
+  # zombies are left to init: nothing waits for them. Still alive after 5 s -> said on stderr, and cleanup goes on.
+  local k c vivi
+  for k in $(seq 1 25); do
+    vivi=""
+    pgrep -P $$ > "$TMPD/figli" 2>/dev/null
+    while read -r c; do
+      [ -n "$c" ] || continue
+      case "$(ps -o stat= -p "$c" 2>/dev/null)" in Z*|"") ;; *) vivi+=" $c" ;; esac
+    done < "$TMPD/figli"
+    [ -z "$vivi" ] && return 0
+    kill -KILL $vivi 2>/dev/null; sleep 0.2
+  done
+  echo "counterproof: $(msg counterproof-180.cleanup_alive pids="${vivi# }")" >&2
+  return 1
+}
 cleanup() {
   # A second signal during cleanup would interrupt it halfway (copies and processes left behind): from here
   # on signals are ignored.
   CP_FINE=1; trap '' TERM INT HUP
   : > "$TMPD/fine"   # before any read of runpgids: a run recorded after this does not start (run_cmd)
-  kill_tree; kill_runs; kill_tree; wait 2>/dev/null
+  kill_tree; kill_runs; kill_tree
+  figli_morti   # FIGLI-ENTRO
   runs_gone   # ATTESA: no run still alive inside the copy deleted below
   # inflight holds the real path (run_one, 1.8.0): a link mutated through its target stays a link
   if [ -s "$TMPD/inflight" ] && [ -f "$TMPD/bak" ]; then q=$(cat "$TMPD/inflight"); rm -f "$q"; cp -p "$TMPD/bak" "$q"; fi
