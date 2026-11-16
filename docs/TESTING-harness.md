@@ -289,7 +289,10 @@ going; on `main` and on tags every commit has its own run, never cancelled. Limi
 measured job, rounded up to 5 minutes): Linux 25 minutes, Windows 40 (worst job 1546 s), macOS 30 (longest 984 s,
 with the Homebrew setup). Since 1.8.0 each job also sets `MAAT_SUITE_TIMEOUT`, the limit of each suite in
 `tools/suite.sh`, below the job's: 1200 s on Linux and macOS, 1800 s on Windows (`tools/suite.test.sh` checks that
-every job of the groups sets it below `timeout-minutes` × 60). A suite that hangs then ends with `rc=124` and a line
+every job of the groups sets it below `timeout-minutes` × 60), and `MAAT_GRUPPO_TIMEOUT`, the seconds of all the
+suites of the group, at least 300 below the job's: each suite gets at most what is left of it, and the suites after
+its end get `NON ESEGUITA` (first CI of 1.8.0: a suite cut at 1200 s six minutes into its group, the job cancelled
+17 s later, the rest of the group never run). A suite that hangs then ends with `rc=124` and a line
 `TIMEOUT <entry> dopo <s> s` followed by the last 20 lines of its log, and the job goes on with the next suite instead
 of dying without saying which one. In the log of every job, a line `suite: avvio <entry>` before each suite; after a
 red suite, its `^FAIL` lines (at most 10) are printed and written in `riepilogo.txt` under its line, so the case
@@ -556,6 +559,7 @@ Seven small git repositories, built from models, with 65 specs and 49 counted js
 | `--rigenera` with `MAAT_RIF_REPO` | `comandi-equivalenza.test.sh` | rewrites the frozen reference from the private history (see «The commands of the gates») |
 | `suite.sh --gruppo <k>/<n>` | `tools/suite.sh` | group k of `tools/suite-gruppi.list` only (CI, parallel run) |
 | `MAAT_SUITE_TIMEOUT` | `tools/suite.sh` | the limit of each suite in seconds (default 5400; the CI: 1200 on Linux and macOS, 1800 on Windows); over it `rc=124` and a `TIMEOUT` line; not a positive integer → exit 2 |
+| `MAAT_GRUPPO_TIMEOUT` | `tools/suite.sh` | the limit of the whole run in seconds (default none; the CI: at least 300 below each job's); a suite gets at most what is left, the suites after its end `NON ESEGUITA` and exit 1; not a positive integer → exit 2 |
 | `MAAT_LINUX_CLONI`, `MAAT_PARALLELO_FORZA=1`, `MAAT_PARALLELO_LOCK` | `suite-parallelo.sh`, `giro-completo.sh --linux-parallelo` | the clones, one per group; skip the check of the processes; the lock file |
 | `--linux-parallelo`, `--windows-breve` | `giro-completo.sh` | the Linux part in parallel; the short proof on Windows (`tools/prova-breve-windows.list`) |
 

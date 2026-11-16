@@ -25,6 +25,10 @@ unset MAAT_CONFIG MAAT_ROOT FIC_REPO PROJECT_ROOT FIC_GATES_VENV_PY MAAT_MODULO
 # 1.8.0 (C1): the lock wait of every case is 60 s, not the default 900: a lock held by an orphan of an earlier case
 # fails soon and says so (BLOCKED «mirror occupato») instead of hanging the suite past the CI job
 export FIC_LOCK_WAIT=60
+# 1.8.0 (CI): and every fake run at most 120 s, not the default 1800 (no fake run lasts more than 30 s): on the CI of
+# 1.8.0 the suite printed nothing for 1200 s on Linux and was cut by the limit of tools/suite.sh, with no case named;
+# a run that hangs now ends BLOCKED by its timeout, its case FAILs with its name and the suite goes on
+export FIC_CP_TIMEOUT=120
 
 # fake repo: .claude/maat.json (the example) + modules/app + modules/api
 R=$T/repo; A=$R/modules/app; AD=$A/apps/admin; API=$R/modules/api

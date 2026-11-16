@@ -47,8 +47,12 @@ jobs:
     timeout-minutes: 25
     # 1.8.0: the limit of each suite (tools/suite.sh), below the job's: a suite that hangs ends with rc=124 and a
     # TIMEOUT line naming it, and the job goes on to the next one instead of dying without saying where.
+    # MAAT_GRUPPO_TIMEOUT: the seconds of all the suites of the group, 300 below the job's (setup, upload of the
+    # results): each suite gets at most what is left, so the job never dies first (first CI of 1.8.0: counterproof cut
+    # at 1200 s, but 6 minutes into the group, and the job cancelled 17 s later). tools/suite.test.sh checks both.
     env:
       MAAT_SUITE_TIMEOUT: "1200"
+      MAAT_GRUPPO_TIMEOUT: "1200"
     strategy:
       fail-fast: false
       matrix:
@@ -101,8 +105,9 @@ jobs:
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
       HOMEBREW_NO_ANALYTICS: "1"
       MAAT_BREW: "bash coreutils gnu-sed findutils grep gawk diffutils flock rsync"
-      # 1.8.0: the limit of each suite, below the job's (as for Linux)
+      # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux)
       MAAT_SUITE_TIMEOUT: "1200"
+      MAAT_GRUPPO_TIMEOUT: "1500"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -169,9 +174,10 @@ jobs:
     # Measure (CI of 1.6.0): the worst job observed took 1546 s (25.8 min), setup included; limit = first multiple
     # of 5 min above 1.5 × 25.8 = 38.7 → 40.
     timeout-minutes: 40
-    # 1.8.0: the limit of each suite, below the job's (as for Linux)
+    # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux)
     env:
       MAAT_SUITE_TIMEOUT: "1800"
+      MAAT_GRUPPO_TIMEOUT: "2100"
     strategy:
       fail-fast: false
       matrix:

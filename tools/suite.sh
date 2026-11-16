@@ -25,6 +25,12 @@
 # gets rc=124 and the line «TIMEOUT <entry> dopo <s> s» (stdout and riepilogo.txt), then the last 20 lines of its log
 # on stdout. After a red suite, the «^FAIL» lines of its log (at most 10) on stdout and in riepilogo.txt, indented
 # under its line.
+# Limit of the whole run (1.8.0, CI): MAAT_GRUPPO_TIMEOUT seconds for all the suites of this run (unset: none). Each
+# suite gets the smaller of MAAT_SUITE_TIMEOUT and the seconds left (its TIMEOUT line says which limit it had); once
+# none are left, every suite not yet started gets the line «<entry> NON ESEGUITA: tempo del gruppo finito
+# (MAAT_GRUPPO_TIMEOUT=<s> s)» and the exit is 1. The CI sets it below its job's minutes minus the setup: a per-suite
+# limit alone lets a suite that hangs late in a group outlive the job (CI of 1.8.0: counterproof cut at 1200 s, 17 s
+# before the job died, the suites after it never run). Not a positive integer: exit 2.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 GRUPPO= GRUPPI=
@@ -41,6 +47,9 @@ done
 [ -n "$GRUPPO$GRUPPI" ] && GRUPPI=${GRUPPI:-tools/suite-gruppi.list}
 LIMITE=${MAAT_SUITE_TIMEOUT-5400}
 [[ $LIMITE =~ ^[1-9][0-9]*$ ]] || { echo "suite.sh: MAAT_SUITE_TIMEOUT must be a positive integer of seconds (got '$LIMITE')" >&2; exit 2; }
+GLIMITE=${MAAT_GRUPPO_TIMEOUT-}
+[ -z "${MAAT_GRUPPO_TIMEOUT+x}" ] || [[ $GLIMITE =~ ^[1-9][0-9]*$ ]] ||
+  { echo "suite.sh: MAAT_GRUPPO_TIMEOUT must be a positive integer of seconds (got '$GLIMITE')" >&2; exit 2; }
 OUT=${1:-esiti}
 mkdir -p "$OUT" && OUT=$(cd "$OUT" && pwd)
 cd "$ROOT" || exit 2
@@ -109,15 +118,25 @@ export FIC_WT_WSL=0
 : > "$OUT/riepilogo.txt"
 [ -z "$ESCLUSE" ] || printf '%s' "$ESCLUSE" | tee -a "$OUT/riepilogo.txt"
 failed=0
+G0=$(date +%s)
 for s in $LIST; do
+  lim=$LIMITE
+  if [ -n "$GLIMITE" ]; then
+    resto=$(( GLIMITE - ($(date +%s) - G0) ))
+    if [ "$resto" -le 0 ]; then   # GRUPPO-FINITO
+      echo "$s NON ESEGUITA: tempo del gruppo finito (MAAT_GRUPPO_TIMEOUT=$GLIMITE s)" | tee -a "$OUT/riepilogo.txt"
+      failed=1; continue
+    fi
+    [ "$resto" -lt "$lim" ] && lim=$resto   # GRUPPO-RESTO
+  fi
   echo "suite: avvio $s"
   t0=$(date +%s)
   log=$OUT/$(suite_log "$s").log
   read -ra va <<< "${VARS[$s]:-}"
   # -k: a suite that ignores TERM is killed 10 s later (rc 137 from timeout: still the limit, reported as 124)
-  env ${va[@]+"${va[@]}"} timeout -k 10 "$LIMITE" bash "$(suite_file "$s")" > "$log" 2>&1
+  env ${va[@]+"${va[@]}"} timeout -k 10 "$lim" bash "$(suite_file "$s")" > "$log" 2>&1
   rc=$?
-  [ $rc -eq 137 ] && [ $(( $(date +%s) - t0 )) -ge "$LIMITE" ] && rc=124
+  [ $rc -eq 137 ] && [ $(( $(date +%s) - t0 )) -ge "$lim" ] && rc=124
   [ $rc -eq 0 ] || failed=1
   dopo=$(guardia_impronta plugins/maat)   # GUARDIA-DOPO
   cambiato=
@@ -125,7 +144,7 @@ for s in $LIST; do
   prima=$dopo
   printf '%-22s rc=%-3s %5ss  %s%s%s\n' "$s" "$rc" "$(( $(date +%s) - t0 ))" "$cambiato" "${VARS[$s]:+[${VARS[$s]}] }" "$(tail -1 "$log" | cut -c1-90)" | tee -a "$OUT/riepilogo.txt"
   if [ $rc -eq 124 ]; then
-    echo "TIMEOUT $s dopo $LIMITE s" | tee -a "$OUT/riepilogo.txt"
+    echo "TIMEOUT $s dopo $lim s" | tee -a "$OUT/riepilogo.txt"
     tail -20 "$log" | sed 's/^/    | /'
   fi
   [ $rc -eq 0 ] || grep '^FAIL' "$log" | head -10 | cut -c1-200 | sed 's/^/    /' | tee -a "$OUT/riepilogo.txt"

@@ -16,7 +16,9 @@
 #   its log, the next suite still runs; a «suite: avvio <entry>» line before each suite; after a red suite its «^FAIL»
 #   lines (at most 10) on stdout and in riepilogo.txt; a value that is not a positive integer → exit 2; each job of
 #   the groups in ci.yml sets MAAT_SUITE_TIMEOUT below its timeout-minutes × 60; counterproofs (the variable ignored,
-#   a limit above the job's, a job without it)
+#   a limit above the job's, a job without it); MAAT_GRUPPO_TIMEOUT: each suite gets at most the seconds left of the
+#   run, the suites after the end «NON ESEGUITA», exit 1; not a positive integer → exit 2; each job of the groups sets it
+#   at least 300 s below its timeout-minutes × 60 and not below its MAAT_SUITE_TIMEOUT; counterproofs
 #   bash tools/suite.test.sh          (Git Bash or WSL; only in the repo)
 set -uo pipefail
 export MAAT_LINGUA=it
@@ -264,6 +266,55 @@ awk '/^  linux-gruppo:$/ { s = 1 } /^  macos-gruppo:$/ { s = 0 } s && /MAAT_SUIT
 grep -v 'MAAT_SUITE_TIMEOUT: "1800"' "$CIY" > "$T/ci-wt.yml"
 check "controprova: linux con MAAT_SUITE_TIMEOUT 1500 (= 25 × 60), o windows senza la variabile → rosso" \
   '! cmp -s "$CIY" "$T/ci-l.yml" && ! ci_limite "$T/ci-l.yml" linux-gruppo && ! cmp -s "$CIY" "$T/ci-wt.yml" && ! ci_limite "$T/ci-wt.yml" windows-gruppo'
+# MAAT_GRUPPO_TIMEOUT (CI of 1.8.0): the limit of the whole run. 3 s for two suites, the first one sleeping 8 s with
+# MAAT_SUITE_TIMEOUT=100: it is cut at the seconds left (at most 3, not 100: a slow start may leave 2), the second one
+# does not start
+corri_gl() { printf '%s\n' "# finta" $1 > "$R/tools/suite.list"
+  rm -rf "$T/esiti"; (cd "$R" && MAAT_SUITE_TIMEOUT=100 MAAT_GRUPPO_TIMEOUT=$2 bash "$SUITE_SH" "$T/esiti") > "$T/out" 2>&1; rc=$?; }
+caso_gruppo() {
+  [ $rc -eq 1 ] && riga tools/finta-dorme.test.sh | grep -q "rc=124" && ! grep -q "finta: sveglia" "$T/esiti/tools-finta-dorme.test.sh.log" &&
+    grep -qxE "TIMEOUT tools/finta-dorme.test.sh dopo [1-3] s" "$T/out" &&
+    grep -qx "tools/finta-ferma.test.sh NON ESEGUITA: tempo del gruppo finito (MAAT_GRUPPO_TIMEOUT=3 s)" "$T/esiti/riepilogo.txt" &&
+    grep -qx "tools/finta-ferma.test.sh NON ESEGUITA: tempo del gruppo finito (MAAT_GRUPPO_TIMEOUT=3 s)" "$T/out" &&
+    ! grep -q "suite: avvio tools/finta-ferma.test.sh" "$T/out" && [ ! -f "$T/esiti/tools-finta-ferma.test.sh.log" ]
+}
+pulisci; ferma; dorme; corri_gl "tools/finta-dorme.test.sh tools/finta-ferma.test.sh" 3
+check "MAAT_GRUPPO_TIMEOUT=3 con MAAT_SUITE_TIMEOUT=100: la suite che dorme 8 s tagliata ai 3 s rimasti, la dopo «NON ESEGUITA», exit 1" 'caso_gruppo' "$(cat "$T/out")"
+pulisci; ferma; corri_gl "tools/finta-ferma.test.sh" 600
+check "  con tempo a sufficienza la suite gira come senza (rc=0, exit 0)" '[ $rc -eq 0 ] && riga tools/finta-ferma.test.sh | grep -q "rc=0" && ! grep -q "NON ESEGUITA" "$T/esiti/riepilogo.txt"' "$(cat "$T/out")"
+for v in abc 0 ""; do
+  rm -rf "$T/esiti"; (cd "$R" && MAAT_GRUPPO_TIMEOUT=$v bash "$SUITE_SH" "$T/esiti") > "$T/out" 2>&1; rc=$?
+  check "  MAAT_GRUPPO_TIMEOUT='$v' → exit 2, nessuna suite lanciata" '[ $rc -eq 2 ] && grep -q "MAAT_GRUPPO_TIMEOUT" "$T/out" && [ ! -f "$T/esiti/riepilogo.txt" ]' "$(cat "$T/out")"
+done
+# counterproofs: the suite limit not reduced to the time left; the suites after the end still started
+for mm in 'GRUPPO-RESTO:s/^    \[ "\$resto" -lt "\$lim" \] && lim=\$resto   # GRUPPO-RESTO$/    :   # GRUPPO-RESTO tolto/' \
+          'GRUPPO-FINITO:s/^    if \[ "\$resto" -le 0 \]; then   # GRUPPO-FINITO$/    if false; then   # GRUPPO-FINITO tolto/'; do
+  cp "$T/suite.orig" "$SUITE_SH"; sed -i "${mm#*:}" "$SUITE_SH"
+  check "controprova: la mutazione ${mm%%:*} è applicata" 'grep -q "${mm%%:*} tolto" "$SUITE_SH"'
+  pulisci; ferma; dorme; corri_gl "tools/finta-dorme.test.sh tools/finta-ferma.test.sh" 3
+  check "controprova: senza ${mm%%:*} il caso MAAT_GRUPPO_TIMEOUT è rosso" '! caso_gruppo' "$(cat "$T/out")"
+done
+cp "$T/suite.orig" "$SUITE_SH"
+# the CI: in the block of each job of the groups, one MAAT_GRUPPO_TIMEOUT, at least 300 s (setup, the 10 s of -k, the
+# upload of the results) below timeout-minutes × 60, and not below MAAT_SUITE_TIMEOUT. $1 = ci.yml, $2 = job
+ci_gruppo() {
+  local b m t g
+  b=$(ci_blocco "$1" "$2" | grep -v '^[[:space:]]*#')
+  m=$(printf '%s\n' "$b" | sed -n 's/^    timeout-minutes: \([0-9][0-9]*\)[[:space:]]*$/\1/p')
+  t=$(printf '%s\n' "$b" | sed -n 's/^[[:space:]]*MAAT_SUITE_TIMEOUT: "\{0,1\}\([0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p')
+  g=$(printf '%s\n' "$b" | sed -n 's/^[[:space:]]*MAAT_GRUPPO_TIMEOUT: "\{0,1\}\([0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p')
+  [ "$(printf '%s' "$g" | grep -c .)" = 1 ] && [ "$(printf '%s\n' "$b" | grep -c MAAT_GRUPPO_TIMEOUT)" = 1 ] &&
+    [ "$(printf '%s' "$m" | grep -c .)" = 1 ] && [ "$(printf '%s' "$t" | grep -c .)" = 1 ] &&
+    [ "$g" -ge "$t" ] && [ $((g + 300)) -le $((m * 60)) ]
+}
+check "  ci.yml: linux, macos e windows impostano MAAT_GRUPPO_TIMEOUT almeno 300 s sotto timeout-minutes × 60 e non sotto MAAT_SUITE_TIMEOUT" \
+  'ci_gruppo "$CIY" linux-gruppo && ci_gruppo "$CIY" macos-gruppo && ci_gruppo "$CIY" windows-gruppo'
+grep -v 'MAAT_GRUPPO_TIMEOUT:' "$CIY" > "$T/ci-g0.yml"
+awk '/^  macos-gruppo:$/ { s = 1 } /^  windows-gruppo:$/ { s = 0 } s && /MAAT_GRUPPO_TIMEOUT:/ { sub(/[0-9]+/, "1800") } 1' "$CIY" > "$T/ci-g1.yml"
+awk '/^  windows-gruppo:$/ { s = 1 } /^  linux:$/ { s = 0 } s && /MAAT_GRUPPO_TIMEOUT:/ { sub(/[0-9]+/, "1000") } 1' "$CIY" > "$T/ci-g2.yml"
+check "controprova: senza MAAT_GRUPPO_TIMEOUT, macos a 1800 (= 30 × 60), windows a 1000 (sotto MAAT_SUITE_TIMEOUT) → rosso" \
+  '! cmp -s "$CIY" "$T/ci-g0.yml" && ! ci_gruppo "$T/ci-g0.yml" linux-gruppo && ! cmp -s "$CIY" "$T/ci-g1.yml" && ! ci_gruppo "$T/ci-g1.yml" macos-gruppo &&
+   ! cmp -s "$CIY" "$T/ci-g2.yml" && ! ci_gruppo "$T/ci-g2.yml" windows-gruppo'
 rm -f "$R/tools/finta-dorme.test.sh" "$R/tools/finta-rossa.test.sh"
 
 # --- 7. (1.5.1) tools/suite-parallelo.sh on two fake clones (Linux: it needs flock) ---
