@@ -45,8 +45,17 @@
 # driver.py `_cycle_state`).
 #   1b (1.3.0, above every other row, chains included) both "## Review implementazione" and "## Implementation
 #      review" in the spec → STOP (the same section in two languages)
+#   R  (1.8.0, below 1b and above every other row) the last phase launched ended STOP and has a log/<label>.ripresa
+#      REGISTERED in driver.log (its line «Ripresa: <label> · esito=… · n=… · declassata=… · sha=<sha of the file>»,
+#      written by driver.py run; a .ripresa without it is ignored, with an «AVVISO:» line above State:) taken at
+#      the current State:
+#      R1 esito=rilancio (plan or test-red, resumes not off: ciclo.riprese / FIC_RIPRESE > 0)
+#         → <PLAN|TEST-RED> — ripresa <n_fase>/<max> (<causa>)   (driver.py run adds «RIPRESA (driver): …» to the prompt)
+#      R2 esito=limite or senza-progresso → STOP with the cause (until the State changes)
 #   1  review section without a plan                            → STOP (nothing to plan on top of)
-#   2  no plan, or Plan status DRAFT without a review             → PLAN
+#   2  no plan, or Plan status DRAFT without a review             → PLAN; R3 (1.8.0): DRAFT and the last plan phase
+#      has a registered .ripresa esito=limite (or senza-progresso) at the current State → STOP (a second invocation
+#      does not relaunch the plan past the limit)
 #   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
 #   4  Plan status NEEDS HUMAN DECISION                           → STOP (open decision)
 #   5  non-standard Plan status                                   → STOP

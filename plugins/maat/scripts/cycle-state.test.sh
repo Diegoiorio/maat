@@ -425,6 +425,48 @@ unset MAAT_ROOT
 if [ "$fdr_prima" = __non_impostata__ ]; then unset FIC_DRIVER_ROOT; else export FIC_DRIVER_ROOT="$fdr_prima"; fi
 reset
 
+# --- 1.8.0 (B9): rows R1-R3, the resumes. A stopped phase with its .ripresa, registered in driver.log as driver.py run
+# writes it (the line with the sha of the file); the State recorded is the current one unless said otherwise.
+ripresa() { # $1 label, $2 phase, $3 esito, $4 state, [$5 = noreg: no line in driver.log]
+  mkdir -p "$RUN/log"; : > "$RUN/log/$1.jsonl"
+  printf 'PHASE RESULT %s: STOP — round 1 not collected\nstate=%s\n' "$2" "$4" > "$RUN/log/$1.esito"
+  printf '%s\n' "classe=RIPRENDIBILE" "regola=draft" "fase=$2" "causa=piano non approvato (DRAFT)" "prova=log/$1.result.json" \
+    "esito=$3" "n=1" "n_fase=1" "max=2" "state=$4" "piano=000000000000" "rilievi=-" > "$RUN/log/$1.ripresa"
+  local sha; sha=$(sha256sum "$RUN/log/$1.ripresa" | cut -c1-12)
+  [ "${5:-}" = noreg ] || echo "2026-11-16T10:00:00Z Ripresa: $1 · esito=$3 · n=1 · declassata=- · sha=$sha" >> "$RUN/driver.log"
+}
+reset; { above; plan DRAFT; } > "$SP"
+ripresa 01-plan plan rilancio "$(state)"; expect "R1: plan fermato con .ripresa rilancio registrata, State uguale" "^PLAN — ripresa 1/2 \(piano non approvato \(DRAFT\)\)$"
+FIC_RIPRESE=0 expect "R1 spenta (FIC_RIPRESE=0): la riga di oggi" "^PLAN — piano in DRAFT$"
+reset; ripresa 01-plan plan rilancio "$(state)" noreg; expect "R1: .ripresa senza la riga in driver.log → ignorata, la riga di oggi" "^PLAN — piano in DRAFT$"
+out=$(bash "$CS" "$SP" 2>&1)
+if printf '%s\n' "$out" | grep -q "^AVVISO: .*01-plan.ripresa non è registrato in driver.log: ignorato$" &&
+   [ "$(printf '%s\n' "$out" | grep -n '^AVVISO: ' | cut -d: -f1)" -lt "$(printf '%s\n' "$out" | grep -n '^State: ' | cut -d: -f1)" ]; then pass=$((pass + 1))
+else fail=$((fail + 1)); echo "FAIL [R1: l AVVISO del .ripresa ignorato, sopra State:]"; printf '%s\n' "$out" | sed 's/^/    /'; fi
+reset; ripresa 01-plan plan rilancio 000000000000; expect "R1: .ripresa di un altro State → la riga di oggi" "^PLAN — piano in DRAFT$"
+reset; ripresa 01-plan plan limite "$(state)"; expect "R2: .ripresa limite, State uguale → STOP" "^STOP — 01-plan fermata: limite delle riprese: 1/3 nel ciclo, 1/2 per plan: piano non approvato \(DRAFT\)"
+reset; ripresa 01-plan plan senza-progresso "$(state)"; expect "R2: .ripresa senza-progresso → STOP" "^STOP — 01-plan fermata: ripresa senza progresso"
+reset; ripresa 01-plan plan limite "$(state)"; sed -i 's/^Contesto\.$/Contesto cambiato./' "$SP"; expect "R2: limite ma la spec cambiata (State diverso) → la riga di oggi" "^PLAN — piano in DRAFT$"
+# R3: the last phase is not the plan (a later label without .ripresa), the last plan stopped at the limit: still STOP
+reset; { above; plan DRAFT; } > "$SP"; ripresa 01-plan plan limite "$(state)"; esito 02-review "PHASE RESULT review: OK — x" "$(state)"
+expect "R3: DRAFT e l ultima plan con .ripresa limite, State uguale → STOP (non PLAN)" "^STOP — 01-plan fermata: limite delle riprese"
+reset; { above; plan APPROVED; } > "$SP"; ripresa 01-test-red test-red rilancio "$(state)"
+expect "R1: test-red fermato con .ripresa rilancio → TEST-RED" "^TEST-RED — ripresa 1/2 \(piano non approvato \(DRAFT\)\)$"
+# counterproofs on a copy of the driver (FIC_DRIVER_PY): R1 and R3 off → the rows of 1.7
+csmut() { sed "$1" "$HERE/driver.py" > "$O/driver.py"; cp "$HERE/maat_paths.py" "$HERE/maat_msg.py" "$O/"; mkdir -p "$O/lib"; cp "$HERE/lib/messages.tsv" "$O/lib/"; ! cmp -s "$HERE/driver.py" "$O/driver.py"; }
+if csmut 's/^\( *\)if d.get("esito") == "rilancio" and w and .*# RIPRESA-RILANCIO$/\1if False:/'; then
+  reset; { above; plan APPROVED; } > "$SP"; ripresa 01-test-red test-red rilancio "$(state)"
+  o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
+  if printf '%s\n' "$o" | grep -q "^TEST-RED — ripresa"; then fail=$((fail + 1)); echo "FAIL [controprova R1: senza la riga il test-red non e ripreso]"; else pass=$((pass + 1)); fi
+else fail=$((fail + 1)); echo "FAIL [controprova R1: la mutazione si applica]"; fi
+if csmut 's/^\( *\)if dp and .*# DRAFT-LIMITE$/\1if False:/'; then
+  reset; { above; plan DRAFT; } > "$SP"; ripresa 01-plan plan limite "$(state)"; esito 02-review "PHASE RESULT review: OK — x" "$(state)"
+  o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
+  if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R3: senza la riga DRAFT → PLAN scavalca il limite]"; printf '    %s\n' "$o"; fi
+else fail=$((fail + 1)); echo "FAIL [controprova R3: la mutazione si applica]"; fi
+rm -f "$O/driver.py" "$O/maat_paths.py" "$O/maat_msg.py"; rm -rf "$O/lib"
+reset
+
 # --- 1.4.0, block B (b, d): explicit English cases. A run dir written in Italian (ESITO FASE … OK — fatto) read with
 # MAAT_LINGUA=en gives the same step and the same destination; then the check of every English Next collected above.
 { above; plan APPROVED; } > "$SP"; with_basis

@@ -24,7 +24,10 @@
 #  12 (1.5.1) the internal readers of cycle-state.sh in the real run-phase.sh: a STOP of its wrapper is a STOP outcome
 #     or a phase not launched, never an OK outcome with state= empty (end of a phase, start and review of a ring, closing)
 #  13 (1.7.0) the size of the cycle · 14 (1.8.0) classifica: the five classes of a finished phase, unit cases on
-#     synthetic run dirs, (d) only for plan and test-red, with counterproofs
+#     synthetic run dirs, (d) only for plan and test-red, with counterproofs · 15 (1.8.0, B9) the resumes in run:
+#     .ripresa on the stopped phase, its line in driver.log, the RIPRESA (driver) prompt line, limits per cycle, no
+#     progress, the second invocation after the limit, final STOPs (implement, a valid Open decision), FIC_RIPRESE=0 and
+#     ciclo.riprese 0, a .ripresa not registered, with counterproofs
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -545,7 +548,7 @@ check "controprova: impronta col percorso assoluto → il caso «altro percorso�
 rm -rf "$T/altrove" "$H2"
 
 # --- 6. plan counterproofs (mutations on a copy; the case must turn red) ---
-sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
+sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\] and nrip == prev\[3\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
 check "controprova anti-loop: la mutazione e' applicata" 'grep -q "ANTI-LOOP tolto" "$T/drv-noloop.py"'
 DRUN_DRV="$T/drv-noloop.py" drun nulla "$SP" --max-fasi 3
 check "controprova anti-loop: senza la guardia la stessa fase si rilancia (3 lanci, nessun anti-loop)" '[ "$(calls)" = 3 ] && ! grep -q "anti-loop" "$T/run.out"'
@@ -1240,6 +1243,99 @@ clmut rifiutata 's/^\( *\)if fuori:  # DEVIAZIONE-RIFIUTATA$/\1if False:/' tr-de
 clmut piano-ok 's/^\( *\)if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK$/\1if False:/' plan-ok-draft "OK ok log/01-plan.esito"
 clmut vecchio 's/^\( *\)return None  # ROSSI-DI-QUESTA-FASE$/\1pass/' tr-vecchio "RIPRENDIBILE simbolo test-red/rossi.json"
 rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py
+
+
+# --- 15. (1.8.0, B9) the resumes in run: a fake run-phase.sh whose phases end STOP as run-phase writes them (.exit 0,
+# .esito, a valid result.json, the jsonl), FAKE_MODE chooses what the phase does to the spec. The first word of Next
+# and the State come from the real `next` (rows R1-R3). Every rule has its counterproof on a mutated copy (tmut).
+SR=$CW/spec-r.md; RR=$CW/spec-r.run
+spec_r() { printf '%s\n' "# R" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare A." "## Piano di implementazione" \
+  "Plan status: ${1:-DRAFT}" "Test level: std" "### Passi" "1. Modificare \`src/a.py\`." > "$SR"; }
+cat > "$T/rp-ripresa" <<'EOF'
+#!/usr/bin/env bash
+# fake run-phase.sh for the resumes: <run-dir> <label> <prompt>
+d=$1 l=$2; mkdir -p "$d/log"; echo "$l" >> "$FAKE_CALLS"; spec="${d%.run}.md"; cp "$3" "$FAKE_CALLS.$l.prompt"
+ph=${l#*-}; fnd=""; bloc=nessuno; riga="PHASE RESULT $ph: STOP — round 1 not collected"
+: > "$d/log/$l.jsonl"
+case "$FAKE_MODE" in
+  draft) printf '%s\n' "2. Passo aggiunto da $l." >> "$spec" ;;   # progress: the plan changes at every phase
+  draft-fermo) fnd='{"severita":"major","file":"src/a.py","riga":1,"testo":"the same finding"}' ;;   # no progress
+  nhd-valida|nhd-tipo) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
+    if [ "$FAKE_MODE" = nhd-valida ]; then printf '%s\n' "Open decision: budget — four iterations used, three majors still open" >> "$spec"
+    else printf '%s\n' "Open decision: hunch — the counter looks too small ($l)" >> "$spec"; fi ;;
+  impl-bg) riga="PHASE RESULT implement: STOP — agents pending"
+    printf '%s\n' '{"type":"system","subtype":"init"}' \
+      '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"l1","name":"Agent","input":{"subagent_type":"maat:plan-implementer","prompt":"lane","run_in_background":true}}]}}' \
+      '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"Async agent launched successfully.\nagentId: agz1 (internal ID)"}]}}' \
+      '{"type":"system","subtype":"init"}' '{"type":"result","subtype":"success","result":"STOP"}' > "$d/log/$l.jsonl" ;;
+esac
+printf '{"fase":"%s","esito":"STOP","motivo":"m","deviazioni":[],"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[%s]}\n' "$ph" "$bloc" "$fnd" > "$d/log/$l.result.json"
+printf '%s\nstate=x\n' "$riga" > "$d/log/$l.esito"; echo 0 > "$d/log/$l.exit"
+exit 0
+EOF
+chmod +x "$T/rp-ripresa"
+rrun() { # $1 FAKE_MODE, then variables → rc, $T/run.out (the run dir is kept: a second invocation reads it)
+  rm -f "$FAKE_CALLS"*; : > "$FAKE_CALLS"
+  env "${@:2}" FAKE_MODE=$1 FIC_RUN_PHASE="$T/rp-ripresa" FIC_CONTEXT_PACK=- "$FIC_PY" "${RRUN_DRV:-$DRV}" run "$SR" > "$T/run.out" 2>&1; rc=$?; }
+rnuovo() { rm -rf "$RR"; spec_r "${1:-DRAFT}"; }
+rcalls() { tr '\n' ' ' < "$FAKE_CALLS"; }
+rf() { sed -n "s/^$2=//p" "$RR/log/$1.ripresa" 2>/dev/null | tr -d '\r'; }   # <label> <field> of a .ripresa
+rnuovo; rrun draft
+check "ripresa: plan STOP con la spec DRAFT → log/01-plan.ripresa esito=rilancio n=1, la riga in driver.log" '[ "$(rf 01-plan esito) $(rf 01-plan n) $(rf 01-plan classe) $(rf 01-plan regola)" = "rilancio 1 RIPRENDIBILE draft" ] && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=- · sha=[0-9a-f]\{12\}$" "$RR/driver.log"'
+check "  02-plan col prompt «RIPRESA (driver): 1/2 — piano non approvato (DRAFT) — rilievi aperti: log/01-plan.result.json»" 'grep -qx "RIPRESA (driver): 1/2 — piano non approvato (DRAFT) — rilievi aperti: log/01-plan.result.json" "$FAKE_CALLS.02-plan.prompt" && ! grep -q "RIPRESA" "$FAKE_CALLS.01-plan.prompt"'
+check "  terza volta → 03-plan.ripresa esito=limite, STOP «limite delle riprese» (exit 1), nessun 04-plan" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan 02-plan 03-plan " ] && [ "$(rf 02-plan esito)" = rilancio ] && grep -q "^RIPRESA (driver): 2/2 — " "$FAKE_CALLS.03-plan.prompt" && [ "$(rf 03-plan esito) $(rf 03-plan n)" = "limite 2" ] && grep -q "Driver result: STOP — limite delle riprese: 2/3 nel ciclo, 2/2 per plan: piano non approvato (DRAFT)" "$T/run.out"'
+cp -r "$RR" "$T/rr-limite"; cp "$SR" "$T/sr-limite"
+rrun draft
+check "ripresa: seconda invocazione dopo il limite, stessa run dir e spec ancora DRAFT → STOP senza lanci" '[ $rc -eq 1 ] && [ "$(rcalls)" = "" ] && grep -q "Driver result: STOP — STOP — 03-plan fermata: limite delle riprese" "$T/run.out"'
+rlim() { rm -rf "$RR"; cp -r "$T/rr-limite" "$RR"; cp "$T/sr-limite" "$SR"; }
+if tmut r2 's/^\( *\)if d.get("esito") in ("limite", "senza-progresso"):  # RIPRESA-STOP$/\1if False:/'; then
+  rlim; RRUN_DRV="$T/drv-r2.py" rrun draft
+  check "  senza la riga R2 la riga R3 (DRAFT con .ripresa limite e State uguale) tiene da sola: STOP senza lanci" '[ $rc -eq 1 ] && [ "$(rcalls)" = "" ] && grep -q "Driver result: STOP — STOP — 03-plan fermata: limite delle riprese" "$T/run.out"'
+else check "controprova R2: la mutazione si applica" false; fi
+if tmut r23 's/^\( *\)if d.get("esito") in ("limite", "senza-progresso"):  # RIPRESA-STOP$/\1if False:/; s/^\( *\)if dp and .*# DRAFT-LIMITE$/\1if False:/'; then
+  rlim; RRUN_DRV="$T/drv-r23.py" rrun draft
+  check "controprova: senza R2 ne R3 la riga DRAFT → PLAN rilancia il piano oltre il limite (04-plan: rosso)" '[ "$(rcalls)" = "04-plan " ]'
+else check "controprova R2+R3: la mutazione si applica" false; fi
+rlim; sed -i 's/^Contesto\.$/Contesto cambiato./' "$SR"; rrun draft
+check "ripresa: dopo una modifica della spec (State diverso) il ciclo riparte (04-plan) e il contatore resta quello del ciclo: subito al limite" '[ $rc -eq 1 ] && [ "$(rcalls)" = "04-plan " ] && [ "$(rf 04-plan esito)" = limite ] && ! grep -q "RIPRESA" "$FAKE_CALLS.04-plan.prompt"'
+if tmut cl 's/^\( *\)c = classifica(fase, run_fs, label, spec_fs) if rmax > 0 else None  # CLASSIFICA$/\1c = None/'; then
+  rnuovo; RRUN_DRV="$T/drv-cl.py" rrun draft
+  check "controprova: senza classifica (lo STOP della 1.7) il primo caso finisce STOP dopo 01-plan, nessuna .ripresa (rosso)" '[ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ]'
+else check "controprova classifica: la mutazione si applica" false; fi
+rnuovo; rrun draft-fermo
+check "ripresa senza progresso: stessa impronta del piano e stessi rilievi → 02-plan.ripresa esito=senza-progresso, STOP con la causa" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan 02-plan " ] && [ "$(rf 02-plan esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso (stesso piano, stessi rilievi aperti): piano non approvato (DRAFT)" "$T/run.out"'
+check "  il rilancio con lo State invariato non e il vecchio anti-loop: la chiave e (word, state, n_ripresa)" '! grep -q "anti-loop" "$T/run.out" && [ -n "$(rf 01-plan rilievi | grep -x "[0-9a-f]\{8\}")" ]'
+if tmut progresso 's/^\( *\)if prec and .*# PROGRESSO$/\1if False:/'; then
+  rnuovo; RRUN_DRV="$T/drv-progresso.py" rrun draft-fermo
+  check "controprova: senza il controllo del progresso il caso arriva al limite, non alla causa (rosso)" '[ "$(rcalls)" = "01-plan 02-plan 03-plan " ] && grep -q "Driver result: STOP — limite delle riprese" "$T/run.out"'
+else check "controprova progresso: la mutazione si applica" false; fi
+if tmut chiave 's/ and state == prev\[1\] and nrip == prev\[3\]:  # ANTI-LOOP$/ and state == prev[1]:  # ANTI-LOOP/'; then
+  rnuovo; RRUN_DRV="$T/drv-chiave.py" rrun draft-fermo
+  check "controprova: con la chiave (word, state) di 1.7 il rilancio a State invariato e un anti-loop (rosso)" 'grep -q "Driver result: STOP — anti-loop" "$T/run.out" && [ "$(rcalls)" = "01-plan " ]'
+else check "controprova chiave anti-loop: la mutazione si applica" false; fi
+# final STOPs: an implement with an agent not collected ((d) only plan and test-red), a valid Open decision
+rnuovo APPROVED; rrun impl-bg
+check "ripresa: implement STOP con un agente in background non raccolto → STOP finale, nessuna ripresa, la prova nella riga" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-implement " ] && [ ! -f "$RR/log/01-implement.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT implement: STOP — agents pending · prova: .*spec-r.run/log/01-implement.esito" "$T/run.out"'
+rnuovo; rrun nhd-valida
+check "ripresa: plan NEEDS HUMAN DECISION con Open decision: budget valida → STOP finale, nessun rilancio (non sovra-accetta)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "· prova: .*spec-r.md" "$T/run.out"'
+rnuovo; rrun nhd-tipo FIC_RIPRESE=1
+K=$(printf '%s' "the counter looks too small (01-plan)" | sha256sum | cut -c1-8)
+check "ripresa: Open decision non valida (tipo fuori lista) → RIPRENDIBILE, «declassata: <chiave>» nel .ripresa e in driver.log; FIC_RIPRESE=1 → limite alla seconda" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=$K · " "$RR/driver.log" && [ "$(rf 02-plan esito) $(rf 02-plan max)" = "limite 1" ]'
+# off: FIC_RIPRESE=0 and ciclo.riprese 0 give the STOP of 1.7
+rnuovo; rrun draft FIC_RIPRESE=0
+check "ripresa spenta: FIC_RIPRESE=0 → STOP con la riga della fase dopo 01-plan, nessuna .ripresa (1.7)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT plan: STOP — round 1 not collected$" "$T/run.out"'
+printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"riprese":0}}' > "$T/maat-r0.json"
+rnuovo; rrun draft MAAT_CONFIG="$T/maat-r0.json"
+check "ripresa spenta: maat.json ciclo.riprese 0 → lo STOP della 1.7" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ]'
+# a .ripresa that no driver wrote (a phase can write the run dir): not counted, an AVVISO
+forgia() { rnuovo; mkdir -p "$RR/log"; printf '%s\n' "classe=RIPRENDIBILE" "fase=plan" "esito=rilancio" "n=1" "n_fase=1" "max=1" > "$RR/log/00-plan.ripresa"; }
+forgia; rrun draft FIC_RIPRESE=1
+check "ripresa: un .ripresa senza la sua riga in driver.log non conta (01 rilancio, 02 limite) ed e detto in un AVVISO" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -q "AVVISO: .*00-plan.ripresa non è registrato in driver.log: ignorato" "$RR/driver.log"'
+if tmut reg 's/^\( *\)if _ripresa_riga(label, d, .*# RIPRESA-REGISTRATA$/\1if True:/'; then
+  forgia; RRUN_DRV="$T/drv-reg.py" rrun draft FIC_RIPRESE=1
+  check "controprova: senza il controllo della registrazione il .ripresa forgiato conta e 01-plan va subito al limite (rosso)" '[ "$(rcalls)" = "01-plan " ]'
+else check "controprova registrazione: la mutazione si applica" false; fi
+rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

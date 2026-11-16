@@ -537,6 +537,23 @@ printf '%s\n' '{"versione_schema":1,"harness":">=1.7","moduli":[{"nome":"a","rad
 mc valida "$T/s11k.json" > "$T/out" 2>&1; check "non valido: una soglia sconosciuta in piano.taglia.soglie" '[ $? = 1 ] && grep -qF "piano.taglia.soglie.file" "$T/out"'
 printf '%s\n' '{"versione_schema":1,"harness":">=1.5","moduli":[{"nome":"a","radice":"."}],"piano":{"migrazioni":["/m/"]}}' > "$T/s11c.json"
 mc valida "$T/s11c.json" > "$T/out" 2>&1; check "compatibilita: un maat.json senza piano.taglia resta valido (harness >=1.5)" '[ $? = 0 ]'
+# 1.8.0 (B9): ciclo.riprese, an integer >= 0, needs "harness": ">=1.8" or newer (S12)
+caso_s12() { printf '%s\n' '{"versione_schema":1,"harness":">=1.7","moduli":[{"nome":"a","radice":"."}],"ciclo":{"riprese":1}}' > "$T/ks12.json"
+  "$FIC_PY" "$1" valida "$T/ks12.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ': harness: ciclo.riprese richiede "harness": ">=1.8" o successiva' "$T/out"; }
+check "non valido: ciclo.riprese con harness >=1.7 (S12)" 'caso_s12 "$MC"'
+caso_s12n() { printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"riprese":-1}}' > "$T/ks12n.json"
+  "$FIC_PY" "$1" valida "$T/ks12n.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ': ciclo.riprese: ciclo.riprese vale -1: deve essere un intero >= 0' "$T/out"; }
+check "non valido: ciclo.riprese negativo (S12)" 'caso_s12n "$MC"'
+for r in 0 2 5; do
+  printf '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"riprese":%s}}\n' "$r" > "$T/s12ok.json"
+  mc valida "$T/s12ok.json" > "$T/out" 2>&1; check "ciclo.riprese $r con harness >=1.8: valido" '[ $? = 0 ]'
+done
+printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"riprese":"2"}}' > "$T/s12s.json"
+mc valida "$T/s12s.json" > "$T/out" 2>&1; check "non valido: ciclo.riprese stringa" '[ $? = 1 ] && grep -qF "ciclo.riprese" "$T/out"'
+printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"tentativi":2}}' > "$T/s12k.json"
+mc valida "$T/s12k.json" > "$T/out" 2>&1; check "non valido: una chiave sconosciuta in ciclo" '[ $? = 1 ] && grep -qF "ciclo.tentativi" "$T/out"'
+MAAT_CONFIG=$T/s11c.json mc leggi ciclo.riprese > "$T/out" 2>&1; rcl=$?
+check "compatibilita: senza ciclo nessun default scritto nella configurazione risolta (il default 2 e del driver)" '[ $rcl = 3 ]'
 imp() { # <reader> -> the outputs of the imported functions (MAAT_CONFIG_PY like plan-check.sh), one per line
   MAAT_CONFIG=$SS PROJECT_ROOT=$TD "$FIC_PY" -c '
 import importlib.util, sys
@@ -577,6 +594,10 @@ m=$(mutante s10 's/if m.get("preparati") and not m.get("preparazione"):/if False
 check "controprova: S10 disattivato -> preparati senza preparazione passa, rosso" '[ -n "$m" ] && ! caso_s10 "$m"'
 m=$(mutante s11 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 7):  # HARNESS-PER-TAGLIA/if False:/')
 check "controprova: S11 disattivato -> piano.taglia con harness >=1.6 passa, rosso" '[ -n "$m" ] && ! caso_s11 "$m"'
+m=$(mutante s12 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-CICLO/if False:/')
+check "controprova: S12 disattivato -> ciclo con harness >=1.7 passa, rosso" '[ -n "$m" ] && ! caso_s12 "$m"'
+m=$(mutante s12n 's/and r < 0:  # RIPRESE-NON-NEGATIVE/and False:/')
+check "controprova: S12 senza il controllo del segno -> ciclo.riprese -1 passa, rosso" '[ -n "$m" ] && ! caso_s12n "$m"'
 m=$(mutante moddi 's/^    return instrada(r, percorso)$/    return None/')
 check "controprova: modulo_di importato che non instrada -> diverso dalla CLI, rosso" '[ -n "$m" ] && [ "$(MAAT_ROOT=$PLUGIN imp "$m")" != "$IMP" ]'
 m=$(mutante corta 's/key=lambda c: -c\[0\]/key=lambda c: c[0]/g')

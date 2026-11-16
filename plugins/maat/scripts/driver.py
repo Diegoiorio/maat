@@ -72,13 +72,15 @@ that enters State.
 
 Variables: FIC_BASH (bash to use) · FIC_CYCLE_STATE (a script instead of our own `next` in `run`, tests) ·
 FIC_RUN_PHASE (run-phase.sh instead of the real one, tests) · FIC_CONTEXT_PACK (context-pack.sh; "-" = skipped) · FIC_MAX_FASI (default budget, 12) ·
-FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs).
+FIC_DRIVER_ROOT (harness root instead of MAAT_ROOT: a mutated copy of the plugin, test counterproofs) ·
+FIC_RIPRESE (1.8.0: the resumes per phase type, instead of ciclo.riprese of maat.json; 0 = the STOP of 1.7).
 Test: driver.test.sh.
 """
 import collections
 import datetime
 import fnmatch
 import hashlib
+import io
 import json
 import os
 import posixpath
@@ -586,6 +588,17 @@ def _cycle_state(spec_fs, tmp):
         out.append(code_out)
     out.append("Last code phase: " + (last_label or "(nessuna)") + (" · " + last_esito if last_esito else "")
                + (" · result.json: %s — %s" % (json_esito, json_why) if json_esito else ""))
+    # --- resumes (1.8.0, B9): only registered .ripresa files count; the last phase launched, stopped, with one taken at
+    # this State, gives the first two rows of the table ---
+    rip_reg, rip_ign = riprese(run_fs) if has_log else ([], [])
+    for l in rip_ign:
+        out.append("AVVISO: " + T("driver-180.ripresa_ignorata", label=l, run=RUN))
+    rip_last = None
+    labs_all = _labels(run_fs, ".") if has_log else []
+    if labs_all:
+        d = dict(rip_reg).get(labs_all[-1])
+        if d and d.get("state") == STATE and re.match(RIGA_STOP, _first_line(log(labs_all[-1] + ".esito"))):
+            rip_last = (labs_all[-1], d)
     out.append("State: " + STATE)
 
     # --- decision ---
@@ -768,6 +781,14 @@ def _cycle_state(spec_fs, tmp):
     try:
         if review_both:
             nxt("STOP — " + T("cycle-state.review_both"))
+        if rip_last:   # R1, R2 (1.8.0): above the rows of 1.7
+            l, d = rip_last
+            w = RIPRESA_PAROLA.get(d.get("fase"))
+            if d.get("esito") == "rilancio" and w and riprese_max(_radice_git(cwd)) > 0:  # RIPRESA-RILANCIO
+                nxt("%s — %s" % (w, T("cycle-state-180.ripresa", n=d.get("n_fase"), max=d.get("max"),
+                                       causa=d.get("causa"))))
+            if d.get("esito") in ("limite", "senza-progresso"):  # RIPRESA-STOP
+                nxt("STOP — " + T("cycle-state-180.ripresa_stop", label=l, why=messaggio_ripresa(d), run=RUN))
         if figlie:
             mother_next()
         if has_review and not has_plan:
@@ -778,6 +799,12 @@ def _cycle_state(spec_fs, tmp):
             if has_review:
                 nxt("STOP — " + T("cycle-state.plan_reopened", plan=plan_raw))
             if plan == "DRAFT":
+                # R3 (1.8.0): the last plan phase stopped at its resume limit (or without progress) at this State:
+                # STOP, otherwise a second invocation would relaunch the plan without counting it
+                lp = _labels(run_fs, "plan") if has_log else []
+                dp = dict(rip_reg).get(lp[-1]) if lp else None
+                if dp and dp.get("esito") in ("limite", "senza-progresso") and dp.get("state") == STATE:  # DRAFT-LIMITE
+                    nxt("STOP — " + T("cycle-state-180.ripresa_stop", label=lp[-1], why=messaggio_ripresa(dp), run=RUN))
                 nxt("PLAN — " + T("cycle-state.plan_draft"))
             nxt("STOP — " + T("cycle-state.plan_nhd"))
         if plan != "APPROVED":
@@ -963,8 +990,8 @@ def result_errors(path, fase):
 
 # ─────────────────────────────────────────────────────────────── the class of a finished phase (1.8.0, B8)
 # classifica(fase, run_fs, label, spec_fs) -> Classe(classe, regola, causa, prova): PURE, only files (log/<label>.exit,
-# .esito, .result.json, .gates, .rossi, .jsonl, .deviazioni-test, test-red/rossi.json, the spec). B8 is the function
-# alone: the cycle does not call it yet (B9 wires it). Evaluation order, the first that holds (spec §Tassonomia):
+# .esito, .result.json, .gates, .rossi, .jsonl, .deviazioni-test, test-red/rossi.json, the spec). `run` calls it
+# on every PHASE RESULT … STOP (B9, resumes below). Evaluation order, the first that holds (spec §Tassonomia):
 #   TECNICO        .exit missing or != 0 · no PHASE RESULT line in .esito · a phase with `valida` (plan, test-red,
 #                  implement, review, fix) ended STOP without result.json (invalid output) · result.json invalid ·
 #                  gates or rossi BLOCKED
@@ -1199,6 +1226,157 @@ def classifica(fase, run_fs, label, spec_fs):
         return Classe("UMANO", "deviazione-test", T("driver-180.c_dev_not_accepted", d="; ".join(td)[:300]),
                       rel(".result.json"))
     return Classe("UMANO", "stop", esito[:300], rel(".esito"))
+
+
+# ─────────────────────────────────────────────────────────────── resumes (1.8.0, B9)
+# A STOP that classifica calls RIPRENDIBILE makes the driver write log/<label>.ripresa ON THE STOPPED PHASE (before the
+# relaunch), one «campo=valore» per line, plus one «declassata: <key>» line per Open decision made non-valid (D3):
+#   classe= regola= fase= causa= prova= esito=rilancio|limite|senza-progresso n=<resumes of the cycle after this one>
+#   n_fase=<of this phase type> max=<ciclo.riprese> state=<State at the STOP> piano=<plan fingerprint> rilievi=<keys|->
+# and the same write in driver.log: «Ripresa: <label> · esito=… · n=… · declassata=<keys|-> · sha=<sha256[:12] of the
+# file>»: driver.log is the driver's register, the phases do not write it, and the sha binds the line to the content. A
+# .ripresa without its line is ignored (by `next`, the counts and the relaunch), with an AVVISO from `next`. Limits per CYCLE (counted from the files, DA5): ciclo.riprese per
+# phase type (default 2; 0 = the behaviour of 1.7), RIPRESE_CICLO in all; only esito=rilancio counts. Progress: the same
+# plan fingerprint and the same open findings as the previous resume of the same phase type -> senza-progresso.
+RIPRESE_DEFAULT, RIPRESE_CICLO = 2, 3
+RIPRESA_PAROLA = {"plan": "PLAN", "test-red": "TEST-RED"}   # the phases with a resume procedure, their Next word
+
+
+def _radice_git(d):
+    rc, top = _run(["git", "rev-parse", "--show-toplevel"], cwd=d)
+    return os.path.normpath(_subst(top)) if rc == 0 and top.strip() else d
+
+
+def riprese_max(root):
+    """ciclo.riprese: FIC_RIPRESE (digits) > maat.json of the project (MAAT_CONFIG, else <root>/.claude/maat.json) >
+    RIPRESE_DEFAULT. A value that cannot be read (FIC_RIPRESE not a number, maat.json invalid) -> 0: no resumes, the
+    STOP of 1.7 (fail-closed)."""
+    v = os.environ.get("FIC_RIPRESE", "")
+    if v:
+        return int(v) if v.isdigit() else 0
+    saved, sys.stderr = sys.stderr, io.StringIO()   # the reader's errors belong to maat-config valida, not here
+    try:
+        mc = _modulo("maat_config_driver", "maat-config.py")
+        try:
+            cfg, _p = mc.carica(os.environ.get("MAAT_CONFIG") or os.path.join(root, ".claude", "maat.json"))
+        except mc.Uscita as u:
+            return RIPRESE_DEFAULT if u.codice == 4 else 0
+    except Exception:
+        return 0
+    finally:
+        sys.stderr = saved
+    r = (cfg.get("ciclo") or {}).get("riprese", RIPRESE_DEFAULT)
+    return r if isinstance(r, int) and not isinstance(r, bool) and r >= 0 else 0
+
+
+def chiave_decisione(t):
+    """the key of an Open decision text: sha256 of the text with whitespace compressed, trimmed, lower case, 8 hex"""
+    return hashlib.sha256(_enc(" ".join(t.split()).lower())).hexdigest()[:8]
+
+
+def impronta_piano(spec_fs):
+    """the plan fingerprint of a resume: sha256 of the lines of the plan zone (not the changelog, not the review), 12 hex"""
+    return hashlib.sha256(_enc("\n".join(_zona_piano(spec_fs)))).hexdigest()[:12]
+
+
+def chiavi_rilievi(rj):
+    """the keys of the open findings of a result.json (`finding`, each one sha256 of its JSON, 8 hex), sorted, or «-»"""
+    try:
+        ff = json.load(open(rj, encoding="utf-8")).get("finding") or []
+    except (OSError, ValueError, AttributeError):
+        ff = []
+    kk = sorted({hashlib.sha256(_enc(json.dumps(f, sort_keys=True, ensure_ascii=False))).hexdigest()[:8] for f in ff})
+    return ",".join(kk) or "-"
+
+
+def _ripresa_testo(d):
+    campi = ("classe", "regola", "fase", "causa", "prova", "esito", "n", "n_fase", "max", "state", "piano", "rilievi")
+    return "".join("%s=%s\n" % (k, " ".join(str(d.get(k, "")).split())) for k in campi) + "".join(
+        "declassata: %s\n" % k for k in d.get("declassata") or [])
+
+
+def _ripresa_riga(label, d, sha):
+    return "Ripresa: %s · esito=%s · n=%s · declassata=%s · sha=%s" % (
+        label, d.get("esito"), d.get("n"), ",".join(d.get("declassata") or []) or "-", sha)
+
+
+def _ripresa_leggi(t):
+    d = {"declassata": []}
+    for l in t.replace("\r", "").split("\n"):
+        if l.startswith("declassata: "):
+            d["declassata"].append(l[len("declassata: "):].strip())
+        elif "=" in l:
+            k, _, v = l.partition("=")
+            d.setdefault(k, v)
+    return d
+
+
+def riprese(run_fs):
+    """([(label, record)] of the REGISTERED .ripresa files in label order, [labels of the ignored ones])"""
+    log_t = (_read(os.path.join(run_fs, "driver.log")) or "").replace("\r", "")
+    righe = set(l.split(" ", 1)[1] for l in log_t.split("\n") if " Ripresa: " in l)
+    reg, ign = [], []
+    for n in sorted((n for n in _names(run_fs) if n.endswith(".ripresa")), key=_numkey):
+        label = n[:-len(".ripresa")]
+        b = (_read(os.path.join(run_fs, "log", n)) or "").replace("\r", "")
+        d = _ripresa_leggi(b)
+        if _ripresa_riga(label, d, hashlib.sha256(_enc(b)).hexdigest()[:12]) in righe:  # RIPRESA-REGISTRATA
+            reg.append((label, d))
+        else:
+            ign.append(label)
+    return reg, ign
+
+
+def n_rilanci(run_fs):
+    return sum(1 for _l, d in riprese(run_fs)[0] if d.get("esito") == "rilancio")
+
+
+def scrivi_ripresa(run_fs, label, d, ev):
+    b = _ripresa_testo(d)
+    with open(os.path.join(run_fs, "log", label + ".ripresa"), "wb") as fh:
+        fh.write(_enc(b))
+    ev(_ripresa_riga(label, d, hashlib.sha256(_enc(b)).hexdigest()[:12]))
+
+
+def decidi_ripresa(fase, run_fs, label, spec_fs, c, state, rmax):
+    """the record of a RIPRENDIBILE STOP: rilancio, or limite / senza-progresso (a final UMANO STOP)"""
+    reg = [d for _l, d in riprese(run_fs)[0]]
+    ril = [d for d in reg if d.get("esito") == "rilancio"]
+    n_tot, n_fase = len(ril), len([d for d in ril if d.get("fase") == fase])
+    d = {"classe": c.classe, "regola": c.regola, "fase": fase, "causa": c.causa, "prova": c.prova, "max": rmax,
+         "state": state, "piano": impronta_piano(spec_fs),
+         "rilievi": chiavi_rilievi(os.path.join(run_fs, "log", label + ".result.json")),
+         "declassata": [chiave_decisione(t) for t in c.decisioni] if c.regola == "decisione" else []}
+    prec = [x for x in reg if x.get("fase") == fase]
+    if prec and prec[-1].get("piano") == d["piano"] and prec[-1].get("rilievi") == d["rilievi"]:  # PROGRESSO
+        d.update(esito="senza-progresso", n=n_tot, n_fase=n_fase)
+    elif n_fase >= rmax or n_tot >= RIPRESE_CICLO:  # LIMITE-RIPRESE
+        d.update(esito="limite", n=n_tot, n_fase=n_fase)
+    else:
+        d.update(esito="rilancio", n=n_tot + 1, n_fase=n_fase + 1)
+    return d
+
+
+def ripresa_in_corso(run_fs, fase, state):
+    """the registered record that makes this launch of `fase` a resume: the last phase launched is a STOP of the same
+    phase with a .ripresa esito=rilancio taken at this State; else None"""
+    labs = _labels(run_fs, ".")
+    if not labs:
+        return None
+    reg = dict(riprese(run_fs)[0])
+    d = reg.get(labs[-1])
+    if d and d.get("esito") == "rilancio" and d.get("fase") == fase and d.get("state") == state \
+            and re.match(RIGA_STOP, _first_line(os.path.join(run_fs, "log", labs[-1] + ".esito"))):
+        return d
+    return None
+
+
+def messaggio_ripresa(d):
+    """the reason of a final STOP that a resume became (limite, senza-progresso)"""
+    if d.get("esito") == "senza-progresso":
+        return T("driver-180.ripresa_senza", causa=d.get("causa"))
+    return T("driver-180.ripresa_limite", n=d.get("n"), tot=RIPRESE_CICLO, nf=d.get("n_fase"), max=d.get("max"),
+             fase=d.get("fase"), causa=d.get("causa"))
 
 
 # ─────────────────────────────────────────────────────────────── implement batches and lanes (step 5)
@@ -1890,7 +2068,7 @@ def cmd_run(argv):
     cpk = os.environ.get("FIC_CONTEXT_PACK") or CPK
     spec_fs, entrati = None, set()
     visti = set()   # (spec, State) from which we already moved to another spec of the chain without launching anything
-    prev, launched = None, 0
+    prev, launched, avvisi = None, 0, set()
 
     def entra(p):
         nonlocal spec_fs, name, run_fs, root, ev
@@ -1932,8 +2110,13 @@ def cmd_run(argv):
         state = next((l[7:] for l in out if l.startswith("State: ")), "")
         nx = out[-1][6:] if out and out[-1].startswith("Next: ") else ""
         word = nx.split(" ", 1)[0]
+        for l in out:   # 1.8.0: a .ripresa not registered in driver.log, said once per invocation
+            if l.startswith("AVVISO: ") and l not in avvisi:
+                avvisi.add(l)
+                ev(l)
         ev("Next: " + nx)
-        if prev is not None and word == prev[0] and state == prev[1]:  # ANTI-LOOP
+        nrip = n_rilanci(run_fs)   # 1.8.0: the key of the anti-loop is (word, state, resumes of the cycle)
+        if prev is not None and word == prev[0] and state == prev[1] and nrip == prev[3]:  # ANTI-LOOP
             return fine("STOP", T("driver.antiloop", label=prev[2], state=state, next=nx), 1)
         # M2: the chain. WAIT naming a ring -> that ring; DONE of a ring -> the mother, which names the
         # next ring or the closing. Same budget, same anti-loop; a hand-over already made with no launches
@@ -1977,7 +2160,7 @@ def cmd_run(argv):
             if azione == "stop":
                 return fine("STOP", perche, 1)
             if azione == "riapri":   # E2: the plan phase again, with --full, before anything else
-                if prev is not None and prev[0] == "PLAN" and prev[1] == state:
+                if prev is not None and prev[0] == "PLAN" and prev[1] == state and prev[3] == nrip:
                     return fine("STOP", T("driver.antiloop", label=prev[2], state=state, next=nx), 1)
                 word, fase, riapertura = "PLAN", "plan", perche
                 ev("Next: PLAN — " + T("driver-170.e2_reopen"))
@@ -2003,6 +2186,10 @@ def cmd_run(argv):
             extra = "RIAPERTURA (driver): %s — %s\n" % (riapertura, T("driver-170.e2_reopen"))
         elif fase == "review" and piccola:
             extra = "TAGLIA (driver): piccola — %s\n" % T("driver-170.review_line")
+        rip = ripresa_in_corso(run_fs, fase, state)
+        if rip:   # 1.8.0: the relaunch of a stopped phase, with the file of its open findings
+            extra += "RIPRESA (driver): %s/%s — %s — %s\n" % (rip.get("n_fase"), rip.get("max"), rip.get("causa"),
+                                                             T("driver-180.ripresa_aperti", f=rip.get("prova")))
         os.makedirs(os.path.join(run_fs, "prompts"), exist_ok=True)
         pf = os.path.join(run_fs, "prompts", label + ".md")
         with open(pf, "wb") as fh:
@@ -2042,7 +2229,23 @@ def cmd_run(argv):
                    6: T("driver.rp6")}.get(prc) or T("driver.rp_other", rc=prc)
             return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, _tail(err)), 1)
         if re.match(RIGA_STOP, esito):
-            return fine("STOP", esito, 1)
+            # 1.8.0 (§Tassonomia): the class of the STOP. TECNICO as in 1.7; UMANO final, with its proof; RIPRENDIBILE:
+            # .ripresa on this phase, then the relaunch through `next` (row R1) or a final STOP at the limit
+            rmax = riprese_max(root)
+            c = classifica(fase, run_fs, label, spec_fs) if rmax > 0 else None  # CLASSIFICA
+            if c is None or c.classe == "TECNICO":
+                return fine("STOP", esito, 1)
+            if c.classe != "RIPRENDIBILE":
+                pv = c.prova if os.path.isabs(c.prova) else os.path.join(run_fs, c.prova)
+                return fine("STOP", esito + " · " + T("driver-180.prova", f=_rel(pv, root)), 1)
+            st_stop = next((l[7:] for l in (_next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs))
+                            if l.startswith("State: ")), "")
+            d = decidi_ripresa(fase, run_fs, label, spec_fs, c, st_stop, rmax)
+            scrivi_ripresa(run_fs, label, d, ev)
+            if d["esito"] != "rilancio":
+                return fine("STOP", messaggio_ripresa(d), 1)
+            prev = (word, state, label, nrip)
+            continue
         rj = os.path.join(run_fs, "log", label + ".result.json")
         if os.path.isfile(rj):
             errs = result_errors(rj, fase)
@@ -2071,7 +2274,7 @@ def cmd_run(argv):
                             da = mo.group(1)
                             break
                 return fine("STOP", T("driver.nv_done", what=da or T("driver.nv_no_detail")), 1)
-        prev = (word, state, label)
+        prev = (word, state, label, nrip)
 
 
 # ─────────────────────────────────────────────────────────────── corpus fingerprint and helpers of the tests

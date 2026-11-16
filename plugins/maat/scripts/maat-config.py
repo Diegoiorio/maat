@@ -283,6 +283,19 @@ def s11(cfg):
         yield "harness", T("maat-config-170.s11")
 
 
+def s12(cfg):
+    """1.8.0: ciclo (ciclo.riprese, the resumes of a stopped phase) exists from 1.8: a file that uses it declares
+    "harness": ">=1.8" or newer; ciclo.riprese is an integer >= 0 (0 = the STOP of 1.7)."""
+    if "ciclo" not in cfg:
+        return
+    r = (cfg.get("ciclo") or {}).get("riprese")
+    if isinstance(r, int) and not isinstance(r, bool) and r < 0:  # RIPRESE-NON-NEGATIVE
+        yield "ciclo.riprese", T("maat-config-180.s12_negative", v=r)
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-CICLO
+        yield "harness", T("maat-config-180.s12")
+
+
 # Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
 # maat-config.s* keys of the catalog).
 SEMANTICA = [
@@ -297,6 +310,7 @@ SEMANTICA = [
     ("S9", "generati[]: no golden, snapshot or lint baseline", s9),
     ("S10", "moduli[].preparati => preparazione present", s10),
     ("S11", "piano.taglia => harness >=1.7 or newer", s11),
+    ("S12", "ciclo => harness >=1.8 or newer; ciclo.riprese >= 0", s12),
 ]
 
 

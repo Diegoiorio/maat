@@ -300,6 +300,15 @@ driver-180.c_dec_anchor	Open decision of type spec with a code anchor ({a}): it 
 driver-180.c_symbol	missing stubs: {s}	stub mancanti: {s}
 driver-180.c_open	agents or background jobs not collected at the closing of the session: {ids}	agenti o job in background non raccolti alla chiusura della sessione: {ids}
 driver-180.c_plan_ok	OK line of a plan phase whose Plan status is {s}: not approved	riga OK di una fase plan con Plan status {s}: non approvato
+driver-180.prova	proof: {f}	prova: {f}
+driver-180.ripresa_aperti	open findings: {f}	rilievi aperti: {f}
+driver-180.ripresa_limite	resume limit: {n}/{tot} in the cycle, {nf}/{max} for {fase}: {causa}	limite delle riprese: {n}/{tot} nel ciclo, {nf}/{max} per {fase}: {causa}
+driver-180.ripresa_senza	resume without progress (same plan, same open findings): {causa}	ripresa senza progresso (stesso piano, stessi rilievi aperti): {causa}
+driver-180.ripresa_ignorata	{run}/log/{label}.ripresa is not registered in driver.log: ignored	{run}/log/{label}.ripresa non è registrato in driver.log: ignorato
+cycle-state-180.ripresa	resume {n}/{max} ({causa})	ripresa {n}/{max} ({causa})
+cycle-state-180.ripresa_stop	{label} stopped: {why}; change the spec to start again ({run}/log/{label}.ripresa)	{label} fermata: {why}; cambia la spec per ripartire ({run}/log/{label}.ripresa)
+maat-config-180.s12	ciclo.riprese needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	ciclo.riprese richiede "harness": ">=1.8" o successiva, cosi' una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
+maat-config-180.s12_negative	ciclo.riprese is {v}: it must be an integer >= 0 (0 = no resumes)	ciclo.riprese vale {v}: deve essere un intero >= 0 (0 = nessuna ripresa)
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
