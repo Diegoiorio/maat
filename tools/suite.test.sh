@@ -296,7 +296,8 @@ for mm in 'GRUPPO-RESTO:s/^    \[ "\$resto" -lt "\$lim" \] && lim=\$resto   # GR
 done
 cp "$T/suite.orig" "$SUITE_SH"
 # the CI: in the block of each job of the groups, one MAAT_GRUPPO_TIMEOUT, at least 300 s (setup, the 10 s of -k, the
-# upload of the results) below timeout-minutes × 60, and not below MAAT_SUITE_TIMEOUT. $1 = ci.yml, $2 = job
+# upload of the results) below timeout-minutes × 60, and not below MAAT_SUITE_TIMEOUT. The 300 s are measured (ci.yml,
+# linux job): the steps out of «Suites» at most 116 s (macOS) + 10 s of -k + 2 minutes = 246. $1 = ci.yml, $2 = job
 ci_gruppo() {
   local b m t g
   b=$(ci_blocco "$1" "$2" | grep -v '^[[:space:]]*#')

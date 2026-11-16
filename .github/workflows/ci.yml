@@ -51,6 +51,8 @@ jobs:
     # MAAT_GRUPPO_TIMEOUT: the seconds of all the suites of the group, 300 below the job's (setup, upload of the
     # results): each suite gets at most what is left, so the job never dies first (first CI of 1.8.0: counterproof cut
     # at 1200 s, but 6 minutes into the group, and the job cancelled 17 s later). tools/suite.test.sh checks both.
+    # The 300 s, measured on the last 20 runs up to 2a711e9: the steps out of «Suites» took at most 27 s on Linux,
+    # 100 on Windows, 116 on macOS (Homebrew from its cache); 116 + the 10 s of `timeout -k` + 2 minutes = 246 <= 300.
     env:
       MAAT_SUITE_TIMEOUT: "1200"
       MAAT_GRUPPO_TIMEOUT: "1200"
@@ -106,7 +108,8 @@ jobs:
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
       HOMEBREW_NO_ANALYTICS: "1"
       MAAT_BREW: "bash coreutils gnu-sed findutils grep gawk diffutils flock rsync"
-      # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux)
+      # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux; 1500 = 30 × 60 - 300: the steps
+      # out of «Suites» at most 116 s on the macOS runs measured, see the linux job)
       MAAT_SUITE_TIMEOUT: "1200"
       MAAT_GRUPPO_TIMEOUT: "1500"
     steps:
