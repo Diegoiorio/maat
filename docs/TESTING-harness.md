@@ -113,6 +113,11 @@ the two languages are tested.
 - **Frozen lines.** `protocol-strings.list` says, line by line, which Italian text stays in every language and why
   (the lines that scripts pass to each other, the keywords `VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`,
   `Scheletro:`, `S2:`). A new Italian literal goes either into the catalog or into the list, with its reason.
+- **`tools/suite.sh` is not in the catalog.** It is a tool of this repo, not of the plugin, and prints one language
+  per kind of line, never both: the lines of the run, on stdout and in `riepilogo.txt`, are Italian, the words the
+  CI log and `tools/suite.test.sh` read (`suite: avvio <entry>`, `<entry> ESCLUSA: …`, `TIMEOUT <entry> dopo <s> s`,
+  `<entry> NON ESEGUITA: tempo del gruppo finito (…)`, `FINE`); the refusals on stderr (usage, a bad list or groups
+  file, a variable that is not a positive integer) are English. A new line follows the kind it belongs to.
 
 ## How to run the suites from the plugin
 
@@ -224,17 +229,18 @@ from the repo root (`tools/esempi-equiv.test.sh`). Both scripts resolve an entry
 `tools/lib/guardia-plugin.sh`). A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
 `*.test.sh` of the plugin or a `tools/*.test.sh`, or names a file that does not exist.
 
-**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`: three groups (five since 1.8.0) of similar length on
-Linux (about 13.5 minutes each on the clone in WSL), used by the CI (one job per group) and by the parallel run (one
-clone per group). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k only, in the order of `suite.list`, and
+**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`, used by the CI (one job per group)
+and by the parallel run (one clone per group): five groups since 1.8.0, balanced on the seconds of the first CI of
+1.8.0, about 7–10 minutes each on Linux and 10–12 on macOS (the times per group are in the head of the file; 1.5.1:
+three groups of about 13.5 minutes each on the clone in WSL). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k only, in the order of `suite.list`, and
 refuses (exit 2) a groups file that does not cover `suite.list` exactly (an entry in no group or in two, an entry not
 in the list) or that has not exactly the groups 1..n. A new suite goes into both files; to rebalance, move a line
 using the times of the last `riepilogo.txt`. `tools/esempi-equiv.test.sh`, the one that reads `MAAT_ATTESE_RICHIESTE`,
 is in group 4. Since 1.6.0 the same groups run on macOS (five since 1.8.0, balanced on the times of its first CI), and Windows has its own groups file,
 `tools/suite-gruppi-windows.list` (seven groups since 1.8.0, balanced on the times of the CI runner, and lines `- <entry> <reason>`
 for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/7
-<folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. Since 1.6.0 the Linux groups are
-shorter (block C) and not rebalanced: the longest job is about 12 minutes.
+<folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. The longest group, since 1.8.0, is
+about 10 minutes on Linux (1.6.0: three groups, not rebalanced after block C, the longest job about 12 minutes).
 
 ### The parallel run (1.5.1)
 
@@ -305,9 +311,9 @@ minutes). Left out on Windows, with the reason in its groups file: `test-fast`, 
 them locally from WSL before each release) and `tools/oracolo.test.sh` (it runs on Linux and macOS). **macOS**:
 `setup-python` first, then `brew install` of bash and the GNU tools (with a cache of the downloads), their `gnubin`
 folders first in `PATH`, `awk` = gawk, `TMPDIR=$RUNNER_TEMP`; the runner usually has 3 CPUs, so the step 2 cases of
-`counterproof` (they want at least 4) are `SALTATO` there with the reason. The longest job: Linux about 12 minutes,
-macOS about 16, Windows about 22. **On Linux**, since
-1.5.1 in **three jobs at the same time**, one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
+`counterproof` (they want at least 4) are `SALTATO` there with the reason. The longest job since 1.8.0: Linux about 10
+minutes, macOS about 12 (plus the setup), Windows about 25 (1.6.0: 12, 16 and 22). **On Linux**, since
+1.5.1 in **one job per group at the same time** (five since 1.8.0), one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
 supported version), Node 20, a test git identity, the `jsonschema` venv, then `bash tools/suite.sh --gruppo <k>/<n>
 esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. `n` is not written by hand: it is
 `strategy.job-total`, the number of jobs of the matrix, and `k` (`matrix.gruppo`) must be the job's position
