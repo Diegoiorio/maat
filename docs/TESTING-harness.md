@@ -185,9 +185,8 @@ always `~/maat-linux` (another one with `MAAT_LINUX_CLONE`). For example:
 40 minutes on Linux, about 10 hours on Windows (1.5.0), because of the long suites. Two options (1.5.1), before the
 arguments:
 
-- `--linux-parallelo`: the Linux part with `tools/suite-parallelo.sh` (below), three clones at once, about 15 minutes
-  instead of 40. Clones in `MAAT_LINUX_CLONI` (relative to the WSL home, default `maat-linux maat-linux-2
-  maat-linux-3`). If the machine is busy the run stops before the Windows part.
+- `--linux-parallelo`: the Linux part with `tools/suite-parallelo.sh` (below), one clone per group at once (five since
+  1.8.0), about 15 minutes instead of 40. Clones in `MAAT_LINUX_CLONI` (relative to the WSL home, default `maat-linux` … `maat-linux-5`). If the machine is busy the run stops before the Windows part.
 - `--windows-breve`: the Windows part runs only the short proof (below), about 50 minutes.
 
 For a release since 1.5.1: `bash tools/giro-completo.sh --windows-breve <folder> <worktree> <branch>` (the Linux part
@@ -225,15 +224,15 @@ from the repo root (`tools/esempi-equiv.test.sh`). Both scripts resolve an entry
 `tools/lib/guardia-plugin.sh`). A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
 `*.test.sh` of the plugin or a `tools/*.test.sh`, or names a file that does not exist.
 
-**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`: three groups of similar length on
+**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`: three groups (five since 1.8.0) of similar length on
 Linux (about 13.5 minutes each on the clone in WSL), used by the CI (one job per group) and by the parallel run (one
 clone per group). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k only, in the order of `suite.list`, and
 refuses (exit 2) a groups file that does not cover `suite.list` exactly (an entry in no group or in two, an entry not
 in the list) or that has not exactly the groups 1..n. A new suite goes into both files; to rebalance, move a line
 using the times of the last `riepilogo.txt`. `tools/esempi-equiv.test.sh`, the one that reads `MAAT_ATTESE_RICHIESTE`,
-is in group 3. Since 1.6.0 the same three groups run on macOS, and Windows has its own groups file,
-`tools/suite-gruppi-windows.list` (five groups balanced on the times of the CI runner, and lines `- <entry> <reason>`
-for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/5
+is in group 4. Since 1.6.0 the same groups run on macOS (five since 1.8.0, balanced on the times of its first CI), and Windows has its own groups file,
+`tools/suite-gruppi-windows.list` (seven groups since 1.8.0, balanced on the times of the CI runner, and lines `- <entry> <reason>`
+for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/7
 <folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. Since 1.6.0 the Linux groups are
 shorter (block C) and not rebalanced: the longest job is about 12 minutes.
 
@@ -241,7 +240,7 @@ shorter (block C) and not rebalanced: the longest job is about 12 minutes.
 
 `bash tools/suite-parallelo.sh <folder> <ref>`, from Linux or WSL, from any checkout of the repo: group k of
 `tools/suite-gruppi.list` runs in clone k (`MAAT_LINUX_CLONI`, one clone per group, relative to `$HOME` or absolute,
-default `maat-linux maat-linux-2 maat-linux-3`), all at the same time, each with `tools/suite.sh --gruppo k/n`. Create
+default `maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5`), all at the same time, each with `tools/suite.sh --gruppo k/n`. Create
 the clones once (`git clone <repo> ~/maat-linux-2`, …) with origin pointing to a repo that has `<ref>`; the script
 realigns them (fetch, `checkout --detach`, `clean`), so nothing must be changed inside them.
 
@@ -281,8 +280,8 @@ with the bash engine.
 ## CI
 
 `.github/workflows/ci.yml` runs at every push and pull request on GitHub, and by hand (`workflow_dispatch`). Since
-1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the three groups of
-`tools/suite-gruppi.list`, Windows the five of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
+1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the five groups of
+`tools/suite-gruppi.list`, Windows the seven of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
 `windows` are green only if all the groups of their platform are, and **`ci`** only if all three are: `ci` is the
 check to require on `main`. `concurrency`: on a branch a new push stops the run of the same event and branch still
 going; on `main` and on tags every commit has its own run, never cancelled. Limits per job (about 1.5 × the longest
@@ -300,8 +299,8 @@ that failed is read in the job log, without downloading the artifact. **Windows*
 Git Bash of the runner, `FIC_PYTHON` = the Python 3.10 of `setup-python` (otherwise `py -3` would choose the newest),
 the `jsonschema` venv in `Scripts/python.exe`, `core.autocrlf false`, `TEMP` rewritten in its long form (the runner
 gives `C:\Users\RUNNER~1\…`, which Python expands and bash does not). The whole Windows run goes at every push: the
-rule is complete at every push if it fits in at most 8 jobs of at most 45 minutes, and it is 5 jobs of about 16–22
-minutes. Left out on Windows, with the reason in its groups file: `test-fast`, `counterproof`, `vitest-classify`,
+rule is complete at every push if it fits in at most 8 jobs of at most 45 minutes, and it is 7 jobs since 1.8.0 (the longest about 25 minutes; 1.6.0: 5 jobs of about 16–22
+minutes). Left out on Windows, with the reason in its groups file: `test-fast`, `counterproof`, `vitest-classify`,
 `comandi-equivalenza` (they need `rsync` and `flock`; on Windows they run in WSL, which the runner does not have: run
 them locally from WSL before each release) and `tools/oracolo.test.sh` (it runs on Linux and macOS). **macOS**:
 `setup-python` first, then `brew install` of bash and the GNU tools (with a cache of the downloads), their `gnubin`

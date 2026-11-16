@@ -5,7 +5,7 @@
 #   MAAT_LINUX_CLONE: the Linux clone, relative to the WSL home (default maat-linux); it must have origin pointing to the repo.
 #   --linux-parallelo (1.5.1): the Linux part with tools/suite-parallelo.sh of the worktree, run in WSL: one group of
 #     tools/suite-gruppi.list per clone, all at the same time, a suite red only in parallel run again alone. Clones in
-#     MAAT_LINUX_CLONI (relative to the WSL home, default "maat-linux maat-linux-2 maat-linux-3"). Its exit 2 (clones)
+#     MAAT_LINUX_CLONI (relative to the WSL home, default "maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5"). Its exit 2 (clones)
 #     or 3 (machine busy: a cycle on Windows, attese.sh --scrivi, another parallel run) stops the run before Windows.
 #   --windows-breve (1.5.1): the Windows part runs only the lines of tools/prova-breve-windows.list (about 50 minutes in
 #     Git Bash), not every suite. A line: [VAR=value …] <entry of suite.list>.
@@ -56,7 +56,7 @@ if [ $PARALLELO -eq 1 ]; then
   # 1'. Linux in parallel: tools/suite-parallelo.sh of the worktree, in WSL; its results on the Windows side
   OUTW=$(cd "$OUT/linux" && { pwd -W 2>/dev/null || pwd; })
   case $OUTW in [A-Za-z]:/*) d=${OUTW:0:1}; OUTW=/mnt/${d,,}${OUTW:2} ;; esac
-  wsl -- bash -lc "cd '$MAAT_W' && MAAT_LINUX_CLONI='${MAAT_LINUX_CLONI:-maat-linux maat-linux-2 maat-linux-3}' bash tools/suite-parallelo.sh '$OUTW' '$RAMO'" > "$OUT/linux/parallelo.out" 2>&1
+  wsl -- bash -lc "cd '$MAAT_W' && MAAT_LINUX_CLONI='${MAAT_LINUX_CLONI:-maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5}' bash tools/suite-parallelo.sh '$OUTW' '$RAMO'" > "$OUT/linux/parallelo.out" 2>&1
   rp=$?
   c_lx=$(sed -n '1s/^clone 1: [^ ]* \([0-9a-f]*\) .*/\1/p' "$OUT/linux/clone.txt" 2>/dev/null)
   c_lx=$(git -C "$WT" rev-parse --verify -q "${c_lx:-x}^{commit}" 2>/dev/null)

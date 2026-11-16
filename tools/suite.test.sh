@@ -98,9 +98,9 @@ corri_g "$L6" "1 tools/finta-ferma.test.sh;3 finta" 1/2
 check "  un gruppo fuori da 1..n → exit 2" '[ $rc -eq 2 ] && grep -q "finta is in group 3, outside 1..2" "$T/out"' "$(cat "$T/out")"
 corri_g "$L6" "1 tools/finta-ferma.test.sh;1 finta" 3/2
 check "  --gruppo 3/2 (k > n) → exit 2, uso" '[ $rc -eq 2 ] && grep -q "^usage:" "$T/out"' "$(cat "$T/out")"
-check "  il file vero: tools/suite-gruppi.list copre tools/suite.list (ogni suite in un gruppo solo, gruppi 1..3)" \
+check "  il file vero: tools/suite-gruppi.list copre tools/suite.list (ogni suite in un gruppo solo, gruppi 1..5)" \
   '(cd "$ROOT" && G=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite-gruppi.list | tr -d "\r"); L=$(grep -v "^[[:space:]]*\(#\|$\)" tools/suite.list | tr -d "\r");
-    [ "$(printf "%s\n" "$G" | awk "{print \$2}" | sort)" = "$(printf "%s\n" "$L" | sort)" ] && [ "$(printf "%s\n" "$G" | awk "{print \$1}" | sort -u | tr "\n" " ")" = "1 2 3 " ])'
+    [ "$(printf "%s\n" "$G" | awk "{print \$2}" | sort)" = "$(printf "%s\n" "$L" | sort)" ] && [ "$(printf "%s\n" "$G" | awk "{print \$1}" | sort -u | tr "\n" " ")" = "1 2 3 4 5 " ])'
 # the link with the CI (review of 1.5.1; 1.6.0: one matrix job per platform): in the block of job $2 of ci.yml, n is
 # strategy.job-total (never written by hand), k must be strategy.job-index + 1, the groups file is $3 (--gruppi, a
 # path from the repo root), and the matrix is 1..n with n = the groups of that file (lines «-» are not groups).
@@ -122,7 +122,7 @@ CIY=$ROOT/.github/workflows/ci.yml
 check "  il legame con la CI: per linux e macos (tools/suite-gruppi.list) e windows (tools/suite-gruppi-windows.list) n = strategy.job-total, k = job-index + 1, la matrice e' 1..n con n = i gruppi del file" \
   'ci_legame "$CIY" linux-gruppo tools/suite-gruppi.list && ci_legame "$CIY" macos-gruppo tools/suite-gruppi.list && ci_legame "$CIY" windows-gruppo tools/suite-gruppi-windows.list && ci_tre "$CIY"'
 sed 's|/\${{ strategy.job-total }} esiti|/3 esiti|' "$CIY" > "$T/ci-3.yml"
-sed 's|^\(        gruppo: \)\[1, 2, 3\]$|\1[1, 2]|' "$CIY" > "$T/ci-2.yml"
+sed 's|^\(        gruppo: \)\[1, 2, 3, 4, 5\]$|\1[1, 2]|' "$CIY" > "$T/ci-2.yml"
 sed 's|--gruppi tools/suite-gruppi-windows.list|--gruppi tools/suite-gruppi.list|' "$CIY" > "$T/ci-w.yml"
 sed 's|^\(        gruppo: \)\[\(1, 2, 3, 4[0-9, ]*\), [0-9]*\]$|\1[\2]|' "$CIY" > "$T/ci-w1.yml"
 check "controprova: ci.yml con /3 scritto a mano, o con la matrice [1, 2] → il legame è rosso" \
@@ -145,7 +145,7 @@ check "controprova: senza la prima riga «-» il file Windows non copre suite.li
 WIN_ESCLUSE="comandi-equivalenza counterproof test-fast tools/oracolo.test.sh vitest-classify "
 win_escluse() { [ "$(grep -v '^[[:space:]]*\(#\|$\)' "$1" | tr -d '\r' | awk '$1 == "-" { print $2 }' | sort | tr '\n' ' ')" = "$WIN_ESCLUSE" ]; }
 check "  il file Windows esclude esattamente le cinque voci attese ($WIN_ESCLUSE)" 'win_escluse "$ROOT/tools/suite-gruppi-windows.list"'
-sed 's/^1 run-phase$/- run-phase motivo finto/' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-piu.list"
+sed 's/^[0-9][0-9]* run-phase$/- run-phase motivo finto/' "$ROOT/tools/suite-gruppi-windows.list" > "$T/w-piu.list"
 check "controprova: un'esclusa in piu' (run-phase), o una in meno (senza la prima riga «-») → rosso" \
   '! cmp -s "$T/w-piu.list" "$ROOT/tools/suite-gruppi-windows.list" && ! win_escluse "$T/w-piu.list" && ! win_escluse "$T/w-senza.list"'
 # no «<g> VAR=value <entry>» line in the groups files of the CI: a variable there (MAAT_ATTESE_RICHIESTE, FIC_WT_WSL,

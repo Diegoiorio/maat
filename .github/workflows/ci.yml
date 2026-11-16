@@ -1,5 +1,5 @@
 # CI (1.6.0): all the plugin suites on Linux, macOS and Windows, split in jobs that run at the same time, one per group
-# of a groups file: tools/suite-gruppi.list for Linux and macOS (the same three groups), tools/suite-gruppi-windows.list
+# of a groups file: tools/suite-gruppi.list for Linux and macOS (the same five groups), tools/suite-gruppi-windows.list
 # for Windows. Job k of n runs `tools/suite.sh --gruppi <file> --gruppo k/n`, with n = strategy.job-total (the number of
 # jobs of the matrix, never written by hand) and k = matrix.gruppo, which the step requires equal to
 # strategy.job-index + 1 (the matrix is exactly 1..n, in order). suite.sh refuses a groups file that does not cover
@@ -13,12 +13,12 @@
 # public corpus, tools/esempi-equiv/attese/, with the two validators: the system Python, minimal validator, and a venv
 # with jsonschema at a fixed version, MAAT_PY_JSONSCHEMA; the same version that `attese.sh --scrivi` requires) is red
 # with a validator SALTATO, and with a file of attese/ changed since the merge-base with origin/main (fetch-depth: 0)
-# without a new line in attese/STORIA. It is in group 3 of tools/suite-gruppi.list, group 2 of the Windows file.
+# without a new line in attese/STORIA. It is in group 4 of tools/suite-gruppi.list, group 3 of the Windows file.
 # Windows (D6 of the 1.6.0 plan): Git Bash of the runner, FIC_PYTHON = the Python 3.10 of setup-python (otherwise
 # `py -3` would choose the newest Python of the runner and the minimum would not be proven), FIC_WT_WSL=0 (suite.sh),
 # core.autocrlf false (as the local Windows proofs), TEMP in its long form. Complete at EVERY push: the rule of D6
 # (complete at every push if it fits in at most 8 jobs of at most 45 minutes, otherwise only on pull requests to main)
-# measured on the first CI of 1.6.0: 5 jobs of about 20 minutes. Left out on Windows (lines «-» of its file): the four
+# measured on the first CI of 1.6.0: 5 jobs of about 20 minutes (1.8.0: 7 jobs, the longest about 25 minutes). Left out on Windows (lines «-» of its file): the four
 # suites that want WSL (run locally at release) and the oracle.
 # macOS (D7): bash and the GNU tools from Homebrew (cache of its downloads), their gnubin folders first in the PATH, awk
 # = gawk, TMPDIR=$RUNNER_TEMP (on macOS /var is a link to /private/var).
@@ -43,7 +43,8 @@ jobs:
     name: linux (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     # Measure (CI of 1.6.0): the three groups took 558, 694 and 682 s. Longest group ~12 min, plus ~2 min of setup
-    # = 14; limit = first multiple of 5 min above 1.5 × 14 = 21 → 25.
+    # = 14; limit = first multiple of 5 min above 1.5 × 14 = 21 → 25. 1.8.0: five groups (tools/suite-gruppi.list) of
+    # about 7-10 minutes on the times of the first CI of 1.8.0; the limit stays.
     timeout-minutes: 25
     # 1.8.0: the limit of each suite (tools/suite.sh), below the job's: a suite that hangs ends with rc=124 and a
     # TIMEOUT line naming it, and the job goes on to the next one instead of dying without saying where.
@@ -56,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gruppo: [1, 2, 3]
+        gruppo: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,12 +94,12 @@ jobs:
     runs-on: macos-latest
     # Measure (CI of 1.6.0): the three groups took 810, 984 and 900 s, Homebrew setup included. Longest ~16.4 min;
     # limit = first multiple of 5 min above 1.5 × 16.4 = 24.6 → 25, rounded up to 30 for the Homebrew setup without
-    # its cache.
+    # its cache. 1.8.0: five groups of about 10-12 minutes; the limit stays.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        gruppo: [1, 2, 3]
+        gruppo: [1, 2, 3, 4, 5]
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
@@ -172,7 +173,8 @@ jobs:
     name: windows (group ${{ matrix.gruppo }}/${{ strategy.job-total }})
     runs-on: windows-latest
     # Measure (CI of 1.6.0): the worst job observed took 1546 s (25.8 min), setup included; limit = first multiple
-    # of 5 min above 1.5 × 25.8 = 38.7 → 40.
+    # of 5 min above 1.5 × 25.8 = 38.7 → 40. 1.8.0: seven groups (tools/suite-gruppi-windows.list), the longest the
+    # driver alone (1424 s, ~25 min with the setup); the limit stays.
     timeout-minutes: 40
     # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux)
     env:
@@ -181,7 +183,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gruppo: [1, 2, 3, 4, 5]
+        gruppo: [1, 2, 3, 4, 5, 6, 7]
     defaults:
       run:
         shell: bash
