@@ -1459,6 +1459,23 @@ else check "controprova registrazione: la mutazione si applica" false; fi
 # (B9 review) an OK line is classified too: a plan OK on a spec still DRAFT is a final STOP, not the uncounted DRAFT -> PLAN
 rnuovo; rrun ok-draft
 check "ripresa (review B9): plan OK con la spec DRAFT → classifica dopo la riga OK: STOP finale dopo 01-plan con la prova" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT plan: OK — done · riga OK di una fase plan con Plan status DRAFT: non approvato · prova: .*spec-r.md" "$T/run.out"'
+# (B9 fix 2) that UMANO STOP is registered in driver.log and the next invocation stops too (row R4 of next)
+check "  B9 fix 2: la riga «Stop umano: 01-plan · regola=piano · state=<State>» in driver.log" 'grep -q " Stop umano: 01-plan · regola=piano · state=[0-9a-f]\{12\}$" "$RR/driver.log"'
+cp -r "$RR" "$T/rr-okdraft"; cp "$SR" "$T/sr-okdraft"
+rrun ok
+check "  B9 fix 2: seconda invocazione, spec invariata → STOP senza lanci (non la riga DRAFT → PLAN)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "" ] && grep -q "Driver result: STOP — STOP — 01-plan ha dato OK su un piano ancora DRAFT" "$T/run.out"'
+rokd() { rm -rf "$RR"; cp -r "$T/rr-okdraft" "$RR"; cp "$T/sr-okdraft" "$SR"; }
+if tmut r4 's/^\( *\)if lp and stop_umani(run_fs).*# DRAFT-STOP-UMANO$/\1if False:/'; then
+  rokd; RRUN_DRV="$T/drv-r4.py" rrun ok
+  check "  controprova: senza la riga R4 la seconda invocazione rilancia il piano senza contarlo (02-plan: rosso)" 'grep -qx 02-plan "$FAKE_CALLS"'
+else check "controprova R4: la mutazione si applica" false; fi
+if tmut r4reg 's/^\( *\)ev("%s%s · regola=%s · state=%s" .*# STOP-UMANO-REGISTRATO$/\1pass/'; then
+  rnuovo; RRUN_DRV="$T/drv-r4reg.py" rrun ok-draft; RRUN_DRV="$T/drv-r4reg.py" rrun ok
+  check "  controprova: senza la riga in driver.log la seconda invocazione rilancia il piano (02-plan: rosso)" 'grep -qx 02-plan "$FAKE_CALLS"'
+else check "controprova registrazione R4: la mutazione si applica" false; fi
+rokd; sed -i 's/^Contesto\.$/Contesto cambiato./' "$SR"; rrun ok
+check "  B9 fix 2: spec cambiata (State diverso) → il piano riparte (02-plan)" 'grep -qx 02-plan "$FAKE_CALLS"'
+rm -rf "$T/rr-okdraft" "$T/sr-okdraft" "$T/drv-r4.py" "$T/drv-r4reg.py"
 if tmut clok 's/^\( *\)c = classifica(fase, run_fs, label, spec_fs)  # CLASSIFICA-OK$/\1c = Classe("OK", "ok", "", "")/'; then
   rnuovo; RRUN_DRV="$T/drv-clok.py" rrun ok-draft FIC_MAX_FASI=3
   check "controprova: senza classifica sulla riga OK la riga DRAFT → PLAN rilancia il piano senza contarlo (02-plan: rosso)" 'case "$(rcalls)" in "01-plan 02-plan "*) true ;; *) false ;; esac && [ ! -f "$RR/log/01-plan.ripresa" ]'

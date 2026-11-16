@@ -806,6 +806,10 @@ def _cycle_state(spec_fs, tmp):
                 dp = dict(rip_reg).get(lp[-1]) if lp else None
                 if dp and dp.get("esito") in ("limite", "senza-progresso") and dp.get("state") == STATE:  # DRAFT-LIMITE
                     nxt("STOP — " + T("cycle-state-180.ripresa_stop", label=lp[-1], why=messaggio_ripresa(dp), run=RUN))
+                # R4 (B9 fix 2): the last plan phase printed OK on a spec still DRAFT, a final UMANO STOP the driver
+                # registered in driver.log at this State: STOP again (a phase cannot write that line)
+                if lp and stop_umani(run_fs).get(lp[-1]) == STATE:  # DRAFT-STOP-UMANO
+                    nxt("STOP — " + T("cycle-state-180.stop_umano", label=lp[-1], run=RUN))
                 nxt("PLAN — " + T("cycle-state.plan_draft"))
             nxt("STOP — " + T("cycle-state.plan_nhd"))
         if plan != "APPROVED":
@@ -1122,6 +1126,11 @@ NON_VERIFICATA = "decisione non verificata da script"   # a token, the same in e
 # the driver.log line of a final STOP on such a decision: «<UTC> Decisione non verificata da script: <label> · <cause>»,
 # read by cycle-report.py and by the review prompt (DECISIONE NON VERIFICATA (driver): …)
 NON_VERIFICATA_RIGA = "Decisione non verificata da script: "
+# (B9 fix 2) the driver.log line of a final UMANO STOP on an OK line of a plan phase (a plan OK on a spec still DRAFT):
+# «<UTC> Stop umano: <label> · regola=<rule> · state=<State after the phase>». The phases do not write driver.log (the
+# guard denies it); row R4 of `next` reads it: DRAFT and the last plan label stopped so at this State -> STOP, not PLAN
+STOP_UMANO_RIGA = "Stop umano: "
+STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+)$")
 AMBITO_H = re.compile(r"^#+[ \t]+(?:[0-9]+\.[ \t]*)?(?:Out of scope|Fuori ambito|Constraints|Vincoli)\b", re.I)
 REQ_H = re.compile(r"^##[ \t]+(?:[0-9]+\.[ \t]*)?(?:requisiti funzionali|criteri di accettazione|functional requirements"
                    r"|acceptance criteria)", re.I)
@@ -1529,6 +1538,17 @@ def riprese(run_fs):
         else:
             ign.append(label)
     return reg, ign
+
+
+def stop_umani(run_fs):
+    """{label: State} of the final UMANO STOPs on an OK line of a plan phase, from the «Stop umano:» lines of driver.log
+    (B9 fix 2; the last line of a label wins)"""
+    out = {}
+    for l in (_read(os.path.join(run_fs, "driver.log")) or "").replace("\r", "").split("\n"):
+        m = STOP_UMANO_RX.search(l)
+        if m:
+            out[m.group(1)] = m.group(2)
+    return out
 
 
 def rilanci_registro(run_fs):
@@ -2490,6 +2510,10 @@ def cmd_run(argv):
             c = classifica(fase, run_fs, label, spec_fs)  # CLASSIFICA-OK
             if c.classe == "UMANO":
                 pv = c.prova if os.path.isabs(c.prova) else os.path.join(run_fs, c.prova)
+                if fase == "plan":   # B9 fix 2: registered, so that the next invocation stops too (row R4 of next)
+                    st_ok = next((l[7:] for l in (_next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs))
+                                  if l.startswith("State: ")), "")
+                    ev("%s%s · regola=%s · state=%s" % (STOP_UMANO_RIGA, label, c.regola, st_ok or "-"))  # STOP-UMANO-REGISTRATO
                 return fine("STOP", esito + " · " + c.causa + " · " + T("driver-180.prova", f=_rel(pv, root)), 1)
         if re.match(RIGA_STOP, esito):
             # 1.8.0 (§Tassonomia): the class of the STOP. TECNICO as in 1.7; UMANO final, with its proof; RIPRENDIBILE:

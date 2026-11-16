@@ -55,7 +55,10 @@
 #   1  review section without a plan                            → STOP (nothing to plan on top of)
 #   2  no plan, or Plan status DRAFT without a review             → PLAN; R3 (1.8.0): DRAFT and the last plan phase
 #      has a registered .ripresa esito=limite (or senza-progresso) at the current State → STOP (a second invocation
-#      does not relaunch the plan past the limit)
+#      does not relaunch the plan past the limit); R4 (1.8.0): DRAFT and the last plan phase printed OK on it, a
+#      final UMANO STOP that driver.py run registered in driver.log («Stop umano: <label> · regola=… · state=<State>»,
+#      a line the phases do not write) at the current State → STOP (a second invocation does not relaunch it
+#      uncounted); a different State (the spec changed) → PLAN as today
 #   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
 #   4  Plan status NEEDS HUMAN DECISION                           → STOP (open decision)
 #   5  non-standard Plan status                                   → STOP

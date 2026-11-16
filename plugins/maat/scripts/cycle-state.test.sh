@@ -450,6 +450,16 @@ reset; ripresa 01-plan plan limite "$(state)"; sed -i 's/^Contesto\.$/Contesto c
 # R3: the last phase is not the plan (a later label without .ripresa), the last plan stopped at the limit: still STOP
 reset; { above; plan DRAFT; } > "$SP"; ripresa 01-plan plan limite "$(state)"; esito 02-review "PHASE RESULT review: OK — x" "$(state)"
 expect "R3: DRAFT e l ultima plan con .ripresa limite, State uguale → STOP (non PLAN)" "^STOP — 01-plan fermata: limite delle riprese"
+# R4 (B9 fix 2): the last plan printed OK on a spec still DRAFT, a final UMANO STOP that driver.py run registered
+stopumano() { # $1 label, $2 state
+  mkdir -p "$RUN/log"; : > "$RUN/log/$1.jsonl"; printf 'PHASE RESULT plan: OK — done\nstate=x\n' > "$RUN/log/$1.esito"
+  echo "2026-11-16T10:00:00Z Stop umano: $1 · regola=piano · state=$2" >> "$RUN/driver.log"; }
+reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"
+expect "R4: DRAFT e l ultima plan con «Stop umano:» registrato in driver.log, State uguale → STOP (non PLAN)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
+reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan 000000000000
+expect "R4: «Stop umano:» di un altro State (la spec e cambiata) → PLAN come oggi" "^PLAN — piano in DRAFT$"
+reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"; : > "$RUN/log/02-plan.jsonl"
+expect "R4: «Stop umano:» di una plan che non e l ultima → PLAN come oggi" "^PLAN — piano in DRAFT$"
 reset; { above; plan APPROVED; } > "$SP"; ripresa 01-test-red test-red rilancio "$(state)"
 expect "R1: test-red fermato con .ripresa rilancio → TEST-RED" "^TEST-RED — ripresa 1/2 \(piano non approvato \(DRAFT\)\)$"
 # counterproofs on a copy of the driver (FIC_DRIVER_PY): R1 and R3 off → the rows of 1.7
@@ -464,6 +474,11 @@ if csmut 's/^\( *\)if dp and .*# DRAFT-LIMITE$/\1if False:/'; then
   o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
   if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R3: senza la riga DRAFT → PLAN scavalca il limite]"; printf '    %s\n' "$o"; fi
 else fail=$((fail + 1)); echo "FAIL [controprova R3: la mutazione si applica]"; fi
+if csmut 's/^\( *\)if lp and stop_umani(run_fs).*# DRAFT-STOP-UMANO$/\1if False:/'; then
+  reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"
+  o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
+  if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4: senza la riga DRAFT → PLAN rilancia il piano]"; printf '    %s\n' "$o"; fi
+else fail=$((fail + 1)); echo "FAIL [controprova R4: la mutazione si applica]"; fi
 rm -f "$O/driver.py" "$O/maat_paths.py" "$O/maat_msg.py"; rm -rf "$O/lib"
 reset
 
