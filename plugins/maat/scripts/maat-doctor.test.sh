@@ -38,7 +38,29 @@ cygm() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
 # 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see (an app execution alias of
 # WindowsApps is a reparse point: Git Bash does not stat it, Python's shutil.which finds it; on some CI runners)
-PATH_SENZA_WSL=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ] || ls -A "$d" 2>/dev/null | grep -qixE 'wsl(\.exe)?'; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
+# 1.8.0 (CI): that listing still missed it on some Windows runners (1.6.1, 1.7.0, 1.8.0: the doctor's shutil.which found
+# WindowsApps\wsl.EXE on the reduced PATH), so the same Python decides too (shutil.which and os.listdir on each folder),
+# and the PATH is computed again right before each case that uses it, not once at the start
+senza_wsl() {
+  local out="" d i=0 dirs=() py
+  IFS=: read -ra dirs <<< "$PATH"
+  py=$(for d in ${dirs[@]+"${dirs[@]}"}; do printf '%s\n' "$(cygm "$d")"; done | "$FIC_PY" -c 'import os, shutil, sys
+for d in sys.stdin.read().split("\n")[:-1]:
+    try:
+        ns = [n.lower() for n in os.listdir(d)]
+    except OSError:
+        ns = []
+    w = d and (shutil.which("wsl", path=d) or shutil.which("wsl.exe", path=d) or "wsl" in ns or "wsl.exe" in ns)
+    print(1 if w else 0)' | tr -d '\r')
+  for d in ${dirs[@]+"${dirs[@]}"}; do
+    i=$((i + 1))
+    [ "$(printf '%s\n' "$py" | sed -n "${i}p")" = 0 ] || continue   # SENZA-WSL-PY
+    { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ] || ls -A "$d" 2>/dev/null | grep -qixE 'wsl(\.exe)?'; } && continue
+    out+="${out:+:}$d"
+  done
+  printf '%s' "$out"
+}
+PATH_SENZA_WSL=$(senza_wsl)
 
 mkdir -p "$T/bin" "$T/home/.claude" "$T/py38"
 printf '#!/bin/sh\necho "2.1.285 (Claude Code)"\n' > "$T/bin/claude"
@@ -224,8 +246,8 @@ check "  modulo alla radice senza copia -> nessuna riga sulla copia alla radice"
 
 # --- 9. Windows without WSL: copia_wsl auto, nativo modules --------------------------------------------------------------
 V9=$(variante wsl-auto 'c["piattaforma"]["copia_wsl"] = "auto"')
-caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
-caso_piattaforma() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
+caso_wsl_assente() { PATH_SENZA_WSL=$(senza_wsl); DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
+caso_piattaforma() { PATH_SENZA_WSL=$(senza_wsl); DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
 if [ "$WIN" = 1 ]; then
   check "copia_wsl auto, moduli nativi, PATH senza wsl -> exit 0 con «WSL assente»" 'caso_wsl_assente'
   caso_wsl_assente || (   # detail of a red: which wsl the Python of the doctor finds on that PATH, and from which folder
@@ -241,6 +263,7 @@ fi
 # --- 10. wsl module without WSL (or outside Windows) -----------------------------------------------------------------------
 V10=$(variante modulo-wsl 'c["moduli"][0]["ambiente"] = "wsl"')
 caso_modulo_wsl() {
+  PATH_SENZA_WSL=$(senza_wsl)
   DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V10"
   [ "$rc" = 1 ] || return 1
   if [ "$WIN" = 1 ]; then ha "^MANCA modulo m ambiente: wsl ma WSL assente: i suoi gate saranno BLOCKED — metti \`ambiente: nativo\` o installa WSL"
