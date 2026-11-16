@@ -1152,6 +1152,37 @@ rossi() { # <name> <esito> <riassunto> <json of "test"> <json of "conflitti"> [r
   printf '{"esito":"%s","riassunto":"%s","evidence":"x","conflitti":%s,"test":%s}\n' "$2" "$3" "$5" "$4" > "$CL/$1.run/test-red/rossi.json"
   printf 'rosso T1: ...\nrossi: esito=%s — %s\nstubs: ok\n' "$2" "${6:-$3}" > "$CL/$1.run/log/01-test-red.rossi"
 }
+# --- 14b. (1.8.0, B10, D3) the checks of the types of an Open decision: for each mechanical type a valid case (STOP,
+# UMANO) and one with the line falsified by the phase itself (RIPRENDIBILE, declassata); the non-mechanical types are
+# UMANO and say «decisione non verificata da script»
+jl() { # <file> then pairs <command> <result>: a jsonl of the main session with those Bash calls and their results
+  "$FIC_PY" - "$@" <<'EOF'
+import json, sys
+f, rest = sys.argv[1], sys.argv[2:]
+out = ['{"type":"system","subtype":"init"}']
+for i in range(0, len(rest), 2):
+    out.append(json.dumps({"type": "assistant", "parent_tool_use_id": None, "message": {"content": [
+        {"type": "tool_use", "id": "b%d" % i, "name": "Bash", "input": {"command": rest[i]}}]}}))
+    out.append(json.dumps({"type": "user", "parent_tool_use_id": None, "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "b%d" % i, "content": rest[i + 1]}]}}))
+out.append('{"type":"result","subtype":"success","result":"STOP"}')
+open(f, "w", encoding="utf-8").write("\n".join(out) + "\n")
+EOF
+}
+rv() { # <file> <n> <subagent_type> [<result text>]: n Agent calls of the main session, each with its result
+  "$FIC_PY" - "$@" <<'EOF'
+import json, sys
+f, n, tipo = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+res = sys.argv[4] if len(sys.argv) > 4 else "Decision: NEEDS_CHANGES"
+out = ['{"type":"system","subtype":"init"}']
+for i in range(n):
+    out.append(json.dumps({"type": "assistant", "parent_tool_use_id": None, "message": {"content": [
+        {"type": "tool_use", "id": "a%d" % i, "name": "Agent", "input": {"subagent_type": tipo, "prompt": "lens"}}]}}))
+    out.append(json.dumps({"type": "user", "parent_tool_use_id": None, "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "a%d" % i, "content": res}]}}))
+open(f, "w", encoding="utf-8").write("\n".join(out) + "\n")
+EOF
+}
 OKI=$(ok_json implement OK '[]' nessuno); STI=$(ok_json implement STOP '[]' nessuno)
 OKP=$(ok_json plan OK '[]' nessuno); STP=$(ok_json plan STOP '[]' "decisione umana")
 STR=$(ok_json test-red STOP '[]' nessuno); STV=$(ok_json review STOP '[]' nessuno)
@@ -1165,14 +1196,16 @@ clp ok implement 0 "PHASE RESULT implement: OK — fatto" "$OKI" "$AP"
 clp ok-json implement 0 "PHASE RESULT implement: OK — fatto" "$(ok_json implement OK '["passo 8 adattato"]' nessuno)" "$AP"
 clp draft plan 0 "PHASE RESULT plan: STOP — round 1 not collected" "$STP" "$DR"
 clp nhd-budget plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "" "Open decision: budget — four iterations used, three majors still open"
-clp nhd-prova plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "- Decisione aperta: prova — il contatore a 16 bit non regge 100000 livelli"
+rv "$CL/nhd-budget.run/log/01-plan.jsonl" 9 maat:spec-plan-reviewer   # (B10) the budget is counted on the transcripts
+clp nhd-prova plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "- Decisione aperta: prova — il contatore a 16 bit non regge 100000 livelli" "- Prova eseguita: \`python3 tools/depth.py 100000\` → «RecursionError: depth 65536»"
+jl "$CL/nhd-prova.run/log/01-plan.jsonl" "python3 tools/depth.py 100000" "RecursionError: depth 65536"   # (B10) the executed proof
 clp nhd-spec plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — FR2 can be read in two ways and the code does not settle it"
 clp nhd-assente plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH"
 clp nhd-tipo plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: hunch — the counter looks too small"
 clp nhd-forma plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: the counter looks too small"
 clp nhd-ancora plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — the push in src/x.rs:12 cannot go deeper"
 clp nhd-recinto plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" '```' "Open decision: budget — inside a fence" '```' "### Changelog revisione piano" "Open decision: budget — in the changelog"
-clp nhd-mista plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: budget — four iterations used" "Open decision: hunch — and a guess"
+clp nhd-mista plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — four iterations used" "Open decision: hunch — and a guess"
 clp plan-aperti plan 0 "PHASE RESULT plan: STOP — reviews pending" "$STP" "$AP"; bg plan-aperti plan
 clp plan-stop plan 0 "PHASE RESULT plan: STOP — something else" "$STP" "$AP"
 clp impl-aperti implement 0 "PHASE RESULT implement: STOP — agents pending" "$STI" "$AP"; bg impl-aperti implement
@@ -1199,7 +1232,7 @@ printf 'dati-test: T4 — other fixture names — routes collide\tSTOP — requi
 # BLOCKED; a plan OK line on a plan still DRAFT or NEEDS HUMAN DECISION
 clp tr-devrif test-red 0 "PHASE RESULT test-red: STOP — judge said no" "$(ok_json test-red STOP '["test-data: T4 — other fixture names — routes collide"]' nessuno)" "$AP"; bg tr-devrif test-red
 printf 'test-data: T4 — other fixture names — routes collide\tSTOP — requisito non coperto\t0123abcd\n' > "$CL/tr-devrif.run/log/01-test-red.deviazioni-test"
-clp nhd-aperti plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: budget — four iterations used"; bg nhd-aperti plan
+clp nhd-aperti plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — four iterations used"; bg nhd-aperti plan
 clp tr-blocked test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-blocked BLOCKED "no runner" '{}' '[]'
 clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
@@ -1237,11 +1270,73 @@ clmut() { # <name> <sed> <case> <expected class rule proof of the mutated driver
 clmut solo-plan 's/^\( *\)if fase in FASI_RIPRESA:  # RIPRESA-SOLO-PLAN-TEST-RED$/\1if True:/' impl-aperti "RIPRENDIBILE aperti log/01-implement.jsonl"
 clmut draft 's/^\( *\)if fase == "plan" and stato.startswith("DRAFT"):  # RIPRESA-DRAFT$/\1if False:/' draft "UMANO stop log/01-plan.esito"
 clmut ancora 's/^\( *\)if tipo == "spec" and a:  # SPEC-CON-ANCORA$/\1if False:/' nhd-ancora "UMANO decisione nhd-ancora.md"
-clmut valida 's/^\( *\)if all(v\[0\] for v in vv):  # DECISIONE-VALIDA$/\1if any(v[0] for v in vv):/' nhd-mista "UMANO decisione nhd-mista.md"
+clmut valida 's/^\( *\)if all(e\[1\] for e in esami):  # DECISIONE-VALIDA$/\1if any(e[1] for e in esami):/' nhd-mista "UMANO decisione nhd-mista.md"
 clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO$/\1if v.get("esito") == "rosso_simbolo":/' tr-simbolo "UMANO stop log/01-test-red.esito"
 clmut rifiutata 's/^\( *\)if fuori:  # DEVIAZIONE-RIFIUTATA$/\1if False:/' tr-devrif "RIPRENDIBILE aperti log/01-test-red.jsonl"
 clmut piano-ok 's/^\( *\)if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK$/\1if False:/' plan-ok-draft "OK ok log/01-plan.esito"
 clmut vecchio 's/^\( *\)return None  # ROSSI-DI-QUESTA-FASE$/\1pass/' tr-vecchio "RIPRENDIBILE simbolo test-red/rossi.json"
+NHS="PHASE RESULT plan: STOP — decisione"
+CMDP='python3 tools/depth.py 100000'
+clp p-ok plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$CMDP\` → «RecursionError: depth 65536»"
+jl "$CL/p-ok.run/log/01-plan.jsonl" "$CMDP" "Traceback ...
+RecursionError: depth 65536"
+clp p-nessuna plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels"
+clp p-inventata plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$CMDP\` → «RecursionError: depth 65536»"
+jl "$CL/p-inventata.run/log/01-plan.jsonl" "$CMDP" "ok: 100000 levels"
+clp p-echo plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — impossible" "Executed proof: \`cd src && X=1 echo impossibile \$((65535+1))\` → «65536»"
+jl "$CL/p-echo.run/log/01-plan.jsonl" "cd src && X=1 echo impossibile \$((65535+1))" "impossibile 65536"
+clp p-pyc plan 0 "$NHS" "$STP" "$NH" "Open decision: prova — impossible" "- Prova eseguita: \`python -c 'print(\"impossibile\")'\` → «impossibile»"
+jl "$CL/p-pyc.run/log/01-plan.jsonl" "python -c 'print(\"impossibile\")'" "impossibile"
+clp p-spec plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — impossible" "Executed proof: \`$CMDP\` → «something»"
+jl "$CL/p-spec.run/log/01-plan.jsonl" "$CMDP" "something"
+clp p-side plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$CMDP\` → «RecursionError: depth 65536»"
+printf '%s\n' '{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"tool_use","id":"s1","name":"Bash","input":{"command":"python3 tools/depth.py 100000"}}]}}' \
+  '{"type":"user","isSidechain":true,"message":{"content":[{"type":"tool_result","tool_use_id":"s1","content":"RecursionError: depth 65536"}]}}' > "$CL/p-side.run/log/01-plan.jsonl"
+clp b-ok plan 0 "$NHS" "$STP" "$NH" "Open decision: budget — four iterations used, three majors still open"
+rv "$CL/b-ok.run/log/01-plan.jsonl" 6 maat:spec-plan-reviewer; rv "$CL/b-ok.run/log/02-plan.jsonl" 3 maat:spec-plan-reviewer; echo 0 > "$CL/b-ok.run/log/02-plan.exit"
+clp b-giri plan 0 "$NHS" "$STP" "$NH" "Open decision: budget — four iterations used" "### Plan review changelog" "Metrica ciclo: giri=4 · R1=2/3 · esito=stop"
+rv "$CL/b-giri.run/log/01-plan.jsonl" 3 maat:spec-plan-reviewer
+clp b-light plan 0 "$NHS" "$STP" "$NH" "Open decision: budget — the one round of the small size said stop"
+rv "$CL/b-light.run/log/01-plan.jsonl" 1 maat:spec-plan-reviewer-light "Decision: STOP_HUMAN_DECISION_REQUIRED
+Coverage statement: all"
+clp b-light-ok plan 0 "$NHS" "$STP" "$NH" "Open decision: budget — the one round of the small size said stop"
+rv "$CL/b-light-ok.run/log/01-plan.jsonl" 1 maat:spec-plan-reviewer-light "Decision: APPROVED"
+riempi() { local i=0; while [ $i -lt 410 ]; do echo "- line $i of a long plan"; i=$((i + 1)); done; }
+clp c-ok plan 0 "$NHS" "$STP" "$NH" "Open decision: taglio — skeleton above the ceiling, cut proposal in 2 rings" "Plan format: 2" "$(riempi)"
+clp c-sotto plan 0 "$NHS" "$STP" "$NH" "Open decision: cut — skeleton above the ceiling, cut proposal in 2 rings" "Plan format: 2" "### Plan review changelog" "scheletro sopra il tetto: proposta di taglio in 2 anelli"
+scope_spec() { # <name> <decision text>: a spec with requirements and an Out of scope section above the plan
+  printf '%s\n' "# Spec" "" "## Functional requirements" "" "- FR1. Export the report." "- FR2. Sort it." "" "## Out of scope" "" \
+    "- The export to CSV stays out of this change." "" "## Implementation plan" "" "$NH" "Open decision: scope — $2" > "$CL/$1.md"
+}
+clp s-ok plan 0 "$NHS" "$STP" "$NH"; scope_spec s-ok "FR1 needs a CSV file, but the spec says «The export to CSV stays out of this change.»"
+clp s-inventata plan 0 "$NHS" "$STP" "$NH"; scope_spec s-inventata "FR1 needs a CSV file, but the spec says «The export to XLSX stays out.»"
+clp s-noid plan 0 "$NHS" "$STP" "$NH"; scope_spec s-noid "the report needs a CSV file, but «The export to CSV stays out of this change.»"
+for ty in recurrence ricorrenza dispute partial; do
+  clp nm-$ty plan 0 "$NHS" "$STP" "$NH" "Open decision: $ty — the same major again, no new evidence"
+done
+clp nm-dopo plan 0 "$NHS" "$STP" "$NH" "Open decision: spec — FR2 can be read in two ways"
+printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: 0badc0de" > "$CL/nm-dopo.run/log/00-plan.ripresa"
+printf '2026-11-16T10:00:00Z Ripresa: 00-plan · esito=rilancio · n=1 · declassata=0badc0de · sha=%s\n' "$(sha256sum < "$CL/nm-dopo.run/log/00-plan.ripresa" | cut -c1-12)" > "$CL/nm-dopo.run/driver.log"
+CASI="p-ok:plan p-nessuna:plan p-inventata:plan p-echo:plan p-pyc:plan p-spec:plan p-side:plan b-ok:plan b-giri:plan b-light:plan b-light-ok:plan c-ok:plan c-sotto:plan s-ok:plan s-inventata:plan s-noid:plan nm-recurrence:plan nm-ricorrenza:plan nm-dispute:plan nm-partial:plan nm-dopo:plan nhd-spec:plan"
+CLO=$(cla "$DRV")
+check "tipi: la funzione risponde su tutti i casi nuovi" '[ "$(printf "%s\n" "$CLO" | grep -c "	")" = "$(echo $CASI | wc -w)" ] && ! grep -q Traceback "$T/cl.out"'
+cln() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $6 }'; }   # <name> → the cause
+check "proof: Executed proof trovata nel jsonl della fase (comando esatto, estratto nel risultato) → UMANO, lo STOP che deve ancora fermarsi" '[ "$(clv p-ok)" = "UMANO decisione p-ok.md" ]'
+check "proof falsificata → RIPRENDIBILE: senza riga, estratto non nel risultato, echo dopo cd e VAR=, estratto nel comando (python -c), estratto copiato dalla spec, solo in un sidechain" '[ "$(clv p-nessuna)" = "RIPRENDIBILE decisione p-nessuna.md" ] && [ "$(clv p-inventata)" = "RIPRENDIBILE decisione p-inventata.md" ] && [ "$(clv p-echo)" = "RIPRENDIBILE decisione p-echo.md" ] && [ "$(clv p-pyc)" = "RIPRENDIBILE decisione p-pyc.md" ] && [ "$(clv p-spec)" = "RIPRENDIBILE decisione p-spec.md" ] && [ "$(clv p-side)" = "RIPRENDIBILE decisione p-side.md" ]'
+check "  le cause: prova assente, non trovata nel jsonl, comando che stampa, estratto scritto nel comando o nella spec" 'cln p-nessuna | grep -q "senza una riga Prova eseguita" && cln p-inventata | grep -q "non trovata in log/01-plan.jsonl" && cln p-echo | grep -q "stampa soltanto" && cln p-pyc | grep -q "estratto scritto nel comando o nella spec" && cln p-spec | grep -q "estratto scritto nel comando o nella spec"'
+check "budget: 9 risultati di maat:spec-plan-reviewer nei jsonl delle fasi plan (6+3) → UMANO; giri=4 nella metrica ma 3 risultati → RIPRENDIBILE" '[ "$(clv b-ok)" = "UMANO decisione b-ok.md" ] && [ "$(clv b-giri)" = "RIPRENDIBILE decisione b-giri.md" ] && cln b-giri | grep -q "con 3 risultati"'
+check "budget, taglia piccola: il risultato del revisore leggero con E1: STOP (rieseguito) → UMANO; con APPROVED → RIPRENDIBILE" '[ "$(clv b-light)" = "UMANO decisione b-light.md" ] && [ "$(clv b-light-ok)" = "RIPRENDIBILE decisione b-light-ok.md" ]'
+check "cut: skeleton rieseguito SOPRA IL TETTO (exit 1) → UMANO; la nota di taglio nel changelog ma skeleton sotto il tetto → RIPRENDIBILE" '[ "$(clv c-ok)" = "UMANO decisione c-ok.md" ] && [ "$(clv c-sotto)" = "RIPRENDIBILE decisione c-sotto.md" ]'
+check "scope: riga di Out of scope citata ed esistente + ID FR1 → UMANO; riga inventata, o senza ID di requisito → RIPRENDIBILE" '[ "$(clv s-ok)" = "UMANO decisione s-ok.md" ] && [ "$(clv s-inventata)" = "RIPRENDIBILE decisione s-inventata.md" ] && [ "$(clv s-noid)" = "RIPRENDIBILE decisione s-noid.md" ]'
+check "non meccanici (recurrence, ricorrenza, dispute, partial, spec): UMANO con «decisione non verificata da script: <tipo>»" 'for x in nm-recurrence nm-ricorrenza nm-dispute nm-partial; do [ "$(clv $x)" = "UMANO decisione $x.md" ] || exit 1; done; cln nm-ricorrenza | grep -q "· decisione non verificata da script: recurrence$" && cln nm-partial | grep -q "decisione non verificata da script: partial$" && cln nhd-spec | grep -q "decisione non verificata da script: spec$"'
+check "non meccanico dopo una ripresa che aveva declassato una chiave → UMANO e «dopo la ripresa che aveva declassato <chiave>»" '[ "$(clv nm-dopo)" = "UMANO decisione nm-dopo.md" ] && cln nm-dopo | grep -q "decisione non verificata da script: spec · dopo la ripresa che aveva declassato 0badc0de$" && ! cln nhd-spec | grep -q "dopo la ripresa"'
+clmut jsonl 's/^\( *\)trov = tr.bash_trovato(.*# PROVA-NEL-JSONL$/\1trov = True/' p-inventata "UMANO decisione p-inventata.md"
+clmut stampa 's/^\( *\)return not w or .*# FILTRO-STAMPA$/\1return False/' p-echo "UMANO decisione p-echo.md"
+clmut budget 's/^\( *\)if n >= BUDGET_RISULTATI:  # BUDGET-CONTATO$/\1if True:/' b-giri "UMANO decisione b-giri.md"
+clmut taglio 's/^\( *\)if rc == 1 and "Scheletro: SOPRA IL TETTO" in out:  # TAGLIO-RIESEGUITO$/\1if True:/' c-sotto "UMANO decisione c-sotto.md"
+clmut ambito 's/^\( *\)if not any(c in t for c in citabili):  # AMBITO-CITATO$/\1if False:/' s-inventata "UMANO decisione s-inventata.md"
+clmut tipo 's/^\( *\)if not vale:  # CONTROLLO-DEL-TIPO$/\1if False:/' p-nessuna "UMANO decisione p-nessuna.md"
+rm -f "$T"/drv-jsonl.py "$T"/drv-stampa.py "$T"/drv-budget.py "$T"/drv-taglio.py "$T"/drv-ambito.py "$T"/drv-tipo.py
 rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py
 
 
@@ -1259,6 +1354,7 @@ ph=${l#*-}; fnd=""; bloc=nessuno; es=STOP; riga="PHASE RESULT $ph: STOP — roun
 : > "$d/log/$l.jsonl"
 case "$FAKE_MODE" in
   draft) printf '%s\n' "2. Passo aggiunto da $l." >> "$spec" ;;   # progress: the plan changes at every phase
+  ok) riga="PHASE RESULT $ph: OK — done"; es=OK ;;
   ok-draft) riga="PHASE RESULT $ph: OK — done"; es=OK; printf '%s\n' "2. Passo aggiunto da $l." >> "$spec" ;;   # (B9 review) OK on a DRAFT
   draft-cancella|draft-altera) printf '%s\n' "2. Passo aggiunto da $l." >> "$spec"   # (DA10) the phase touches a .ripresa
     if [ "$l" = 02-plan ]; then
@@ -1270,7 +1366,7 @@ case "$FAKE_MODE" in
     printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
   draft-fermo) fnd='{"severita":"major","file":"src/a.py","riga":1,"testo":"the same finding"}' ;;   # no progress
   nhd-valida|nhd-tipo) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
-    if [ "$FAKE_MODE" = nhd-valida ]; then printf '%s\n' "Open decision: budget — four iterations used, three majors still open" >> "$spec"
+    if [ "$FAKE_MODE" = nhd-valida ]; then printf '%s\n' "Open decision: spec — FR1 can be read in two ways and the code does not settle it" >> "$spec"
     else printf '%s\n' "Open decision: hunch — the counter looks too small ($l)" >> "$spec"; fi ;;
   impl-bg) riga="PHASE RESULT implement: STOP — agents pending"
     printf '%s\n' '{"type":"system","subtype":"init"}' \
@@ -1326,7 +1422,7 @@ else check "controprova chiave anti-loop: la mutazione si applica" false; fi
 rnuovo APPROVED; rrun impl-bg
 check "ripresa: implement STOP con un agente in background non raccolto → STOP finale, nessuna ripresa, la prova nella riga" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-implement " ] && [ ! -f "$RR/log/01-implement.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT implement: STOP — agents pending · prova: .*spec-r.run/log/01-implement.esito" "$T/run.out"'
 rnuovo; rrun nhd-valida
-check "ripresa: plan NEEDS HUMAN DECISION con Open decision: budget valida → STOP finale, nessun rilancio (non sovra-accetta)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "· prova: .*spec-r.md" "$T/run.out"'
+check "ripresa: plan NEEDS HUMAN DECISION con Open decision: spec valida → STOP finale, nessun rilancio (non sovra-accetta)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "· prova: .*spec-r.md" "$T/run.out"'
 rnuovo; rrun nhd-tipo FIC_RIPRESE=1
 K=$(printf '%s' "the counter looks too small (01-plan)" | sha256sum | cut -c1-8)
 check "ripresa: Open decision non valida (tipo fuori lista) → RIPRENDIBILE, «declassata: <chiave>» nel .ripresa e in driver.log; FIC_RIPRESE=1 → limite alla seconda" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=$K · " "$RR/driver.log" && [ "$(rf 02-plan esito) $(rf 02-plan max)" = "limite 1" ]'
@@ -1403,6 +1499,21 @@ check "ripresa: maat.json invalido → 0 riprese e un AVVISO" '[ $rc -eq 1 ] && 
 rnuovo; rrun nhd-tipo
 check "ripresa: la prova di una decisione nel .ripresa e' relativa alla radice (spec-r.md), mai un percorso assoluto" 'p=$(rf 01-plan prova); case "$p" in /*|?:*) false ;; *spec-r.md) true ;; *) false ;; esac'
 rm -f "$T"/drv-clok.py "$T"/drv-tetto.py "$T"/drv-registro.py "$T"/drv-causa.py "$T/cs-tr" "$T/maat-rotto.json"
+# (B10, D3) the relaunch on a declassified decision: the prompt names its key, the same as the .ripresa and driver.log
+rnuovo; rrun nhd-tipo FIC_RIPRESE=1
+K=$(printf '%s' "the counter looks too small (01-plan)" | sha256sum | cut -c1-8)
+check "ripresa (B10): il prompt di 02-plan dice «decisione umana senza prova eseguita — decisione <chiave>: <testo>», la chiave del .ripresa e di driver.log" 'grep -q "^RIPRESA (driver): 1/1 — decisione umana senza prova eseguita — decisione $K: the counter looks too small (01-plan) (" "$FAKE_CALLS.02-plan.prompt" && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · .* · declassata=$K · " "$RR/driver.log"'
+# (B10) a non-mechanical decision: the final STOP says so, driver.log keeps the line for cycle-report.py and the review
+rnuovo; rrun nhd-valida
+check "ripresa (B10): Open decision: spec → STOP finale con «decisione non verificata da script: spec» e la riga in driver.log" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && grep -q "Driver result: STOP — .*decisione non verificata da script: spec · prova: .*spec-r.md" "$T/run.out" && grep -q " Decisione non verificata da script: 01-plan · decisione umana: spec — " "$RR/driver.log"'
+cat > "$T/cs-rev" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "State: rev-fisso" "Next: REVIEW — finto"
+EOF
+chmod +x "$T/cs-rev"
+rrun ok FIC_CYCLE_STATE="$T/cs-rev" FIC_MAX_FASI=1
+check "  la review successiva riceve «DECISIONE NON VERIFICATA (driver): 01-plan · …» nel prompt" 'grep -q "^DECISIONE NON VERIFICATA (driver): 01-plan · decisione umana: spec — .* — una decisione umana del piano che nessuno script ha verificato" "$FAKE_CALLS.02-review.prompt"'
+rm -f "$T/cs-rev"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"

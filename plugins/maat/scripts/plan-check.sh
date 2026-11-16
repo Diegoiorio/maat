@@ -9,7 +9,8 @@
 #   plan-check.sh lint         <spec> [--baseline <copia>] structure of the plan section
 #   plan-check.sh contract     <spec>                      verification contract, for /implementation-review-cycle
 #   plan-check.sh basis        <spec>                      is the approval still the one of this spec and this plan?
-#   plan-check.sh lint2        <spec>                      structure of a FORMAT 2 plan (Plan format: 2)
+#   plan-check.sh lint2        <spec> [--run-dir <dir>]    structure of a FORMAT 2 plan (Plan format: 2); 1.8.0: the
+#                                                          probes against the registered resumes of <dir> (<spec>.run)
 #   plan-check.sh gen          <spec> [--run-dir <dir>]    procedure generated from a format 2 plan (commands, mutations.json)
 #   plan-check.sh route        <spec> [--diff <file>]      L5: surfaces detected from the files, light or full path
 #   plan-check.sh s2           <spec> --delta <f> --gate <f> [--respinti <n>]   S2: delta and fresh eyes clean?
@@ -1391,7 +1392,63 @@ def report_nessuno(M):
     return out
 
 
-def lint2(M, root):
+# 1.8.0 (D3, B10): the probe of a declassified decision, a list item of the plan zone, the tokens the same in every
+# language: «⚠️ Rischio da verificare in test-red: <claim> — sonda: <Tn> — decisione: <key> — se vera: «<expected>»».
+# It is valid only if <key> is a «declassata:» key of a .ripresa of the run dir REGISTERED in driver.log (driver.py
+# riprese(), the single reader: DRIVER_PY, exported by need_py), <Tn> is a row of the test table and it is the first
+# probe of that key. lint2 gives VIOLAZIONE for every other probe line; rossi ignores it (a normal row).
+SONDA_PREF = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio da verificare in test-red:")
+SONDA = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio da verificare in test-red:[ \t]*(\S.*?)[ \t]+\u2014[ \t]+sonda:[ \t]*"
+                   r"([A-Za-z0-9._-]+)[ \t]+\u2014[ \t]+decisione:[ \t]*([0-9a-f]{8})[ \t]+\u2014[ \t]+se vera:[ \t]*"
+                   r"\u00ab(.+)\u00bb[ \t]*$")
+
+
+def declassate(run):
+    """(keys declassified by the registered .ripresa files of the run dir, [labels of the ignored ones], error)"""
+    if not run or not os.path.isdir(os.path.join(run, "log")):
+        return set(), [], ""
+    try:
+        sp = importlib.util.spec_from_file_location("maat_driver_pc", os.environ["DRIVER_PY"])
+        drv = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(drv)
+        reg, ign = drv.riprese(run)
+    except BaseException as e:   # the driver cannot be read: no probe is valid (fail-closed)
+        return set(), [], str(e)[:200] or type(e).__name__
+    return set(k for _l, d in reg for k in d.get("declassata") or []), ign, ""
+
+
+def sonde(M, run):
+    """({Tn: {decisione, affermazione, atteso, riga}} of the valid probes, [VIOLAZIONE texts], [AVVISO texts])"""
+    righe = [(n, x) for n, x in M["plan"] if SONDA_PREF.search(x)]
+    if not righe:
+        return {}, [], []
+    keys, ign, err = declassate(run)
+    E, W, ok, viste = [], [], {}, set()
+    if err:
+        W.append(_msg.T("plan-check-180.probe_driver", e=err))
+    for lab in ign:
+        W.append(_msg.T("plan-check-180.probe_ignored", label=lab))
+    for n, x in righe:
+        m = SONDA.search(x)
+        if not m:  # SONDA-FORMA
+            E.append(_msg.T("plan-check-180.probe_form", n=n))
+            continue
+        aff, tid, k, att = m.groups()
+        if tid not in M["tests"]:  # SONDA-RIGA
+            E.append(_msg.T("plan-check-180.probe_no_row", n=n, id=tid))
+        elif k in viste:  # SONDA-SECONDA
+            E.append(_msg.T("plan-check-180.probe_second", n=n, k=k))
+        elif k not in keys:  # SONDA-SENZA-RIPRESA
+            E.append(_msg.T("plan-check-180.probe_no_resume", n=n, k=k))
+        elif tid in ok:
+            E.append(_msg.T("plan-check-180.probe_same_row", n=n, id=tid))
+        else:
+            ok[tid] = {"decisione": k, "affermazione": aff.strip(), "atteso": att.strip(), "riga": n}
+        viste.add(k)
+    return ok, E, W
+
+
+def lint2(M, root, run=None):
     E, W = M["E"], M["W"]
     tests, steps = M["tests"], M["steps"]
     E.extend(M["G"])
@@ -1428,6 +1485,10 @@ def lint2(M, root):
                 E.append(_msg.T("plan-check.step_not_touched", n=S["n"], id=S["id"], f=f))
             if not path_ok(root, f, M):
                 E.append(_msg.T("plan-check.step_path", n=S["n"], id=S["id"], f=f))
+    if run is not None:   # the probes (B10): None = not checked (taglia measures the structure only)
+        _ok, e2, w2 = sonde(M, run)  # CONTROLLO-SONDE-LINT2
+        E.extend(e2)
+        W.extend(w2)
     for n, t in M["plan"]:
         if RISK.search(t) and not any(re.search(r"(?<![A-Za-z0-9._-])" + re.escape(tid) + r"(?![A-Za-z0-9._-])", t) for tid in tests):
             E.append(_msg.T("plan-check.risk_no_test", n=n))
@@ -2866,7 +2927,7 @@ elif cmd == "rossi":
 elif cmd == "l2":
     sys.exit(cmd_l2(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 if cmd == "lint2":
-    sys.exit(lint2(M, sys.argv[2]))
+    sys.exit(lint2(M, sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else ""))
 elif cmd == "gen":
     sys.exit(gen(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 elif cmd == "route":
@@ -2892,6 +2953,12 @@ need_py() {
     NOMI_TEST_PY=$(maat_cygm "$NOMI_TEST_PY" 2>/dev/null || printf '%s' "$NOMI_TEST_PY")
   fi
   export NOMI_TEST_PY
+  # 1.8.0 (B10): driver.py, the single reader of the registered .ripresa files (the probes of lint2 and rossi)
+  if [ -z "${DRIVER_PY:-}" ]; then
+    DRIVER_PY=$PC_HERE/driver.py; [ -f "$DRIVER_PY" ] || DRIVER_PY=$MAAT_SCRIPTS/driver.py
+    DRIVER_PY=$(maat_cygm "$DRIVER_PY" 2>/dev/null || printf '%s' "$DRIVER_PY")
+  fi
+  export DRIVER_PY
   export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0
@@ -2904,11 +2971,20 @@ repo_root() {
 has_plan_section() { printf '%s\n' "$1" | awk -F'\t' '$2 != "above" { f = 1 } END { exit !f }'; }
 
 cmd_lint2() {
-  [ $# -eq 1 ] && [ -f "$1" ] || die_usage
-  local ann; ann=$(annotate "$1")
+  local spec="" run=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      -*) die_usage ;;
+      *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] || die_usage
+  [ -n "$run" ] || run="${spec%.md}.run"   # 1.8.0 (B10): the run dir of the probes, as gen and rossi
+  local ann; ann=$(annotate "$spec")
   has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
-  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" lint2 "$(repo_root "$1")"
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" lint2 "$(repo_root "$spec")" "$(maat_cygm "$run" 2>/dev/null || printf '%s' "$run")"
 }
 
 cmd_gen() {

@@ -450,6 +450,35 @@ sed 's/^- \[pavimento: permessi\] T1$/&\n- ⚠️ Rischio aperto: la barra lampe
 expect 1 "VIOLAZIONE: riga [0-9]+: rischio aperto senza un test assegnato" "lint2: rischio aperto senza test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-risk.md"
 sed 's/^- ⚠️ Rischio aperto: la barra lampeggia$/& — T2/' "$T/f2-risk.md" > "$T/f2-risk-ok.md"
 expect 0 "^lint2: OK$" "lint2: rischio aperto con il suo test = pulito" -- bash "$PC" lint2 "$T/f2-risk-ok.md"
+# 1.8.0 (B10, D3): the probe line of a declassified decision. lint2 [--run-dir <d>] (default <spec>.run): the key must be
+# a «declassata:» of a .ripresa REGISTERED in driver.log (driver.py riprese()), Tn a row of the test table, one probe per
+# key. lint accepts the new lines (Open decision, Executed proof, the probe).
+KS=a1b2c3d4
+regrip() { # <run dir> <key> [nolog]: log/01-plan.ripresa declassifying <key>, registered in driver.log unless nolog
+  mkdir -p "$1/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: $2" > "$1/log/01-plan.ripresa"
+  if [ "${3:-}" = nolog ]; then : > "$1/driver.log"
+  else printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$1/log/01-plan.ripresa" | cut -c1-12)" > "$1/driver.log"; fi
+}
+SONDA_T1="- ⚠️ Rischio da verificare in test-red: la barra non regge cento obiettivi — sonda: T1 — decisione: $KS — se vera: «too many goals»"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n$SONDA_T1/" "$T/f2.md" > "$T/f2-sonda.md"; regrip "$T/f2-sonda.run" $KS
+expect 0 "^lint2: OK$" "lint2 sonda: chiave declassata da una ripresa registrata (run dir predefinito <spec>.run) = pulito" -- bash "$PC" lint2 "$T/f2-sonda.md"
+cp "$T/f2-sonda.md" "$T/f2-sonda-nr.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata che l'abbia declassata" "lint2 sonda senza .ripresa corrispondente = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-nr.md"
+expect 0 "^lint2: OK$" "lint2 --run-dir: il run dir indicato vale al posto di quello predefinito" -- bash "$PC" lint2 "$T/f2-sonda-nr.md" --run-dir "$T/f2-sonda.run"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n$SONDA_T1\n${SONDA_T1/sonda: T1/sonda: T2}/" "$T/f2.md" > "$T/f2-sonda2.md"; regrip "$T/f2-sonda2.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: seconda sonda sulla decisione $KS" "lint2: seconda sonda sulla stessa chiave = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda2.md"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n${SONDA_T1/sonda: T1/sonda: T9}/" "$T/f2.md" > "$T/f2-sonda9.md"; regrip "$T/f2-sonda9.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda T9 non e' una riga del piano di test" "lint2: sonda su un ID fuori tabella = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda9.md"
+cp "$T/f2-sonda.md" "$T/f2-sonda-nl.md"; regrip "$T/f2-sonda-nl.run" $KS nolog
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata" "lint2: .ripresa con la chiave ma senza la riga in driver.log (scritto dalla fase) = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
+expect 1 "AVVISO: .*01-plan.ripresa non registrato in driver.log: ignorato" "lint2: il .ripresa non registrato e' detto in un AVVISO" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n- ⚠️ Rischio da verificare in test-red: la barra non regge — sonda: T1/" "$T/f2.md" > "$T/f2-sonda-f.md"; regrip "$T/f2-sonda-f.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: riga di sonda non nella forma" "lint2: riga di sonda incompleta = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-f.md"
+if mutpc sonda 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        elif False:/'; then
+  expect 0 "^lint2: OK$" "controprova: senza il controllo della ripresa la sonda inventata passa lint2" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-sonda/plan-check.sh" lint2 "$T/f2-sonda-nr.md"
+else echo "FAIL [controprova sonda: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed "s/^Plan status: .*/&\nOpen decision: proof — the bar cannot hold 100 goals\nExecuted proof: \`python3 -c 'import app'\` → «too many goals»/" "$T/f2-sonda.md" > "$T/f2-sonda-l.md"
+expect 0 "lint: OK" "lint: Open decision, Executed proof e la riga di sonda sono righe ammesse" -- bash "$PC" lint "$T/f2-sonda-l.md"
 # contract: the format and the open risk lines; format 1 unchanged
 expect 0 "^Plan format: 2$" "contract: formato 2 dichiarato in coda" -- bash "$PC" contract "$T/f2.md"
 expect 0 "^Rischio: riga [0-9]+ — ⚠️ Rischio aperto: la barra lampeggia — T2$" "contract: il rischio aperto e' un focus di rischio" -- bash "$PC" contract "$T/f2-risk-ok.md"
