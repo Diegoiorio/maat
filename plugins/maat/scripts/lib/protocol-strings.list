@@ -156,5 +156,5 @@ scripts/driver.py	^"(OK-DEVIAZIONE|deviazione|deviazione-test|piano)"$	classe e 
 scripts/driver.py	\.rossi\b|rossi\.json|rossi: esito=|\.deviazioni-test	nomi di file del run dir (log/<label>.rossi, test-red/rossi.json, log/<label>.deviazioni-test) e prefisso della riga di plan-check.sh rossi, letti da classifica
 
 # --- 1.8.0 (B9): the resumes of the driver (log/<label>.ripresa, the Ripresa: line of driver.log, ciclo.riprese)
-scripts/driver.py	^"(limite|senza-progresso|ciclo|riprese)"$	valori di esito= del file .ripresa (rilancio | limite | senza-progresso), letti da next, lint2 e rossi (B10, B12), e la chiave ciclo.riprese di maat.json: uguali in ogni lingua
+scripts/driver.py	^"(limite|senza-progresso|ciclo|riprese)"$|^"ciclo\.riprese=%s"$	valori di esito= del file .ripresa (rilancio | limite | senza-progresso), letti da next, lint2 e rossi (B10, B12), e la chiave ciclo.riprese di maat.json: uguali in ogni lingua
 scripts/maat-config.py	^"(ciclo|riprese|ciclo\.riprese)"$|^"ciclo => harness >=1\.8 or newer; ciclo\.riprese >= 0"$	chiave di maat.json ciclo.riprese (S12) e la sua descrizione nella tabella SEMANTICA (documentazione)

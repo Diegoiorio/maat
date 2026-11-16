@@ -1255,10 +1255,19 @@ cat > "$T/rp-ripresa" <<'EOF'
 #!/usr/bin/env bash
 # fake run-phase.sh for the resumes: <run-dir> <label> <prompt>
 d=$1 l=$2; mkdir -p "$d/log"; echo "$l" >> "$FAKE_CALLS"; spec="${d%.run}.md"; cp "$3" "$FAKE_CALLS.$l.prompt"
-ph=${l#*-}; fnd=""; bloc=nessuno; riga="PHASE RESULT $ph: STOP — round 1 not collected"
+ph=${l#*-}; fnd=""; bloc=nessuno; es=STOP; riga="PHASE RESULT $ph: STOP — round 1 not collected"
 : > "$d/log/$l.jsonl"
 case "$FAKE_MODE" in
   draft) printf '%s\n' "2. Passo aggiunto da $l." >> "$spec" ;;   # progress: the plan changes at every phase
+  ok-draft) riga="PHASE RESULT $ph: OK — done"; es=OK; printf '%s\n' "2. Passo aggiunto da $l." >> "$spec" ;;   # (B9 review) OK on a DRAFT
+  draft-cancella|draft-altera) printf '%s\n' "2. Passo aggiunto da $l." >> "$spec"   # (DA10) the phase touches a .ripresa
+    if [ "$l" = 02-plan ]; then
+      if [ "$FAKE_MODE" = draft-cancella ]; then rm -f "$d/log/01-plan.ripresa"; else echo "n=0" >> "$d/log/01-plan.ripresa"; fi
+    fi ;;
+  tr-uguale|tr-diverso) mkdir -p "$d/test-red"; riga="PHASE RESULT test-red: STOP — rossi"   # (DA9) a missing symbol
+    sym=MaxDepth; [ "$FAKE_MODE" = tr-diverso ] && sym="Max${l%%-*}"
+    printf '{"esito":"STOP","riassunto":"T1 rosso_raccolta","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: %s","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' "$sym" > "$d/test-red/rossi.json"
+    printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
   draft-fermo) fnd='{"severita":"major","file":"src/a.py","riga":1,"testo":"the same finding"}' ;;   # no progress
   nhd-valida|nhd-tipo) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
     if [ "$FAKE_MODE" = nhd-valida ]; then printf '%s\n' "Open decision: budget — four iterations used, three majors still open" >> "$spec"
@@ -1269,7 +1278,7 @@ case "$FAKE_MODE" in
       '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"Async agent launched successfully.\nagentId: agz1 (internal ID)"}]}}' \
       '{"type":"system","subtype":"init"}' '{"type":"result","subtype":"success","result":"STOP"}' > "$d/log/$l.jsonl" ;;
 esac
-printf '{"fase":"%s","esito":"STOP","motivo":"m","deviazioni":[],"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[%s]}\n' "$ph" "$bloc" "$fnd" > "$d/log/$l.result.json"
+printf '{"fase":"%s","esito":"%s","motivo":"m","deviazioni":[],"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[%s]}\n' "$ph" "$es" "$bloc" "$fnd" > "$d/log/$l.result.json"
 printf '%s\nstate=x\n' "$riga" > "$d/log/$l.esito"; echo 0 > "$d/log/$l.exit"
 exit 0
 EOF
@@ -1332,9 +1341,68 @@ forgia() { rnuovo; mkdir -p "$RR/log"; printf '%s\n' "classe=RIPRENDIBILE" "fase
 forgia; rrun draft FIC_RIPRESE=1
 check "ripresa: un .ripresa senza la sua riga in driver.log non conta (01 rilancio, 02 limite) ed e detto in un AVVISO" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -q "AVVISO: .*00-plan.ripresa non è registrato in driver.log: ignorato" "$RR/driver.log"'
 if tmut reg 's/^\( *\)if _ripresa_riga(label, d, .*# RIPRESA-REGISTRATA$/\1if True:/'; then
-  forgia; RRUN_DRV="$T/drv-reg.py" rrun draft FIC_RIPRESE=1
-  check "controprova: senza il controllo della registrazione il .ripresa forgiato conta e 01-plan va subito al limite (rosso)" '[ "$(rcalls)" = "01-plan " ]'
+  # (DA10) the counts come from driver.log: what the registration still guards is R1/R2 of next. A phase writes a STOP
+  # 00-plan and a .ripresa esito=limite at the State of now: registered, next would stop without launching
+  forgia2() { rnuovo; mkdir -p "$RR/log"; printf '%s\n' "PHASE RESULT plan: STOP — x" > "$RR/log/00-plan.esito"
+    printf '%s\n' "classe=RIPRENDIBILE" "fase=plan" "esito=limite" "n=1" "n_fase=1" "max=1" \
+      "state=$("$FIC_PY" "$DRV" next "$SR" 2>/dev/null | sed -n 's/^State: //p' | tr -d '\r')" > "$RR/log/00-plan.ripresa"; }
+  forgia2; rrun draft FIC_RIPRESE=1
+  check "ripresa: un .ripresa esito=limite forgiato da una fase (non registrato) non ferma next: 01-plan parte" 'grep -qx 01-plan "$FAKE_CALLS"'
+  forgia2; RRUN_DRV="$T/drv-reg.py" rrun draft FIC_RIPRESE=1
+  check "controprova: senza il controllo della registrazione il .ripresa forgiato ferma il ciclo senza lanci (rosso)" '[ "$(rcalls)" = "" ]'
 else check "controprova registrazione: la mutazione si applica" false; fi
+# (B9 review) an OK line is classified too: a plan OK on a spec still DRAFT is a final STOP, not the uncounted DRAFT -> PLAN
+rnuovo; rrun ok-draft
+check "ripresa (review B9): plan OK con la spec DRAFT → classifica dopo la riga OK: STOP finale dopo 01-plan con la prova" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT plan: OK — done · riga OK di una fase plan con Plan status DRAFT: non approvato · prova: .*spec-r.md" "$T/run.out"'
+if tmut clok 's/^\( *\)c = classifica(fase, run_fs, label, spec_fs)  # CLASSIFICA-OK$/\1c = Classe("OK", "ok", "", "")/'; then
+  rnuovo; RRUN_DRV="$T/drv-clok.py" rrun ok-draft FIC_MAX_FASI=3
+  check "controprova: senza classifica sulla riga OK la riga DRAFT → PLAN rilancia il piano senza contarlo (02-plan: rosso)" 'case "$(rcalls)" in "01-plan 02-plan "*) true ;; *) false ;; esac && [ ! -f "$RR/log/01-plan.ripresa" ]'
+else check "controprova classifica OK: la mutazione si applica" false; fi
+# (B9 review) the total cap of the cycle is the limit that triggers: FIC_RIPRESE=5, the fourth STOP is the limit 3/3
+rnuovo; rrun draft FIC_RIPRESE=5
+check "ripresa (review B9): FIC_RIPRESE=5 → 01..04-plan, 04-plan.ripresa esito=limite n=3, STOP «limite delle riprese: 3/3 nel ciclo»" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan 02-plan 03-plan 04-plan " ] && [ "$(rf 04-plan esito) $(rf 04-plan n)" = "limite 3" ] && grep -q "Driver result: STOP — limite delle riprese: 3/3 nel ciclo, 3/5 per plan" "$T/run.out"'
+if tmut tetto 's/ or n_tot >= RIPRESE_CICLO:  # LIMITE-RIPRESE$/:  # LIMITE-RIPRESE/'; then
+  rnuovo; RRUN_DRV="$T/drv-tetto.py" rrun draft FIC_RIPRESE=5
+  check "controprova: senza il tetto di 3 per ciclo la quinta fase parte (05-plan: rosso)" 'grep -qx 05-plan "$FAKE_CALLS"'
+else check "controprova tetto del ciclo: la mutazione si applica" false; fi
+# (DA10) the count comes from the Ripresa: lines of driver.log: a registered .ripresa deleted or edited by a phase does
+# not lower it (01 rilancio n=1, 02 rilancio n=2, 03 limite)
+for m in draft-cancella draft-altera; do
+  rnuovo; rrun $m
+  check "ripresa (DA10, $m): 01-plan.ripresa toccato dalla fase 02-plan → il contatore resta: 02-plan n=2, 03-plan limite" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan 02-plan 03-plan " ] && [ "$(rf 02-plan esito) $(rf 02-plan n)" = "rilancio 2" ] && [ "$(rf 03-plan esito)" = limite ]'
+done
+if tmut registro 's/^\( *\)ril = rilanci_registro(run_fs)  # LIMITI-DAL-REGISTRO$/\1ril = [l for l, x in riprese(run_fs)[0] if x.get("esito") == "rilancio"]/'; then
+  rnuovo; RRUN_DRV="$T/drv-registro.py" rrun draft-cancella
+  check "controprova: contando dai file il .ripresa cancellato abbassa il contatore (02-plan n=1, 04-plan: rosso)" '[ "$(rf 02-plan n)" = 1 ] && grep -qx 04-plan "$FAKE_CALLS"'
+else check "controprova conteggio dal registro: la mutazione si applica" false; fi
+# (DA9) a test-red resume inside run (a fake next that says TEST-RED): the progress is the cause, the missing symbols
+cat > "$T/cs-tr" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "State: tr-fisso" "Next: TEST-RED — finto"
+EOF
+chmod +x "$T/cs-tr"
+rnuovo APPROVED; rrun tr-uguale FIC_CYCLE_STATE="$T/cs-tr"
+check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio (prompt 1/2 in 02), 02 senza-progresso, STOP" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito) $(rf 01-test-red regola)" = "rilancio simbolo" ] && grep -q "^RIPRESA (driver): 1/2 — stub mancanti: T1: undefined: MaxDepth — " "$FAKE_CALLS.02-test-red.prompt" && [ "$(rf 02-test-red esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso" "$T/run.out"'
+check "  la chiave rilievi di test-red porta l'impronta dei simboli: «-;<8 hex>»" '[ -n "$(rf 01-test-red rilievi | grep -x -- "-;[0-9a-f]\{8\}")" ]'
+rnuovo APPROVED; rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
+check "ripresa test-red (DA9): un simbolo diverso a ogni fase → seconda ripresa, poi il limite 2/2" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red 03-test-red " ] && [ "$(rf 02-test-red esito)" = rilancio ] && [ "$(rf 03-test-red esito)" = limite ]'
+if tmut causa 's/ + (";" + kc if kc else ""),  # CAUSA-TEST-RED$/,  # CAUSA-TEST-RED/'; then
+  rnuovo APPROVED; RRUN_DRV="$T/drv-causa.py" rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
+  check "controprova: senza la causa nella chiave i simboli diversi sembrano senza progresso (02 senza-progresso: rosso)" '[ "$(rf 02-test-red esito)" = senza-progresso ]'
+else check "controprova causa test-red: la mutazione si applica" false; fi
+# (B9 review) resumes off after a rilancio record: the relaunch prompt carries no RIPRESA line
+rnuovo; rrun draft FIC_MAX_FASI=1
+rrun draft FIC_RIPRESE=0 FIC_MAX_FASI=1
+check "ripresa spenta dopo un rilancio registrato: 02-plan senza la riga RIPRESA (driver)" '[ "$(rcalls)" = "02-plan " ] && [ "$(rf 01-plan esito)" = rilancio ] && ! grep -q "RIPRESA" "$FAKE_CALLS.02-plan.prompt"'
+# (B9 review) ciclo.riprese unreadable → 0 with one AVVISO; the proof of a decision is relative to the repository
+rnuovo; rrun draft FIC_RIPRESE=abc
+check "ripresa: FIC_RIPRESE=abc → lo STOP della 1.7 e un solo AVVISO «ciclo.riprese illeggibile»" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ "$(grep -c "AVVISO: ciclo.riprese illeggibile (FIC_RIPRESE=abc)" "$T/run.out")" = 1 ]'
+printf '{ non json\n' > "$T/maat-rotto.json"
+rnuovo; rrun draft MAAT_CONFIG="$T/maat-rotto.json"
+check "ripresa: maat.json invalido → 0 riprese e un AVVISO" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ "$(grep -c "AVVISO: ciclo.riprese illeggibile" "$T/run.out")" = 1 ]'
+rnuovo; rrun nhd-tipo
+check "ripresa: la prova di una decisione nel .ripresa e' relativa alla radice (spec-r.md), mai un percorso assoluto" 'p=$(rf 01-plan prova); case "$p" in /*|?:*) false ;; *spec-r.md) true ;; *) false ;; esac'
+rm -f "$T"/drv-clok.py "$T"/drv-tetto.py "$T"/drv-registro.py "$T"/drv-causa.py "$T/cs-tr" "$T/maat-rotto.json"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"
