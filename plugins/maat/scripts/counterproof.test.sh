@@ -339,14 +339,19 @@ check "pytest: import rotto in raccolta -> rosso_import" '[ "$(field PYI esito)"
 PYP=$(mj pyp.json "[$(entry PYP modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::test_uno' 'assert 2 == 1')]")
 PYC=$(mj pyc.json "[$(entry PYC modules/api/app/core.py 'UNO = 1' 'UNO = 1  # ROSSO' modules/api/tests/test_core.py 'tests/test_core.py::TestC' 'assert 2 == 1')]")
 VTD=$(mj vtd.json "[$(entry VTD $V/src.ts 'x = 1' 'x = 2 // ROSSO' "$V/tests/a.test.ts" 'somma')]")
+# 1.8.0 (CI): each <id>.json removed before its run, so an outcome is never the one of the run before (a run that
+# writes nothing gives an empty outcome); $T/nomi keeps, per case, the outcome, the exit and the last line of the run
 caso_nomi() { # [NOMI_TEST_PY]: the three cases -> 0 if all rosso_asserzione
-  NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; local a=$(field PYP esito)
-  NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; local b=$(field PYC esito)
-  NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; local c=$(field VTD esito)
-  echo "$a $b $c" > "$T/nomi"
+  local a b c
+  rm -f "$OUT/PYP.json"; NOMI_TEST_PY=${1:-} FAKE_PY_NAME='test_uno[a]' cpr "$PYP"; a=$(field PYP esito)
+  echo "PYP=${a:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" > "$T/nomi"
+  rm -f "$OUT/PYC.json"; NOMI_TEST_PY=${1:-} FAKE_PY_CLASS=tests.test_core.TestC FAKE_PY_NAME=test_a cpr "$PYC"; b=$(field PYC esito)
+  echo "PYC=${b:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" >> "$T/nomi"
+  rm -f "$OUT/VTD.json"; NOMI_TEST_PY=${1:-} FIC_CP_PARALLEL=1 cpr "$VTD"; c=$(field VTD esito)
+  echo "VTD=${c:-(nessuno)} rc=$(rc) · $(tail -1 "$T/out")" >> "$T/nomi"
   [ "$a $b $c" = "rosso_asserzione rosso_asserzione rosso_asserzione" ]
 }
-check "pytest test_uno[a] e classe TestC, vitest su un describe -> rosso_asserzione (D1-bis)" 'caso_nomi || { echo "    $(cat "$T/nomi")"; false; }'
+check "pytest test_uno[a] e classe TestC, vitest su un describe -> rosso_asserzione (D1-bis)" 'caso_nomi || { sed "s/^/    /" "$T/nomi"; false; }'
 cp "$HERE/nomi_test.py" "$T/nomi-uguale.py"
 python3 - "$T/nomi-uguale.py" <<'PY'
 import sys
@@ -355,7 +360,8 @@ a = "    for k in range(0, m - n):   # RELAZIONE-DISCENDENTE"
 assert s.count(a) == 1
 open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
 PY
-check "controprova: relazione ridotta all uguaglianza -> i tre casi non sono rosso_asserzione: rosso" '! caso_nomi "$T/nomi-uguale.py"'
+check "controprova: relazione ridotta all uguaglianza -> i tre casi non sono rosso_asserzione: rosso" \
+  'grep -qF "    return \"altro\"" "$T/nomi-uguale.py" && ! caso_nomi "$T/nomi-uguale.py" || { sed "s/^/    /" "$T/nomi"; false; }'
 
 # 10. invalid input -> 64, nothing run
 cpr "$(mj bad.json "[$(entry X modules/api/app/core.py 'UNO = 1' 'UNO = 2')]")"
@@ -731,7 +737,13 @@ rm -f "$SX/link.txt"; ln -s dati.txt "$SX/link.txt"   # the mirror as before the
 mkdir -p "$R/top"
 echo 'UNO=1' > "$R/top/core.txt"
 printf 'echo ran >> "$FAKE_LOG.all"\ngrep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/top/t.sh"
-printf 'setsid sleep 27 > /dev/null 2>&1 < /dev/null & echo $! > "$FAKE_LOG.orfano"\ngrep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }\nexit 0\n' > "$R/top/t-o.sh"
+# the orphan: a sleep in a session of its own, by Python's os.setsid (macOS has no setsid command: the CI of 1.8.0 was
+# red there, the orphan never started); it keeps the descriptors it inherits, like `setsid sleep`
+cat > "$R/top/t-o.sh" <<'EOF'
+python3 -c 'import os; os.setsid(); os.execvp("sleep", ["sleep", "27"])' > /dev/null 2>&1 < /dev/null & echo $! > "$FAKE_LOG.orfano"
+grep -q ROSSO top/core.txt && { echo "rosso: ROSSO"; exit 1; }
+exit 0
+EOF
 (cd "$R" && git add -A && git commit -qm radice) > /dev/null 2>&1
 SVC='{"nome": "svc", "radice": "y/svc", "collega_nel_worktree": ["deps"], '"$CMDC"'}'
 FE='{"nome": "fe", "radice": "modules/app/apps/admin", "radice_pacchetti": "modules/app", "copia": {"test": "true {test}"}}'
