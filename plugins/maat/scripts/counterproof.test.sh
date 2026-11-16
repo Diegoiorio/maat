@@ -321,16 +321,19 @@ check "secondo scrittore durante il gradino 2 -> attende e resta fuori (exit 3),
 check "  il secondo non ha eseguito nulla e non ha cambiato il mirror" '[ ! -e "$T/second/S1.json" ] && [ "$(mir_hash)" = "$MIRS" ]'
 
 # 2. lock held beyond the cap -> exit 3, nothing run, no fallback
-( flock -w 30 9 || exit 1; sleep 5 ) 9>"$M/.fic-lock" & holder=$!
-sleep 1
+# 1.8.0 (CI): the holder says when it has the lock (preso), the case waits for it instead of a fixed second: under
+# load the second was not enough and counterproof.sh took the lock first (2 FAIL in a run on 4 loaded CPUs)
+preso_attendi() { local k=0; while [ ! -e "$1" ] && [ $k -lt 300 ]; do sleep 0.1; k=$((k + 1)); done; rm -f "$1"; }
+rm -f "$T/preso"; ( flock -w 30 9 || exit 1; : > "$T/preso"; sleep 5 ) 9>"$M/.fic-lock" & holder=$!
+preso_attendi "$T/preso"
 FIC_LOCK_WAIT=1 cpr "$LIST"
 check "lock occupato oltre il tetto -> exit 3, BLOCKED" '[ "$(rc)" = 3 ] && grep -q "esito=BLOCKED (mirror occupato" "$T/out"'
 check "  nessun runner lanciato (ne mirror ne /mnt/c)" '[ ! -f "$FAKE_LOG.all" ]'
 wait $holder
 
 # 3. lock held but released within the cap -> waits and runs
-( flock -w 30 9 || exit 1; sleep 2 ) 9>"$M/.fic-lock" & holder=$!
-sleep 1
+rm -f "$T/preso"; ( flock -w 30 9 || exit 1; : > "$T/preso"; sleep 2 ) 9>"$M/.fic-lock" & holder=$!
+preso_attendi "$T/preso"
 FIC_LOCK_WAIT=20 cpr "$(mj one.json "[$(entry A1 $V/src.ts 'x = 1' 'x = 2 // ROSSO')]")"
 check "lock liberato entro il tetto -> attende ed esegue" '[ "$(rc)" = 0 ] && tail -1 "$T/out" | grep -q "esito=PASS prove=1/1"'
 wait $holder
@@ -943,8 +946,8 @@ check "  da un worktree: gira nella copia del worktree, il file .git non è copi
 # the lock of a sibling held: with copia (fe, as test-fast.sh takes it) and without (svc, as a counterproof on svc)
 caso_lock_fratello() { # <config> <lock> [script]: the lock held by another process -> exit 3 with that lock, nothing synced, no run
   local h; semina16; AL0=$(albero_copia)
-  ( flock -w 30 9 || exit 1; exec sleep 30 ) 9>"$2" & h=$!
-  sleep 0.5
+  rm -f "$T/preso"; ( flock -w 30 9 || exit 1; : > "$T/preso"; exec sleep 30 ) 9>"$2" & h=$!
+  preso_attendi "$T/preso"
   MAAT_CONFIG=$1 FIC_LOCK_WAIT=1 CPX=${3:-} cpr "$LR1"
   kill "$h" 2>/dev/null; wait "$h" 2>/dev/null
   [ "$(rc)" = 3 ] && grep -qF "esito=BLOCKED (mirror occupato oltre 1s (lock $2)" "$T/out" && [ "$(albero_copia)" = "$AL0" ] && [ ! -f "$FAKE_LOG.all" ]
@@ -959,11 +962,11 @@ check "  nessun modulo con copia: lock del fratello svc tenuto -> exit 3 senza s
 caso_scadenza() { # [script] -> 0 if exit 3 on the lock of svc within 7.5 s of the count line
   local h1 h2 h3 dt
   rm -f "$T/out" "$T/t-avvio" "$T/t-esito"
-  ( flock -w 30 9 || exit 1; k=0; until grep -q "da eseguire" "$T/out" 2>/dev/null || [ $k -ge 1200 ]; do sleep 0.05; k=$((k + 1)); done; date +%s%N > "$T/t-avvio"
+  rm -f "$T/preso1"; ( flock -w 30 9 || exit 1; : > "$T/preso1"; k=0; until grep -q "da eseguire" "$T/out" 2>/dev/null || [ $k -ge 1200 ]; do sleep 0.05; k=$((k + 1)); done; date +%s%N > "$T/t-avvio"
     exec sleep 3 ) 9>"$MR/.fic-lock" & h1=$!
-  ( flock -w 30 9 || exit 1; exec sleep 60 ) 9>"$SVCL" & h2=$!
+  rm -f "$T/preso"; ( flock -w 30 9 || exit 1; : > "$T/preso"; exec sleep 60 ) 9>"$SVCL" & h2=$!
   ( k=0; until grep -q "esito=" "$T/out" 2>/dev/null || [ $k -ge 1200 ]; do sleep 0.05; k=$((k + 1)); done; date +%s%N > "$T/t-esito" ) & h3=$!
-  sleep 0.3
+  preso_attendi "$T/preso1"; preso_attendi "$T/preso"
   MAAT_CONFIG=$T/radn.json FIC_LOCK_WAIT=6 CPX=${1:-} cpr "$LR1"
   sleep 0.2; kill "$h1" "$h2" "$h3" 2>/dev/null; wait "$h1" "$h2" "$h3" 2>/dev/null
   dt=$(( ($(cat "$T/t-esito" 2>/dev/null || echo 0) - $(cat "$T/t-avvio" 2>/dev/null || echo 0)) / 1000000 ))
