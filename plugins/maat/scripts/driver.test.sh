@@ -1326,7 +1326,23 @@ done
 clp nm-dopo plan 0 "$NHS" "$STP" "$NH" "Open decision: spec — FR2 can be read in two ways"
 printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: 0badc0de" > "$CL/nm-dopo.run/log/00-plan.ripresa"
 printf '2026-11-16T10:00:00Z Ripresa: 00-plan · esito=rilancio · n=1 · declassata=0badc0de · sha=%s\n' "$(sha256sum < "$CL/nm-dopo.run/log/00-plan.ripresa" | cut -c1-12)" > "$CL/nm-dopo.run/driver.log"
-CASI="p-ok:plan p-nessuna:plan p-inventata:plan p-echo:plan p-pyc:plan p-spec:plan p-side:plan b-ok:plan b-giri:plan b-light:plan b-light-ok:plan c-ok:plan c-sotto:plan s-ok:plan s-inventata:plan s-noid:plan nm-recurrence:plan nm-ricorrenza:plan nm-dispute:plan nm-partial:plan nm-dopo:plan nhd-spec:plan"
+# (B10-B11 review) the DOPO-DECLASSATA signal from driver.log (the .ripresa deleted); more ways around the printing filter;
+# two proofs under one decision, one forged; the R<n> ids of a «## Requisiti» section
+clp nm-dopo-del plan 0 "$NHS" "$STP" "$NH" "Open decision: spec — FR2 can be read in two ways"
+printf '2026-11-16T10:00:00Z Ripresa: 00-plan · esito=rilancio · n=1 · declassata=0badc0de · sha=000000000000\n' > "$CL/nm-dopo-del.run/driver.log"
+for c in "p-cdsemi|cd src; printf 'impossibile %s' 65536|impossibile 65536" "p-gitshow|git show HEAD:src/name.rs|let depth: u16 = 0;" \
+         "p-shc|bash -c 'cat src/name.rs'|let depth: u16 = 0;" "p-env|env X=1 nice -n 5 rg u16 src|let depth: u16 = 0;" \
+         "p-graffa|{ tr a-z A-Z < src/name.rs; }|LET DEPTH: U16"; do
+  IFS='|' read -r nm cmd res <<< "$c"
+  clp "$nm" plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$cmd\` → «$res»"
+  jl "$CL/$nm.run/log/01-plan.jsonl" "$cmd" "$res"
+done
+clp p-due plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$CMDP\` → «RecursionError: depth 65536»" "Executed proof: \`python3 tools/depth.py 7\` → «RecursionError: depth 7»"
+jl "$CL/p-due.run/log/01-plan.jsonl" "$CMDP" "RecursionError: depth 65536"
+clp s-r plan 0 "$NHS" "$STP" "$NH"
+printf '%s\n' "# Spec" "" "## Requisiti" "" "- R1. Esportare il report." "" "## Fuori ambito" "" "- L'esportazione in CSV resta fuori da questa modifica." "" \
+  "## Piano di implementazione" "" "$NH" "Open decision: scope — R1 vuole un file CSV, ma la spec dice «L'esportazione in CSV resta fuori da questa modifica.»" > "$CL/s-r.md"
+CASI="p-ok:plan p-nessuna:plan p-inventata:plan p-echo:plan p-pyc:plan p-spec:plan p-side:plan b-ok:plan b-giri:plan b-light:plan b-light-ok:plan c-ok:plan c-sotto:plan s-ok:plan s-inventata:plan s-noid:plan nm-recurrence:plan nm-ricorrenza:plan nm-dispute:plan nm-partial:plan nm-dopo:plan nhd-spec:plan nm-dopo-del:plan p-cdsemi:plan p-gitshow:plan p-shc:plan p-env:plan p-graffa:plan p-due:plan s-r:plan"
 CLO=$(cla "$DRV")
 check "tipi: la funzione risponde su tutti i casi nuovi" '[ "$(printf "%s\n" "$CLO" | grep -c "	")" = "$(echo $CASI | wc -w)" ] && ! grep -q Traceback "$T/cl.out"'
 cln() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $6 }'; }   # <name> → the cause
@@ -1339,13 +1355,29 @@ check "cut: skeleton rieseguito SOPRA IL TETTO (exit 1) → UMANO; la nota di ta
 check "scope: riga di Out of scope citata ed esistente + ID FR1 → UMANO; riga inventata, o senza ID di requisito → RIPRENDIBILE" '[ "$(clv s-ok)" = "UMANO decisione s-ok.md" ] && [ "$(clv s-inventata)" = "RIPRENDIBILE decisione s-inventata.md" ] && [ "$(clv s-noid)" = "RIPRENDIBILE decisione s-noid.md" ]'
 check "non meccanici (recurrence, ricorrenza, dispute, partial, spec): UMANO con «decisione non verificata da script: <tipo>»" 'for x in nm-recurrence nm-ricorrenza nm-dispute nm-partial; do [ "$(clv $x)" = "UMANO decisione $x.md" ] || exit 1; done; cln nm-ricorrenza | grep -q "· decisione non verificata da script: recurrence$" && cln nm-partial | grep -q "decisione non verificata da script: partial$" && cln nhd-spec | grep -q "decisione non verificata da script: spec$"'
 check "non meccanico dopo una ripresa che aveva declassato una chiave → UMANO e «dopo la ripresa che aveva declassato <chiave>»" '[ "$(clv nm-dopo)" = "UMANO decisione nm-dopo.md" ] && cln nm-dopo | grep -q "decisione non verificata da script: spec · dopo la ripresa che aveva declassato 0badc0de$" && ! cln nhd-spec | grep -q "dopo la ripresa"'
+check "(review B10-B11) dopo una declassata il cui .ripresa e' stato cancellato: il segnale viene da driver.log (DA10)" '[ "$(clv nm-dopo-del)" = "UMANO decisione nm-dopo-del.md" ] && cln nm-dopo-del | grep -q "dopo la ripresa che aveva declassato 0badc0de$"'
+check "(review B10-B11) filtro: «cd x;», git show, bash -c '"'"'cat'"'"', env/nice + rg, «{ tr …; }» → comando che stampa, RIPRENDIBILE" 'for x in p-cdsemi p-gitshow p-shc p-env p-graffa; do [ "$(clv $x)" = "RIPRENDIBILE decisione $x.md" ] && cln $x | grep -q "stampa soltanto" || exit 1; done'
+check "(review B10-B11) due Executed proof sotto una decisione, la seconda inventata → RIPRENDIBILE" '[ "$(clv p-due)" = "RIPRENDIBILE decisione p-due.md" ] && cln p-due | grep -q "non trovata in log/01-plan.jsonl"'
+check "(review B10-B11) scope con «## Requisiti» e l ID R1 delle spec di Maat → UMANO" '[ "$(clv s-r)" = "UMANO decisione s-r.md" ]'
+if tmut dopodel 's/^\( *\)dk = declassate_registro(run_fs) .*$/\1dk = sorted(set(k for _l, r in riprese(run_fs)[0] for k in r.get("declassata") or []))/'; then
+  CLO=$(cla "$T/drv-dopodel.py")
+  check "controprova dopodel: con le declassate lette dai .ripresa il segnale sparisce col file (rosso)" '! cln nm-dopo-del | grep -q "dopo la ripresa"'
+else check "controprova dopodel: la mutazione si applica" false; fi
+clmut puntoevirgola 's/\[ \\t\]\*(?:&&|;)\[ \\t\]\*"),$/[ \\t]*\&\&[ \\t]*"),/' p-cdsemi "UMANO decisione p-cdsemi.md"
+clmut gitshow 's/^STAMPA_GIT = ("grep", "show")$/STAMPA_GIT = ()/' p-gitshow "UMANO decisione p-gitshow.md"
+clmut shc 's/^\( *\)s = _SHELL_C.match(t)$/\1s = None/' p-shc "UMANO decisione p-shc.md"
+clmut copiato 's/^\( *\)if estr in cmd or estr in "\\n".join(_sopra_piano(spec_fs)):$/\1if False:/' p-pyc "UMANO decisione p-pyc.md"
+clmut leggero 's/^\( *\)if rc == 0 and any(l.startswith("E1: STOP") for l in .*$/\1if False:/' b-light "RIPRENDIBILE decisione b-light.md"
+clmut reqr 's/(?:RF|CA|FR|AC|R)\[0-9\]+/(?:RF|CA|FR|AC)[0-9]+/' s-r "RIPRENDIBILE decisione s-r.md"
+CLO=$(cla "$DRV")
 clmut jsonl 's/^\( *\)trov = tr.bash_trovato(.*# PROVA-NEL-JSONL$/\1trov = True/' p-inventata "UMANO decisione p-inventata.md"
-clmut stampa 's/^\( *\)return not w or .*# FILTRO-STAMPA$/\1return False/' p-echo "UMANO decisione p-echo.md"
+clmut stampa 's/^\( *\)return p in STAMPA  # FILTRO-STAMPA$/\1return False/' p-echo "UMANO decisione p-echo.md"
 clmut budget 's/^\( *\)if n >= BUDGET_RISULTATI:  # BUDGET-CONTATO$/\1if True:/' b-giri "UMANO decisione b-giri.md"
 clmut taglio 's/^\( *\)if rc == 1 and "Scheletro: SOPRA IL TETTO" in out:  # TAGLIO-RIESEGUITO$/\1if True:/' c-sotto "UMANO decisione c-sotto.md"
 clmut ambito 's/^\( *\)if not any(c in t for c in citabili):  # AMBITO-CITATO$/\1if False:/' s-inventata "UMANO decisione s-inventata.md"
 clmut tipo 's/^\( *\)if not vale:  # CONTROLLO-DEL-TIPO$/\1if False:/' p-nessuna "UMANO decisione p-nessuna.md"
 rm -f "$T"/drv-jsonl.py "$T"/drv-stampa.py "$T"/drv-budget.py "$T"/drv-taglio.py "$T"/drv-ambito.py "$T"/drv-tipo.py
+rm -f "$T"/drv-dopodel.py "$T"/drv-puntoevirgola.py "$T"/drv-gitshow.py "$T"/drv-shc.py "$T"/drv-copiato.py "$T"/drv-leggero.py "$T"/drv-reqr.py
 rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py "$T"/drv-limite.py
 
 
@@ -1374,9 +1406,20 @@ case "$FAKE_MODE" in
     printf '{"esito":"STOP","riassunto":"T1 rosso_raccolta","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: %s","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' "$sym" > "$d/test-red/rossi.json"
     printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
   draft-fermo) fnd='{"severita":"major","file":"src/a.py","riga":1,"testo":"the same finding"}' ;;   # no progress
-  nhd-valida|nhd-tipo) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
-    if [ "$FAKE_MODE" = nhd-valida ]; then printf '%s\n' "Open decision: spec — FR1 can be read in two ways and the code does not settle it" >> "$spec"
-    else printf '%s\n' "Open decision: hunch — the counter looks too small ($l)" >> "$spec"; fi ;;
+  nhd-valida|nhd-tipo|nhd-proof|nhd-budget) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
+    case "$FAKE_MODE" in
+      nhd-valida) printf '%s\n' "Open decision: spec — FR1 can be read in two ways and the code does not settle it" >> "$spec" ;;
+      nhd-proof) printf '%s\n' "Open decision: proof — the counter looks too small ($l)" >> "$spec" ;;   # no Executed proof
+      nhd-budget) printf '%s\n' "Open decision: budget — four iterations used ($l)" >> "$spec" ;;   # no reviewer in the jsonl
+      *) printf '%s\n' "Open decision: hunch — the counter looks too small ($l)" >> "$spec" ;;
+    esac ;;
+  ok-nhd) riga="PHASE RESULT $ph: OK — done"; es=OK; bloc="decisione umana"   # (B10-B11 review) OK line, a valid spec decision
+    sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"
+    printf '%s\n' "Open decision: spec — FR1 can be read in two ways and the code does not settle it" >> "$spec" ;;
+  tr-rilievi) mkdir -p "$d/test-red"; riga="PHASE RESULT test-red: STOP — rossi"   # (DA9) same symbol, other findings
+    fnd='{"severita":"minor","file":"a.go","riga":1,"testo":"finding of '"$l"'"}'
+    printf '{"esito":"STOP","riassunto":"T1 rosso_raccolta","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' > "$d/test-red/rossi.json"
+    printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
   impl-bg) riga="PHASE RESULT implement: STOP — agents pending"
     printf '%s\n' '{"type":"system","subtype":"init"}' \
       '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"l1","name":"Agent","input":{"subagent_type":"maat:plan-implementer","prompt":"lane","run_in_background":true}}]}}' \
@@ -1419,7 +1462,7 @@ else check "controprova classifica: la mutazione si applica" false; fi
 rnuovo; rrun draft-fermo
 check "ripresa senza progresso: stessa impronta del piano e stessi rilievi → 02-plan.ripresa esito=senza-progresso, STOP con la causa" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan 02-plan " ] && [ "$(rf 02-plan esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso (stesso piano, stessi rilievi aperti): piano non approvato (DRAFT)" "$T/run.out"'
 check "  il rilancio con lo State invariato non e il vecchio anti-loop: la chiave e (word, state, n_ripresa)" '! grep -q "anti-loop" "$T/run.out" && [ -n "$(rf 01-plan rilievi | grep -x "[0-9a-f]\{8\}")" ]'
-if tmut progresso 's/^\( *\)if prec and .*# PROGRESSO$/\1if False:/'; then
+if tmut progresso 's/^\( *\)if uguale:  # PROGRESSO$/\1if False:/'; then
   rnuovo; RRUN_DRV="$T/drv-progresso.py" rrun draft-fermo
   check "controprova: senza il controllo del progresso il caso arriva al limite, non alla causa (rosso)" '[ "$(rcalls)" = "01-plan 02-plan 03-plan " ] && grep -q "Driver result: STOP — limite delle riprese" "$T/run.out"'
 else check "controprova progresso: la mutazione si applica" false; fi
@@ -1432,9 +1475,28 @@ rnuovo APPROVED; rrun impl-bg
 check "ripresa: implement STOP con un agente in background non raccolto → STOP finale, nessuna ripresa, la prova nella riga" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-implement " ] && [ ! -f "$RR/log/01-implement.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT implement: STOP — agents pending · prova: .*spec-r.run/log/01-implement.esito" "$T/run.out"'
 rnuovo; rrun nhd-valida
 check "ripresa: plan NEEDS HUMAN DECISION con Open decision: spec valida → STOP finale, nessun rilancio (non sovra-accetta)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "· prova: .*spec-r.md" "$T/run.out"'
-rnuovo; rrun nhd-tipo FIC_RIPRESE=1
+rnuovo; rrun nhd-proof FIC_RIPRESE=1
 K=$(printf '%s' "the counter looks too small (01-plan)" | sha256sum | cut -c1-8)
-check "ripresa: Open decision non valida (tipo fuori lista) → RIPRENDIBILE, «declassata: <chiave>» nel .ripresa e in driver.log; FIC_RIPRESE=1 → limite alla seconda" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=$K · " "$RR/driver.log" && [ "$(rf 02-plan esito) $(rf 02-plan max)" = "limite 1" ]'
+check "ripresa: Open decision proof senza prova → RIPRENDIBILE, «declassata: <chiave>» nel .ripresa e in driver.log; FIC_RIPRESE=1 → limite alla seconda" '[ "$(rcalls)" = "01-plan 02-plan " ] && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=$K · " "$RR/driver.log" && [ "$(rf 02-plan esito) $(rf 02-plan max)" = "limite 1" ]'
+# (B10-B11 review, D3.1) only a claim about the code is declassified: a type out of the list or a falsified budget are
+# relaunched with the generic line (cause + result.json of the stopped phase), no declassata:, so no probe can use the key
+for m in nhd-tipo nhd-budget; do
+  rnuovo; rrun $m FIC_RIPRESE=1
+  check "ripresa (review B10-B11, $m): RIPRENDIBILE senza «declassata:» (.ripresa e driver.log declassata=-), riga generica col result.json" '[ "$(rcalls)" = "01-plan 02-plan " ] && [ "$(rf 01-plan esito) $(rf 01-plan regola)" = "rilancio decisione" ] && ! grep -q "^declassata: " "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · esito=rilancio · n=1 · declassata=- · " "$RR/driver.log" && grep -q "^RIPRESA (driver): 1/1 — .* — rilievi aperti: log/01-plan.result.json$" "$FAKE_CALLS.02-plan.prompt" && ! grep -q "decisione umana senza prova eseguita" "$FAKE_CALLS.02-plan.prompt"'
+done
+KB=$(printf '%s' "four iterations used (01-plan)" | sha256sum | cut -c1-8)
+cat > "$T/declassate.py" <<'EOF'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("drv_dk", sys.argv[1]); d = importlib.util.module_from_spec(s); s.loader.exec_module(d)
+print(" ".join(k for _l, r in d.riprese(sys.argv[2])[0] for k in r.get("declassata") or []))
+EOF
+check "  budget falsificato: la sua chiave non e' fra le declassate delle riprese registrate (quelle che lint2 e rossi leggono)" '[ -z "$("$FIC_PY" "$T/declassate.py" "$DRV" "$RR" | tr -d "\r")" ] && ! grep -q "$KB" "$RR/driver.log"'
+if tmut declassa 's/^\( *\)return tipo == "proof" or .*# DECLASSA-SOLO-PROOF$/\1return True/'; then
+  rnuovo; RRUN_DRV="$T/drv-declassa.py" rrun nhd-budget FIC_RIPRESE=1
+  check "controprova: declassando ogni decisione non valida il budget falsificato ha «declassata: <chiave>» (rosso)" 'grep -qx "declassata: $KB" "$RR/log/01-plan.ripresa"'
+else check "controprova declassa: la mutazione si applica" false; fi
+rm -f "$T/drv-declassa.py"
 # off: FIC_RIPRESE=0 and ciclo.riprese 0 give the STOP of 1.7
 rnuovo; rrun draft FIC_RIPRESE=0
 check "ripresa spenta: FIC_RIPRESE=0 → STOP con la riga della fase dopo 01-plan, nessuna .ripresa (1.7)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ ! -f "$RR/log/01-plan.ripresa" ] && grep -q "Driver result: STOP — PHASE RESULT plan: STOP — round 1 not collected$" "$T/run.out"'
@@ -1508,27 +1570,62 @@ check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio
 check "  la chiave rilievi di test-red porta l'impronta dei simboli: «-;<8 hex>»" '[ -n "$(rf 01-test-red rilievi | grep -x -- "-;[0-9a-f]\{8\}")" ]'
 rnuovo APPROVED; rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
 check "ripresa test-red (DA9): un simbolo diverso a ogni fase → seconda ripresa, poi il limite 2/2" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red 03-test-red " ] && [ "$(rf 02-test-red esito)" = rilancio ] && [ "$(rf 03-test-red esito)" = limite ]'
-if tmut causa 's/ + (";" + kc if kc else ""),  # CAUSA-TEST-RED$/,  # CAUSA-TEST-RED/'; then
+if tmut causa 's/^\( *\)uguale = bool(prec) and (prec\[-1\].get("rilievi") or "").rsplit(";", 1)\[-1\] == kc  # PROGRESSO-TEST-RED$/\1uguale = bool(prec)/'; then
   rnuovo APPROVED; RRUN_DRV="$T/drv-causa.py" rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
   check "controprova: senza la causa nella chiave i simboli diversi sembrano senza progresso (02 senza-progresso: rosso)" '[ "$(rf 02-test-red esito)" = senza-progresso ]'
 else check "controprova causa test-red: la mutazione si applica" false; fi
+# (B10-B11 review, DA9) only the cause counts in test-red: the same missing symbol with other findings is no progress
+rnuovo APPROVED; rrun tr-rilievi FIC_CYCLE_STATE="$T/cs-tr"
+check "ripresa test-red (DA9, review B10-B11): stesso simbolo, rilievi diversi → 02 senza-progresso" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito)" = rilancio ] && [ "$(rf 02-test-red esito)" = senza-progresso ]'
+if tmut solocausa 's/^\( *\)uguale = bool(prec) and (prec\[-1\].get("rilievi") or "").rsplit(";", 1)\[-1\] == kc  # PROGRESSO-TEST-RED$/\1uguale = bool(prec) and prec[-1].get("piano") == d["piano"] and prec[-1].get("rilievi") == d["rilievi"]/'; then
+  rnuovo APPROVED; RRUN_DRV="$T/drv-solocausa.py" rrun tr-rilievi FIC_CYCLE_STATE="$T/cs-tr"
+  check "controprova: confrontando anche i rilievi il simbolo ripetuto sembra un progresso (02 rilancio: rosso)" '[ "$(rf 02-test-red esito)" = rilancio ]'
+else check "controprova solo la causa: la mutazione si applica" false; fi
+rm -f "$T/drv-solocausa.py"
 # (B9 review) resumes off after a rilancio record: the relaunch prompt carries no RIPRESA line
 rnuovo; rrun draft FIC_MAX_FASI=1
 rrun draft FIC_RIPRESE=0 FIC_MAX_FASI=1
 check "ripresa spenta dopo un rilancio registrato: 02-plan senza la riga RIPRESA (driver)" '[ "$(rcalls)" = "02-plan " ] && [ "$(rf 01-plan esito)" = rilancio ] && ! grep -q "RIPRESA" "$FAKE_CALLS.02-plan.prompt"'
+if tmut attive 's/^\( *\)rip = ripresa_in_corso(run_fs, fase, state) if rmax > 0 else None .*# RIGA-SE-ATTIVE$/\1rip = ripresa_in_corso(run_fs, fase, state)/'; then
+  rnuovo; rrun draft FIC_MAX_FASI=1
+  RRUN_DRV="$T/drv-attive.py" rrun draft FIC_RIPRESE=0 FIC_MAX_FASI=1
+  check "controprova: senza la condizione sulle riprese attive il prompt di 02-plan porta la riga RIPRESA (rosso)" 'grep -q "^RIPRESA (driver): " "$FAKE_CALLS.02-plan.prompt"'
+else check "controprova riga se attive: la mutazione si applica" false; fi
 # (B9 review) ciclo.riprese unreadable → 0 with one AVVISO; the proof of a decision is relative to the repository
 rnuovo; rrun draft FIC_RIPRESE=abc
 check "ripresa: FIC_RIPRESE=abc → lo STOP della 1.7 e un solo AVVISO «ciclo.riprese illeggibile»" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ "$(grep -c "AVVISO: ciclo.riprese illeggibile (FIC_RIPRESE=abc)" "$T/run.out")" = 1 ]'
+if tmut avviso 's/^\( *\)avvisa("AVVISO: " + T("driver-180.riprese_illeggibili", why=r\[1\]))$/\1pass/'; then
+  rnuovo; RRUN_DRV="$T/drv-avviso.py" rrun draft FIC_RIPRESE=abc
+  check "controprova: senza l AVVISO di riprese_max il valore illeggibile passa in silenzio (rosso)" '! grep -q "AVVISO: ciclo.riprese illeggibile" "$T/run.out"'
+else check "controprova AVVISO riprese_max: la mutazione si applica" false; fi
 printf '{ non json\n' > "$T/maat-rotto.json"
 rnuovo; rrun draft MAAT_CONFIG="$T/maat-rotto.json"
 check "ripresa: maat.json invalido → 0 riprese e un AVVISO" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && [ "$(grep -c "AVVISO: ciclo.riprese illeggibile" "$T/run.out")" = 1 ]'
 rnuovo; rrun nhd-tipo
 check "ripresa: la prova di una decisione nel .ripresa e' relativa alla radice (spec-r.md), mai un percorso assoluto" 'p=$(rf 01-plan prova); case "$p" in /*|?:*) false ;; *spec-r.md) true ;; *) false ;; esac'
+if tmut relativa 's/^\( *\)pv = _rel(c.prova, root) if root and os.path.isabs(c.prova) else c.prova .*$/\1pv = c.prova/'; then
+  rnuovo; RRUN_DRV="$T/drv-relativa.py" rrun nhd-tipo
+  check "controprova: senza _rel la prova del .ripresa e' un percorso assoluto (rosso)" 'p=$(rf 01-plan prova); case "$p" in /*|?:*) true ;; *) false ;; esac'
+else check "controprova prova relativa: la mutazione si applica" false; fi
+rm -f "$T/drv-attive.py" "$T/drv-avviso.py" "$T/drv-relativa.py"
 rm -f "$T"/drv-clok.py "$T"/drv-tetto.py "$T"/drv-registro.py "$T"/drv-causa.py "$T/cs-tr" "$T/maat-rotto.json"
 # (B10, D3) the relaunch on a declassified decision: the prompt names its key, the same as the .ripresa and driver.log
-rnuovo; rrun nhd-tipo FIC_RIPRESE=1
+rnuovo; rrun nhd-proof FIC_RIPRESE=1
 K=$(printf '%s' "the counter looks too small (01-plan)" | sha256sum | cut -c1-8)
 check "ripresa (B10): il prompt di 02-plan dice «decisione umana senza prova eseguita — decisione <chiave>: <testo>», la chiave del .ripresa e di driver.log" 'grep -q "^RIPRESA (driver): 1/1 — decisione umana senza prova eseguita — decisione $K: the counter looks too small (01-plan) (" "$FAKE_CALLS.02-plan.prompt" && grep -qx "declassata: $K" "$RR/log/01-plan.ripresa" && grep -q " Ripresa: 01-plan · .* · declassata=$K · " "$RR/driver.log"'
+check "  (review B10-B11) la riga nomina il result.json della fase fermata, non la spec: «— rilievi aperti: log/01-plan.result.json»" 'grep -q "^RIPRESA (driver): 1/1 — decisione umana senza prova eseguita — .* — rilievi aperti: log/01-plan.result.json$" "$FAKE_CALLS.02-plan.prompt"'
+if tmut rilres 's/^\( *\)f = "log\/%s.result.json" % label if .*# RILIEVI-RESULT$/\1f = rip.get("prova")/'; then
+  rnuovo; RRUN_DRV="$T/drv-rilres.py" rrun nhd-proof FIC_RIPRESE=1
+  check "controprova: con la prova della regola (la spec) la riga non nomina il result.json (rosso)" '! grep -q "rilievi aperti: log/01-plan.result.json$" "$FAKE_CALLS.02-plan.prompt"'
+else check "controprova rilievi result.json: la mutazione si applica" false; fi
+# (B10-B11 review) an OK line on a plan NEEDS HUMAN DECISION with a valid non-mechanical decision: the driver.log line too
+rnuovo; rrun ok-nhd
+check "ripresa (review B10-B11): riga OK con una decisione spec valida → STOP e la riga «Decisione non verificata da script:» in driver.log" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && grep -q " Decisione non verificata da script: 01-plan · decisione umana: spec — " "$RR/driver.log"'
+if tmut nvok 's/^\( *\)ev("%s%s · %s" % (NON_VERIFICATA_RIGA, label, .*# NON-VERIFICATA-OK$/\1pass/'; then
+  rnuovo; RRUN_DRV="$T/drv-nvok.py" rrun ok-nhd
+  check "controprova: senza la scrittura nel ramo OK driver.log non ha la riga (rosso)" '! grep -q " Decisione non verificata da script: " "$RR/driver.log"'
+else check "controprova decisione non verificata OK: la mutazione si applica" false; fi
+rm -f "$T/drv-rilres.py" "$T/drv-nvok.py"
 # (B10) a non-mechanical decision: the final STOP says so, driver.log keeps the line for cycle-report.py and the review
 rnuovo; rrun nhd-valida
 check "ripresa (B10): Open decision: spec → STOP finale con «decisione non verificata da script: spec» e la riga in driver.log" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-plan " ] && grep -q "Driver result: STOP — .*decisione non verificata da script: spec · prova: .*spec-r.md" "$T/run.out" && grep -q " Decisione non verificata da script: 01-plan · decisione umana: spec — " "$RR/driver.log"'
@@ -1550,6 +1647,18 @@ cat > "$T/cs-rev2" <<'EOF'
 printf '%s\n' "State: rev-fisso" "Next: REVIEW — finto"
 EOF
 chmod +x "$T/cs-rev2"
+# (B10-B11 review) the probe counts only with its key declassified by a registered resume (as LIMITE-CON-RIPRESA)
+rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
+check "review (review B10-B11): sonda_smentita la cui chiave nessuna ripresa registrata ha declassato → niente riga SONDA SMENTITA" '! grep -q "SONDA SMENTITA" "$FAKE_CALLS.02-review.prompt"'
+rm -rf "$RR/log/02-review"* "$RR/prompts"
+printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: c0ffee04" > "$RR/log/00-plan.ripresa"
+printf '2026-11-16T10:00:00Z Ripresa: 00-plan · esito=rilancio · n=1 · declassata=c0ffee04 · sha=%s\n' "$(sha256sum < "$RR/log/00-plan.ripresa" | cut -c1-12)" >> "$RR/driver.log"
+if tmut smentita 's/^\( *\)if isinstance(s, dict) and s.get("decisione") in dk:  # SMENTITA-CON-RIPRESA$/\1if isinstance(s, dict):/'; then
+  mv "$RR/log/00-plan.ripresa" "$T/00-plan.ripresa.bak"
+  RRUN_DRV="$T/drv-smentita.py" rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
+  check "controprova: senza il controllo della chiave la sonda non registrata entra nel prompt (rosso)" 'grep -q "^SONDA SMENTITA (driver): T5" "$FAKE_CALLS.02-review.prompt"'
+  mv "$T/00-plan.ripresa.bak" "$RR/log/00-plan.ripresa"; rm -rf "$RR/log/02-review"* "$RR/prompts" "$T/drv-smentita.py"
+else check "controprova sonda smentita registrata: la mutazione si applica" false; fi
 rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
 check "review (B11): il prompt mostra la sonda smentita accanto alla riga: «SONDA SMENTITA (driver): T5 — <affermazione> — decisione <chiave> — …»" 'grep -q "^SONDA SMENTITA (driver): T5 — the 16-bit counter cannot hold 100000 levels — decisione c0ffee04 — una sonda di test-red ha smentito" "$FAKE_CALLS.02-review.prompt"'
 printf 'rossi: esito=OK — altro\n' > "$RR/log/01-test-red.rossi"; rm -rf "$RR/log/02-review"* "$RR/prompts"

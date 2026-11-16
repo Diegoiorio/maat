@@ -282,6 +282,8 @@ plan-check-180.probe_no_row	line {n}: probe {id} is not a row of the test plan	r
 plan-check-180.probe_second	line {n}: second probe on the decision {k}: only one probe for each declassified decision	riga {n}: seconda sonda sulla decisione {k}: una sola sonda per decisione declassata
 plan-check-180.probe_no_resume	line {n}: probe on the decision {k} without a registered resume that declassified it (log/*.ripresa with its line in driver.log)	riga {n}: sonda sulla decisione {k} senza una ripresa registrata che l'abbia declassata (log/*.ripresa con la sua riga in driver.log)
 plan-check-180.probe_same_row	line {n}: a second probe on the row {id}	riga {n}: una seconda sonda sulla riga {id}
+plan-check-180.probe_in_assert	line {n}: the expected text of the probe on {id} is already in the row's red if: a red on the assertion would look like the limit	riga {n}: il testo atteso della sonda su {id} è già nel rosso della riga: un rosso sull'asserzione sembrerebbe il limite
+plan-check-180.probe_in_source	line {n}: the expected text of the probe on {id} is written in {f}: the test would print it itself	riga {n}: il testo atteso della sonda su {id} è scritto in {f}: il test lo stamperebbe da sé
 plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignored for the probes	{label}.ripresa non registrato in driver.log: ignorato per le sonde
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}

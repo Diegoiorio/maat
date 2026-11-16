@@ -994,8 +994,9 @@ def result_errors(path, fase):
 
 
 # ─────────────────────────────────────────────────────────────── the class of a finished phase (1.8.0, B8)
-# classifica(fase, run_fs, label, spec_fs) -> Classe(classe, regola, causa, prova): PURE, only files (log/<label>.exit,
-# .esito, .result.json, .gates, .rossi, .jsonl, .deviazioni-test, test-red/rossi.json, the spec). `run` calls it
+# classifica(fase, run_fs, label, spec_fs) -> Classe(classe, regola, causa, prova, decisioni, declassate): it reads files
+# (log/<label>.exit, .esito, .result.json, .gates, .rossi, .jsonl, .deviazioni-test, test-red/rossi.json, driver.log, the
+# spec) and, for the checks of the decision types (B10), runs plan-check.sh skeleton and e1 again; it writes nothing. `run` calls it
 # after every launched phase, OK lines too (B9, resumes below; B9 review). Evaluation order, the first that holds (spec §Tassonomia):
 #   TECNICO        .exit missing or != 0 · no PHASE RESULT line in .esito · a phase with `valida` (plan, test-red,
 #                  implement, review, fix) ended STOP without result.json (invalid output) · result.json invalid ·
@@ -1020,8 +1021,9 @@ def result_errors(path, fase):
 CLASSI = ("OK", "OK-DEVIAZIONE", "RIPRENDIBILE", "UMANO", "TECNICO")
 # decisioni (B8 review): for the rule `decisione`, the <text> of the Open decisions concerned (the valid ones for UMANO,
 # the not valid ones for RIPRENDIBILE: the whole value when it is not in the form <type> — <text>); for the rule
-# `simbolo` the missing symbols, sorted (DA9); else ()
-Classe = collections.namedtuple("Classe", "classe regola causa prova decisioni", defaults=((),))
+# `simbolo` the missing symbols, sorted (DA9); else (). declassate (B10-B11 review): for a RIPRENDIBILE `decisione`, the
+# texts of the not valid decisions that are a claim about the code (_declassabile), the only ones a .ripresa declassifies
+Classe = collections.namedtuple("Classe", "classe regola causa prova decisioni declassate", defaults=((), ()))
 TEST_DATA = ("test-data: ", "dati-test: ")
 FASI_VALIDA = ("plan", "test-red", "implement", "review", "fix")   # the phases whose outcome passes through `valida`
 FASI_RIPRESA = ("plan", "test-red")   # (d): the only phases with a resume procedure
@@ -1085,6 +1087,15 @@ def _testo_decisione(v):
     return m.group(2) if m else v
 
 
+def _declassabile(v):
+    """True when the Open decision value is a claim about the code (D3.1): of type `proof`, or `spec` with a code anchor
+    path:line. A form or a type not valid is not (reading chosen in the B10-B11 review: fail-closed, no probe can be
+    born of a line that does not say what it claims)"""
+    m = DECISIONE_CORPO.match(v)
+    tipo = TIPI_DECISIONE.get(m.group(1).strip("`*").lower()) if m else None
+    return tipo == "proof" or (tipo == "spec" and bool(ANCORA_RX.search(m.group(2))))  # DECLASSA-SOLO-PROOF
+
+
 def _decisione(v):
     """(canonical type, text, "") of a valid Open decision, or (None, None, cause of the invalidity)"""
     m = DECISIONE_CORPO.match(v)
@@ -1110,17 +1121,20 @@ def _decisione(v):
 #           does not count
 #   scope   the text quotes a line of the spec above the plan, under Out of scope / Fuori ambito / Constraints / Vincoli
 #           (whitespace compressed, list marker dropped, at least AMBITO_MIN characters), and names a requirement ID of
-#           the spec (RF|CA|FR|AC<n>, in the requirement sections)
+#           the spec (RF|CA|FR|AC|R<n>, in the requirement sections: Requisiti…, Requirements…, acceptance criteria)
 #   proof   every `Executed proof: `<command>` → «<excerpt>»` line (Prova eseguita:) below the decision, at least one:
 #           transcript.py finds in the jsonl of THIS phase (main session) a Bash call with exactly that command whose
-#           result contains the excerpt; the command runs code of the repository: refused when, past `cd <dir> &&` and
-#           VAR=… assignments, it starts with a command of STAMPA, or when the excerpt is literally in the command or
+#           result contains the excerpt; the command runs code of the repository: refused when, past `cd <dir> &&|;`,
+#           VAR=… assignments, env/command/exec/time/nice, a leading `{`/`(` and into `sh -c '…'`, it starts with a
+#           command of STAMPA (or git grep/show), or when the excerpt is literally in the command or
 #           in the spec above the plan. Still falsifiable with effort (`python -c` that builds the string): a declared
 #           limit, the command is quoted in the STOP
 #   recurrence, dispute, partial, spec: NOT mechanical (DA6 extended): valid, and the STOP says NON_VERIFICATA
 PROVA_RX = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:Executed proof|Prova eseguita):[ \t]*(.*?)[ \t]*$")
 PROVA_CORPO = re.compile(r"^`(.+)`[ \t]*→[ \t]*«(.+)»$")
-STAMPA = ("echo", "printf", "cat", "true", ":", "sed", "awk", "grep", "head", "tail", "tee")
+STAMPA = ("echo", "printf", "cat", "true", ":", "sed", "awk", "grep", "head", "tail", "tee",
+          "rg", "nl", "less", "more", "cut", "tr")   # B10-B11 review: the read-only commands prove nothing either
+STAMPA_GIT = ("grep", "show")
 NON_MECCANICI = ("recurrence", "dispute", "partial", "spec")
 NON_VERIFICATA = "decisione non verificata da script"   # a token, the same in every language (cycle-report.py reads it)
 # the driver.log line of a final STOP on such a decision: «<UTC> Decisione non verificata da script: <label> · <cause>»,
@@ -1132,9 +1146,10 @@ NON_VERIFICATA_RIGA = "Decisione non verificata da script: "
 STOP_UMANO_RIGA = "Stop umano: "
 STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+)$")
 AMBITO_H = re.compile(r"^#+[ \t]+(?:[0-9]+\.[ \t]*)?(?:Out of scope|Fuori ambito|Constraints|Vincoli)\b", re.I)
-REQ_H = re.compile(r"^##[ \t]+(?:[0-9]+\.[ \t]*)?(?:requisiti funzionali|criteri di accettazione|functional requirements"
+# (B10-B11 review) also «## Requisiti» / «## Requirements» and the ids R<n> of the Maat specs
+REQ_H = re.compile(r"^##[ \t]+(?:[0-9]+\.[ \t]*)?(?:requisiti|criteri di accettazione|(?:functional )?requirements"
                    r"|acceptance criteria)", re.I)
-REQ_ID = re.compile(r"^(?:###+[ \t]+|[ \t]*(?:[-*]|[0-9]+\.)[ \t]+|[ \t]*\|[ \t]*)?[*_`]*((?:RF|CA|FR|AC)[0-9]+(?:\.[0-9]+)*)")
+REQ_ID = re.compile(r"^(?:###+[ \t]+|[ \t]*(?:[-*]|[0-9]+\.)[ \t]+|[ \t]*\|[ \t]*)?[*_`]*((?:RF|CA|FR|AC|R)[0-9]+(?:\.[0-9]+)*)")
 AMBITO_MIN = 8
 REVISORE, REVISORE_LIGHT, BUDGET_RISULTATI = "maat:spec-plan-reviewer", "maat:spec-plan-reviewer-light", 9
 
@@ -1169,17 +1184,37 @@ def _decisioni_e_prove(spec_fs):
     return res
 
 
+_PREFISSI_CMD = (   # what runs nothing by itself before the command (B10-B11 review: more ways around the filter)
+    re.compile(r"cd[ \t]+(?:\"[^\"]*\"|'[^']*'|[^ \t;&|]+)[ \t]*(?:&&|;)[ \t]*"),
+    re.compile(r"[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|[^ \t]*)[ \t]+"),
+    re.compile(r"(?:env|command|exec|time|nice|builtin)(?:[ \t]+-[A-Za-z-]+(?:[ \t]+[0-9]+)?)*[ \t]+"),
+    re.compile(r"[{(][ \t]*"),
+)
+_SHELL_C = re.compile(r"(?:\S*/)?(?:ba|da|z)?sh[ \t]+(?:-[A-Za-z]*c[A-Za-z]*)[ \t]+(?:'([^']*)'|\"([^\"]*)\")")
+
+
 def _comando_stampa(cmd):
-    """True when the command, past `cd <dir> &&` and VAR=… assignments, starts with a command that only prints"""
+    """True when the command, past `cd <dir> &&` (or `;`), VAR=… assignments, env/command/exec/time/nice, a leading `{`
+    or `(`, and into `bash|sh -c '…'`, starts with a command that only prints or reads (STAMPA, `git grep`, `git show`)"""
     t = cmd.strip()
-    while True:
-        m = re.match(r"cd[ \t]+(?:\"[^\"]*\"|'[^']*'|[^ \t;&|]+)[ \t]*&&[ \t]*", t) or \
-            re.match(r"[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|[^ \t]*)[ \t]+", t)
-        if not m:
-            break
-        t = t[m.end():]
-    w = re.match(r"[^ \t;&|()<>]+", t)
-    return not w or os.path.basename(w.group(0).strip("\"'")) in STAMPA  # FILTRO-STAMPA
+    for _giro in range(20):
+        m = next((r.match(t) for r in _PREFISSI_CMD if r.match(t)), None)
+        if m:
+            t = t[m.end():]
+            continue
+        s = _SHELL_C.match(t)
+        if s:   # the script of sh -c is the command
+            t = (s.group(1) if s.group(1) is not None else s.group(2)).strip()
+            continue
+        break
+    w = re.match(r"[^ \t;&|()<>{}]+", t)
+    if not w:
+        return True
+    p = os.path.basename(w.group(0).strip("\"'"))
+    if p == "git":   # git grep / git show print what is already in the repository
+        g = re.match(r"git(?:[ \t]+-[Cc][ \t]+\S+)*[ \t]+(\S+)", t)
+        return bool(g) and g.group(1) in STAMPA_GIT
+    return p in STAMPA  # FILTRO-STAMPA
 
 
 def _verifica_prova(v, run_fs, label, spec_fs):
@@ -1333,7 +1368,9 @@ def classifica(fase, run_fs, label, spec_fs):
     stato, decs = _stato_piano(spec_fs) if fase == "plan" else ("", [])
     nhd = stato.startswith("NEEDS HUMAN DECISION")
     # B10: every decision of a valid form also passes the check of its type; the not valid ones (form or check), with
-    # their cause, make the STOP RIPRENDIBILE (declassata)
+    # their cause, make the STOP RIPRENDIBILE. Only a claim about the code is declassified (D3.1, B10-B11 review): a
+    # `proof` that did not hold, a `spec` with a code anchor (it is a proof); a falsified budget / cut / scope, an absent
+    # line, a form or type not valid are relaunched with the generic line, no declassata (no probe can be born of them)
     esami = []
     if fase == "plan" and nhd and decs:
         for d, prove in _decisioni_e_prove(spec_fs):
@@ -1342,7 +1379,7 @@ def classifica(fase, run_fs, label, spec_fs):
                 vale, why = _verifica_decisione(tipo, testo, prove, run_fs, label, spec_fs)
                 if not vale:  # CONTROLLO-DEL-TIPO
                     tipo = None
-            esami.append((d, tipo, testo if tipo else _testo_decisione(d), why))
+            esami.append((d, tipo, testo if tipo else _testo_decisione(d), why, not tipo and _declassabile(d)))
     # --- UMANO proven ---
     if fase == "plan" and nhd and esami:
         if all(e[1] for e in esami):  # DECISIONE-VALIDA
@@ -1350,7 +1387,7 @@ def classifica(fase, run_fs, label, spec_fs):
             causa = T("driver-180.c_decision", d="; ".join("%s — %s" % (e[1], e[2][:200]) for e in esami))
             if nonm:   # valid, but no script verified it: the STOP says so (the token is the same in every language)
                 causa += " · %s: %s" % (NON_VERIFICATA, ", ".join(nonm))
-                dk = sorted(set(k for _l, r in riprese(run_fs)[0] for k in r.get("declassata") or []))
+                dk = declassate_registro(run_fs)   # DA10: from driver.log, a deleted .ripresa does not erase it
                 if dk:  # DOPO-DECLASSATA
                     causa += " · " + T("driver-180.c_after_declassed", k=", ".join(dk))
             return Classe("UMANO", "decisione", causa, spec_fs, tuple(e[2] for e in esami))
@@ -1398,7 +1435,8 @@ def classifica(fase, run_fs, label, spec_fs):
         return Classe("RIPRENDIBILE", "draft", T("driver-180.c_draft"), rel(".result.json"))
     if fase == "plan" and nhd:
         why = T("driver-180.c_dec_absent") if not esami else next(e[3] for e in esami if not e[1])
-        return Classe("RIPRENDIBILE", "decisione", why, spec_fs, tuple(e[2] for e in esami if not e[1]))
+        return Classe("RIPRENDIBILE", "decisione", why, spec_fs, tuple(e[2] for e in esami if not e[1]),
+                      tuple(e[2] for e in esami if not e[1] and e[4]))
     if fase == "test-red" and rossi:
         nt = _modulo("nomi_test", "nomi_test.py")
         sim, simboli = [], []
@@ -1562,6 +1600,17 @@ def rilanci_registro(run_fs):
     return out
 
 
+def declassate_registro(run_fs):
+    """the keys declassified in the cycle, from the declassata= field of the «Ripresa:» lines of driver.log (DA10: a
+    deleted or edited .ripresa does not erase them), sorted"""
+    kk = set()
+    for l in (_read(os.path.join(run_fs, "driver.log")) or "").replace("\r", "").split("\n"):
+        m = re.search(r" Ripresa: \S+ · esito=\S+ · n=\S* · declassata=(\S+) · ", l)
+        if m and m.group(1) != "-":
+            kk.update(k for k in m.group(1).split(",") if k)
+    return sorted(kk)
+
+
 def n_rilanci(run_fs):
     return len(rilanci_registro(run_fs))  # CONTA-DAL-REGISTRO
 
@@ -1592,9 +1641,13 @@ def decidi_ripresa(fase, run_fs, label, spec_fs, c, state, rmax, root=None):
     pv = _rel(c.prova, root) if root and os.path.isabs(c.prova) else c.prova   # never an absolute path in the prompt
     d = {"classe": c.classe, "regola": c.regola, "fase": fase, "causa": c.causa, "prova": pv, "max": rmax,
          "state": state, "piano": impronta_piano(spec_fs), "rilievi": ril_k + (";" + kc if kc else ""),  # CAUSA-TEST-RED
-         "declassata": [chiave_decisione(t) for t in c.decisioni] if c.regola == "decisione" else []}
+         "declassata": [chiave_decisione(t) for t in c.declassate] if c.regola == "decisione" else []}  # DECLASSATA
     prec = [x for x in reg if x.get("fase") == fase]
-    if prec and prec[-1].get("piano") == d["piano"] and prec[-1].get("rilievi") == d["rilievi"]:  # PROGRESSO
+    if kc:   # DA9: the progress of a test-red resume is its cause only (plan and findings hardly change there)
+        uguale = bool(prec) and (prec[-1].get("rilievi") or "").rsplit(";", 1)[-1] == kc  # PROGRESSO-TEST-RED
+    else:
+        uguale = bool(prec) and prec[-1].get("piano") == d["piano"] and prec[-1].get("rilievi") == d["rilievi"]
+    if uguale:  # PROGRESSO
         d.update(esito="senza-progresso", n=n_tot, n_fase=n_fase)
     elif n_fase >= rmax or n_tot >= RIPRESE_CICLO:  # LIMITE-RIPRESE
         d.update(esito="limite", n=n_tot, n_fase=n_fase)
@@ -1617,20 +1670,23 @@ def ripresa_in_corso(run_fs, fase, state):
     return None
 
 
-def riga_ripresa(rip, spec_fs):
+def riga_ripresa(rip, spec_fs, label=None):
     """the prompt line of a relaunch: «RIPRESA (driver): <n>/<max> — <cause> — open findings: <file>»; for declassified
     Open decisions (B10, D3) «RIPRESA (driver): <n>/<max> — <human decision without an executed proof> — decisione
-    <key>: <text> (<cause>)», one «decisione <key>: <text>» per declassata: key of the .ripresa (the text from the spec,
-    whose State is the one of the STOP)"""
+    <key>: <text> (<cause>) — open findings: <file>», one «decisione <key>: <text>» per declassata: key of the .ripresa
+    (the text from the spec, whose State is the one of the STOP). For the rule decisione the file of the open findings is
+    the result.json of the stopped phase <label> (its proof is the spec, which holds no findings: B10-B11 review)"""
     testa = "RIPRESA (driver): %s/%s — " % (rip.get("n_fase"), rip.get("max"))
     kk = rip.get("declassata") or []
+    f = "log/%s.result.json" % label if label and rip.get("regola") == "decisione" else rip.get("prova")  # RILIEVI-RESULT
     if rip.get("regola") != "decisione" or not kk:
-        return testa + "%s — %s\n" % (rip.get("causa"), T("driver-180.ripresa_aperti", f=rip.get("prova")))
+        return testa + "%s — %s\n" % (rip.get("causa"), T("driver-180.ripresa_aperti", f=f))
     testi = {}
     for d, _p in _decisioni_e_prove(spec_fs):
         testi.setdefault(chiave_decisione(_testo_decisione(d)), _testo_decisione(d))
-    return testa + "%s — %s (%s)\n" % (T("driver-180.ripresa_decisione"), " — ".join(
-        "decisione %s: %s" % (k, " ".join(testi.get(k, "?").split())[:300]) for k in kk), rip.get("causa"))
+    return testa + "%s — %s (%s) — %s\n" % (T("driver-180.ripresa_decisione"), " — ".join(
+        "decisione %s: %s" % (k, " ".join(testi.get(k, "?").split())[:300]) for k in kk), rip.get("causa"),
+        T("driver-180.ripresa_aperti", f=f))
 
 
 def messaggio_ripresa(d):
@@ -2451,13 +2507,14 @@ def cmd_run(argv):
         rmax = riprese_max(root, ev)
         rip = ripresa_in_corso(run_fs, fase, state) if rmax > 0 else None   # resumes off: never the line  # RIGA-SE-ATTIVE
         if rip:   # 1.8.0: the relaunch of a stopped phase, with the file of its open findings
-            extra += riga_ripresa(rip, spec_fs)
+            extra += riga_ripresa(rip, spec_fs, _labels(run_fs, ".")[-1])
         if fase == "review":   # B11: a probe disproved in test-red: the declassified claim next to its row
             trl = _labels(run_fs, r"-test-red$")
             ro = _rossi_di(run_fs, trl[-1]) if trl else None
+            dk = set(k for _l, r in riprese(run_fs)[0] for k in r.get("declassata") or []) if ro else set()
             for tid, v in sorted(((ro or {}).get("test") or {}).items() if isinstance((ro or {}).get("test"), dict) else []):
                 s = v.get("sonda") if isinstance(v, dict) and v.get("esito") == "sonda_smentita" else None
-                if isinstance(s, dict):
+                if isinstance(s, dict) and s.get("decisione") in dk:  # SMENTITA-CON-RIPRESA
                     extra += "SONDA SMENTITA (driver): %s — %s — decisione %s — %s\n" % (
                         tid, " ".join(str(s.get("affermazione")).split())[:300], s.get("decisione"),
                         T("driver-180.review_disproved"))
@@ -2514,6 +2571,8 @@ def cmd_run(argv):
                     st_ok = next((l[7:] for l in (_next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs))
                                   if l.startswith("State: ")), "")
                     ev("%s%s · regola=%s · state=%s" % (STOP_UMANO_RIGA, label, c.regola, st_ok or "-"))  # STOP-UMANO-REGISTRATO
+                if c.regola == "decisione" and NON_VERIFICATA in c.causa:   # B10-B11 review: as on a STOP line
+                    ev("%s%s · %s" % (NON_VERIFICATA_RIGA, label, " ".join(c.causa.split())[:600]))  # NON-VERIFICATA-OK
                 return fine("STOP", esito + " · " + c.causa + " · " + T("driver-180.prova", f=_rel(pv, root)), 1)
         if re.match(RIGA_STOP, esito):
             # 1.8.0 (§Tassonomia): the class of the STOP. TECNICO as in 1.7; UMANO final, with its proof; RIPRENDIBILE:

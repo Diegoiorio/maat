@@ -472,6 +472,11 @@ expect 1 "VIOLAZIONE: riga [0-9]+: sonda T9 non e' una riga del piano di test" "
 cp "$T/f2-sonda.md" "$T/f2-sonda-nl.md"; regrip "$T/f2-sonda-nl.run" $KS nolog
 expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata" "lint2: .ripresa con la chiave ma senza la riga in driver.log (scritto dalla fase) = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
 expect 1 "AVVISO: .*01-plan.ripresa non registrato in driver.log: ignorato" "lint2: il .ripresa non registrato e' detto in un AVVISO" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
+# (B10-B11 review) the .ripresa the driver writes for a falsified budget: registered, rule decisione, no declassata:
+cp "$T/f2-sonda.md" "$T/f2-sonda-bu.md"; mkdir -p "$T/f2-sonda-bu.run/log"
+printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" > "$T/f2-sonda-bu.run/log/01-plan.ripresa"
+printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=- · sha=%s\n' "$(sha256sum < "$T/f2-sonda-bu.run/log/01-plan.ripresa" | cut -c1-12)" > "$T/f2-sonda-bu.run/driver.log"
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata" "lint2: sonda sulla chiave di un budget falsificato (ripresa registrata senza declassata:) = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-bu.md"
 sed "s/^- \[pavimento: permessi\] T1\$/&\n- ⚠️ Rischio da verificare in test-red: la barra non regge — sonda: T1/" "$T/f2.md" > "$T/f2-sonda-f.md"; regrip "$T/f2-sonda-f.run" $KS
 expect 1 "VIOLAZIONE: riga [0-9]+: riga di sonda non nella forma" "lint2: riga di sonda incompleta = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-f.md"
 if mutpc sonda 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        elif False:/'; then
@@ -1022,9 +1027,12 @@ regrip2() { # <run dir> <key> [nolog]
   if [ "${3:-}" = nolog ]; then : > "$1/driver.log"
   else printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$1/log/01-plan.ripresa" | cut -c1-12)" > "$1/driver.log"; fi
 }
-{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «assert 0 == 3»"; } > "$T/f2s.md"
+{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «TooDeeplyNested»"; } > "$T/f2s.md"
 regrip2 "$T/fs.run" $KR
-expect 1 "^rosso T1: limite_dimostrato modules/api/tests/test_calc.py:4" "rossi sonda: rosso col testo atteso = limite_dimostrato, STOP con exit 1" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-ok" --run-dir "$T/fs.run"
+JU_LIM='<testcase classname="tests.test_calc" name="test_somma"><failure message="TooDeeplyNested">E  app.services.calc.TooDeeplyNested: depth 65536
+tests/test_calc.py:4: TooDeeplyNested</failure></testcase>'
+mkev "$T/ev-lim" "$JU_LIM" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: limite_dimostrato modules/api/tests/test_calc.py:4" "rossi sonda: rosso col testo atteso = limite_dimostrato, STOP con exit 1" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
 expect 0 '"esito": "limite_dimostrato"' "rossi sonda: limite_dimostrato in rossi.json" -- cat "$T/fs.run/test-red/rossi.json"
 expect 0 "\"decisione\": \"$KR\"" "rossi sonda: rossi.json porta la sonda (decisione, affermazione, testo atteso)" -- cat "$T/fs.run/test-red/rossi.json"
 expect 0 "^rosso T1: sonda_smentita" "rossi sonda: verde sulla base = sonda_smentita, exit 0" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
@@ -1045,8 +1053,25 @@ if mutpc chiave 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        
   expect 0 "^rosso T1: sonda_smentita" "controprova: senza il controllo della ripresa la sonda inventata passa (sovra-accettazione: rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-chiave/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs0.run"
 else echo "FAIL [controprova chiave della sonda: la mutazione non si applica]"; fail=$((fail+1)); fi
 if mutpc limite 's/^        if es in ("dimostrato", "rosso_diverso", "rosso_senza_asserzione") and pos and nrm(s\["atteso"\]) in msg:  # LIMITE-DIMOSTRATO$/        if False:/'; then
-  expect 0 "^rosso T1: dimostrato " "controprova: senza la regola del limite il rosso col testo atteso resta dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-limite/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-ok" --run-dir "$T/fs.run"
+  expect 1 "^rosso T1: rosso_diverso " "controprova: senza la regola del limite il rosso col testo atteso resta rosso_diverso (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-limite/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
 else echo "FAIL [controprova limite: la mutazione non si applica]"; fail=$((fail+1)); fi
+# (B10-B11 review) a probe whose expected text is already the row's red if (here the red if of the mutation, the text rossi
+# proves T1 with), or is written in the test file: the normal red would look like the limit → VIOLAZIONE, ignored by rossi
+{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «assert 0 == 3»"; } > "$T/f2s-ri.md"
+regrip2 "$T/f2s-ri.run" $KR
+expect 1 "VIOLAZIONE: riga [0-9]+: il testo atteso della sonda su T1 è già nel rosso della riga" "lint2: sonda col testo atteso uguale al rosso della riga = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2s-ri.md"
+expect 0 "^rosso T1: dimostrato " "rossi: sonda col testo atteso nel rosso della riga = ignorata, il rosso sull'asserzione resta dimostrato (non limite)" -- bash "$PC" rossi "$T/f2s-ri.md" --evidence "$T/ev-ok" --run-dir "$T/f2s-ri.run"
+if mutpc nelrosso 's/^        elif any(nrm(att) in nrm(x) for x in .*$/        elif False and ((0/'; then
+  expect 1 "^rosso T1: limite_dimostrato " "controprova: senza il controllo sul rosso della riga il rosso normale diventa limite_dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelrosso/plan-check.sh" rossi "$T/f2s-ri.md" --evidence "$T/ev-ok" --run-dir "$T/f2s-ri.run"
+else echo "FAIL [controprova sonda nel rosso: la mutazione non si applica]"; fail=$((fail+1)); fi
+cp "$R/modules/api/tests/test_calc.py" "$T/test_calc.py.bak"
+printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert False, "TooDeeplyNested"\n' > "$R/modules/api/tests/test_calc.py"
+expect 1 "VIOLAZIONE: riga [0-9]+: il testo atteso della sonda su T1 è scritto in modules/api/tests/test_calc.py" "lint2: testo atteso scritto nel file del test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2s.md" --run-dir "$T/fs.run"
+expect 1 "^rosso T1: rosso_diverso " "rossi: testo atteso scritto nel file del test (assert False, «atteso») = sonda ignorata, non limite_dimostrato" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+if mutpc nelsorgente 's/^        elif root and nrm(att) in nrm(_sorgente(.*# SONDA-NEL-SORGENTE$/        elif False:/'; then
+  expect 1 "^rosso T1: limite_dimostrato " "controprova: senza il controllo sul sorgente il testo scritto nel test da' limite_dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelsorgente/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+else echo "FAIL [controprova sonda nel sorgente: la mutazione non si applica]"; fail=$((fail+1)); fi
+cp "$T/test_calc.py.bak" "$R/modules/api/tests/test_calc.py"
 mkev "$T/ev-suite" "$JU_RED" FAIL " FAIL  tests/fmt.test.ts [ tests/fmt.test.ts ]
 Error: Failed to resolve import \"../utils/fmt\" from \"tests/fmt.test.ts\". Does the file exist?
 vitest-fast: esito=FAIL luogo=copia" FAIL

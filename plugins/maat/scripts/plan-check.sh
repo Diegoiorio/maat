@@ -1417,8 +1417,18 @@ def declassate(run):
     return set(k for _l, d in reg for k in d.get("declassata") or []), ign, ""
 
 
-def sonde(M, run):
-    """({Tn: {decisione, affermazione, atteso, riga}} of the valid probes, [VIOLAZIONE texts], [AVVISO texts])"""
+def _sorgente(root, path):
+    try:
+        with open(os.path.join(root, path), encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except (OSError, TypeError):
+        return None
+
+
+def sonde(M, run, root=None):
+    """({Tn: {decisione, affermazione, atteso, riga}} of the valid probes, [VIOLAZIONE texts], [AVVISO texts]).
+    B10-B11 review: a probe whose expected text the assertion of the row (red if) already contains, or the source of the test
+    file holds (`assert False, "<expected>"`: the test would print it itself), proves no limit: VIOLAZIONE, ignored"""
     righe = [(n, x) for n, x in M["plan"] if SONDA_PREF.search(x)]
     if not righe:
         return {}, [], []
@@ -1442,6 +1452,11 @@ def sonde(M, run):
             E.append(_msg.T("plan-check-180.probe_no_resume", n=n, k=k))
         elif tid in ok:
             E.append(_msg.T("plan-check-180.probe_same_row", n=n, id=tid))
+        elif any(nrm(att) in nrm(x) for x in [M["tests"][tid]["asserzione"]] + M["tests"][tid]["texts"] + (
+                [M["tests"][tid]["mut"]["asserzione"]] if M["tests"][tid]["mut"] else [])):  # SONDA-NEL-ROSSO
+            E.append(_msg.T("plan-check-180.probe_in_assert", n=n, id=tid))
+        elif root and nrm(att) in nrm(_sorgente(root, M["tests"][tid]["path"]) or ""):  # SONDA-NEL-SORGENTE
+            E.append(_msg.T("plan-check-180.probe_in_source", n=n, id=tid, f=M["tests"][tid]["path"]))
         else:
             ok[tid] = {"decisione": k, "affermazione": aff.strip(), "atteso": att.strip(), "riga": n}
         viste.add(k)
@@ -1486,7 +1501,7 @@ def lint2(M, root, run=None):
             if not path_ok(root, f, M):
                 E.append(_msg.T("plan-check.step_path", n=S["n"], id=S["id"], f=f))
     if run is not None:   # the probes (B10): None = not checked (taglia measures the structure only)
-        _ok, e2, w2 = sonde(M, run)  # CONTROLLO-SONDE-LINT2
+        _ok, e2, w2 = sonde(M, run, root)  # CONTROLLO-SONDE-LINT2
         E.extend(e2)
         W.extend(w2)
     for n, t in M["plan"]:
@@ -2824,7 +2839,7 @@ def cmd_rossi(M, root, run, ev):
     # now proven: STOP, exit 1 as every STOP; classifica reads the class from rossi.json); green on the base ->
     # sonda_smentita (not a STOP: the claim is false, the test stays as a regression test); otherwise the rules above.
     # Any other probe line is ignored: its row is a normal row (green = verde, STOP).
-    sv, _se, sw = sonde(M, run)
+    sv, _se, sw = sonde(M, run, root)  # SONDE-ROSSI
     for w in sw:
         print("AVVISO: " + w)
     for tid, s in sorted(sv.items()):
