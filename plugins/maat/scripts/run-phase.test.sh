@@ -731,6 +731,8 @@ case ${FAKE_RED:-ok} in
 tests/test_calc.py:4: AssertionError</failure></testcase>'; e=FAIL ;;
   imp) b='<testcase classname="tests.test_calc" name="test_somma"><failure message="ImportError">ImportError: cannot import name somma</failure></testcase>'; e=FAIL ;;
   verde) b='<testcase classname="tests.test_calc" name="test_somma"/>'; e=PASS ;;
+  lim) b='<testcase classname="tests.test_calc" name="test_somma"><failure message="TooDeeplyNested">E  app.calc.TooDeeplyNested: depth 65536
+tests/test_calc.py:4: TooDeeplyNested</failure></testcase>'; e=FAIL ;;   # B10-B11 review: the limit, a text distinct from the red if
 esac
 printf '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' "$b" > "$ev/tests-be.junit.xml"
 printf '{"gate":"tests-be","esito":"%s","report":"tests-be.junit.xml","motivo":""}\n' "$e" > "$ev/tests-be.json"
@@ -804,14 +806,14 @@ check "test-red con un test verde → STOP" 'sed -n 1p "$TRUN/log/75-test-red.es
 # green → OK with an AVVISO «sonda smentita» (the review sees it), test-red closes as usual.
 mksonda() { # mkspec + the probe line on T1 (expected «assert 0 == 3»), the basis recomputed, the resume registered
   mkspec
-  printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: c0ffee02 — se vera: «assert 0 == 3»" >> "$TSP"
+  printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: c0ffee02 — se vera: «TooDeeplyNested»" >> "$TSP"
   local b; b=$(bash "$PCK" basis "$TSP" | sed -n 's/^Basis: //p')
   sed -i "s/^Approved basis: .*/Approved basis: $b/" "$TSP"
   mkdir -p "$TRUN/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: c0ffee02" > "$TRUN/log/01-plan.ripresa"
   printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=c0ffee02 · sha=%s\n' "$(sha256sum < "$TRUN/log/01-plan.ripresa" | cut -c1-12)" > "$TRUN/driver.log"
 }
 mksonda
-FAKE_CMD="$WRITE_RED" trun 76-test-red
+FAKE_RED=lim FAKE_CMD="$WRITE_RED" trun 76-test-red
 check "test-red con una sonda valida rossa col testo atteso → STOP «limite dimostrato in test-red (T1)», limite_dimostrato in rossi.json" 'sed -n 1p "$TRUN/log/76-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — limite dimostrato in test-red (T1)" && grep -q "\"esito\": \"limite_dimostrato\"" "$TRUN/test-red/rossi.json"'
 mksonda
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 77-test-red
@@ -907,6 +909,7 @@ TRUN="$TRUN" FAKE_CMD="$STAGE_WRITE" FAKE_OUT="$T/76-test-stage" bash "$RP" "$TR
 rm -rf "$FIC_LOCK"
 check "test-stage gira anche col lock di codice preso (non tocca il tree)" '[ $rc -eq 0 ] && grep -qx "FIC_PHASE=test-stage" "$T/76-test-stage.env"'
 check "  scope = la sola staging/, staging.fp = impronta del piano" 'grep -q "spec-t.run/staging/$" "$TRUN/log/76-test-stage.scope" && [ "$(cat "$TRUN/staging.fp")" = "$PFP" ]'
+rm -f "$T/77-test-red".*   # the label is also the one of the probe case above (B11): its .args are not this run's
 FAKE_OUT="$T/77-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-77" bash "$RP" "$TRUN" 77-test-red "$T/prompt.md" 2>"$T/77.err" </dev/null
 check "S3: stessa impronta → test copiati nel tree, nessuna sotto-sessione, verifica eseguita → OK" '[ ! -f "$T/77-test-red.args" ] && [ -f "$FIC_REPO/modules/api/tests/test_calc.py" ] && sed -n 1p "$TRUN/log/77-test-red.esito" | grep -q "^PHASE RESULT test-red: OK — test in sosta (S3)" && grep -q "· tests " "$TSP"'
 check "  staging consumato (staging.copiato)" '[ ! -d "$TRUN/staging" ] && [ -d "$TRUN/staging.copiato" ] && grep -q "S3: 2 file in sosta copiati" "$TRUN/log/77-test-red.stderr"'
