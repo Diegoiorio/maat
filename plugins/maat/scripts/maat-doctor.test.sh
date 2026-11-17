@@ -36,30 +36,10 @@ trap 'rm -rf "$T"' EXIT
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; sed 's/^/    /' "$T/out" 2>/dev/null; fi; }
 cygm() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
-# 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see (an app execution alias of
-# WindowsApps is a reparse point: Git Bash does not stat it, Python's shutil.which finds it; on some CI runners)
-# 1.8.0 (CI): that listing still missed it on some Windows runners (1.6.1, 1.7.0, 1.8.0: the doctor's shutil.which found
-# WindowsApps\wsl.EXE on the reduced PATH), so the same Python decides too (shutil.which and os.listdir on each folder),
-# and the PATH is computed again right before each case that uses it, not once at the start
-senza_wsl() {
-  local out="" d i=0 dirs=() py
-  IFS=: read -ra dirs <<< "$PATH"
-  py=$(for d in ${dirs[@]+"${dirs[@]}"}; do printf '%s\n' "$(cygm "$d")"; done | "$FIC_PY" -c 'import os, shutil, sys
-for d in sys.stdin.read().split("\n")[:-1]:
-    try:
-        ns = [n.lower() for n in os.listdir(d)]
-    except OSError:
-        ns = []
-    w = d and (shutil.which("wsl", path=d) or shutil.which("wsl.exe", path=d) or "wsl" in ns or "wsl.exe" in ns)
-    print(1 if w else 0)' | tr -d '\r')
-  for d in ${dirs[@]+"${dirs[@]}"}; do
-    i=$((i + 1))
-    [ "$(printf '%s\n' "$py" | sed -n "${i}p")" = 0 ] || continue   # SENZA-WSL-PY
-    { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ] || ls -A "$d" 2>/dev/null | grep -qixE 'wsl(\.exe)?'; } && continue
-    out+="${out:+:}$d"
-  done
-  printf '%s' "$out"
-}
+# 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see; 1.8.0 (CI): also when the
+# doctor's Python finds one (shutil.which, os.listdir) or a new bash does (`command -v`), recomputed right before each
+# case — senza_wsl of lib/senza-wsl.sh, shared with senza-wsl.test.sh and phase-events.test.sh
+. "$HERE/lib/senza-wsl.sh"
 PATH_SENZA_WSL=$(senza_wsl)
 
 mkdir -p "$T/bin" "$T/home/.claude" "$T/py38"
@@ -266,7 +246,7 @@ if [ "$WIN" = 1 ]; then
   check "  un wsl che vede solo Python (wsl.cmd in testa al PATH): la cartella tolta, exit 0 con «WSL assente»" \
     '! [ -e "$T/wsl-solo-py/wsl.exe" ] && ! [ -e "$T/wsl-solo-py/wsl" ] && ! ls -A "$T/wsl-solo-py" | grep -qixE "wsl(\.exe)?" &&
      [ -n "$(PATH="$T/wsl-solo-py" "$FIC_PY" -c "import shutil; print(shutil.which(\"wsl\") or \"\")")" ] && caso_solo_py senza_wsl'
-  MUT=$(sed -n '/^senza_wsl() {$/,/^}$/p' "$HERE/maat-doctor.test.sh" | sed '1s/^senza_wsl()/senza_wsl_mut()/; s/^\( *\)\[ .* || continue   # SENZA-WSL-PY$/\1:   # SENZA-WSL-PY tolto/')
+  MUT=$(sed -n '/^senza_wsl() {$/,/^}$/p' "$HERE/lib/senza-wsl.sh" | sed '1s/^senza_wsl()/senza_wsl_mut()/; s/^\( *\)\[ .* || continue   # SENZA-WSL-PY$/\1:   # SENZA-WSL-PY tolto/')
   eval "$MUT"
   check "controprova: senza_wsl senza la decisione di Python (SENZA-WSL-PY) -> la cartella resta, WSL non manca: rosso" \
     'printf "%s\n" "$MUT" | grep -q "SENZA-WSL-PY tolto" && ! printf "%s\n" "$MUT" | grep -q "|| continue   # SENZA-WSL-PY$" && ! caso_solo_py senza_wsl_mut && ! ha "WSL assente"'

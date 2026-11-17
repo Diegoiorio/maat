@@ -25,8 +25,11 @@ T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; tail -20 "$T/out" 2>/dev/null | sed 's/^/    /'; fi; }
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
-PATH=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ]; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
-export PATH
+# 1.8.0 (CI): the folders where bash, a new bash (`command -v`, as gates.sh) or the suite's Python (shutil.which,
+# os.listdir, as the doctor) finds a wsl are left out (lib/senza-wsl.sh), computed again right before each case: with
+# `-e` alone, a WindowsApps alias that Git Bash did not stat stayed, and gates.sh found wsl (CI of b2af7f1, Windows)
+. "$HERE/lib/senza-wsl.sh"
+PATH=$(senza_wsl); export PATH
 : > "$T/out"
 check "premessa: wsl e wsl.exe fuori dal PATH" '! command -v wsl >/dev/null 2>&1 && ! command -v wsl.exe >/dev/null 2>&1'
 repo() { (cd "$1" && git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false &&
@@ -45,6 +48,7 @@ EOF
 echo '{"enabledPlugins": {"maat@prova": true}}' > "$P/.claude/settings.json"
 printf '#!/bin/sh\nexit 0\n' > "$P/run-test.sh"
 repo "$P"
+PATH=$(senza_wsl); export PATH
 (cd "$P" && env HOME="$T/home" USERPROFILE="$T/home" PATH="$T/bin:$PATH" bash "$HERE/maat-doctor.sh") > "$T/out" 2>&1; rc=$?
 if [ "$WIN" = 1 ]; then
   check "doctor senza WSL, moduli nativi, copia_wsl auto -> exit 0, nessun MANCA, «WSL assente»" '[ "$rc" = 0 ] && ! grep -q "^MANCA" "$T/out" && grep -q "^OK WSL assente: copia veloce dei test non disponibile (wsl\.exe fuori dal PATH)" "$T/out"'
@@ -63,6 +67,7 @@ EOF
 printf 'echo n\n' > "$G/n/a.sh"; printf 'echo w\n' > "$G/w/b.sh"
 repo "$G"
 gates() { (cd "$G" && MAAT_ROOT=$PLUGIN bash "$1" --run-dir "$T/$2.run" std n/a.sh w/b.sh) > "$T/out" 2>&1; }
+PATH=$(senza_wsl); export PATH
 gates "$HERE/gates.sh" g1; rc=$?
 check "gates: modulo wsl senza WSL -> controlli BLOCKED con il motivo, esito BLOCKED (exit 3), mai PASS" '[ "$rc" = 3 ] && grep -q "^controlli-w: BLOCKED (eseguito) — WSL assente (wsl\.exe fuori dal PATH): il modulo w ha ambiente wsl" "$T/out" && ! grep -q "^[a-z-]*-w: PASS" "$T/out" && grep -q "^gates: esito=BLOCKED " "$T/out"'
 check "  il modulo nativo accanto gira senza WSL (controlli-n PASS)" 'grep -q "^controlli-n: PASS (eseguito)" "$T/out"'
@@ -73,6 +78,23 @@ if cmp -s "$HERE/gates.sh" "$T/gm/gates.sh"; then fail=$((fail + 1)); echo "FAIL
 else
   gates "$T/gm/gates.sh" g2
   check "controprova: senza la regola i controlli del modulo wsl sono FAIL, non BLOCKED (il caso sopra sarebbe rosso)" 'grep -q "^controlli-w: FAIL" "$T/out" && ! grep -q "WSL assente" "$T/out"'
+fi
+
+# the PATH without wsl itself (Windows only): a folder first in the PATH with a wsl only Python sees (wsl.cmd: shutil.which
+# finds it through PATHEXT; -e, the listing and `command -v` of bash look for wsl and wsl.exe), as the alias of those
+# runners: senza_wsl drops it, the suite's Python finds no wsl on the result. Counterproof: senza_wsl without the
+# Python decision (SENZA-WSL-PY) keeps it -> red. Outside Windows shutil.which does not use PATHEXT: SALTATO.
+if [ "$WIN" = 1 ]; then
+  mkdir -p "$T/wsl-solo-py"; printf '@exit /b 0\r\n' > "$T/wsl-solo-py/wsl.cmd"
+  py_wsl() { PATH=$1 "$FIC_PY" -c 'import shutil; print(shutil.which("wsl") or shutil.which("wsl.exe") or "")' | tr -d '\r'; }
+  check "PATH senza wsl: un wsl che vede solo Python (wsl.cmd in testa) -> la cartella tolta, Python non trova wsl" \
+    '[ -n "$(py_wsl "$T/wsl-solo-py")" ] && [ -z "$(py_wsl "$(PATH="$T/wsl-solo-py:$PATH" senza_wsl)")" ]'
+  MUT=$(sed -n '/^senza_wsl() {$/,/^}$/p' "$HERE/lib/senza-wsl.sh" | sed '1s/^senza_wsl()/senza_wsl_mut()/; s/^\( *\)\[ .* || continue   # SENZA-WSL-PY$/\1:   # SENZA-WSL-PY tolto/')
+  eval "$MUT"
+  check "controprova: senza la decisione di Python (SENZA-WSL-PY) la cartella resta e Python trova wsl: rosso" \
+    'printf "%s\n" "$MUT" | grep -q "SENZA-WSL-PY tolto" && [ -n "$(py_wsl "$(PATH="$T/wsl-solo-py:$PATH" senza_wsl_mut)")" ]'
+else
+  echo "SALTATO [PATH senza wsl, wsl.cmd visto solo da Python]: la piattaforma non è Windows (shutil.which senza PATHEXT)"
 fi
 
 # --- 3. run_cp of run-phase.sh: native module, counterproof.sh directly, never wsl -----------------------------------------
