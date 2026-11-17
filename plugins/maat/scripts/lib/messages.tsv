@@ -299,6 +299,10 @@ plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignor
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
 
+# 1.8.1 C1 (G2-1): rossi --instabili, the package that fell (go-junit «did not run»), related() of an unclaimed file
+plan-check-181.red_unclaimed	(no acceptance test claims it)	(nessun test di accettazione lo rivendica)
+plan-check-181.red_not_run_n	(+{n} tests not run)	(+{n} test non eseguiti)
+
 # B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
 # review prompt shows a disproved claim next to its row (driver.py)
 plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})
