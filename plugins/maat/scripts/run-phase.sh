@@ -1845,7 +1845,15 @@ originale=$orig}"
   cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n 's/^originale=//p' | head -1); [ -n "$orig" ] ||
     orig=$(printf '%s\n' "$esito" | sed -n '1p'); cs_ok=0; esito="PHASE RESULT $phase: STOP — $cs_why${orig:+
 originale=$orig}"; }
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
+  if [ -n "$esito" ] && [ -f "$sp_md" ]; then
+    # (final review 1.8.0, R4/DA7) a test-red OK turned into a STOP here was not parked above (parcheggia parks only a
+    # STOP line, and only once: a second call would copy the restored tree over the parked files): park it now
+    cs_gia=$(printf '%s\n' "$esito" | sed -n 1p | grep -Ec '^(PHASE RESULT|ESITO FASE) [^:]*: STOP')
+    cycle_state_read "$sp_md" || {
+      cs_stop
+      if [ "$phase" = test-red ] && [ "$cs_gia" = 0 ]; then esito=$(parcheggia "$esito"); fi  # PARCHEGGIO-CS-STOP
+    }
+  fi
   case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)
     if [ $cs_ok -eq 1 ] && printf '%s\n' "$esito" | sed -n 1p | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; then
       sp_sum=$(cksum < "$sp_md" 2>/dev/null)

@@ -59,6 +59,10 @@ check "  leggi moduli.0.separatori_test" '[ "$(MAAT_CONFIG=$T/sep.json mc leggi 
 echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": "/"}]}' > "$T/sep-ko.json"
 mc valida "$T/sep-ko.json" > "$T/out" 2>&1; rc=$?
 check "separatori_test non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.separatori_test" "$T/out"'
+# (final review 1.8.0) the documented list «among /, ::, [» is checked: any other separator is refused (enum)
+caso_sep_enum() { printf '%s\n' '{"versione_schema": 1, "harness": ">=1.8", "moduli": [{"nome": "app", "radice": ".", "separatori_test": ["/", "."]}]}' > "$T/sep-enum.json"
+  "$FIC_PY" "$1" valida "$T/sep-enum.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ": moduli.0.separatori_test.1: " "$T/out" && grep -qF "fuori elenco" "$T/out"; }
+check "separatori_test con un separatore fuori elenco (.) -> exit 1 con la chiave dell elemento" 'caso_sep_enum "$MC"'
 # 1.8.0 (D4, B12): moduli[].simbolo_mancante, optional list of regexes (a missing symbol of this runner, nomi_test.py)
 echo '{"versione_schema": 1, "harness": ">=1.8", "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": ["unresolved reference: \\w+"]}]}' > "$T/sm.json"
 mc valida "$T/sm.json" > "$T/out" 2>&1; check "simbolo_mancante: lista di regex valida" '[ $? = 0 ]'
@@ -615,6 +619,14 @@ check "controprova: S12 senza il controllo del segno -> ciclo.riprese -1 passa, 
 m=$(mutante s13 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-MODULI-180/if False:/')
 [ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"   # the catalog next to the mutant: it runs for real
 check "controprova: S13 disattivato -> simbolo_mancante con harness >=1.7 passa (valida esce 0), rosso" '[ -n "$m" ] && ! caso_s13 "$m" simbolo_mancante "[\"x\"]" && "$FIC_PY" "$m" valida "$T/ks13.json" >/dev/null 2>&1'
+m=$(mutante sep-enum 's/^/x/'); [ -z "$m" ] || { "$FIC_PY" - "$(dirname "$(dirname "$m")")/schemas/maat-config.schema.json" <<'EOF'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p, encoding="utf-8"))
+del s["properties"]["moduli"]["items"]["properties"]["separatori_test"]["items"]["enum"]
+json.dump(s, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+EOF
+  cp "$MC" "$m"; cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"; }   # the reader unchanged, the schema without the enum
+check "controprova: schema senza l enum di separatori_test -> il separatore . passa, rosso" '[ -n "$m" ] && ! caso_sep_enum "$m"'
 m=$(mutante moddi 's/^    return instrada(r, percorso)$/    return None/')
 check "controprova: modulo_di importato che non instrada -> diverso dalla CLI, rosso" '[ -n "$m" ] && [ "$(MAAT_ROOT=$PLUGIN imp "$m")" != "$IMP" ]'
 m=$(mutante corta 's/key=lambda c: -c\[0\]/key=lambda c: c[0]/g')

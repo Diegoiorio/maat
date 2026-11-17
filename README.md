@@ -218,8 +218,8 @@ After every phase a script (never the model) gives its outcome a class, and the 
 |---|---|---|
 | OK | the phase did its job | goes on |
 | OK with an accepted deviation | test-red changed only test data, and an independent reviewer and a script agreed | goes on; the deviation is shown to the code review |
-| Resumable | a plan left `DRAFT`; an `Open decision:` that is not proved; a test that needs a stub (a missing symbol); a background agent not collected | **relaunches the same phase** with the open findings in its prompt |
-| Human | a real decision the code and the tests cannot take, with its proof; a limit shown by a probe; a refused deviation; a conflict with the suite | final STOP (exit 1), the line says why and where the proof is |
+| Resumable | a plan that stops with the spec still `DRAFT`; an `Open decision:` that is not proved; a test that needs a stub (a missing symbol); a background agent not collected | **relaunches the same phase** with the open findings in its prompt |
+| Human | a real decision the code and the tests cannot take, with its proof; a limit shown by a probe; a refused deviation; a conflict with the suite; a plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` | final STOP (exit 1), the line says why and where the proof is; a plan `OK` on `DRAFT` is registered (`Stop umano:` in `driver.log`) and stays stopped until the State changes (approve the plan or change the spec) |
 | Technical | a failed run, invalid output, a blocked gate, a busy lock | STOP, WAIT or BUSY, as before |
 
 Limits, counted per cycle and also across invocations: at most **2 resumes per phase type** (plan, test-red) and **3

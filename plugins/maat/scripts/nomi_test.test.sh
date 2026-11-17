@@ -79,6 +79,11 @@ print("sep\t%s" % ",".join(nt.separatori("a/b.rs")))
 print("sep\t%s" % ",".join(nt.separatori("a/b.bats")))
 print("sep\t%s" % ",".join(nt.separatori("a/b.bats", ["/"])))
 print("foglia\t%s" % nt.foglia("TestX/limit 5, 50 bytes", nt.separatori("x_test.go")))
+for dich in (["."], ["/", " "], ["/", 5]):   # (final review 1.8.0) a declared separator outside /, ::, [ is refused
+    try:
+        print("sepko\t%s\t%s" % (",".join(nt.separatori("a/b.bats", dich)), dich))
+    except ValueError:
+        print("sepko\trifiutato\t%s" % dich)
 for t in ("./decode.go:12:3: undefined: MaxDepth", "x.Foo undefined (type T has no field or method MaxDepth)",
           "error[E0425]: cannot find value `depth`", "src/a.test.ts: SyntaxError: The requested module does not provide an export named 'MaxDepth'",
           "error TS2305: Module has no exported member", "ImportError: cannot import name 'max_depth' from 'app'",
@@ -104,6 +109,7 @@ check "separatori: .py -> [,::" 'printf "%s\n" "$o" | sed -n "/^sep/p" | sed -n 
 check "separatori: .rs -> solo ::" 'printf "%s\n" "$o" | sed -n "/^sep/p" | sed -n 3p | grep -qx "sep	::"'
 check "separatori: .bats -> [,:: (niente /)" 'printf "%s\n" "$o" | sed -n "/^sep/p" | sed -n 4p | grep -qx "sep	\[,::"'
 check "separatori dichiarati (separatori_test) al posto di quelli del linguaggio" 'printf "%s\n" "$o" | sed -n "/^sep/p" | sed -n 5p | grep -qx "sep	/,::"'
+check "separatori dichiarati fuori da /, ::, [ (., spazio, un numero) -> rifiutati con ValueError (fail-closed)" '[ "$(printf "%s\n" "$o" | grep -c "^sepko	rifiutato	")" = 3 ]'
 check "foglia Go: lo spazio scritto _" 'printf "%s\n" "$o" | grep -qx "foglia	limit_5,_50_bytes"'
 check "SIMBOLO_MANCANTE: Go undefined e has no field or method" '[ "$(printf "%s\n" "$o" | grep -c "^simbolo	go	")" = 2 ]'
 check "SIMBOLO_MANCANTE: Rust E0425, TS export e TS2305, Python import e attributo, Java" 'printf "%s\n" "$o" | grep -q "^simbolo	rust	error\[E0425\]" && [ "$(printf "%s\n" "$o" | grep -c "^simbolo	ts	")" = 2 ] && [ "$(printf "%s\n" "$o" | grep -c "^simbolo	python	")" = 2 ] && printf "%s\n" "$o" | grep -q "^simbolo	java	"'
@@ -123,6 +129,10 @@ EOF
 esegui "$T/mut.py"
 nno=$(tr -d '\r' < "$T/out" | grep -c "^NO	")
 check "controprova: relazione ridotta all uguaglianza -> i casi discendente e antenato rossi" '[ "$nno" -ge 10 ]'
+# counterproof: separatori without the check of the declared values -> «.» becomes a level, nothing refused
+sed 's/^        if fuori:$/        if False:/' "$NT" > "$T/mut2.py"
+esegui "$T/mut2.py"
+check "controprova: separatori senza il controllo dei valori dichiarati -> nessun rifiuto (rosso)" '! cmp -s "$NT" "$T/mut2.py" && ! tr -d "\r" < "$T/out" | grep -q "^sepko	rifiutato	"'
 
 echo "nomi_test.test.sh: $pass ok, $fail falliti"
 [ "$fail" = 0 ]

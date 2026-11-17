@@ -79,8 +79,15 @@ outside the project). It holds:
   `n_fase`, `max`, `state`, `piano`, `rilievi`) plus `declassata: <key>` per Open decision made non-valid; the same
   write is the line `Ripresa: <label> · esito=… · n=… · declassata=… · sha=<sha of the file>` in `driver.log`, and a
   `.ripresa` without that line is ignored (`AVVISO`). At most `ciclo.riprese` (default 2) per phase type and 3 per
-  cycle, each with progress (another plan fingerprint or other open findings); `ciclo.riprese: 0` or `FIC_RIPRESE=0`
-  = the STOP of 1.7;
+  cycle, each with progress (another plan fingerprint or other open findings; in test-red, DA9, another **cause**:
+  the field `rilievi` ends with `;<key>`, the sha256[:8] of the sorted missing symbols of `rosso_simbolo` or, without
+  them, of the `causa` with its whitespace compressed, and only that key is compared: the same cause twice is
+  `senza-progresso`, a human STOP); `ciclo.riprese: 0` or
+  `FIC_RIPRESE=0` = the STOP of 1.7. A plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` is
+  not resumable: a final human STOP, registered as `Stop umano: <label> · regola=… · state=<State>` in `driver.log`
+  (row R4 of `next`: stopped until the State changes; `state=sha:<sha256[:12] of the spec file>` when the State
+  could not be computed, stopped while the file has that hash; `state=-` when neither could, stopped until a person,
+  after checking the spec, deletes that line);
 - `log/<label>.esito` — the phase's `PHASE RESULT` line (`ESITO FASE` up to 1.2.x, still read) (from the final `result` event only) and the
   `State` at its end, written by `run-phase.sh`: how `cycle-state.sh` knows an implement or a fix
   finished;
@@ -366,7 +373,7 @@ uses it (`workers/<fase>.md`, `autore.md`, `revisori.md`, `formato-1.md`, `fresc
 | Choice of the next phase, resumption table (FIC «Resumption», step 3) | `cycle-state.sh` / `driver.py next` | `cycle-state.test.sh` (on the driver, the only engine since 1.6.0), `tools/esempi-equiv.test.sh` (the expected outputs) |
 | Anti-loop: same phase and same `State:` → STOP (FIC «Resumption») | `driver.py run` | `driver.test.sh` §4, counterproof §6 |
 | `PHASE RESULT … STOP` (or `ESITO FASE … STOP`) → STOP; run-phase exits 4/5/6/7 as STOP/WAIT (FIC step 5) | `driver.py run` | `driver.test.sh` §4 |
-| 1.8.0: the class of a STOP (`classifica`: TECNICO as before, UMANO final with its proof, RIPRENDIBILE → `.ripresa` and the relaunch of the same phase); limits per cycle (`ciclo.riprese` per phase type, 3 in all), progress required, the anti-loop key `(word, State, resumes)`; `next` rows R1–R3 (a second invocation after the limit stops) | `driver.py run`, `cycle-state.sh` rows R1–R3, `maat-config.py valida` (S12) | `driver.test.sh` §14–15, `cycle-state.test.sh`, `maat-config.test.sh` |
+| 1.8.0: the class of a STOP (`classifica`: TECNICO as before, UMANO final with its proof, RIPRENDIBILE → `.ripresa` and the relaunch of the same phase); limits per cycle (`ciclo.riprese` per phase type, 3 in all), progress required, the anti-loop key `(word, State, resumes)`; `next` rows R1–R4 (a second invocation after the limit, or after a plan `OK` on `DRAFT`, stops) | `driver.py run`, `cycle-state.sh` rows R1–R4, `maat-config.py valida` (S12) | `driver.test.sh` §14–15, `cycle-state.test.sh`, `maat-config.test.sh` |
 | `NEEDS_VERIFICATION` obtained in this invocation → STOP (FIC «Resumption», «Termination») | `driver.py run` | `driver.test.sh` §4 |
 | Phase still running (`.running` without `.exit`) → no launch (FIC step 2) | `driver.py run` (exit 4) | `driver.test.sh` §4 |
 | Numbered labels, `--worker=<fase>` phase prompt, forwarded flags (FIC step 4) | `driver.py run` | `driver.test.sh` §4 |

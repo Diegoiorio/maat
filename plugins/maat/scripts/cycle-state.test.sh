@@ -458,6 +458,15 @@ reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"
 expect "R4: DRAFT e l ultima plan con «Stop umano:» registrato in driver.log, State uguale → STOP (non PLAN)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan -
 expect "R4 (review B12-B13): «Stop umano:» scritto con state=- (State ignoto) → STOP (fail-closed)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
+expect "  (review finale) state=-: il rimedio detto, cambiare la spec non basta, una persona cancella la riga" "né lo State né il file della spec erano leggibili.*una persona cancella la riga di 01-plan da .*driver.log$"
+sed -i 's/^Contesto\.$/Contesto cambiato./' "$SP"
+expect "  (review finale) state=-: anche con la spec cambiata resta STOP (fail-closed)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
+# (final review 1.8.0) State not computable when the line was written: state=sha:<sha256[:12] of the spec file>, equal
+# only while the spec file has that hash
+reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "sha:$(sha256sum "$SP" | cut -c1-12)"
+expect "R4 (review finale): state=sha:<impronta della spec> e la spec invariata → STOP" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT \(uno STOP finale, in .*driver.log\): approva"
+sed -i 's/^Contesto\.$/Contesto cambiato./' "$SP"
+expect "R4 (review finale): state=sha:<impronta> e la spec cambiata → PLAN (lo STOP si toglie cambiando la spec)" "^PLAN — piano in DRAFT$"
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan 000000000000
 expect "R4: «Stop umano:» di un altro State (la spec e cambiata) → PLAN come oggi" "^PLAN — piano in DRAFT$"
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"; : > "$RUN/log/02-plan.jsonl"
@@ -476,16 +485,21 @@ if csmut 's/^\( *\)if dp and .*# DRAFT-LIMITE$/\1if False:/'; then
   o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
   if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R3: senza la riga DRAFT → PLAN scavalca il limite]"; printf '    %s\n' "$o"; fi
 else fail=$((fail + 1)); echo "FAIL [controprova R3: la mutazione si applica]"; fi
-if csmut 's/^\( *\)if lp and stop_umani(run_fs).*# DRAFT-STOP-UMANO$/\1if False:/'; then
+if csmut 's/^\( *\)if su is not None and .*# DRAFT-STOP-UMANO$/\1if False:/'; then
   reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"
   o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
   if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4: senza la riga DRAFT → PLAN rilancia il piano]"; printf '    %s\n' "$o"; fi
 else fail=$((fail + 1)); echo "FAIL [controprova R4: la mutazione si applica]"; fi
-if csmut 's/stop_umani(run_fs).get(lp\[-1\]) in (STATE, "-"):/stop_umani(run_fs).get(lp[-1]) == STATE:/'; then
+if csmut 's/(su in (STATE, "-") or /(su == STATE or /'; then
   reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan -
   o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
   if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4 state=-: senza il caso ignoto la riga DRAFT → PLAN rilancia]"; printf '    %s\n' "$o"; fi
 else fail=$((fail + 1)); echo "FAIL [controprova R4 state=-: la mutazione si applica]"; fi
+if csmut 's/(su.startswith("sha:") and su == impronta_spec(spec_fs))/su.startswith("sha:")/'; then
+  reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "sha:$(sha256sum "$SP" | cut -c1-12)"; sed -i 's/^Contesto\.$/Contesto cambiato./' "$SP"
+  o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
+  if printf '%s\n' "$o" | grep -q "^STOP — 01-plan ha dato OK"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4 sha: senza il confronto dell impronta la spec cambiata resta STOP per sempre]"; printf '    %s\n' "$o"; fi
+else fail=$((fail + 1)); echo "FAIL [controprova R4 sha: la mutazione si applica]"; fi
 rm -f "$O/driver.py" "$O/maat_paths.py" "$O/maat_msg.py"; rm -rf "$O/lib"
 reset
 

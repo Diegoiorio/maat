@@ -1018,6 +1018,21 @@ echo 000000000000 > "$TRUN/staging.fp"
 FAKE_CMD="$WRITE_RED" trun 79d-test-red
 check "(review B12-B13) staging di uno STOP con un'altra impronta del piano → staging.scartato (non cancellato) e un AVVISO" '[ -f "$TRUN/staging.scartato/modules/api/tests/test_calc.py" ] && grep -q "AVVISO: S3: i file parcheggiati da uno STOP di test-red sono di un.altra impronta" "$TRUN/log/79d-test-red.stderr"'
 rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+# (final review 1.8.0, R4/DA7) a test-red that ends OK but whose State cannot be read at the end (cycle-state.sh with no
+# State: line) is turned into a STOP by cs_stop, after the parking of verify_red's outcome: it is parked too.
+# On the copy of the plugin, with a cycle-state.sh that never gives a State; counterproof: that parking removed.
+cp "$HC/scripts/cycle-state.sh" "$T/cs-vero.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "Next: STOP — finto: State non calcolabile"' 'exit 1' > "$HC/scripts/cycle-state.sh"
+csko() { mkspec; FAKE_OUT="$T/$1" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-$1" FAKE_CMD="$WRITE_RED" bash "$MRP" "$TRUN" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null; }
+cp "$RP" "$MRP"; csko 79e-test-red
+check "(review finale) test-red OK con lo State non leggibile alla fine → STOP di cs_stop, albero uguale al pre-tree, file in staging/ (origine=stop)" 'sed -n 1p "$TRUN/log/79e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — finto: State non calcolabile · .*file della fase parcheggiati" && [ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" = "$(cat "$TRUN/log/79e-test-red.pre-tree")" ] && [ -f "$TRUN/staging/modules/api/tests/test_calc.py" ] && [ "$(cat "$TRUN/staging.origine")" = stop ] && [ ! -f "$FIC_REPO/modules/api/app/calc.py" ]'
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+if mrp_mut 's/^\( *\)if \[ "\$phase" = test-red \] && \[ "\$cs_gia" = 0 \]; then esito=.*# PARCHEGGIO-CS-STOP$/\1:/'; then
+  csko 79f-test-red
+  check "controprova: senza il parcheggio dopo cs_stop l albero differisce dal pre-tree (rosso)" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" != "$(cat "$TRUN/log/79f-test-red.pre-tree")" ]'
+else check "controprova parcheggio dopo cs_stop: la mutazione si applica" false; fi
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+cp "$T/cs-vero.sh" "$HC/scripts/cycle-state.sh"; cp "$RP" "$MRP"
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
 check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py\( · .*\)\{0,1\}$" && [ ! -f "$T/75b-test-red.gates-args" ]'

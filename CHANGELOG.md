@@ -20,15 +20,20 @@ and a cycle can reach `IMPLEMENTED` where it could not. No format Maat reads cha
   limit proved by a probe, a test deviation of another family or refused, a conflict with the suite, a review that
   asks for a human decision. Anything not classified stays a final STOP (fail-closed).
 - **Resumes.** A resumable STOP makes the driver relaunch **the same phase** with the prompt line `RIPRESA (driver):
-  <n>/<max> — <cause> — <open findings file>`. Resumable: a plan that ends still `DRAFT` (the reviews of round 1 not
-  applied), an `Open decision:` that is not valid, a test-red with a missing stub (`rosso_simbolo`), and, only in plan
-  and test-red, an agent or a job in the background not collected at the end. Limits, **per cycle** (counted from
+  <n>/<max> — <cause> — <open findings file>`. Resumable: a plan that stops (`STOP` line) with the spec still
+  `DRAFT` (the reviews of round 1 not applied), an `Open decision:` that is not valid, a test-red with a missing stub
+  (`rosso_simbolo`), and, only in plan and test-red, an agent or a job in the background not collected at the end. Limits, **per cycle** (counted from
   `driver.log`, so also across invocations of the driver): at most **2 resumes per phase type** (plan, test-red) and
   **3 per cycle**; every resume must **show progress** (another plan fingerprint or other open findings; in test-red
   another cause), otherwise it is a human STOP; over the limit, a human STOP («limite delle riprese»). The record is
   `log/<label>.ripresa` on the stopped phase and a `Ripresa:` line in `driver.log`; a `.ripresa` without its line is
   ignored (`AVVISO`), and deleting one does not lower the count. A second invocation after a final STOP stays stopped
-  until the spec changes. `cycle-state.sh` has the matching rows. It applies in interactive use too. New optional key
+  until the spec changes. A plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` is not resumable:
+  it is a final human STOP, registered as a `Stop umano: <label> · regola=… · state=<State>` line in `driver.log`, and
+  it stays stopped until the State changes (approve the plan or change the spec). When the State cannot be computed
+  the line records `state=sha:<12>`, the sha256 of the spec file, and stays a STOP while the file has that hash; when
+  the spec cannot be read either, `state=-` stays a STOP (fail-closed) until a person, after checking the spec,
+  deletes that line. `cycle-state.sh` has the matching rows. It applies in interactive use too. New optional key
   `ciclo.riprese` (integer ≥ 0, default 2; `0` = 1.7) and the environment variable `FIC_RIPRESE`.
 - **Open decisions are typed and checked.** A plan that stops for a human decision writes `Open decision: <type> —
   <text>` (`Decisione aperta:`), type from a closed list. The driver checks what a script can check: `cut` (it runs
@@ -65,9 +70,10 @@ and a cycle can reach `IMPLEMENTED` where it could not. No format Maat reads cha
   «stub non additivo». A collection or import error that names a missing symbol (a per-language table, extendable
   with the new `moduli[].simbolo_mancante`) is `rosso_simbolo` and is resumable. `lint2` refuses a plan whose red on
   the base is a compilation error. Stubs in existing files are not absorbed by L2.
-- **A STOP of test-red leaves a clean tree.** Before a final STOP and before each resume, the files written by the
-  phase move to `<run-dir>/staging/` (`staging.origine=stop`) and the tree goes back to the start; the next test-red
-  copies them back and still launches its sub-session.
+- **A STOP of test-red leaves a clean tree.** Before a final STOP (a technical end, and an `OK` that becomes a STOP
+  because the State cannot be read at the end of the phase, included) and before each resume, the files written by
+  the phase move to `<run-dir>/staging/` (`staging.origine=stop`) and the tree goes back to the start; the next
+  test-red copies them back and still launches its sub-session.
 - **Names of nested tests.** One rule, in the new `scripts/nomi_test.py`, for `rossi` and the counterproof: a Go
   subtest (`TestX/case`, the space written `_`), a pytest parameter (`test_x[a]`) or class (`TestX::test_a`), a Rust
   `mod::t`, a vitest `describe` are attributed to the test the plan names, with the texts joined in report order; a
@@ -111,14 +117,16 @@ verdict:`, `Requirements still covered:`, `test-data: `, the line `stub <path>`,
 diff-test` and `deviazione`.
 
 - **A run dir of 1.7** has no `.ripresa`, so no resume is counted; a STOP left by 1.7 stays a STOP at the next
-  invocation (except `DRAFT`, which already gave `PLAN`). **Approved 1.7 plans** are accepted by `lint`; `lint2`
-  refuses an «undefined» red on the base only on a plan still to be approved or reopened; the fingerprint of an
-  approved plan does not change.
+  invocation (except a plan that stopped on `DRAFT`, which already gave `PLAN`; a plan that printed `OK` on `DRAFT`
+  is a final STOP only in a 1.8 run dir, where its `Stop umano:` line exists). **Approved 1.7 plans** are accepted
+  by `lint`; `lint2` refuses an «undefined» red on the base only on a plan still to be approved or reopened; the
+  fingerprint of an approved plan does not change.
 - **The fingerprint of the harness changes** (every script and prompt of the plugin is part of it): update the plugin
   **between cycles**, not during one; a cycle in progress stops with «harness changed» and the usual remedy.
 - **`maat.json`:** new optional keys `ciclo.riprese`, `moduli[].simbolo_mancante` (a list of regexes) and
-  `moduli[].separatori_test` (a list among `/`, `::`, `[`). A file that uses them declares `"harness": ">=1.8"`: an
-  older Maat refuses the keys, and the check S12 of `maat-config.py valida` enforces it for `ciclo`.
+  `moduli[].separatori_test` (a list among `/`, `::`, `[`: any other value is refused). A file that uses them declares
+  `"harness": ">=1.8"`: an older Maat refuses the keys, and `maat-config.py valida` enforces it, with the check S12
+  for `ciclo` and S13 for `moduli[].simbolo_mancante` and `moduli[].separatori_test`.
 - **The guard** has one new denial, only in sub-sessions (`FIC_PHASE`): `Agent`/`Task` in the background.
 - A module with `radice_pacchetti` in a subfolder syncs the counterproof mirror exactly as before.
 

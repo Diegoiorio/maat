@@ -32,12 +32,17 @@ SEP_LINGUA = {".go": ["/"], ".py": ["["], ".rs": []}
 SEP_ALTRI = ["["]
 UNIONE = "::"   # the join of file, classes and name in a JUnit id: always a level
 SEP_VITEST = [" > "]
+SEP_AMMESSI = ("/", "::", "[")   # moduli[].separatori_test: the enum of maat-config.schema.json
 
 
 def separatori(percorso, dichiarati=None):
-    """the separators of the levels for the test file `percorso` (its extension), or the declared ones of the module"""
+    """the separators of the levels for the test file `percorso` (its extension), or the declared ones of the module
+    (only among SEP_AMMESSI, as the schema of maat.json says: anything else is a ValueError, fail-closed)"""
     if dichiarati:
-        s = [x for x in dichiarati if isinstance(x, str) and x]
+        fuori = [x for x in dichiarati if not isinstance(x, str) or x not in SEP_AMMESSI]
+        if fuori:
+            raise ValueError("separatori_test: %r not among %s" % (fuori, " ".join(SEP_AMMESSI)))
+        s = list(dichiarati)
     else:
         s = list(SEP_LINGUA.get(os.path.splitext(percorso or "")[1].lower(), SEP_ALTRI))
     if UNIONE not in s:

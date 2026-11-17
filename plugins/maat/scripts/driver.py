@@ -826,9 +826,12 @@ def _cycle_state(spec_fs, tmp):
                     nxt("STOP — " + T("cycle-state-180.ripresa_stop", label=lp[-1], why=messaggio_ripresa(dp), run=RUN))
                 # R4 (B9 fix 2): the last plan phase printed OK on a spec still DRAFT, a final UMANO STOP the driver
                 # registered in driver.log at this State: STOP again (a phase cannot write that line)
-                # (B12-B13 review) a line written with state=- (State unknown) counts as this State: fail-closed
-                if lp and stop_umani(run_fs).get(lp[-1]) in (STATE, "-"):  # DRAFT-STOP-UMANO
-                    nxt("STOP — " + T("cycle-state-180.stop_umano", label=lp[-1], run=RUN))
+                # (final review) state=sha:<h> (State not computed then): this State while the spec file has hash h;
+                # state=- (neither computed) counts as this State, fail-closed, with its own remedy
+                su = stop_umani(run_fs).get(lp[-1]) if lp else None
+                if su is not None and (su in (STATE, "-") or (su.startswith("sha:") and su == impronta_spec(spec_fs))):  # DRAFT-STOP-UMANO
+                    nxt("STOP — " + (T("cycle-state-180.stop_umano", label=lp[-1], run=RUN) if su != "-" else
+                                     T("cycle-state-180.stop_umano_ignoto", label=lp[-1], run=RUN)))
                 nxt("PLAN — " + T("cycle-state.plan_draft"))
             nxt("STOP — " + T("cycle-state.plan_nhd"))
         if plan != "APPROVED":
@@ -1162,9 +1165,29 @@ NON_VERIFICATA = "decisione non verificata da script"   # a token, the same in e
 NON_VERIFICATA_RIGA = "Decisione non verificata da script: "
 # (B9 fix 2) the driver.log line of a final UMANO STOP on an OK line of a plan phase (a plan OK on a spec still DRAFT):
 # «<UTC> Stop umano: <label> · regola=<rule> · state=<State after the phase>». The phases do not write driver.log (the
-# guard denies it); row R4 of `next` reads it: DRAFT and the last plan label stopped so at this State -> STOP, not PLAN
+# guard denies it); row R4 of `next` reads it: DRAFT and the last plan label stopped so at this State -> STOP, not PLAN.
+# (final review 1.8.0) State not computable after the phase: state=sha:<sha256[:12] of the spec file>, equal only while
+# the spec file has that hash; neither computable: state=- (fail-closed: a STOP until a person removes the line)
 STOP_UMANO_RIGA = "Stop umano: "
-STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+|-)$")   # «-»: State unknown
+STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+|sha:[0-9a-f]{12}|-)$")
+
+
+def impronta_spec(spec_fs):
+    """«sha:<sha256[:12] of the bytes of the spec file>», or "" if it cannot be read (the identity of a Stop umano: line
+    whose State could not be computed)"""
+    try:
+        with open(spec_fs, "rb") as fh:
+            return "sha:" + hashlib.sha256(fh.read()).hexdigest()[:12]
+    except OSError:
+        return ""
+
+
+def stato_stop_umano(righe, spec_fs):
+    """the state= of a Stop umano: line: the State of the lines of next, else the identity of the spec file, else «-»"""
+    st = next((l[7:].strip() for l in righe if l.startswith("State: ")), "")
+    return st if re.fullmatch(r"[0-9a-f]+", st) else (impronta_spec(spec_fs) or "-")
+
+
 AMBITO_H = re.compile(r"^#+[ \t]+(?:[0-9]+\.[ \t]*)?(?:Out of scope|Fuori ambito|Constraints|Vincoli)\b", re.I)
 # (B10-B11 review) also «## Requisiti» / «## Requirements» and the ids R<n> of the Maat specs
 REQ_H = re.compile(r"^##[ \t]+(?:[0-9]+\.[ \t]*)?(?:requisiti|criteri di accettazione|(?:functional )?requirements"
@@ -2596,9 +2619,9 @@ def cmd_run(argv):
             if c.classe == "UMANO":
                 pv = c.prova if os.path.isabs(c.prova) else os.path.join(run_fs, c.prova)
                 if fase == "plan":   # B9 fix 2: registered, so that the next invocation stops too (row R4 of next)
-                    st_ok = next((l[7:] for l in (_next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs))
-                                  if l.startswith("State: ")), "")
-                    ev("%s%s · regola=%s · state=%s" % (STOP_UMANO_RIGA, label, c.regola, st_ok or "-"))  # STOP-UMANO-REGISTRATO
+                    st_ok = stato_stop_umano(_next_da_script(cs_test, spec_fs) if cs_test else cycle_state(spec_fs),
+                                             spec_fs)  # STATO-STOP-UMANO
+                    ev("%s%s · regola=%s · state=%s" % (STOP_UMANO_RIGA, label, c.regola, st_ok))  # STOP-UMANO-REGISTRATO
                 if c.regola == "decisione" and NON_VERIFICATA in c.causa:   # B10-B11 review: as on a STOP line
                     ev("%s%s · %s" % (NON_VERIFICATA_RIGA, label, " ".join(c.causa.split())[:600]))  # NON-VERIFICATA-OK
                 return fine("STOP", esito + " · " + c.causa + " · " + T("driver-180.prova", f=_rel(pv, root)), 1)

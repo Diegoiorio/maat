@@ -749,8 +749,8 @@ rm -rf $CW/spec-m*.run $CW/spec-m.md $CW/spec-m-1-a.md $CW/spec-m-2-b.md "$T/loc
 # counterproof: run-phase.sh with the reading of State: of 1.5.0 at the end of a phase (no cycle_state_read): the
 # STOP of the wrapper passes and the outcome stays OK with state= empty. Own spec: the copy has another fingerprint
 cat > "$T/m4" <<'EOF'
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cso=$(bash "$HERE/cycle-state.sh" "$sp_md" 2>>"$err"); fi  # LETTORE-VECCHIO
+    cycle_state_read "$sp_md" || {
+    cso=$(bash "$HERE/cycle-state.sh" "$sp_md" 2>>"$err"); false && {  # LETTORE-VECCHIO
 EOF
 check "controprova lettori: la mutazione e' applicata (run-phase.sh col vecchio sed State: a fine fase)" 'mut "$T/m4" "$CXS/run-phase.sh" "$CXS/rp-lettore.sh" && grep -q LETTORE-VECCHIO "$CXS/rp-lettore.sh"'
 spec_approved; cp "$SP" $CW/spec-v.md
@@ -1541,7 +1541,7 @@ cp -r "$RR" "$T/rr-okdraft"; cp "$SR" "$T/sr-okdraft"
 rrun ok
 check "  B9 fix 2: seconda invocazione, spec invariata → STOP senza lanci (non la riga DRAFT → PLAN)" '[ $rc -eq 1 ] && [ "$(rcalls)" = "" ] && grep -q "Driver result: STOP — STOP — 01-plan ha dato OK su un piano ancora DRAFT" "$T/run.out"'
 rokd() { rm -rf "$RR"; cp -r "$T/rr-okdraft" "$RR"; cp "$T/sr-okdraft" "$SR"; }
-if tmut r4 's/^\( *\)if lp and stop_umani(run_fs).*# DRAFT-STOP-UMANO$/\1if False:/'; then
+if tmut r4 's/^\( *\)if su is not None and .*# DRAFT-STOP-UMANO$/\1if False:/'; then
   rokd; RRUN_DRV="$T/drv-r4.py" rrun ok
   check "  controprova: senza la riga R4 la seconda invocazione rilancia il piano senza contarlo (02-plan: rosso)" 'grep -qx 02-plan "$FAKE_CALLS"'
 else check "controprova R4: la mutazione si applica" false; fi
@@ -1551,6 +1551,26 @@ if tmut r4reg 's/^\( *\)ev("%s%s · regola=%s · state=%s" .*# STOP-UMANO-REGIST
 else check "controprova registrazione R4: la mutazione si applica" false; fi
 rokd; sed -i 's/^Contesto\.$/Contesto cambiato./' "$SR"; rrun ok
 check "  B9 fix 2: spec cambiata (State diverso) → il piano riparte (02-plan)" 'grep -qx 02-plan "$FAKE_CALLS"'
+# (final review 1.8.0) the state= of that line when next gives no State: the identity of the spec file
+# (sha:<sha256[:12]>), «-» only when the spec cannot be read either (R4 of next: cycle-state.test.sh)
+cat > "$T/stato-su.py" <<'EOF'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("drv_su", sys.argv[1]); d = importlib.util.module_from_spec(s); s.loader.exec_module(d)
+print(d.stato_stop_umano(["x", "State: 0123456789ab", "Next: PLAN — x"], sys.argv[2]))
+print(d.stato_stop_umano(["Next: STOP — no State"], sys.argv[2]))
+print(d.stato_stop_umano(["State: not computable", "Next: STOP — x"], sys.argv[2]))
+print(d.stato_stop_umano([], sys.argv[2] + ".absent"))
+EOF
+SUX="0123456789ab
+sha:$(sha256sum "$SR" | cut -c1-12)
+sha:$(sha256sum "$SR" | cut -c1-12)
+-"
+check "  (review finale) state= della riga Stop umano: lo State; senza State l impronta sha:<12> della spec; senza nemmeno la spec «-»" '[ "$("$FIC_PY" "$T/stato-su.py" "$DRV" "$SR" | tr -d "\r")" = "$SUX" ]'
+if tmut su 's/^    return st if re.fullmatch(r"\[0-9a-f\]+", st) else (impronta_spec(spec_fs) or "-")$/    return st or "-"/'; then
+  check "  controprova: senza l impronta della spec lo State ignoto torna «-» (rosso)" '[ "$("$FIC_PY" "$T/stato-su.py" "$T/drv-su.py" "$SR" | tr -d "\r")" != "$SUX" ]'
+else check "controprova impronta Stop umano: la mutazione si applica" false; fi
+rm -f "$T/stato-su.py" "$T/drv-su.py"
 rm -rf "$T/rr-okdraft" "$T/sr-okdraft" "$T/drv-r4.py" "$T/drv-r4reg.py"
 if tmut clok 's/^\( *\)c = classifica(fase, run_fs, label, spec_fs)  # CLASSIFICA-OK$/\1c = Classe("OK", "ok", "", "")/'; then
   rnuovo; RRUN_DRV="$T/drv-clok.py" rrun ok-draft FIC_MAX_FASI=3

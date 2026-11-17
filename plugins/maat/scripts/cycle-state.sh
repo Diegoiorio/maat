@@ -58,8 +58,9 @@
 #      does not relaunch the plan past the limit); R4 (1.8.0): DRAFT and the last plan phase printed OK on it, a
 #      final UMANO STOP that driver.py run registered in driver.log («Stop umano: <label> · regola=… · state=<State>»,
 #      a line the phases do not write) at the current State → STOP (a second invocation does not relaunch it
-#      uncounted); a different State (the spec changed) → PLAN as today; a line with state=- (State not computed when
-#      it was written) counts as the current State (fail-closed)
+#      uncounted); a different State (the spec changed) → PLAN as today; state=sha:<sha256[:12] of the spec file> (the
+#      State not computed when it was written) counts while the spec file has that hash; state=- (neither computed)
+#      counts as the current State (fail-closed: a person deletes the line, the STOP says so)
 #   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
 #   4  Plan status NEEDS HUMAN DECISION                           → STOP (open decision)
 #   5  non-standard Plan status                                   → STOP
