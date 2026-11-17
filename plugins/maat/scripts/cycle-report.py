@@ -523,6 +523,27 @@ def size_of(arg):
     return {"taglia": size or "piena", "motivo": why, "escalation": esc}
 
 
+NON_VERIFICATA_RIGA = " Decisione non verificata da script: "   # driver.py (1.8.0, B10): a token, every language
+
+
+def unverified_of(arg):
+    """1.8.0 (B10, D3): the final STOPs of the driver on a human decision that no script verified (types recurrence,
+    dispute, partial, spec), from <run>/driver.log: [{"fase": <label>, "testo": <cause>}]; [] without the file"""
+    if not os.path.isdir(arg):
+        return []
+    try:
+        with open(os.path.join(arg, "driver.log"), encoding="utf-8", errors="replace") as fh:
+            rows = fh.read().replace("\r", "").split("\n")
+    except OSError:
+        return []
+    out = []
+    for l in rows:
+        if NON_VERIFICATA_RIGA in l:
+            lab, _s, why = l.split(NON_VERIFICATA_RIGA, 1)[1].partition(" \u00b7 ")
+            out.append({"fase": lab.strip(), "testo": why.strip()})
+    return out
+
+
 def analyse_cycle(arg, projects):
     phases = [analyse_phase(f) for f in files_of(arg)]
     driver = driver_seconds(arg) if os.path.isdir(arg) else 0.0
@@ -611,6 +632,7 @@ def analyse_cycle(arg, projects):
         "stops": stops,
         "stops_by_cause": by_cause,
         **({"size": size_of(arg)} if size_of(arg) else {}),
+        **({"decisioni_non_verificate": unverified_of(arg)} if unverified_of(arg) else {}),
     }
 
 
@@ -634,6 +656,8 @@ def print_cycle(c):
     if c.get("size"):   # 1.7.0: the size of the cycle, as the orchestrator's final response says it
         s = c["size"]
         print("   Size: %s (%s · escalation: %d)" % (s["taglia"], s["motivo"], s["escalation"]))
+    for u in c.get("decisioni_non_verificate") or []:   # 1.8.0 (B10): a STOP the reader must not take as proven
+        print("   " + T("cycle-report-180.unverified", fase=u["fase"], t=u["testo"][:200]))
     if c["B_s"] is None and c["B_missing_sessions"]:
         # the frozen JSON value (D7) printed in the language of the summary
         print("   " + T("cycle-report.missing_tr", s=", ".join(T("cycle-report.no_sid") if x == NO_SID else x

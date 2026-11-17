@@ -450,6 +450,57 @@ sed 's/^- \[pavimento: permessi\] T1$/&\n- ⚠️ Rischio aperto: la barra lampe
 expect 1 "VIOLAZIONE: riga [0-9]+: rischio aperto senza un test assegnato" "lint2: rischio aperto senza test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-risk.md"
 sed 's/^- ⚠️ Rischio aperto: la barra lampeggia$/& — T2/' "$T/f2-risk.md" > "$T/f2-risk-ok.md"
 expect 0 "^lint2: OK$" "lint2: rischio aperto con il suo test = pulito" -- bash "$PC" lint2 "$T/f2-risk-ok.md"
+# 1.8.0 (B10, D3): the probe line of a declassified decision. lint2 [--run-dir <d>] (default <spec>.run): the key must be
+# a «declassata:» of a .ripresa REGISTERED in driver.log (driver.py riprese()), Tn a row of the test table, one probe per
+# key. lint accepts the new lines (Open decision, Executed proof, the probe).
+KS=a1b2c3d4
+regrip() { # <run dir> <key> [nolog]: log/01-plan.ripresa declassifying <key>, registered in driver.log unless nolog
+  mkdir -p "$1/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: $2" > "$1/log/01-plan.ripresa"
+  if [ "${3:-}" = nolog ]; then : > "$1/driver.log"
+  else printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$1/log/01-plan.ripresa" | cut -c1-12)" > "$1/driver.log"; fi
+}
+SONDA_T1="- ⚠️ Rischio da verificare in test-red: la barra non regge cento obiettivi — sonda: T1 — decisione: $KS — se vera: «too many goals»"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n$SONDA_T1/" "$T/f2.md" > "$T/f2-sonda.md"; regrip "$T/f2-sonda.run" $KS
+expect 0 "^lint2: OK$" "lint2 sonda: chiave declassata da una ripresa registrata (run dir predefinito <spec>.run) = pulito" -- bash "$PC" lint2 "$T/f2-sonda.md"
+cp "$T/f2-sonda.md" "$T/f2-sonda-nr.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata che l'abbia declassata" "lint2 sonda senza .ripresa corrispondente = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-nr.md"
+expect 0 "^lint2: OK$" "lint2 --run-dir: il run dir indicato vale al posto di quello predefinito" -- bash "$PC" lint2 "$T/f2-sonda-nr.md" --run-dir "$T/f2-sonda.run"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n$SONDA_T1\n${SONDA_T1/sonda: T1/sonda: T2}/" "$T/f2.md" > "$T/f2-sonda2.md"; regrip "$T/f2-sonda2.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: seconda sonda sulla decisione $KS" "lint2: seconda sonda sulla stessa chiave = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda2.md"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n${SONDA_T1/sonda: T1/sonda: T9}/" "$T/f2.md" > "$T/f2-sonda9.md"; regrip "$T/f2-sonda9.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda T9 non e' una riga del piano di test" "lint2: sonda su un ID fuori tabella = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda9.md"
+cp "$T/f2-sonda.md" "$T/f2-sonda-nl.md"; regrip "$T/f2-sonda-nl.run" $KS nolog
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata" "lint2: .ripresa con la chiave ma senza la riga in driver.log (scritto dalla fase) = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
+expect 1 "AVVISO: .*01-plan.ripresa non registrato in driver.log: ignorato" "lint2: il .ripresa non registrato e' detto in un AVVISO" -- bash "$PC" lint2 "$T/f2-sonda-nl.md"
+# 1.8.0 (B12, D4.4): the red declared on the base is an assertion, never a compilation error (a stub is due)
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `MaxDepth undefined` |/' "$T/f2.md" > "$T/f2-und.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: T1: il rosso sulla base è un errore di compilazione \(MaxDepth undefined\)" "lint2: red if «X undefined» = VIOLAZIONE (serve uno stub)" -- bash "$PC" lint2 "$T/f2-und.md"
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `undefined: MaxDepth` |/' "$T/f2.md" > "$T/f2-und2.md"
+expect 1 "VIOLAZIONE: riga [0-9]+: T1: il rosso sulla base è un errore di compilazione" "lint2: red if col messaggio del compilatore Go = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-und2.md"
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `want 79, got 0` |/' "$T/f2.md" > "$T/f2-want.md"
+expect 0 "^lint2: OK$" "lint2: red if «want 79, got 0» (un'asserzione) = 0 violazioni" -- bash "$PC" lint2 "$T/f2-want.md"
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `expected 3, got undefined` |/' "$T/f2.md" > "$T/f2-gotund.md"
+expect 0 "^lint2: OK$" "lint2: «got undefined» (un valore JS) non e' un errore di compilazione" -- bash "$PC" lint2 "$T/f2-gotund.md"
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `Expected undefined to be 3` |/' "$T/f2.md" > "$T/f2-expund.md"
+expect 0 "^lint2: OK$" "lint2 (review B12-B13): «Expected undefined to be 3» e' un'asserzione, non un errore di compilazione" -- bash "$PC" lint2 "$T/f2-expund.md"
+tgl() { bash "$PC" taglia "$1" 2>&1 | tr -d '\r' | sed "s#$1##g"; }
+check_tg=$( [ "$(tgl "$T/f2.md")" = "$(tgl "$T/f2-und.md")" ] && echo uguale )
+[ "$check_tg" = uguale ] && pass=$((pass+1)) || { echo "FAIL [taglia (review B12-B13): il rosso «undefined» non cambia la taglia di un piano (lint2 di taglia non lo conta)]"; fail=$((fail+1)); }
+if mutpc compila 's/^        if rc_ and run is not None:  # ROSSO-COMPILAZIONE-LINT2.*$/        if False:/'; then
+  expect 0 "^lint2: OK$" "controprova: senza il controllo il rosso «undefined» passa lint2 (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-compila/plan-check.sh" lint2 "$T/f2-und.md"
+else echo "FAIL [controprova rosso di compilazione: la mutazione non si applica]"; fail=$((fail+1)); fi
+# (B10-B11 review) the .ripresa the driver writes for a falsified budget: registered, rule decisione, no declassata:
+cp "$T/f2-sonda.md" "$T/f2-sonda-bu.md"; mkdir -p "$T/f2-sonda-bu.run/log"
+printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" > "$T/f2-sonda-bu.run/log/01-plan.ripresa"
+printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=- · sha=%s\n' "$(sha256sum < "$T/f2-sonda-bu.run/log/01-plan.ripresa" | cut -c1-12)" > "$T/f2-sonda-bu.run/driver.log"
+expect 1 "VIOLAZIONE: riga [0-9]+: sonda sulla decisione $KS senza una ripresa registrata" "lint2: sonda sulla chiave di un budget falsificato (ripresa registrata senza declassata:) = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-bu.md"
+sed "s/^- \[pavimento: permessi\] T1\$/&\n- ⚠️ Rischio da verificare in test-red: la barra non regge — sonda: T1/" "$T/f2.md" > "$T/f2-sonda-f.md"; regrip "$T/f2-sonda-f.run" $KS
+expect 1 "VIOLAZIONE: riga [0-9]+: riga di sonda non nella forma" "lint2: riga di sonda incompleta = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2-sonda-f.md"
+if mutpc sonda 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        elif False:/'; then
+  expect 0 "^lint2: OK$" "controprova: senza il controllo della ripresa la sonda inventata passa lint2" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-sonda/plan-check.sh" lint2 "$T/f2-sonda-nr.md"
+else echo "FAIL [controprova sonda: la mutazione non si applica]"; fail=$((fail+1)); fi
+sed "s/^Plan status: .*/&\nOpen decision: proof — the bar cannot hold 100 goals\nExecuted proof: \`python3 -c 'import app'\` → «too many goals»/" "$T/f2-sonda.md" > "$T/f2-sonda-l.md"
+expect 0 "lint: OK" "lint: Open decision, Executed proof e la riga di sonda sono righe ammesse" -- bash "$PC" lint "$T/f2-sonda-l.md"
 # contract: the format and the open risk lines; format 1 unchanged
 expect 0 "^Plan format: 2$" "contract: formato 2 dichiarato in coda" -- bash "$PC" contract "$T/f2.md"
 expect 0 "^Rischio: riga [0-9]+ — ⚠️ Rischio aperto: la barra lampeggia — T2$" "contract: il rischio aperto e' un focus di rischio" -- bash "$PC" contract "$T/f2-risk-ok.md"
@@ -963,8 +1014,8 @@ mkev "$T/ev-green" "$JU_GREEN" PASS "$FE_RED" FAIL
 expect 1 "^rosso T1: verde " "rossi: verde = STOP (il test non prova nulla)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-green" --run-dir "$T/rr.run"
 sed 's/^\(| T1 | RF1 | .* | rosso se: la somma e. sbagliata | \).*$/\1— |/' "$T/f2t.md" > "$T/f2t-imp.md"
 mkev "$T/ev-imp" "$JU_IMP" FAIL "$FE_RED" FAIL
-expect 1 "^rosso T1: rosso_import" "rossi: rosso da import = STOP «non dimostrato» (controprova: senza la classificazione diventa dimostrato)" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
-expect 1 "^rossi: esito=STOP — non dimostrato: T1 rosso_import" "rossi: il riassunto nomina il caso" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
+expect 1 "^rosso T1: rosso_simbolo" "rossi: rosso da import «cannot import name» = STOP «non dimostrato», dalla 1.8.0 rosso_simbolo (controprova: senza la classificazione diventa dimostrato)" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
+expect 1 "^rossi: esito=STOP — non dimostrato: T1 rosso_simbolo" "rossi: il riassunto nomina il caso" -- bash "$PC" rossi "$T/f2t-imp.md" --evidence "$T/ev-imp" --run-dir "$T/rr.run"
 # MAJOR 1 (review round 1): without an assertion text (no backticks, no mutation) any red
 # (NotImplementedError of the stub) is not proven. Counterproof: without CONTROLLO-ASSERZIONE it goes back to «dimostrato».
 JU_NIE='<testcase classname="tests.test_calc" name="test_somma"><failure message="NotImplementedError">E  NotImplementedError
@@ -984,10 +1035,186 @@ expect 0 "^AVVISO: la tabella del piano di test non ha righe" "rossi: tabella se
 JU_DIV='<testcase classname="tests.test_calc" name="test_somma"><failure message="assert 1 == 3">E  assert 1 == 3</failure></testcase>'
 mkev "$T/ev-div" "$JU_DIV" FAIL "$FE_RED" FAIL
 expect 1 "^rosso T1: rosso_diverso" "rossi: rosso su un'altra asserzione = STOP" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-div" --run-dir "$T/rr.run"
+# 1.8.0 (B11, D3): rossi runs the probe. Valid probe (its key declassified by a registered resume): red with the expected
+# text → limite_dimostrato (STOP, exit 1 as every STOP: the class UMANO is read by classifica from rossi.json); green →
+# sonda_smentita, exit 0; red on another text → rosso_diverso. Any other probe is ignored: its row is a normal row.
+KR=c0ffee01
+regrip2() { # <run dir> <key> [nolog]
+  rm -rf "$1"; mkdir -p "$1/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: $2" > "$1/log/01-plan.ripresa"
+  if [ "${3:-}" = nolog ]; then : > "$1/driver.log"
+  else printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=%s · sha=%s\n' "$2" "$(sha256sum < "$1/log/01-plan.ripresa" | cut -c1-12)" > "$1/driver.log"; fi
+}
+{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «TooDeeplyNested»"; } > "$T/f2s.md"
+regrip2 "$T/fs.run" $KR
+JU_LIM='<testcase classname="tests.test_calc" name="test_somma"><failure message="TooDeeplyNested">E  app.services.calc.TooDeeplyNested: depth 65536
+tests/test_calc.py:4: TooDeeplyNested</failure></testcase>'
+mkev "$T/ev-lim" "$JU_LIM" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: limite_dimostrato modules/api/tests/test_calc.py:4" "rossi sonda: rosso col testo atteso = limite_dimostrato, STOP con exit 1" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+expect 0 '"esito": "limite_dimostrato"' "rossi sonda: limite_dimostrato in rossi.json" -- cat "$T/fs.run/test-red/rossi.json"
+expect 0 "\"decisione\": \"$KR\"" "rossi sonda: rossi.json porta la sonda (decisione, affermazione, testo atteso)" -- cat "$T/fs.run/test-red/rossi.json"
+expect 0 "^rosso T1: sonda_smentita" "rossi sonda: verde sulla base = sonda_smentita, exit 0" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+expect 0 "^rossi: esito=OK — .*sonde smentite: T1" "rossi sonda: esito OK, il riassunto nomina la sonda smentita" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+expect 1 "^rosso T1: rosso_diverso" "rossi sonda: rosso su un altro testo = rosso_diverso" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-div" --run-dir "$T/fs.run"
+# over-acceptance: no .ripresa for the key, or a .ripresa that a phase wrote (no line in driver.log): the probe is ignored
+rm -rf "$T/fs0.run"
+expect 1 "^rosso T1: verde " "rossi: sonda senza .ripresa corrispondente, verde sulla base = verde, STOP" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs0.run"
+regrip2 "$T/fs1.run" $KR nolog
+expect 1 "^rosso T1: verde " "rossi: .ripresa con la chiave giusta ma senza la riga in driver.log = sonda ignorata, verde, STOP" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs1.run"
+expect 1 "^AVVISO: .*01-plan.ripresa non registrato in driver.log: ignorato" "rossi: il .ripresa non registrato e' detto in un AVVISO" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs1.run"
+regrip2 "$T/fs2.run" 0badbeef
+expect 1 "^rosso T1: verde " "rossi: .ripresa registrato con un'altra chiave = sonda ignorata (uguaglianza esatta della chiave)" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs2.run"
+if mutpc smentita 's/^        elif es == "verde":  # SONDA-SMENTITA$/        elif False:/'; then
+  expect 1 "^rosso T1: verde " "controprova: sonda ignorata → il verde da' verde e STOP (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-smentita/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs.run"
+else echo "FAIL [controprova sonda smentita: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc chiave 's/^        elif k not in keys:  # SONDA-SENZA-RIPRESA$/        elif False:/'; then
+  expect 0 "^rosso T1: sonda_smentita" "controprova: senza il controllo della ripresa la sonda inventata passa (sovra-accettazione: rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-chiave/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-green" --run-dir "$T/fs0.run"
+else echo "FAIL [controprova chiave della sonda: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc limite 's/^        if es in ("dimostrato", "rosso_diverso", "rosso_senza_asserzione") and pos and nrm(s\["atteso"\]) in msg:  # LIMITE-DIMOSTRATO$/        if False:/'; then
+  expect 1 "^rosso T1: rosso_diverso " "controprova: senza la regola del limite il rosso col testo atteso resta rosso_diverso (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-limite/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+else echo "FAIL [controprova limite: la mutazione non si applica]"; fail=$((fail+1)); fi
+# (B10-B11 review) a probe whose expected text is already the row's red if (here the red if of the mutation, the text rossi
+# proves T1 with), or is written in the test file: the normal red would look like the limit → VIOLAZIONE, ignored by rossi
+{ spect; printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: $KR — se vera: «assert 0 == 3»"; } > "$T/f2s-ri.md"
+regrip2 "$T/f2s-ri.run" $KR
+expect 1 "VIOLAZIONE: riga [0-9]+: il testo atteso della sonda su T1 è già nel rosso della riga" "lint2: sonda col testo atteso uguale al rosso della riga = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2s-ri.md"
+expect 0 "^rosso T1: dimostrato " "rossi: sonda col testo atteso nel rosso della riga = ignorata, il rosso sull'asserzione resta dimostrato (non limite)" -- bash "$PC" rossi "$T/f2s-ri.md" --evidence "$T/ev-ok" --run-dir "$T/f2s-ri.run"
+if mutpc nelrosso 's/^        elif any(nrm(att) in nrm(x) for x in .*$/        elif False and ((0/'; then
+  expect 1 "^rosso T1: limite_dimostrato " "controprova: senza il controllo sul rosso della riga il rosso normale diventa limite_dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelrosso/plan-check.sh" rossi "$T/f2s-ri.md" --evidence "$T/ev-ok" --run-dir "$T/f2s-ri.run"
+else echo "FAIL [controprova sonda nel rosso: la mutazione non si applica]"; fail=$((fail+1)); fi
+cp "$R/modules/api/tests/test_calc.py" "$T/test_calc.py.bak"
+printf 'from app.services.calc import somma\n\ndef test_somma():\n    assert False, "TooDeeplyNested"\n' > "$R/modules/api/tests/test_calc.py"
+expect 1 "VIOLAZIONE: riga [0-9]+: il testo atteso della sonda su T1 è scritto in modules/api/tests/test_calc.py" "lint2: testo atteso scritto nel file del test = VIOLAZIONE" -- bash "$PC" lint2 "$T/f2s.md" --run-dir "$T/fs.run"
+expect 1 "^rosso T1: rosso_diverso " "rossi: testo atteso scritto nel file del test (assert False, «atteso») = sonda ignorata, non limite_dimostrato" -- bash "$PC" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+if mutpc nelsorgente 's/^        elif root and nrm(att) in nrm(_sorgente(.*# SONDA-NEL-SORGENTE$/        elif False:/'; then
+  expect 1 "^rosso T1: limite_dimostrato " "controprova: senza il controllo sul sorgente il testo scritto nel test da' limite_dimostrato (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelsorgente/plan-check.sh" rossi "$T/f2s.md" --evidence "$T/ev-lim" --run-dir "$T/fs.run"
+else echo "FAIL [controprova sonda nel sorgente: la mutazione non si applica]"; fail=$((fail+1)); fi
+cp "$T/test_calc.py.bak" "$R/modules/api/tests/test_calc.py"
 mkev "$T/ev-suite" "$JU_RED" FAIL " FAIL  tests/fmt.test.ts [ tests/fmt.test.ts ]
 Error: Failed to resolve import \"../utils/fmt\" from \"tests/fmt.test.ts\". Does the file exist?
 vitest-fast: esito=FAIL luogo=copia" FAIL
 expect 1 "^rosso T2: rosso_import" "rossi: file di test che non si carica (vitest) = rosso_import" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-suite" --run-dir "$T/rr.run"
+# 1.8.0 (B12, D4): a collection/import red whose text is a missing symbol (nomi_test.py SIMBOLO_MANCANTE, plus the
+# module's simbolo_mancante of maat.json) → rosso_simbolo, never a proof; any other collection error stays rosso_raccolta
+JU_SYM='<testcase classname="" name="tests.test_calc"><error message="collection failure">./decode_test.go:12:5: undefined: MaxDepth</error></testcase>'
+mkev "$T/ev-sym" "$JU_SYM" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: rosso_simbolo .*undefined: MaxDepth" "rossi: JUnit con «undefined: MaxDepth» (il pacchetto non compila) = rosso_simbolo" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sym" --run-dir "$T/rr.run"
+expect 0 '"simbolo": "undefined: MaxDepth"' "rossi: rossi.json porta «simbolo», il testo combaciato (lo legge classifica)" -- cat "$T/rr.run/test-red/rossi.json"
+mkev "$T/ev-sym-fe" "$JU_RED" FAIL " FAIL  tests/fmt.test.ts [ tests/fmt.test.ts ]
+SyntaxError: The requested module '../utils/fmt' does not provide an export named 'fmt'
+vitest-fast: esito=FAIL luogo=copia" FAIL
+expect 1 "^rosso T2: rosso_simbolo" "rossi: vitest «does not provide an export named» = rosso_simbolo" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sym-fe" --run-dir "$T/rr.run"
+# (B12-B13 review) «cannot import name X» is a missing symbol only for a name of the plan; another name may be a typo
+JU_TYPO='<testcase classname="tests.test_calc" name="test_somma"><failure message="ImportError">ImportError: cannot import name sommma
+tests/test_calc.py:1: ImportError</failure></testcase>'
+mkev "$T/ev-typo" "$JU_TYPO" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: rosso_import " "rossi: «cannot import name sommma» (nome fuori dal piano: un refuso del test) resta rosso_import" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-typo" --run-dir "$T/rr.run"
+if mutpc nelpiano 's/^                sm = None$/                pass/'; then
+  expect 1 "^rosso T1: rosso_simbolo " "controprova: senza il controllo del nome nel piano il refuso diventa rosso_simbolo (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelpiano/plan-check.sh" rossi "$T/f2t.md" --evidence "$T/ev-typo" --run-dir "$T/rr.run"
+else echo "FAIL [controprova nome nel piano: la mutazione non si applica]"; fail=$((fail+1)); fi
+JU_SYN='<testcase classname="" name="tests.test_calc"><error message="collection failure">E   SyntaxError: invalid syntax</error></testcase>'
+mkev "$T/ev-syn" "$JU_SYN" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: rosso_(raccolta|import) " "rossi: un errore di sintassi qualunque resta rosso_raccolta/rosso_import, mai rosso_simbolo (non sovra-accetta)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-syn" --run-dir "$T/rr.run"
+JU_KT='<testcase classname="" name="tests.test_calc"><error message="collection failure">e: unresolved reference: maxDepth</error></testcase>'
+mkev "$T/ev-kt" "$JU_KT" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: rosso_raccolta" "rossi: un messaggio fuori tabella resta rosso_raccolta" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-kt" --run-dir "$T/rr.run"
+"$FIC_PY" - "$R/.claude/maat.json" "$T/maat-sym.json" <<'EOF'
+import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+for m in c["moduli"]:
+    m["simbolo_mancante"] = [r"unresolved reference: \w+"]
+c["harness"] = ">=1.8"   # S13: the module keys of 1.8 need it
+json.dump(c, open(sys.argv[2], "w", encoding="utf-8"))
+EOF
+expect 1 "^rosso T1: rosso_simbolo .*unresolved reference: maxDepth" "rossi: moduli[].simbolo_mancante di maat.json estende la tabella → rosso_simbolo" -- env MAAT_CONFIG="$T/maat-sym.json" bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-kt" --run-dir "$T/rr.run"
+sed 's/r"undefined: (\\w+)", //' "$HERE/nomi_test.py" > "$T/nomi-senza-go.py"
+if ! cmp -s "$HERE/nomi_test.py" "$T/nomi-senza-go.py"; then
+  expect 1 "^rosso T1: rosso_raccolta" "controprova: senza la regex Go «undefined:» E1 resta rosso_raccolta (STOP senza ripresa: rosso)" -- env NOMI_TEST_PY="$T/nomi-senza-go.py" bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sym" --run-dir "$T/rr.run"
+else echo "FAIL [controprova regex Go: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.0 (B13, A1): deviazione <result|-> <spec> <Tn> (the plan lines of Tn, the verdict on the judge's result) and
+# diff-test <spec> <file> --run-dir <d> (the diff from the test-red .pre-tree to the CURRENT tree, untracked included)
+expect 0 "^test row: \| T1 \| RF1 \| .modules/api/tests/test_calc.py::test_somma" "deviazione -: la riga T1 del piano di test, testuale" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^trace row: \| RF1 \| P1 \| T1, T2 \|" "deviazione -: la riga di tracciabilita' che nomina T1" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^test file: modules/api/tests/test_calc.py$" "deviazione -: il file del test" -- bash "$PC" deviazione - "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT — only the fixture names change\nRequirements still covered: RF1\n' > "$T/giud-ok.txt"
+expect 0 "^Deviazione: ACCETTATA$" "deviazione: verdetto ACCEPT e tutti gli ID di T1 coperti = ACCETTATA" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT — fine\nRequirements still covered: RF2\n' > "$T/giud-manca.txt"
+expect 1 "^Deviazione: STOP — requisito non più coperto: RF1$" "deviazione: un ID della riga mancante = STOP «requisito non più coperto»" -- bash "$PC" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: STOP — the assertion changes\nRequirements still covered: RF1\n' > "$T/giud-stop.txt"
+expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT \(STOP — the assertion changes\)$" "deviazione: verdetto STOP del giudice = STOP" -- bash "$PC" deviazione "$T/giud-stop.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT | STOP — <reason>\nRequirements still covered: RF1\n' > "$T/giud-modello.txt"
+expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT" "deviazione (review B12-B13): il modello ripetuto «ACCEPT | STOP — <reason>» non e' un ACCEPT" -- bash "$PC" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
+if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].startswith("ACCEPT")/'; then
+  expect 0 "^Deviazione: ACCETTATA$" "controprova: con «comincia con ACCEPT» il modello ripetuto passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-modello/plan-check.sh" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
+else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
+expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\.$" "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
+if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
+  expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
+else echo "FAIL [controprova requisiti coperti: la mutazione non si applica]"; fail=$((fail+1)); fi
+DTR="$T/dtrepo"; mkdir -p "$DTR/modules/api/tests" "$T/dt.run/log"   # a git repository of its own (the tree of review-surface.sh)
+(cd "$DTR" && git init -q . && git config user.email t@t && git config user.name t && printf 'x\n' > a.txt && git add a.txt && git commit -qm init)
+(cd "$DTR" && bash "$HERE/review-surface.sh" tree) > "$T/dt.run/log/03-test-red.pre-tree"
+printf 'def test_nuovo():\n    assert 1 == 2\n' > "$DTR/modules/api/tests/test_dt.py"
+expect 0 "^\+def test_nuovo\(\):$" "diff-test: un file di test NUOVO e non tracciato compare intero (+ righe)" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
+expect 3 "-" "diff-test: senza .pre-tree di un test-red = uscita 3" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-vuoto.run"
+if mutpc dtwt 's/ "\$pre" "\$cur" -- "\$file")/ "$pre" -- "$file")/'; then
+  refute "^\+def test_nuovo" "controprova: col diff preso dall albero di lavoro il file non tracciato sparisce (rosso)" -- env PLAN_CHECK_ROOT="$DTR" MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-dtwt/plan-check.sh" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
+else echo "FAIL [controprova diff-test dall albero: la mutazione non si applica]"; fail=$((fail+1)); fi
+# accept: a production file of File toccati that already exists → «stub <path>» (additive stubs only)
+printf 'def base():\n    return 1\n' > "$R/modules/api/app/services/base.py"
+sed 's|^### File toccati\r\{0,1\}$|&\n- `modules/api/app/services/base.py`|' "$T/f2t.md" > "$T/f2t-stub.md"
+expect 0 "^stub modules/api/app/services/base.py$" "accept: un file di produzione esistente = riga stub" -- bash "$PC" accept "$T/f2t-stub.md"
+refute "^stub modules/app/apps/admin/tests/fmt.test.ts" "accept: un file di test di accettazione esistente non e' uno stub" -- bash "$PC" accept "$T/f2t-stub.md"
+refute "^stub " "accept: senza file esistenti di produzione nessuna riga stub" -- bash "$PC" accept "$T/f2t.md"
+# additivo: the diff of the stub files (git diff -w --ignore-blank-lines), every removed line a list instruction grown
+addt() { # <name> <old content> <new content> [ext]: the -w diff of the two versions in $T/add-<name>.diff
+  mkdir -p "$T/add/a" "$T/add/b"; printf '%b' "$2" > "$T/add/a/f${4:-.py}"; printf '%b' "$3" > "$T/add/b/f${4:-.py}"
+  (cd "$T/add" && git diff --no-index -w --ignore-blank-lines --no-color a/f${4:-.py} b/f${4:-.py}) > "$T/add-$1.diff"
+}
+addt go 'package x\n\ntype D struct {\n\tr   int\n\tbuf []byte\n}\n' 'package x\n\ntype D struct {\n\tr        int\n\tbuf      []byte\n\tMaxDepth int\n}\n' .go
+expect 0 "-" "additivo: campo Go con gli altri riallineati da gofmt = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-go.diff"
+addt ts 'const a = 1\nexport { a }\n' 'const a = 1\nconst b = 2\nexport { a, b }\n' .ts
+expect 0 "-" "additivo: export { a } → export { a, b } = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ts.diff"
+addt all 'def a():\n    return 1\n\n__all__ = ["a"]\n' 'def a():\n    return 1\n\n\ndef max_depth():\n    raise NotImplementedError\n\n__all__ = ["a", "max_depth"]\n'
+expect 0 "-" "additivo: __all__ allungata = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-all.diff"
+addt rs 'pub use x::{a, b};\n' 'pub use x::{a, b, c};\n' .rs
+expect 0 "-" "additivo: pub use x::{a, b} → pub use x::{a, b, c} = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-rs.diff"
+addt if 'func c(x bool) int {\n\tif x {\n\t\treturn 1\n\t}\n\treturn 0\n}\n' 'func c(x bool) int {\n\tif x && y {\n\t\treturn 1\n\t}\n\treturn 0\n}\n' .go
+expect 1 "^stub non additivo: .*f.go:2 " "additivo: if x { → if x && y { = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-if.diff"
+addt call 'def h(a):\n    return g(a)\n' 'def h(a):\n    return g(a, b)\n'
+expect 1 "^stub non additivo: .*f.py:2" "additivo: f(a) → f(a, b) = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-call.diff"
+addt ret 'func d() int {\n\treturn 0\n}\n' 'func d() int {\n\treturn depth(v)+0\n}\n' .go
+expect 1 "^stub non additivo: .*f.go:2" "additivo: return 0 → return depth(v)+0 = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ret.diff"
+addt exf 'export { a }\n' 'export { a, f(b) }\n' .ts
+expect 1 "^stub non additivo: .*f.ts:1" "additivo: export { a } → export { a, f(b) } = non additivo (token non ammesso)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-exf.diff"
+# (B12-B13 review) not a list instruction: an assignment that starts with «imported», a declaration exported, a Java call
+addt imp2 'imported = load(path)\n' 'imported = load(path, strict)\n'
+expect 1 "^stub non additivo: .*f.py:1" "additivo: imported = load(path) → load(path, strict) = non additivo (import senza confine di parola)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-imp2.diff"
+addt efn 'export function decode(v) {\n  return v\n}\n' 'export function decode(v, maxDepth) {\n  return v\n}\n' .ts
+expect 1 "^stub non additivo: .*f.ts:1" "additivo: export function decode(v) { → decode(v, maxDepth) { = non additivo (una firma)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-efn.diff"
+addt ecs 'export const handlers = [auth]\n' 'export const handlers = [auth, debugBypass]\n' .ts
+expect 1 "^stub non additivo: .*f.ts:1" "additivo: export const handlers = [auth] → [auth, debugBypass] = non additivo (una dichiarazione)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ecs.diff"
+addt jv 'class A {\n  void f() {\n    user = repo.find(id);\n  }\n}\n' 'class A {\n  void f() {\n    user = repo.find(id, admin);\n  }\n}\n' .java
+expect 1 "^stub non additivo: .*f.java:3" "additivo: user = repo.find(id); → find(id, admin) = non additivo (use senza confine di parola)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-jv.diff"
+addt fimp 'from x import (a)\n' 'from x import (a, b)\n'
+expect 0 "-" "additivo: from x import (a) → from x import (a, b) = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-fimp.diff"
+addt imts "import { a } from './m'\n" "import { a, b } from './m'\n" .ts
+expect 0 "-" "additivo: import { a } from './m' → import { a, b } from './m' = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-imts.diff"
+addt ets 'export type { A }\n' 'export type { A, B }\n' .ts
+expect 0 "-" "additivo: export type { A } → export type { A, B } = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ets.diff"
+sed 's/^_ELENCO_JS = .*$/_ELENCO_JS = r"^\\s*(?:export|import)"/' "$HERE/nomi_test.py" > "$T/nomi-js-largo.py"
+if ! cmp -s "$HERE/nomi_test.py" "$T/nomi-js-largo.py"; then
+  expect 0 "-" "controprova: con la regola JS larga (ogni export) la dichiarazione esportata passa (rosso)" -- env NOMI_TEST_PY="$T/nomi-js-largo.py" bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ecs.diff"
+else echo "FAIL [controprova regola JS: la mutazione non si applica]"; fail=$((fail+1)); fi
+addt del 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' 'def a():\n    return 1\n'
+expect 1 "^stub non additivo: .*f.py:5" "additivo: una riga tolta = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-del.diff"
+addt sost 'X = 1\n' 'X = 2\n'
+expect 1 "^stub non additivo: .*f.py:1" "additivo: una riga sostituita con un'altra = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-sost.diff"
+sed 's/^\( *\)if not (re.match(rx, t) and any(elenco_allungato(t, a) for a in h\["aggiunte"\])):  # ELENCO-ALLUNGATO$/\1if False:/' "$HERE/nomi_test.py" > "$T/nomi-senza-additivo.py"
+if ! cmp -s "$HERE/nomi_test.py" "$T/nomi-senza-additivo.py"; then
+  expect 0 "-" "controprova: senza il controllo additivo lo stub che cancella passa (rosso)" -- env NOMI_TEST_PY="$T/nomi-senza-additivo.py" bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-del.diff"
+else echo "FAIL [controprova additivo: la mutazione non si applica]"; fail=$((fail+1)); fi
+rm -f "$R/modules/api/app/services/base.py"
 mkev "$T/ev-confl" "$JU_RED" FAIL "$FE_RED
  FAIL  tests/old.test.ts > vecchio caso
 AssertionError: expected true to be false" FAIL

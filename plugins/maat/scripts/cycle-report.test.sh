@@ -289,6 +289,21 @@ printf '%s\n' "2026-11-06T10:00:00Z · avvio · x" "2026-11-06T10:00:02Z · E3 0
 hs=$("$FIC_PY" "$W/cr-su.py" --projects "$WP/projects" "$WP/hv/spec-hs.run" 2>&1)
 { ! cmp -s "$CR" "$W/cr-su.py" && grep -q "   Size: piccola" <<< "$hs"; } && ok ||
   ko "controprova: un lettore che torna a piccola dopo l'escalation → Size: piccola (rosso)" "$hs"
+# --- 1.8.0 (B10, D3): a final STOP of the driver on a decision no script verified is reported, from driver.log ---
+HD="$W/hv/spec-hd.run"; mkdir -p "$HD" && cp -r "$R/log" "$HD/"
+printf '%s\n' "2026-11-16T10:00:00Z Next: PLAN — x" \
+  "2026-11-16T10:00:09Z Decisione non verificata da script: 01-plan · decisione umana: spec — FR2 si legge in due modi · decisione non verificata da script: spec" \
+  "2026-11-16T10:00:09Z Driver result: STOP — PHASE RESULT plan: STOP — d" > "$HD/driver.log"
+hd=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/hv/spec-hd.run" 2>&1)
+grep -qx "   DECISIONE NON VERIFICATA DA SCRIPT 01-plan: decisione umana: spec — FR2 si legge in due modi · decisione non verificata da script: spec" <<< "$hd" && ok ||
+  ko "driver.log con una decisione non verificata: la riga del rapporto la segnala con la fase" "$hd"
+hj=$("$FIC_PY" "$CR" --json --projects "$WP/projects" "$WP/hv/spec-hd.run" 2>&1)
+{ grep -q '"decisioni_non_verificate": \[' <<< "$hj" && grep -q '"fase": "01-plan"' <<< "$hj"; } && ok || ko "--json: decisioni_non_verificate con la fase" "$hj"
+grep -q "NON VERIFICATA" <<< "$hs" && ko "senza la riga in driver.log nessuna segnalazione" "$hs" || ok
+sed 's/^        if NON_VERIFICATA_RIGA in l:$/        if False:/' "$CR" > "$W/cr-nv.py"
+hd=$("$FIC_PY" "$W/cr-nv.py" --projects "$WP/projects" "$WP/hv/spec-hd.run" 2>&1)
+{ ! cmp -s "$CR" "$W/cr-nv.py" && ! grep -q "NON VERIFICATA" <<< "$hd"; } && ok ||
+  ko "controprova: un lettore che ignora la riga del driver non segnala la decisione (rosso)" "$hd"
 mcols() { # $1 csv file → per row: number of fields and last field, "|" between rows
   "$FIC_PY" -c 'import csv, sys
 print("|".join("%d:%s" % (len(r), r[-1]) for r in csv.reader(open(sys.argv[1], encoding="utf-8", newline=""))))' "$1" | tr -d '\r'

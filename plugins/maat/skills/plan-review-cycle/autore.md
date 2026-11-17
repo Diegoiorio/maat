@@ -286,7 +286,12 @@ test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`,
   with neither is a `lint2` VIOLATION, and a red with no text or no position is not proven; every string or `data-test` the plan
   adds must be listed as `adds` in `### Strings and data-test` — an existing test asserting its absence is
   a conflict that stops the phase.
-- **Stubs go only into new files.** A new parameter (or an extra positional argument) of a function that already
+- **The red «on the base» is always an assertion, never a compilation or import error** (1.8.0). In Go, Rust,
+  TS under `tsc`, Java — and for an import in any language — a missing symbol does not fail a test: the whole unit does
+  not load. A new symbol on an existing type or module gets an additive stub in that touched file (test-red writes it);
+  the row's red is what the test asserts on the stub (`` red if: `want 79, got 0` ``), never `MaxDepth undefined`:
+  `lint2` gives a VIOLATION for a red that matches a missing-symbol message.
+- **Signature stubs go only into new files.** A new parameter (or an extra positional argument) of a function that already
   exists gets no signature stub: on the base the test fails with the `TypeError` of the call, before its assertion.
   Its red is that one — `` red if: `unexpected keyword argument 'sep'` `` (or `` `positional argument` ``) — not the
   value the implementation will return; the mutation's `red if:` keeps the value (it runs on the implemented code).
@@ -331,6 +336,15 @@ test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`,
   match in that file: `| removes | string | `Active` | `frontend/tests/x.test.ts` — rewritten by flow X |`.
 - **A product defect found late** (round 3 or 4) does not reopen the design: it becomes one test row, with its
   step, and one list item `⚠️ Open risk: <claim> — <test ID>` under the table.
+- **A declassified decision becomes a probe** (1.8.0, a resume whose prompt line names `decisione <key>: <text>`): the
+  claim about the code that stopped the plan is not a stop any more but one test row (its step, its `red if:`) and one
+  list item under the table, the tokens the same in every language:
+  `⚠️ Rischio da verificare in test-red: <claim> — sonda: <Tn> — decisione: <key> — se vera: «<expected text>»`.
+  `<key>` is the one of the prompt (8 hex characters), at most one probe per key; `<expected text>` is what the red of
+  `Tn` prints if the claim is true (the error of the limit). `lint2` refuses a probe whose `Tn` is not a row of the
+  table, whose key no registered resume of the run directory declassified, or a second probe on the same key. In
+  test-red the row decides: red with the expected text → the limit is proven (a human STOP, with the proof); green
+  on the base → the claim is disproved and the cycle goes on (the test stays as a regression test).
 
 **Generated, never written.** The plan carries **no** command line, no `test-fast.sh` path list, no
 pytest selector, no counterproof recipe: `plan-check.sh gen <spec>` derives them from the test table and

@@ -9,7 +9,8 @@
 #   plan-check.sh lint         <spec> [--baseline <copia>] structure of the plan section
 #   plan-check.sh contract     <spec>                      verification contract, for /implementation-review-cycle
 #   plan-check.sh basis        <spec>                      is the approval still the one of this spec and this plan?
-#   plan-check.sh lint2        <spec>                      structure of a FORMAT 2 plan (Plan format: 2)
+#   plan-check.sh lint2        <spec> [--run-dir <dir>]    structure of a FORMAT 2 plan (Plan format: 2); 1.8.0: the
+#                                                          probes against the registered resumes of <dir> (<spec>.run)
 #   plan-check.sh gen          <spec> [--run-dir <dir>]    procedure generated from a format 2 plan (commands, mutations.json)
 #   plan-check.sh route        <spec> [--diff <file>]      L5: surfaces detected from the files, light or full path
 #   plan-check.sh s2           <spec> --delta <f> --gate <f> [--respinti <n>]   S2: delta and fresh eyes clean?
@@ -1391,7 +1392,78 @@ def report_nessuno(M):
     return out
 
 
-def lint2(M, root):
+# 1.8.0 (D3, B10): the probe of a declassified decision, a list item of the plan zone, the tokens the same in every
+# language: «⚠️ Rischio da verificare in test-red: <claim> — sonda: <Tn> — decisione: <key> — se vera: «<expected>»».
+# It is valid only if <key> is a «declassata:» key of a .ripresa of the run dir REGISTERED in driver.log (driver.py
+# riprese(), the single reader: DRIVER_PY, exported by need_py), <Tn> is a row of the test table and it is the first
+# probe of that key. lint2 gives VIOLAZIONE for every other probe line; rossi ignores it (a normal row).
+SONDA_PREF = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio da verificare in test-red:")
+SONDA = re.compile(r"\u26a0\ufe0f?[ \t]*Rischio da verificare in test-red:[ \t]*(\S.*?)[ \t]+\u2014[ \t]+sonda:[ \t]*"
+                   r"([A-Za-z0-9._-]+)[ \t]+\u2014[ \t]+decisione:[ \t]*([0-9a-f]{8})[ \t]+\u2014[ \t]+se vera:[ \t]*"
+                   r"\u00ab(.+)\u00bb[ \t]*$")
+
+
+def declassate(run):
+    """(keys declassified by the registered .ripresa files of the run dir, [labels of the ignored ones], error)"""
+    if not run or not os.path.isdir(os.path.join(run, "log")):
+        return set(), [], ""
+    try:
+        sp = importlib.util.spec_from_file_location("maat_driver_pc", os.environ["DRIVER_PY"])
+        drv = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(drv)
+        reg, ign = drv.riprese(run)
+    except BaseException as e:   # the driver cannot be read: no probe is valid (fail-closed)
+        return set(), [], str(e)[:200] or type(e).__name__
+    return set(k for _l, d in reg for k in d.get("declassata") or []), ign, ""
+
+
+def _sorgente(root, path):
+    try:
+        with open(os.path.join(root, path), encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except (OSError, TypeError):
+        return None
+
+
+def sonde(M, run, root=None):
+    """({Tn: {decisione, affermazione, atteso, riga}} of the valid probes, [VIOLAZIONE texts], [AVVISO texts]).
+    B10-B11 review: a probe whose expected text the assertion of the row (red if) already contains, or the source of the test
+    file holds (`assert False, "<expected>"`: the test would print it itself), proves no limit: VIOLAZIONE, ignored"""
+    righe = [(n, x) for n, x in M["plan"] if SONDA_PREF.search(x)]
+    if not righe:
+        return {}, [], []
+    keys, ign, err = declassate(run)
+    E, W, ok, viste = [], [], {}, set()
+    if err:
+        W.append(_msg.T("plan-check-180.probe_driver", e=err))
+    for lab in ign:
+        W.append(_msg.T("plan-check-180.probe_ignored", label=lab))
+    for n, x in righe:
+        m = SONDA.search(x)
+        if not m:  # SONDA-FORMA
+            E.append(_msg.T("plan-check-180.probe_form", n=n))
+            continue
+        aff, tid, k, att = m.groups()
+        if tid not in M["tests"]:  # SONDA-RIGA
+            E.append(_msg.T("plan-check-180.probe_no_row", n=n, id=tid))
+        elif k in viste:  # SONDA-SECONDA
+            E.append(_msg.T("plan-check-180.probe_second", n=n, k=k))
+        elif k not in keys:  # SONDA-SENZA-RIPRESA
+            E.append(_msg.T("plan-check-180.probe_no_resume", n=n, k=k))
+        elif tid in ok:
+            E.append(_msg.T("plan-check-180.probe_same_row", n=n, id=tid))
+        elif any(nrm(att) in nrm(x) for x in [M["tests"][tid]["asserzione"]] + M["tests"][tid]["texts"] + (
+                [M["tests"][tid]["mut"]["asserzione"]] if M["tests"][tid]["mut"] else [])):  # SONDA-NEL-ROSSO
+            E.append(_msg.T("plan-check-180.probe_in_assert", n=n, id=tid))
+        elif root and nrm(att) in nrm(_sorgente(root, M["tests"][tid]["path"]) or ""):  # SONDA-NEL-SORGENTE
+            E.append(_msg.T("plan-check-180.probe_in_source", n=n, id=tid, f=M["tests"][tid]["path"]))
+        else:
+            ok[tid] = {"decisione": k, "affermazione": aff.strip(), "atteso": att.strip(), "riga": n}
+        viste.add(k)
+    return ok, E, W
+
+
+def lint2(M, root, run=None):
     E, W = M["E"], M["W"]
     tests, steps = M["tests"], M["steps"]
     E.extend(M["G"])
@@ -1415,6 +1487,11 @@ def lint2(M, root):
         # table it stops the cycle at test-red. It goes in a note under the table.
         if INVARIANZA.match(tests[tid]["asserzione"]):  # CONTROLLO-NON-REGRESSIONE-LINT2
             E.append(_msg.T("plan-check.test_invariance", n=tests[tid]["n"], id=tid))
+        # 1.8.0 (D4.4): the red on the base is an assertion, never a compilation or import error (a stub is due)
+        mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
+        rc_ = nomi().rosso_di_compilazione(tests[tid]["asserzione"], (mt or {}).get("simbolo_mancante") or [])
+        if rc_ and run is not None:  # ROSSO-COMPILAZIONE-LINT2 (not in taglia: the size of an approved plan does not change)
+            E.append(_msg.T("plan-check-180.red_compile", n=tests[tid]["n"], id=tid, t=rc_))
     E.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2
     E.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2
     W.extend(report_nessuno(M))
@@ -1428,6 +1505,10 @@ def lint2(M, root):
                 E.append(_msg.T("plan-check.step_not_touched", n=S["n"], id=S["id"], f=f))
             if not path_ok(root, f, M):
                 E.append(_msg.T("plan-check.step_path", n=S["n"], id=S["id"], f=f))
+    if run is not None:   # the probes (B10): None = not checked (taglia measures the structure only)
+        _ok, e2, w2 = sonde(M, run, root)  # CONTROLLO-SONDE-LINT2
+        E.extend(e2)
+        W.extend(w2)
     for n, t in M["plan"]:
         if RISK.search(t) and not any(re.search(r"(?<![A-Za-z0-9._-])" + re.escape(tid) + r"(?![A-Za-z0-9._-])", t) for tid in tests):
             E.append(_msg.T("plan-check.risk_no_test", n=n))
@@ -2303,18 +2384,32 @@ def acc_paths(M):
     return out
 
 
+STUB_ESISTENTI = "stub_esistenti"   # 1.8.0 (D4): the key of stubs.json for the stubs in existing files (never a path)
+STUB_NON_MISURATO = "non misurato"   # its note for a language without the F13 regexes (a token, the same in every language)
+
+
 def stub_files(M):
     """i file che il piano dichiara nuovi e che non sono test di accettazione: vi vanno gli stub"""
     tp = set(acc_paths(M))
     return [f for f in M["new_files"] if f not in tp]
 
 
+def stub_existing(M):
+    """1.8.0 (D4): the production files of File toccati that are NOT new and not acceptance test files: test-red may
+    write in them only ADDITIVE stubs (run-phase.sh verify_red, nomi_test.diff_additivo), never logic"""
+    tp, newf = set(acc_paths(M)), set(M["new_files"])
+    return [f for f in M["files"] if f not in tp and f not in newf]
+
+
 def cmd_accept(M):
-    """scope della fase test-red: test <path> (i file di test del piano) e nuovo <path> (i file nuovi)"""
+    """scope della fase test-red: test <path> (i file di test del piano), nuovo <path> (i file nuovi) e, dalla 1.8.0,
+    stub <path> (i file di produzione esistenti: solo stub additivi)"""
     for p in acc_paths(M):
         print("test " + p)
     for p in stub_files(M):
         print("nuovo " + p)
+    for p in stub_existing(M):  # STUB-ESISTENTI
+        print("stub " + p)
     return 0
 
 
@@ -2378,15 +2473,105 @@ def mentioned(root, paths, sym):
     return False
 
 
-def cmd_stubs(M, root, run):
-    """alla chiusura OK di test-red: i simboli degli stub di ogni file nuovo -> <run>/test-red/stubs.json"""
+def cmd_stubs(M, root, run, diffp=""):
+    """alla chiusura OK di test-red: i simboli degli stub di ogni file nuovo -> <run>/test-red/stubs.json. 1.8.0 (D4):
+    con --diff (il diff pre-tree -> post-tree dei file `stub`, git diff -w) anche stub_esistenti: {path: {simboli}} i
+    nomi pubblici aggiunti (le regex di F13, size_names: Go, Python, JS/TS), per gli altri linguaggi {simboli: null,
+    nota: non misurato}. Fuori da L2: l2_eval guarda solo i file nuovi, e stubs[<file esistente>] non viene scritto"""
     d = {}
     for f in stub_files(M):
         ex = exports(root, f)
         d[f] = {"simboli": ex}
         print("stub %s: %s" % (f, _msg.T("plan-check.stub_absent") if ex is None else (", ".join(ex) or ("(" + _msg.T("plan-check.stub_none") + ")"))))
+    if diffp:
+        sd = size_diff(diffp)
+        es = {}
+        for f in stub_existing(M):
+            if sd is None or f not in sd[1]:
+                continue
+            added, removed = sd[1][f]
+            ext = os.path.splitext(f)[1].lower()
+            if ext == ".py" or ext == ".go" or ext in SIZE_JS:
+                rm = set(size_names(ext, removed))
+                es[f] = {"simboli": sorted(set(x for x in size_names(ext, added) if x not in rm))}
+            else:  # STUB-NON-MISURATO
+                es[f] = {"simboli": None, "nota": STUB_NON_MISURATO}
+            print("stub %s: %s" % (f, ", ".join(es[f]["simboli"] or []) or ("(" + _msg.T("plan-check-180.stub_not_measured") + ")"
+                                                                            if es[f]["simboli"] is None else "(" + _msg.T("plan-check.stub_none") + ")")))
+        d[STUB_ESISTENTI] = es
     jsave(os.path.join(run, "test-red", "stubs.json"), d)
     return 0
+
+
+DEV_ACCEPT = re.compile(r"^[ \t>*_`-]*Deviation verdict:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
+DEV_COPERTI = re.compile(r"^[ \t>*_`-]*Requirements still covered:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
+
+
+# 1.8.0 (A1): the plan lines a test-data deviation of <Tn> is judged on — «test row: <its line of the test plan>»,
+# «trace row: <each line of the traceability table naming it>», «test file: <path>» — the same bytes the worker puts
+# in the prompt of the judge and run-phase.sh looks for in it. With a result of the judge (a file; «-» = the lines
+# only): the ACCEPTED line when it says Deviation verdict: ACCEPT and Requirements still covered holds every
+# requirement ID of <Tn> (its traceability rows and its requisito column), else the STOP line with the cause.
+# Exit 0 accepted (or lines only), 1 STOP. DEV_STOP / DEV_OK: tokens read by run-phase.sh, the same in every language.
+DEV_STOP, DEV_OK = "Deviazione: STOP — ", "Deviazione: ACCETTATA"
+# (B12-B13 review) the fixed instructions of the judge, printed first («judge instructions: …») and looked for verbatim in
+# its prompt by run-phase.sh: the phase cannot replace them
+DEV_ISTRUZIONI = ("Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — "
+                  "<reason>» and «Requirements still covered: <requirement IDs>». ACCEPT only if the change "
+                  "touches data, fixtures, internal names or the organization of the tests, never an assertion, a "
+                  "requirement, a file or a test name, and the assertion still proves every requirement of the row.")
+
+
+def cmd_deviazione(M, ris, tid):
+    righe = dict(M["plan"])
+    T = M["tests"].get(tid)
+    if T is None:
+        print(DEV_STOP + _msg.T("plan-check-180.dev_no_row", id=tid))
+        return 1
+    print("judge instructions: " + DEV_ISTRUZIONI)
+    print("test row: " + righe.get(T["n"], ""))
+    ids = list(T["reqs"])
+    for n, r, ver in M["reqs"]:
+        if tid in items(ver):
+            print("trace row: " + righe.get(n, ""))
+            if r not in ids:
+                ids.append(r)
+    print("test file: " + T["path"])
+    if ris == "-":
+        return 0
+    try:
+        with open(ris, encoding="utf-8", errors="replace") as fh:
+            t = fh.read().replace("\r", "")
+    except OSError:
+        print(DEV_STOP + _msg.T("plan-check-180.dev_no_result"))
+        return 1
+    v = DEV_ACCEPT.findall(t)
+    if not v or not re.match(r"ACCEPT\b(?!\s*\|)", v[-1]):  # VERDETTO-ACCEPT (never the template «ACCEPT | STOP»)
+        print(DEV_STOP + _msg.T("plan-check-180.dev_judge", v=(v[-1] if v else "-")[:200]))
+        return 1
+    c = DEV_COPERTI.findall(t)
+    cov = set(re.findall(r"[A-Za-z]+[0-9]+(?:\.[0-9]+)*", c[-1])) if c else set()
+    miss = [r for r in ids if r not in cov]
+    if miss:  # REQUISITI-COPERTI
+        print(DEV_STOP + _msg.T("plan-check-180.dev_req", r=", ".join(miss)))
+        return 1
+    print(DEV_OK)
+    return 0
+
+
+def cmd_additivo(M, diffp):
+    """1.8.0 (D4): the stubs in EXISTING files (accept: `stub <path>`) changed only by extension, on the diff of those
+    files (git diff -w --ignore-blank-lines pre-tree post-tree): a removed line is admitted only as a list instruction
+    that grows (nomi_test.diff_additivo). Prints one line per violation; exit 0 additive, 1 not, 2 unreadable"""
+    try:
+        with open(diffp, encoding="utf-8", errors="replace") as fh:
+            t = fh.read()
+    except OSError:
+        return 2
+    vv = nomi().diff_additivo(t)  # CONTROLLO-ADDITIVO: every file of the diff (run-phase.sh passes only the stub files)
+    for f, n, x in vv:
+        print(_msg.T("plan-check-180.stub_not_additive", f=f or "?", n=n, line=" ".join(x.split())[:160]))
+    return 1 if vv else 0
 
 
 def l2_why(T, m, stubs, rossi, root, acc, final):
@@ -2758,6 +2943,38 @@ def cmd_rossi(M, root, run, ev):
                 failed = [x for x in anc_bad if leaf and leaf in x]
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
+    # 1.8.0 (D3, B11): a VALID probe (sonde(): its key declassified by a resume registered in driver.log, the first probe
+    # of that key) decides its row: red with the expected text, at a position -> limite_dimostrato (the human decision,
+    # now proven: STOP, exit 1 as every STOP; classifica reads the class from rossi.json); green on the base ->
+    # sonda_smentita (not a STOP: the claim is false, the test stays as a regression test); otherwise the rules above.
+    # Any other probe line is ignored: its row is a normal row (green = verde, STOP).
+    # 1.8.0 (D4): a collection or import red whose text is a missing symbol (SIMBOLO_MANCANTE of nomi_test.py, plus the
+    # moduli[].simbolo_mancante of the module in maat.json) -> rosso_simbolo: never a proof, the driver resumes test-red with
+    # the stubs (classifica reads this token, and «simbolo», the matched text)
+    simboli = {}
+    for tid in M["order"]:
+        es, why, msg, pos = out.get(tid, ("", "", "", None))
+        if es in ("rosso_raccolta", "rosso_import"):
+            mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
+            sm = nomi().simbolo_mancante(msg, (mt or {}).get("simbolo_mancante") or [])
+            # (B12-B13 review) «cannot import name X» is a missing symbol only if X is a name of the plan (File toccati,
+            # the test table, the steps): otherwise it may be a typo of the test itself and stays rosso_import
+            nm_ = re.search(r"cannot import name \W?([A-Za-z_]\w*)", msg) if sm and sm[0] == "python" else None
+            if nm_ and not re.search(r"(?<![\w$])" + re.escape(nm_.group(1)) + r"(?![\w$])",
+                                     "\n".join(t for _n, t in M["plan"])):  # IMPORT-NEL-PIANO
+                sm = None
+            if sm:  # ROSSO-SIMBOLO
+                out[tid] = ("rosso_simbolo", _msg.T("plan-check-180.red_symbol", s=sm[2][:200]), msg, pos)
+                simboli[tid] = sm[2]
+    sv, _se, sw = sonde(M, run, root)  # SONDE-ROSSI
+    for w in sw:
+        print("AVVISO: " + w)
+    for tid, s in sorted(sv.items()):
+        es, why, msg, pos = out.get(tid, ("", "", "", None))
+        if es in ("dimostrato", "rosso_diverso", "rosso_senza_asserzione") and pos and nrm(s["atteso"]) in msg:  # LIMITE-DIMOSTRATO
+            out[tid] = ("limite_dimostrato", _msg.T("plan-check-180.red_limit", k=s["decisione"], a=s["affermazione"][:200]), msg, pos)
+        elif es == "verde":  # SONDA-SMENTITA
+            out[tid] = ("sonda_smentita", _msg.T("plan-check-180.red_disproved", k=s["decisione"], a=s["affermazione"][:200]), msg, pos)
     # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
     # or an existing test asserting the ABSENCE of a value the plan adds (### Stringhe e data-test)
     def related(f):
@@ -2807,7 +3024,7 @@ def cmd_rossi(M, root, run, ev):
         print("rosso %s: %s%s \u2014 %s%s" % (tid, es, (" " + pos) if pos else "", why, (" \u2014 " + msg[:200]) if msg else ""))
     for c in confl:
         print("conflitto: " + c)
-    bad = [t for t in M["order"] if t in out and out[t][0] != "dimostrato"]
+    bad = [t for t in M["order"] if t in out and out[t][0] not in ("dimostrato", "sonda_smentita")]
     if blocked:
         esito, riass = "BLOCKED", _msg.T("plan-check.red_sum_blocked") + ": " + "; ".join(blocked)
     elif bad or confl:
@@ -2817,10 +3034,16 @@ def cmd_rossi(M, root, run, ev):
         esito, riass = "STOP", "; ".join(parts)
     else:
         esito, riass = "OK", _msg.T("plan-check.red_sum_ok", n=len(out), k=len(M["order"]))
+        sm = [t for t in M["order"] if t in out and out[t][0] == "sonda_smentita"]
+        if sm:
+            riass += " \u00b7 " + _msg.T("plan-check-180.red_sum_disproved", t=", ".join(sm))
+    # «sonda» (B11): the valid probe of a row, {decisione, affermazione, atteso, riga}: the review prompt shows the claim
     jsave(os.path.join(run, "test-red", "rossi.json"), {
         "esito": esito, "riassunto": riass, "evidence": ev, "conflitti": confl,
-        "test": {t: {"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
-                     "file": tests[t]["path"], "nome": tests[t]["name"]} for t, v in out.items()}})
+        "test": {t: dict({"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
+                          "file": tests[t]["path"], "nome": tests[t]["name"]}, **({"sonda": sv[t]} if t in sv else {}),
+                         **({"simbolo": simboli[t]} if t in simboli and v[0] == "rosso_simbolo" else {}))
+                 for t, v in out.items()}})
     print("rossi: esito=%s \u2014 %s" % (esito, riass))
     return {"OK": 0, "STOP": 1}.get(esito, 3)
 
@@ -2852,7 +3075,7 @@ M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(0)
-if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2"):
+if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo", "deviazione"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(2)
 if cmd == "accept":
@@ -2860,13 +3083,17 @@ if cmd == "accept":
 elif cmd == "tests":
     sys.exit(cmd_tests(M, sys.argv[2]))
 elif cmd == "stubs":
-    sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3]))
+    sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else ""))
+elif cmd == "additivo":
+    sys.exit(cmd_additivo(M, sys.argv[3]))
+elif cmd == "deviazione":
+    sys.exit(cmd_deviazione(M, sys.argv[3], sys.argv[4]))
 elif cmd == "rossi":
     sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 elif cmd == "l2":
     sys.exit(cmd_l2(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 if cmd == "lint2":
-    sys.exit(lint2(M, sys.argv[2]))
+    sys.exit(lint2(M, sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else ""))
 elif cmd == "gen":
     sys.exit(gen(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 elif cmd == "route":
@@ -2892,6 +3119,12 @@ need_py() {
     NOMI_TEST_PY=$(maat_cygm "$NOMI_TEST_PY" 2>/dev/null || printf '%s' "$NOMI_TEST_PY")
   fi
   export NOMI_TEST_PY
+  # 1.8.0 (B10): driver.py, the single reader of the registered .ripresa files (the probes of lint2 and rossi)
+  if [ -z "${DRIVER_PY:-}" ]; then
+    DRIVER_PY=$PC_HERE/driver.py; [ -f "$DRIVER_PY" ] || DRIVER_PY=$MAAT_SCRIPTS/driver.py
+    DRIVER_PY=$(maat_cygm "$DRIVER_PY" 2>/dev/null || printf '%s' "$DRIVER_PY")
+  fi
+  export DRIVER_PY
   export MAAT_CONFIG_PY="${MAAT_CONFIG_PY:-$MAAT_SCRIPTS/maat-config.py}"   # the Python imports the single reader (conf)
   [ -n "${FIC_PY:-}" ] && return 0
   . "$MAAT_SCRIPTS/python.sh" && [ -n "${FIC_PY:-}" ] && return 0
@@ -2904,11 +3137,20 @@ repo_root() {
 has_plan_section() { printf '%s\n' "$1" | awk -F'\t' '$2 != "above" { f = 1 } END { exit !f }'; }
 
 cmd_lint2() {
-  [ $# -eq 1 ] && [ -f "$1" ] || die_usage
-  local ann; ann=$(annotate "$1")
+  local spec="" run=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      -*) die_usage ;;
+      *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] || die_usage
+  [ -n "$run" ] || run="${spec%.md}.run"   # 1.8.0 (B10): the run dir of the probes, as gen and rossi
+  local ann; ann=$(annotate "$spec")
   has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
-  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" lint2 "$(repo_root "$1")"
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" lint2 "$(repo_root "$spec")" "$(maat_cygm "$run" 2>/dev/null || printf '%s' "$run")"
 }
 
 cmd_gen() {
@@ -2941,30 +3183,73 @@ cmd_gen() {
 #   l2     <spec> [--run-dir <d>]          for finalize.sh: "L2 <id>: OK | NO — <motivo>" of the mutations on new
 #          files, on the current code (stub = exported symbols, every symbol in a test, tests fingerprint FRESH)
 cmd_f2x() {
-  local sub=$1 spec="" run="" ev=""; shift
+  local sub=$1 spec="" run="" ev="" dif=""; shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
       --evidence) [ "$sub" = rossi ] && [ $# -ge 2 ] || die_usage; ev="$2"; shift 2 ;;
+      --diff) { [ "$sub" = stubs ] || [ "$sub" = additivo ]; } && [ $# -ge 2 ] && [ -f "$2" ] || die_usage; dif="$2"; shift 2 ;;
       -*) die_usage ;;
       *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
     esac
   done
   [ -n "$spec" ] && [ -f "$spec" ] || die_usage
   [ "$sub" != rossi ] || [ -n "$ev" ] || die_usage
+  [ "$sub" != additivo ] || [ -n "$dif" ] || die_usage
   [ -n "$run" ] || run="${spec%.md}.run"
   local ann root ts; ann=$(annotate "$spec")
   has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   root=$(repo_root "$spec")
+  [ -z "$dif" ] || dif=$(maat_cygm "$dif" 2>/dev/null || printf '%s' "$dif")
   case $sub in
     accept|tests) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" "$sub" "$root" ;;
-    stubs) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" stubs "$root" "$run" ;;
+    stubs) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" stubs "$root" "$run" ${dif:+"$dif"} ;;
+    additivo) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" additivo "$root" "$dif" ;;
     rossi) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" rossi "$root" "$run" "$ev" ;;
     l2)
       ts=$(cmd_basis "$spec" | sed -n 's/^Tests status: //p')
       printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" l2 "$root" "$run" "${ts:-ASSENTE}" ;;
   esac
+}
+
+# 1.8.0 (A1): a test-data deviation of test-red, judged by maat:spec-plan-reviewer-light on verified input:
+#   deviazione <result|-> <spec> <Tn>   the plan lines of <Tn> («test row:», «trace row:», «test file:»); with the
+#          result of the judge (a file) also «Deviazione: ACCETTATA | STOP — <why>» (verdict ACCEPT, every requirement
+#          of <Tn> in «Requirements still covered:»). Exit 0 accepted / lines only · 1 STOP · 2 usage
+#   diff-test <spec> <file> [--run-dir <d>]   the diff of <file> from the .pre-tree of the last test-red of <d> to the
+#          CURRENT tree photographed with review-surface.sh tree (untracked files included: a new test file shows
+#          whole), CR removed. The worker prints it for the judge, run-phase.sh computes it again after the phase: the
+#          same command, the same bytes. Exit 0 · 2 usage · 3 no pre-tree or tree not computable
+cmd_deviazione() {
+  [ $# -eq 3 ] && [ -f "$2" ] && { [ "$1" = - ] || [ -f "$1" ]; } || die_usage
+  local ris=$1 spec=$2 tn=$3 ann
+  ann=$(annotate "$spec")
+  has_plan_section "$ann" || { echo "Deviazione: STOP — $(msg plan-check.no_plan)"; return 1; }
+  need_py || return 2
+  [ "$ris" = - ] || ris=$(maat_cygm "$ris" 2>/dev/null || printf '%s' "$ris")
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" deviazione "$(repo_root "$spec")" "$ris" "$tn"
+}
+
+cmd_diff_test() {
+  local spec="" file="" run=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      -*) die_usage ;;
+      *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$file" ]; then file="$1"; else die_usage; fi; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] && [ -n "$file" ] || die_usage
+  [ -n "$run" ] || run="${spec%.md}.run"
+  local root pre pf cur rs
+  root=$(repo_root "$spec")
+  pf=$(ls "$run/log" 2>/dev/null | grep -- '-test-red\.pre-tree$' | sort -n | tail -1)
+  pre=$([ -n "$pf" ] && tr -d '\r\n' < "$run/log/$pf")
+  rs=${PLAN_CHECK_RS:-$PC_HERE/review-surface.sh}; [ -f "$rs" ] || rs=$MAAT_SCRIPTS/review-surface.sh
+  cur=$(cd "$root" && bash "$rs" tree 2>/dev/null | tr -d '\r')
+  [ -n "$pre" ] && [ -n "$cur" ] || { echo "$(msg plan-check-180.diff_no_tree run="$run")" >&2; return 3; }
+  (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
 }
 
 cmd_route() {
@@ -3170,7 +3455,9 @@ case "$sub" in
   closed) cmd_closed "$@" ;;
   taglia) cmd_taglia "$@" ;;
   e1) cmd_e1 "$@" ;;
-  accept|tests|stubs|rossi|l2) cmd_f2x "$sub" "$@" ;;
+  accept|tests|stubs|rossi|l2|additivo) cmd_f2x "$sub" "$@" ;;
+  deviazione) cmd_deviazione "$@" ;;
+  diff-test) cmd_diff_test "$@" ;;
   *) die_usage ;;
 esac
 exit $?

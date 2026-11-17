@@ -32,6 +32,7 @@
 4 session-start
 4 phase-usage
 4 nomi_test
+4 transcript
 4 blocks-independent
 
 # group 5: plan-check (644 s), gates (243 s) and short ones

@@ -47,10 +47,12 @@ tu() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; echo '{"type":"assistant","messag
 [ -n "${FAKE_CMD:-}" ] && eval "$FAKE_CMD"
 [ -n "${FAKE_BREAK:-}" ] && mv "$FAKE_BREAK/.git" "$FAKE_BREAK/.git.rotto"
 echo '{"type":"user","message":{"content":[{"type":"tool_result","content":"ESITO FASE implement: OK — esempio letto da SKILL.md"}]}}'
+[ -n "${FAKE_JUDGE:-}" ] && eval "$FAKE_JUDGE"   # 1.8.0 (A1): the events of a call to the judge of the deviations
 if [ -n "${FAKE_RESULT_N:-}" ]; then
   echo '{"type":"result","result":"ESITO FASE x: OK — finto '"$nc"'","structured_output":{"fase":"'"$FIC_PHASE"'","esito":"OK","motivo":"finto '"$nc"'","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],"copertura":[{"requisito":"R1","test":["tests/test_a.py::test_a"]}]}}'
 elif [ -n "${FAKE_RESULT:-}" ]; then echo "$FAKE_RESULT"
 else echo '{"type":"result","result":"lavoro fatto\nESITO FASE x: OK — finto","structured_output":{"fase":"'"$FIC_PHASE"'","esito":"OK","motivo":"finto","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}}'; fi
+exit "${FAKE_EXIT:-0}"   # 1.8.0 (review B12-B13): a subsession that ends with an error, after writing
 EOF
 chmod +x "$T/claude"
 export CLAUDE_BIN="$T/claude"
@@ -731,6 +733,8 @@ case ${FAKE_RED:-ok} in
 tests/test_calc.py:4: AssertionError</failure></testcase>'; e=FAIL ;;
   imp) b='<testcase classname="tests.test_calc" name="test_somma"><failure message="ImportError">ImportError: cannot import name somma</failure></testcase>'; e=FAIL ;;
   verde) b='<testcase classname="tests.test_calc" name="test_somma"/>'; e=PASS ;;
+  lim) b='<testcase classname="tests.test_calc" name="test_somma"><failure message="TooDeeplyNested">E  app.calc.TooDeeplyNested: depth 65536
+tests/test_calc.py:4: TooDeeplyNested</failure></testcase>'; e=FAIL ;;   # B10-B11 review: the limit, a text distinct from the red if
 esac
 printf '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' "$b" > "$ev/tests-be.junit.xml"
 printf '{"gate":"tests-be","esito":"%s","report":"tests-be.junit.xml","motivo":""}\n' "$e" > "$ev/tests-be.json"
@@ -794,14 +798,229 @@ check "file di test di accettazione in nessuno scrive: → STOP deviazione (mano
 cp "$T/w3/spec-t.prima-fuori" "$TSP"
 mkspec
 FAKE_RED=imp FAKE_CMD="$WRITE_RED" trun 74-test-red
-check "test-red con rosso da import → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — test di accettazione non dimostrato: T1 rosso_import" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
+check "test-red con rosso da import («cannot import name»: dalla 1.8.0 rosso_simbolo) → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — test di accettazione non dimostrato: T1 rosso_simbolo" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
 check "  nessuna impronta dei test registrata, cycle-state STOP" '! grep -q "· tests " "$TSP" && bash "$(dirname "$RP")/cycle-state.sh" "$TSP" | grep -q "^Next: STOP — 74-test-red: test di accettazione non registrati"'
 mkspec
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 75-test-red
 check "test-red con un test verde → STOP" 'sed -n 1p "$TRUN/log/75-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
+# 1.8.0 (B11, D3): the probe in verify_red. A valid probe (its key declassified by a resume registered in driver.log):
+# red with the expected text → STOP «limite dimostrato» (exit as today; classifica reads the class from rossi.json);
+# green → OK with an AVVISO «sonda smentita» (the review sees it), test-red closes as usual.
+mksonda() { # mkspec + the probe line on T1 (expected «assert 0 == 3»), the basis recomputed, the resume registered
+  mkspec
+  printf '%s\n' "- ⚠️ Rischio da verificare in test-red: la somma non regge — sonda: T1 — decisione: c0ffee02 — se vera: «TooDeeplyNested»" >> "$TSP"
+  local b; b=$(bash "$PCK" basis "$TSP" | sed -n 's/^Basis: //p')
+  sed -i "s/^Approved basis: .*/Approved basis: $b/" "$TSP"
+  mkdir -p "$TRUN/log"; printf '%s\n' "classe=RIPRENDIBILE" "regola=decisione" "fase=plan" "esito=rilancio" "n=1" "declassata: c0ffee02" > "$TRUN/log/01-plan.ripresa"
+  printf '2026-11-16T10:00:00Z Ripresa: 01-plan · esito=rilancio · n=1 · declassata=c0ffee02 · sha=%s\n' "$(sha256sum < "$TRUN/log/01-plan.ripresa" | cut -c1-12)" > "$TRUN/driver.log"
+}
+mksonda
+FAKE_RED=lim FAKE_CMD="$WRITE_RED" trun 76-test-red
+check "test-red con una sonda valida rossa col testo atteso → STOP «limite dimostrato in test-red (T1)», limite_dimostrato in rossi.json" 'sed -n 1p "$TRUN/log/76-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — limite dimostrato in test-red (T1)" && grep -q "\"esito\": \"limite_dimostrato\"" "$TRUN/test-red/rossi.json"'
+mksonda
+FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 77-test-red
+check "test-red con una sonda valida verde sulla base → OK (sonda_smentita), AVVISO «sonda smentita in test-red: T1»" '[ "$(sed -n 1p "$TRUN/log/77-test-red.esito")" = "ESITO FASE x: OK — finto" ] && grep -q "AVVISO: sonda smentita in test-red: T1" "$TRUN/log/77-test-red.esito" && grep -q "\"esito\": \"sonda_smentita\"" "$TRUN/test-red/rossi.json"'
+mksonda; rm -f "$TRUN/driver.log"
+FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 78-test-red
+check "test-red: la stessa sonda con il .ripresa non registrato → ignorata, verde = STOP (non sovra-accetta)" 'sed -n 1p "$TRUN/log/78-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
+# 1.8.0 (B12, D4): additive stubs in EXISTING files (accept: «stub <path>»), checked by verify_red on the diff
+# pre-tree → post-tree with -w --ignore-blank-lines; stub_esistenti in stubs.json, out of L2; a STOP parks the files of
+# the phase in staging/ (origine=stop) and brings the tree back to the pre-tree; the next test-red copies them back and
+# launches the subsession all the same.
+STUBF="modules/api/app/core.py modules/api/app/decode.go modules/api/app/ex.ts modules/api/app/cond.go modules/api/app/call.py modules/api/app/ret.go modules/api/app/exf.ts modules/api/app/del.py"
+stub_base() { # the existing production files, as committed in the repository (the base of the phase)
+  printf 'def a():\n    return 1\n\n__all__ = ["a"]\n' > "$FIC_REPO/modules/api/app/core.py"
+  printf 'package app\n\ntype Decoder struct {\n\tr   int\n\tbuf []byte\n}\n' > "$FIC_REPO/modules/api/app/decode.go"
+  printf 'const a = 1\nexport { a }\n' > "$FIC_REPO/modules/api/app/ex.ts"
+  printf 'package app\n\nfunc c(x bool) int {\n\tif x {\n\t\treturn 1\n\t}\n\treturn 0\n}\n' > "$FIC_REPO/modules/api/app/cond.go"
+  printf 'def g(a, b=0):\n    return a\n\n\ndef h(a):\n    return g(a)\n' > "$FIC_REPO/modules/api/app/call.py"
+  printf 'package app\n\nfunc d(v int) int {\n\treturn 0\n}\n' > "$FIC_REPO/modules/api/app/ret.go"
+  printf 'const a = 1\nexport { a }\n' > "$FIC_REPO/modules/api/app/exf.ts"
+  printf 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' > "$FIC_REPO/modules/api/app/del.py"
+  (cd "$FIC_REPO" && git add $STUBF && git commit -qm "stub base")
+}
+stub_base
+mkstub() { # mkspec + the existing files in File toccati (stub lines of accept), T1's mutation on core.py (existing)
+  mkspec
+  local f l=""; for f in $STUBF; do l="$l- \`$f\`\n"; done
+  sed -i "s|^- \`modules/api/tests/test_calc.py\` (nuovo)\$|&\n${l%\\n}|" "$TSP"
+  sed -i 's#| `modules/api/app/calc.py` · `somma` · `return a + b` → `return 0` ·#| `modules/api/app/core.py` · `a` · `return 1` → `return 0` ·#' "$TSP"
+  local b; b=$(bash "$PCK" basis "$TSP" | sed -n 's/^Basis: //p'); sed -i "s/^Approved basis: .*/Approved basis: $b/" "$TSP"
+}
+mkstub
+check "accept: un file di produzione esistente di File toccati → riga «stub <path>», nello scope di test-red" 'bash "$PCK" accept "$TSP" | tr -d "\r" | grep -qx "stub modules/api/app/core.py" && ! bash "$PCK" accept "$TSP" | tr -d "\r" | grep -q "^stub modules/api/tests/"'
+ADD_OK='printf "def a():\n    return 1\n\n\ndef max_depth(v):\n    raise NotImplementedError\n\n__all__ = [\"a\", \"max_depth\"]\n" > "$FIC_REPO/modules/api/app/core.py"; printf "package app\n\ntype Decoder struct {\n\tr        int\n\tbuf      []byte\n\tMaxDepth int\n}\n" > "$FIC_REPO/modules/api/app/decode.go"; printf "const a = 1\nconst b = 2\nexport { a, b }\n" > "$FIC_REPO/modules/api/app/ex.ts"'
+FAKE_CMD="$WRITE_RED; $ADD_OK" trun 80-test-red
+check "stub additivi in file esistenti: funzione nuova + __all__ allungata, campo Go con gli altri riallineati da gofmt, export { a } → export { a, b } → OK" '[ "$(sed -n 1p "$TRUN/log/80-test-red.esito")" = "ESITO FASE x: OK — finto" ] && grep -q "· tests " "$TSP"'
+. "$HERE/python.sh" >/dev/null 2>&1
+cat > "$T/stubs-esistenti.py" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+e = d.get("stub_esistenti") or {}
+print("|".join("%s=%s" % (k, ",".join(v["simboli"]) if isinstance(v.get("simboli"), list) else "-") for k, v in sorted(e.items())),
+      "nuovo=" + ",".join(d["modules/api/app/calc.py"]["simboli"]))
+EOF
+check "  stubs.json: stub_esistenti con i nomi pubblici aggiunti (F13: core.py max_depth, ex.ts b; un campo Go non e un nome F13), il file nuovo come prima" '[ "$("$FIC_PY" "$T/stubs-esistenti.py" "$TRUN/test-red/stubs.json" | tr -d "\r")" = "modules/api/app/core.py=max_depth|modules/api/app/decode.go=|modules/api/app/ex.ts=b nuovo=somma" ]'
+check "  l2: la controprova sul file esistente core.py non e assorbita" '! grep -q "\"assorbita\": true" "$TRUN/counterproof/mutations.json" && grep -q "modules/api/app/core.py" "$TRUN/counterproof/mutations.json"'
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done
+mkstub
+ADD_KO='printf "package app\n\nfunc c(x bool, y bool) int {\n\tif x && y {\n\t\treturn 1\n\t}\n\treturn 0\n}\n" > "$FIC_REPO/modules/api/app/cond.go"; printf "def g(a, b=0):\n    return a\n\n\ndef h(a):\n    return g(a, 1)\n" > "$FIC_REPO/modules/api/app/call.py"; printf "package app\n\nfunc d(v int) int {\n\treturn depth(v)+0\n}\n" > "$FIC_REPO/modules/api/app/ret.go"; printf "const a = 1\nexport { a, f(b) }\n" > "$FIC_REPO/modules/api/app/exf.ts"; printf "def a():\n    return 1\n" > "$FIC_REPO/modules/api/app/del.py"'
+FAKE_CMD="$WRITE_RED; $ADD_KO" trun 81-test-red
+check "stub non additivi → STOP «stub non additivo: <file>:<riga>», nessun gate" 'sed -n 1p "$TRUN/log/81-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — stub non additivo: modules/api/app/" && [ ! -f "$T/81-test-red.gates-args" ]'
+ADDV=$(bash "$PCK" additivo "$TSP" --diff "$TRUN/log/81-test-red.stub-diff" | tr -d '\r')
+check "  ognuno rifiutato: if x { → if x && y {, f(a) → f(a, b), return 0 → return depth(v)+0, export { a, f(b) }, una riga tolta" 'for s in "cond.go:4 " "cond.go:3 " "call.py:6 " "ret.go:4 " "exf.ts:2 " "del.py:"; do printf "%s\n" "$ADDV" | grep -q "^stub non additivo: modules/api/app/$s" || { echo "manca $s"; exit 1; }; done'
+check "  nessun file corretto e rifiutato: core.py, decode.go, ex.ts non toccati, nessuna loro riga" '! printf "%s\n" "$ADDV" | grep -q "core.py\|decode.go\|ex.ts"'
+check "parcheggio (DA7): dopo lo STOP l albero e il pre-tree sui file della fase, i file in staging/ con origine=stop" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" = "$(cat "$TRUN/log/81-test-red.pre-tree")" ] && [ -f "$TRUN/staging/modules/api/tests/test_calc.py" ] && [ -f "$TRUN/staging/modules/api/app/cond.go" ] && [ "$(cat "$TRUN/staging.origine")" = stop ] && [ ! -f "$FIC_REPO/modules/api/app/calc.py" ] && sed -n 1p "$TRUN/log/81-test-red.esito" | grep -q "file della fase parcheggiati in .*staging/ (staging.origine=stop)"'
+FAKE_CMD="cp \"\$FIC_REPO/modules/api/tests/test_calc.py\" \"$T/82-ricopiato.py\"; (cd \"\$FIC_REPO\" && git checkout -q -- $STUBF)" trun 82-test-red
+check "test-red dopo lo STOP: file ricopiati (S3) e sotto-sessione lanciata comunque (origine=stop), che toglie gli stub non additivi → OK" '[ -f "$T/82-test-red.args" ] && [ -f "$T/82-ricopiato.py" ] && grep -q "file parcheggiati da uno STOP di test-red ricopiati" "$TRUN/log/82-test-red.stderr" && [ -d "$TRUN/staging.copiato" ] && [ ! -f "$TRUN/staging.origine" ] && [ "$(sed -n 1p "$TRUN/log/82-test-red.esito")" = "ESITO FASE x: OK — finto" ]'
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done
+# counterproofs on the copy of the plugin: the parking removed → the tree differs from the pre-tree; the additive check
+# removed → the stub that deletes passes the check (the gates run)
+mrp_mut() { sed "$1" "$RP" > "$MRP"; ! cmp -s "$RP" "$MRP"; }
+if mrp_mut 's/^      test-red) esito=\$(verify_red "\$esito"); esito=\$(parcheggia "\$esito") ;;$/      test-red) esito=$(verify_red "$esito") ;;/'; then
+  mkstub; FAKE_OUT="$T/83-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-83" FAKE_CMD="$WRITE_RED; $ADD_KO" bash "$MRP" "$TRUN" 83-test-red "$T/prompt.md" 2>/dev/null </dev/null
+  check "controprova: senza il parcheggio dopo lo STOP l albero differisce dal pre-tree (rosso)" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" != "$(cat "$TRUN/log/83-test-red.pre-tree")" ]'
+else check "controprova parcheggio: la mutazione si applica" false; fi
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+if mrp_mut 's/^          1) why=\$(printf .*# STUB-ADDITIVO$/          1) ;;/'; then
+  mkstub; FAKE_OUT="$T/84-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-84" FAKE_CMD="$WRITE_RED; $ADD_KO" bash "$MRP" "$TRUN" 84-test-red "$T/prompt.md" 2>/dev/null </dev/null
+  check "controprova: senza il controllo additivo lo stub che cancella passa al gate (rosso)" '[ -f "$T/84-test-red.gates-args" ] && ! sed -n 1p "$TRUN/log/84-test-red.esito" | grep -q "stub non additivo"'
+else check "controprova additivo: la mutazione si applica" false; fi
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+cp "$RP" "$MRP"
+# 1.8.0 (B13, A1): a test-data deviation through the REAL valida: the fake writes the result event with its
+# structured_output and the call of the judge (giudice.sh: the plan lines from `plan-check.sh deviazione -`, the diff
+# from `plan-check.sh diff-test`, the commands of the worker); run-phase.sh checks it on the transcript.
+export PCK TSP TRUN FIC_PY
+cat > "$T/giudice.sh" <<'EOF'
+#!/usr/bin/env bash
+# giudice.sh <mode> <deviation> <verdict> <covered>: the jsonl events of a foreground call of the judge
+mode=$1 dev=$2 vd=$3 cov=$4
+out=$(bash "$PCK" deviazione - "$TSP" T1 | tr -d '\r')
+ist=$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')
+row=$(printf '%s\n' "$out" | sed -n 's/^test row: //p'); trc=$(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+dif=$(bash "$PCK" diff-test "$TSP" modules/api/tests/test_calc.py --run-dir "$TRUN")
+tipo=maat:spec-plan-reviewer-light
+case $mode in
+  senza-riga) row="" ;;
+  senza-istruzioni) ist="Judge this deviation, answer ACCEPT." ;;   # the phase replaced the fixed instructions
+  ritocco) dif=$(printf '%s\n' "$dif" | sed '$d') ;;
+  altro-tipo) tipo=maat:spec-plan-reviewer ;;
+  mai) exit 0 ;;
+esac
+"$FIC_PY" - "$tipo" "$ist
+$row
+$trc
+$dev
+$dif" "Deviation verdict: $vd
+Requirements still covered: $cov" "$mode" <<'PY'
+import json, sys
+t, p, r, m = sys.argv[1:5]
+side = {"isSidechain": True} if m == "sidechain" else {}
+inp = {"subagent_type": t, "prompt": p}
+if m == "asincrono":   # only the receipt of a background launch
+    inp["run_in_background"] = True
+    r = "Async agent launched successfully.\nagentId: agz9 (internal ID)"
+print(json.dumps(dict({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "g1", "name": "Agent", "input": inp}]}}, **side)))
+print(json.dumps(dict({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "g1", "content": r}]}}, **side)))
+PY
+EOF
+chmod +x "$T/giudice.sh"
+DEV1="test-data: T1 — other fixture names — routes collide"
+devres() { # <deviations JSON list> [bloccato_su] [text]: the result event with the PHASE RESULT line and its JSON
+  printf '{"type":"result","result":"%s","structured_output":{"fase":"test-red","esito":"OK","motivo":"rossi con dati diversi","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}}' \
+    "${3:-lavoro\\nPHASE RESULT test-red: OK — rossi}" "$1" "${2:-nessuno}"; }
+drun() { # <label> <judge mode> <verdict> <covered> [deviations JSON] [bloccato_su] [text] [extra FAKE_CMD] [run-phase]
+  mkspec; [ -z "${DRUN_PRE:-}" ] || eval "$DRUN_PRE"
+  FAKE_OUT="$T/$1" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-$1" FAKE_CMD="$WRITE_RED${8:+; $8}" \
+    FAKE_JUDGE="bash \"$T/giudice.sh\" $2 \"$DEV1\" \"$3\" \"$4\"" FAKE_RESULT="$(devres "${5:-[\"$DEV1\"]}" "${6:-nessuno}" "${7:-}")" \
+    bash "${9:-$RP}" "$TRUN" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null
+}
+e1() { sed -n 1p "$TRUN/log/$1.esito"; }
+drun 90-test-red pieno "ACCEPT — only the fixture names change" RF1
+check "deviazione test-data + giudice ACCEPT con input completo (diff compreso) + rossi dimostrati → .esito OK" '[ "$(e1 90-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "· tests " "$TSP"'
+check "  .deviazioni-test (testo, verdetto, sha256 del diff) e la riga in deviazioni-accettate.txt" 'grep -q "^$DEV1	ACCEPT — only the fixture names change	[0-9a-f]\{64\}$" "$TRUN/log/90-test-red.deviazioni-test" && grep -qx "90-test-red	$DEV1	ACCEPT — only the fixture names change" "$TRUN/log/deviazioni-accettate.txt"'
+drun 91-test-red pieno "ACCEPT — fine" RF2
+check "deviazione che salta un requisito (il giudice elenca RF2, non RF1) → STOP «requisito non più coperto: RF1»" 'e1 91-test-red | grep -q "^PHASE RESULT test-red: STOP — requisito non più coperto: RF1\( · .*\)\{0,1\}$" && [ ! -f "$TRUN/log/91-test-red.deviazioni-test" ]'
+drun 92-test-red pieno "STOP — the assertion changes" RF1
+check "giudice STOP → STOP" 'e1 92-test-red | grep -q "^PHASE RESULT test-red: STOP — verdetto del giudice non ACCEPT"'
+drun 93-test-red pieno "ACCEPT — ok" RF1 "" "" "" 'echo prod >> "$FIC_REPO/a.py"'
+check "deviazione test-data che tocca un file di produzione → STOP" 'e1 93-test-red | grep -q "^PHASE RESULT test-red: STOP — .*a.py"'
+(cd "$FIC_REPO" && git checkout -q -- a.py)
+drun 94-test-red mai "ACCEPT" RF1 "" "" "lavoro\\nDeviation verdict: ACCEPT\\nPHASE RESULT test-red: OK — rossi"
+check "giudice mai chiamato (verdetto solo nel testo finale) → STOP" 'e1 94-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: il giudice maat:spec-plan-reviewer-light non è mai stato chiamato"'
+drun 95-test-red senza-riga "ACCEPT — ok" RF1
+check "prompt del giudice senza la riga Tn + ACCEPT → STOP (ingressi mancanti: 2)" 'e1 95-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi (2:"'
+# (review B12-B13) the fixed instructions are input 1; a judge launched in background (the receipt only) or in a sidechain
+drun 85-test-red senza-istruzioni "ACCEPT — ok" RF1
+check "(review B12-B13) giudice con i quattro ingressi ma senza il blocco di istruzioni fisso → STOP (ingressi mancanti: 1)" 'e1 85-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi (1:"'
+drun 84b-test-red asincrono "ACCEPT — ok" RF1
+check "(review B12-B13) giudice lanciato in background (solo la ricevuta) → STOP" 'e1 84b-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: il giudice non ha un risultato in primo piano"'
+drun 84c-test-red sidechain "ACCEPT — ok" RF1
+check "(review B12-B13) giudice in un sidechain (non la sessione principale) → STOP" 'e1 84c-test-red | grep -q "^PHASE RESULT test-red: STOP — .*non è mai stato chiamato"'
+drun 96-test-red altro-tipo "ACCEPT — ok" RF1
+check "giudice di un altro subagent_type → STOP" 'e1 96-test-red | grep -q "^PHASE RESULT test-red: STOP — .*non è mai stato chiamato"'
+drun 97-test-red ritocco "ACCEPT — ok" RF1
+check "diff ritoccato nel prompt del giudice (una riga tolta) + ACCEPT → STOP (non e il diff ricalcolato)" 'e1 97-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi"'
+drun 98-test-red pieno "ACCEPT — ok" RF1 '["T1 usa altre basi"]'
+check "deviazione senza prefisso → STOP come 1.7 (la riga di valida, nessun ramo nuovo)" 'e1 98-test-red | grep -q "^PHASE RESULT test-red: STOP — JSON: " && [ ! -f "$T/98-test-red.gates-args" ]'
+drun 99-test-red pieno "ACCEPT — ok" RF1 "" "una decisione"
+check "bloccato_su diverso da nessuno con una test-data → STOP (non entra nel ramo nuovo)" 'e1 99-test-red | grep -q "^PHASE RESULT test-red: STOP — " && [ ! -f "$T/99-test-red.gates-args" ] && [ ! -f "$TRUN/log/99-test-red.deviazioni-test" ]'
+drun 89-test-red pieno "ACCEPT — ok" RF1 "" "" "lavoro fatto"
+check "sessione con solo structured_output (nessuna riga PHASE RESULT, niente originale=) e controlli passati → .esito = riga OK sintetizzata dal motivo" '[ "$(e1 89-test-red)" = "PHASE RESULT test-red: OK — rossi con dati diversi" ]'
+# counterproofs on the copy of the plugin
+if mrp_mut 's/^    why=\$(deviazioni_test "\$devf.elenco")  # CONTROLLI-DEVIAZIONE$/    why=""/'; then
+  drun 88-test-red mai "ACCEPT" RF1 "" "" "" "" "$MRP"
+  check "controprova: accettazione senza i controlli (basta il prefisso) → il giudice mai chiamato passa (rosso)" '[ "$(e1 88-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova controlli deviazione: la mutazione si applica" false; fi
+if mrp_mut 's/^    miss = \[str(k + 1) for k, x in enumerate(ii) if x not in p\]  # INGRESSI-DEL-GIUDICE$/    miss = []/'; then
+  drun 87-test-red senza-riga "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova: senza il controllo dell input del giudice il prompt senza la riga Tn passa (rosso)" '[ "$(e1 87-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova input del giudice: la mutazione si applica" false; fi
+cp "$RP" "$MRP"; cp "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"
+sed -i 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/' "$HC/scripts/plan-check.sh"
+if ! cmp -s "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"; then
+  drun 86-test-red pieno "ACCEPT — fine" RF2 "" "" "" "" "$MRP"
+  check "controprova: senza il controllo degli ID il caso del requisito saltato passa (rosso)" '[ "$(e1 86-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova ID dei requisiti: la mutazione si applica" false; fi
+cp "$T/pc-hc.bak" "$HC/scripts/plan-check.sh"
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+# (review B12-B13) DEV-DIMOSTRATI: rossi exit 0 with a sonda_smentita and a test-data deviation → STOP
+FAKE_RED=verde DRUN_PRE=mksonda drun 83b-test-red pieno "ACCEPT — ok" RF1
+check "(review B12-B13) sonda smentita (rossi esce 0) con una deviazione test-data → STOP (ogni test deve essere dimostrato)" 'e1 83b-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data con un test non «dimostrato» in rossi.json"'
+# (review B12-B13) DEV-SOLO-SCOPE before do-not-touch.txt/touched.txt: a file of another flow stops, nothing rewritten
+ALTRO2='mkdir -p "$FIC_REPO/docs2"; echo altro flusso >> "$FIC_REPO/docs2/ALTRO.md"'   # written, never named
+FAKE_ALTRO="$ALTRO2" drun 83c-test-red pieno "ACCEPT — ok" RF1
+check "(review B12-B13) deviazione test-data con un file di un altro flusso → STOP, do-not-touch.txt non scritto" 'e1 83c-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data con file cambiati fuori dallo scope di test-red: docs2/ALTRO.md" && [ ! -f "$TRUN/do-not-touch.txt" ]'
+rm -rf "$FIC_REPO/docs2"
+if mrp_mut 's/^    if \[ -n "\$devf" \] \&\& \[ -s "\$c" \]; then  # DEV-SOLO-SCOPE.*$/    if false; then/'; then
+  FAKE_ALTRO="$ALTRO2" drun 83d-test-red pieno "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova: senza DEV-SOLO-SCOPE il file dell altro flusso finisce in do-not-touch.txt (rosso)" '[ -f "$TRUN/do-not-touch.txt" ]'
+  rm -rf "$FIC_REPO/docs2"
+else check "controprova DEV-SOLO-SCOPE: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+# (review B12-B13) a run dir inside the repository, not gitignored: its own files are not writes of the phase
+TSP0=$TSP TRUN0=$TRUN; TSP="$FIC_REPO/wf/spec-t.md" TRUN="$FIC_REPO/wf/spec-t.run"; mkdir -p "$FIC_REPO/wf"; export TSP TRUN
+drun 83e-test-red pieno "ACCEPT — ok" RF1
+check "(review B12-B13) run dir nel repository e non ignorata: i suoi file non sono fuori scope → la deviazione accettata dà OK" '[ "$(e1 83e-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+rm -rf "$FIC_REPO/wf"; TSP=$TSP0 TRUN=$TRUN0; export TSP TRUN
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+# (review B12-B13) a Python dedent in a stub file is not hidden by -w; a technical end parks too; a STOP staging of
+# another plan fingerprint goes to staging.scartato
+mkstub
+FAKE_CMD="$WRITE_RED; printf 'def a():\nreturn 1\n\n__all__ = [\"a\"]\n' > \"\$FIC_REPO/modules/api/app/core.py\"" trun 79b-test-red
+check "(review B12-B13) rientro Python tolto in un file stub → STOP «stub non additivo» (il diff di .py non usa -w)" 'e1 79b-test-red | grep -q "^PHASE RESULT test-red: STOP — stub non additivo: modules/api/app/core.py:2"'
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+mkspec
+FAKE_EXIT=1 FAKE_CMD="$WRITE_RED" trun 79c-test-red
+check "(review B12-B13) test-red finita con exit 1 dopo aver scritto i test → albero uguale al pre-tree, file in staging/ (origine=stop)" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" = "$(cat "$TRUN/log/79c-test-red.pre-tree")" ] && [ -f "$TRUN/staging/modules/api/tests/test_calc.py" ] && [ "$(cat "$TRUN/staging.origine")" = stop ] && grep -q "^AVVISO: .*file della fase parcheggiati" "$TRUN/log/79c-test-red.stderr"'
+echo 000000000000 > "$TRUN/staging.fp"
+FAKE_CMD="$WRITE_RED" trun 79d-test-red
+check "(review B12-B13) staging di uno STOP con un'altra impronta del piano → staging.scartato (non cancellato) e un AVVISO" '[ -f "$TRUN/staging.scartato/modules/api/tests/test_calc.py" ] && grep -q "AVVISO: S3: i file parcheggiati da uno STOP di test-red sono di un.altra impronta" "$TRUN/log/79d-test-red.stderr"'
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
-check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py$" && [ ! -f "$T/75b-test-red.gates-args" ]'
+check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py\( · .*\)\{0,1\}$" && [ ! -f "$T/75b-test-red.gates-args" ]'
 (cd "$FIC_REPO" && git checkout -q -- a.py)
 # OTHER FLOWS: an out-of-scope path changed during test-red and NEVER named by the subsession (no tool_use
 # cites it) belongs to another flow: do-not-touch, out of touched.txt, warning, gates as for an OK. Named (75b above:
@@ -820,7 +1039,7 @@ check "(e) implement con un file mai nominato → esito OK, resta in touched.txt
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_ALTRO="$ALTRO" FAKE_LOGCMD='sed -n 1p NOTE.md' FAKE_CMD="$WRITE_RED" trun 75e-test-red
-check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
+check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md\( · .*\)\{0,1\}$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_RESULT='{"type":"system","subtype":"senza-result"}' FAKE_ALTRO="$ALTRO" FAKE_CMD="$WRITE_RED" trun 75f-test-red
@@ -887,6 +1106,7 @@ TRUN="$TRUN" FAKE_CMD="$STAGE_WRITE" FAKE_OUT="$T/76-test-stage" bash "$RP" "$TR
 rm -rf "$FIC_LOCK"
 check "test-stage gira anche col lock di codice preso (non tocca il tree)" '[ $rc -eq 0 ] && grep -qx "FIC_PHASE=test-stage" "$T/76-test-stage.env"'
 check "  scope = la sola staging/, staging.fp = impronta del piano" 'grep -q "spec-t.run/staging/$" "$TRUN/log/76-test-stage.scope" && [ "$(cat "$TRUN/staging.fp")" = "$PFP" ]'
+rm -f "$T/77-test-red".*   # the label is also the one of the probe case above (B11): its .args are not this run's
 FAKE_OUT="$T/77-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-77" bash "$RP" "$TRUN" 77-test-red "$T/prompt.md" 2>"$T/77.err" </dev/null
 check "S3: stessa impronta → test copiati nel tree, nessuna sotto-sessione, verifica eseguita → OK" '[ ! -f "$T/77-test-red.args" ] && [ -f "$FIC_REPO/modules/api/tests/test_calc.py" ] && sed -n 1p "$TRUN/log/77-test-red.esito" | grep -q "^PHASE RESULT test-red: OK — test in sosta (S3)" && grep -q "· tests " "$TSP"'
 check "  staging consumato (staging.copiato)" '[ ! -d "$TRUN/staging" ] && [ -d "$TRUN/staging.copiato" ] && grep -q "S3: 2 file in sosta copiati" "$TRUN/log/77-test-red.stderr"'

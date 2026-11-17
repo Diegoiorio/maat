@@ -277,6 +277,105 @@ stop-hook-180.agents	background agents not collected: 	agenti in background non 
 stop-hook-180.agents_fix	wait for the reviewers' notifications, do not close the phase (and launch the next agents in the foreground: several Agent calls in the same message already run in parallel)	attendi le notifiche dei revisori, non chiudere la fase (e lancia i prossimi agenti in primo piano: più chiamate Agent nello stesso messaggio girano già in parallelo)
 maat-config-180.root_copy	{name}: moduli.{i} ({nome}): copia with radice_pacchetti at the root of the repository is not supported (1.8.0); for the counterproof use a module without copia, or put radice_pacchetti in a subfolder	{name}: moduli.{i} ({nome}): copia con radice_pacchetti alla radice del repository non e' supportata (1.8.0); per la controprova usa un modulo senza copia, o metti radice_pacchetti in una sottocartella
 
+# --- plan-check-180, cycle-report-180 (1.8.0, B10, D3, written by hand): the probe line of a declassified decision
+# (lint2 and rossi), the report of a STOP on a decision that no script verified
+plan-check-180.probe_form	line {n}: probe line not in the form «⚠️ Rischio da verificare in test-red: <claim> — sonda: <Tn> — decisione: <key> — se vera: «<expected text>»»	riga {n}: riga di sonda non nella forma «⚠️ Rischio da verificare in test-red: <affermazione> — sonda: <Tn> — decisione: <chiave> — se vera: «<testo atteso>»»
+plan-check-180.probe_no_row	line {n}: probe {id} is not a row of the test plan	riga {n}: sonda {id} non e' una riga del piano di test
+plan-check-180.probe_second	line {n}: second probe on the decision {k}: only one probe for each declassified decision	riga {n}: seconda sonda sulla decisione {k}: una sola sonda per decisione declassata
+plan-check-180.probe_no_resume	line {n}: probe on the decision {k} without a registered resume that declassified it (log/*.ripresa with its line in driver.log)	riga {n}: sonda sulla decisione {k} senza una ripresa registrata che l'abbia declassata (log/*.ripresa con la sua riga in driver.log)
+plan-check-180.probe_same_row	line {n}: a second probe on the row {id}	riga {n}: una seconda sonda sulla riga {id}
+plan-check-180.probe_in_assert	line {n}: the expected text of the probe on {id} is already in the row's red if: a red on the assertion would look like the limit	riga {n}: il testo atteso della sonda su {id} è già nel rosso della riga: un rosso sull'asserzione sembrerebbe il limite
+plan-check-180.probe_in_source	line {n}: the expected text of the probe on {id} is written in {f}: the test would print it itself	riga {n}: il testo atteso della sonda su {id} è scritto in {f}: il test lo stamperebbe da sé
+plan-check-180.red_symbol	red on a missing symbol ({s}): the unit does not load, a stub is due, it proves nothing	rosso su un simbolo mancante ({s}): l'unità non si carica, serve uno stub, non dimostra niente
+plan-check-180.red_compile	line {n}: {id}: the red on the base is a compilation error ({t}): a stub is due, the red is its assertion	riga {n}: {id}: il rosso sulla base è un errore di compilazione ({t}): serve uno stub, il rosso è la sua asserzione
+plan-check-180.stub_not_additive	stub not additive: {f}:{n} ({line})	stub non additivo: {f}:{n} ({line})
+plan-check-180.stub_not_measured	not measured	non misurato
+plan-check-180.dev_no_row	{id} is not a row of the test plan	{id} non è una riga del piano di test
+plan-check-180.dev_no_result	the result of the judge cannot be read	il risultato del giudice non è leggibile
+plan-check-180.dev_judge	verdict of the judge not ACCEPT ({v})	verdetto del giudice non ACCEPT ({v})
+plan-check-180.dev_req	requirement no longer covered: {r}	requisito non più coperto: {r}
+plan-check-180.diff_no_tree	diff-test: no .pre-tree of a test-red in {run}/log, or the current tree cannot be computed	diff-test: nessun .pre-tree di un test-red in {run}/log, o albero corrente non calcolabile
+plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignored for the probes	{label}.ripresa non registrato in driver.log: ignorato per le sonde
+plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
+cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
+
+# B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
+# review prompt shows a disproved claim next to its row (driver.py)
+plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})
+plan-check-180.red_disproved	green on the base: the probe disproves the declassified claim (decision {k}: {a})	verde sulla base: la sonda smentisce l'affermazione declassata (decisione {k}: {a})
+plan-check-180.red_sum_disproved	probes disproved: {t}	sonde smentite: {t}
+run-phase-180.red_limit	limit proven in test-red ({tests}): a human decision with its proof (log/{label}.rossi, test-red/rossi.json)	limite dimostrato in test-red ({tests}): una decisione umana con la sua prova (log/{label}.rossi, test-red/rossi.json)
+run-phase-180.probe_disproved	probe disproved in test-red: {tests} (the declassified claim is false; the review sees it)	sonda smentita in test-red: {tests} (l'affermazione declassata e' falsa; la review la vede)
+run-phase-180.park_technical	test-red ended without an outcome (exit {code})	test-red finita senza esito (exit {code})
+run-phase-180.s3_kept	the files parked by a STOP of test-red belong to another plan fingerprint ({fp}): kept in staging.scartato, not copied	i file parcheggiati da uno STOP di test-red sono di un'altra impronta del piano ({fp}): conservati in staging.scartato, non ricopiati
+run-phase-180.dev_not_proven	test-data deviation with a test not «dimostrato» in rossi.json: the deviation is not accepted	deviazione test-data con un test non «dimostrato» in rossi.json: la deviazione non è accettata
+run-phase-180.dev_no_tn	test-data deviation without its test ID («test-data: <Tn> — <what> — <why>»): {d}	deviazione test-data senza il suo ID di test («test-data: <Tn> — <cosa> — <perché>»): {d}
+run-phase-180.dev_no_diff	test-data deviation of {tn}: the diff of its test file cannot be computed (plan-check.sh diff-test)	deviazione test-data di {tn}: il diff del suo file di test non è calcolabile (plan-check.sh diff-test)
+run-phase-180.dev_judge_never	test-data deviation of {tn}: the judge maat:spec-plan-reviewer-light was never called in the foreground of the session	deviazione test-data di {tn}: il giudice maat:spec-plan-reviewer-light non è mai stato chiamato in primo piano dalla sessione
+run-phase-180.dev_judge_input	test-data deviation of {tn}: the prompt of the judge lacks inputs ({which}: 1 = the fixed instructions, 2 = the test plan row, then the traceability rows, the deviation, the diff recomputed by plan-check.sh diff-test)	deviazione test-data di {tn}: al prompt del giudice mancano ingressi ({which}: 1 = le istruzioni fisse, 2 = la riga del piano di test, poi le righe di tracciabilità, la deviazione, il diff ricalcolato da plan-check.sh diff-test)
+run-phase-180.dev_judge_async	test-data deviation of {tn}: the judge has no result in the foreground (an asynchronous launch does not count)	deviazione test-data di {tn}: il giudice non ha un risultato in primo piano (un lancio asincrono non conta)
+run-phase-180.dev_outside	test-data deviation with files changed outside the scope of test-red: {files}	deviazione test-data con file cambiati fuori dallo scope di test-red: {files}
+run-phase-180.accepted_prompt	test-data deviations accepted in test-red by the judge (label, text, verdict): list them in the review section «Accepted test deviations» and judge whether each still leaves the requirement covered	deviazioni test-data accettate in test-red dal giudice (etichetta, testo, verdetto): elencale nella sezione di review «Deviazioni di test accettate» e giudica se ognuna lascia coperto il requisito
+run-phase-180.stub_diff	the diff of the stub files of {label} cannot be computed (git diff -w): the additive check is not possible	il diff dei file stub di {label} non è calcolabile (git diff -w): il controllo additivo non è possibile
+run-phase-180.s3_stop	{n} files parked by a STOP of test-red copied back; the subsession is launched all the same (staging.origine=stop)	{n} file parcheggiati da uno STOP di test-red ricopiati; la sotto-sessione parte comunque (staging.origine=stop)
+run-phase-180.park_no_tree	{label}: STOP of test-red without .pre-tree/.post-tree or scope: its files are not parked	{label}: STOP di test-red senza .pre-tree/.post-tree o scope: i suoi file non sono parcheggiati
+run-phase-180.parked	{n} files of the phase parked in {dir}/staging/ (staging.origine=stop), the tree back to the pre-tree	{n} file della fase parcheggiati in {dir}/staging/ (staging.origine=stop), l'albero torna al pre-tree
+driver-180.review_disproved	a probe of test-red disproved this claim: judge whether the row really proves it false	una sonda di test-red ha smentito questa affermazione: giudica se la riga la smentisce davvero
+
+# --- transcript-180, driver-180 (1.8.0, B8, written by hand): transcript.py (a Bash call and its result, an agent call
+# with its input and result, the count of the results of a reviewer, on the main session of a phase log) and
+# driver.py classifica (the class of a finished phase: the cause that the driver will show, B9)
+transcript-180.usage	usage: transcript.py bash <command> <excerpt> < <jsonl> | agente <subagent_type> <input text>… <result text> < <jsonl> | conta <subagent_type> <jsonl>… (empty texts not allowed)	uso: transcript.py bash <comando> <estratto> < <jsonl> | agente <subagent_type> <testo d'input>… <testo di risultato> < <jsonl> | conta <subagent_type> <jsonl>… (testi vuoti non ammessi)
+transcript-180.found	found in the main session: call at line {call}, result at line {res}	trovato nella sessione principale: chiamata alla riga {call}, risultato alla riga {res}
+transcript-180.not_found	not found in the main session	non trovato nella sessione principale
+transcript-180.unreadable	transcript unreadable: {f}: {e}	transcript illeggibile: {f}: {e}
+driver-180.c_exit	the phase ended with exit {rc}	la fase è finita con exit {rc}
+driver-180.c_esito	no PHASE RESULT line in {f}	nessuna riga PHASE RESULT in {f}
+driver-180.c_no_result	output not valid (no result.json): {esito}	uscita non valida (nessun result.json): {esito}
+driver-180.c_blocked	gates BLOCKED: {esito}	gate BLOCKED: {esito}
+driver-180.c_decision	human decision: {d}	decisione umana: {d}
+driver-180.c_limit	limit proven in test-red: {tests}	limite dimostrato in test-red: {tests}
+driver-180.c_conflict	conflict with the suite: {c}	conflitto con la suite: {c}
+driver-180.c_deviation	deviation outside the defensive and test-data families: {d}	deviazione fuori dalle famiglie difensiva e test-data: {d}
+driver-180.c_ok_dev	{n} test deviations accepted by the judge	{n} deviazioni di test accettate dal giudice
+driver-180.c_dev_not_accepted	test deviation not accepted: {d}	deviazione di test non accettata: {d}
+driver-180.c_draft	plan not approved (DRAFT)	piano non approvato (DRAFT)
+driver-180.c_dec_absent	NEEDS HUMAN DECISION without an Open decision: line	NEEDS HUMAN DECISION senza una riga Decisione aperta:
+driver-180.c_dec_form	Open decision not in the form <type> — <text>: {d}	Decisione aperta non nella forma <tipo> — <testo>: {d}
+driver-180.c_dec_type	Open decision with a type outside the list: {t}	Decisione aperta con un tipo fuori lista: {t}
+driver-180.c_dec_anchor	Open decision of type spec with a code anchor ({a}): it is a proof	Decisione aperta di tipo spec con un'àncora di codice ({a}): è una prova
+driver-180.c_symbol	missing stubs: {s}	stub mancanti: {s}
+driver-180.ripresa_stub	write the additive stubs in the `stub` files of the scope (and the new ones), only for names of the plan; a «cannot import name» may also be a typo in the import of the test itself: check it against the plan; never change an assertion	scrivi gli stub additivi nei file `stub` dello scope (e in quelli nuovi), solo per nomi del piano; un «cannot import name» può essere anche un refuso nell'import del test stesso: confrontalo col piano; non cambiare mai un'asserzione
+driver-180.c_open	agents or background jobs not collected at the closing of the session: {ids}	agenti o job in background non raccolti alla chiusura della sessione: {ids}
+driver-180.c_plan_ok	OK line of a plan phase whose Plan status is {s}: not approved	riga OK di una fase plan con Plan status {s}: non approvato
+driver-180.prova	proof: {f}	prova: {f}
+driver-180.ripresa_aperti	open findings: {f}	rilievi aperti: {f}
+driver-180.ripresa_limite	resume limit: {n}/{tot} in the cycle, {nf}/{max} for {fase}: {causa}	limite delle riprese: {n}/{tot} nel ciclo, {nf}/{max} per {fase}: {causa}
+driver-180.ripresa_senza	resume without progress (same plan, same open findings): {causa}	ripresa senza progresso (stesso piano, stessi rilievi aperti): {causa}
+driver-180.ripresa_ignorata	{run}/log/{label}.ripresa is not registered in driver.log: ignored	{run}/log/{label}.ripresa non è registrato in driver.log: ignorato
+driver-180.riprese_illeggibili	ciclo.riprese cannot be read ({why}): resumes off (0), the STOP of 1.7	ciclo.riprese illeggibile ({why}): riprese spente (0), lo STOP della 1.7
+cycle-state-180.testred_json	{label}: result.json STOP ({why}); a test-data deviation counts only when {run}/log/{label}.deviazioni-test accepts it	{label}: result.json STOP ({why}); una deviazione test-data vale solo se {run}/log/{label}.deviazioni-test la accetta
+# B10 (D3): the checks of the types of an Open decision (driver.py _verifica_decisione) and the prompt lines of a
+# relaunch on a declassified decision and of the review on a decision that no script verified
+driver-180.c_proof_none	Open decision of type proof without an Executed proof: line	Decisione aperta di tipo proof senza una riga Prova eseguita:
+driver-180.c_proof_form	Executed proof not in the form `<command>` → «<excerpt>»: {p}	Prova eseguita non nella forma `<comando>` → «<estratto>»: {p}
+driver-180.c_proof_print	Executed proof with a command that only prints (it runs no code of the repository): {c}	Prova eseguita con un comando che stampa soltanto (non esegue codice del repository): {c}
+driver-180.c_proof_copied	Executed proof whose excerpt is written in the command or in the spec: {e}	Prova eseguita con l'estratto scritto nel comando o nella spec: {e}
+driver-180.c_proof_absent	Executed proof not found in {f}: no Bash call with exactly that command and the excerpt in its result: {c}	Prova eseguita non trovata in {f}: nessuna chiamata Bash con esattamente quel comando e l'estratto nel risultato: {c}
+driver-180.c_budget_short	Open decision of type budget with {n} results of the plan reviewer in the plan logs (at least {min}, or E1: STOP of the small size)	Decisione aperta di tipo budget con {n} risultati del revisore del piano nei log del piano (almeno {min}, o E1: STOP della taglia piccola)
+driver-180.c_cut_skeleton	Open decision of type cut but plan-check.sh skeleton does not put the skeleton above the ceiling (exit {rc})	Decisione aperta di tipo cut ma plan-check.sh skeleton non dice SOPRA IL TETTO (exit {rc})
+driver-180.c_scope_line	Open decision of type scope that quotes no line of Out of scope or Constraints of the spec	Decisione aperta di tipo scope che non cita una riga di Fuori ambito o Vincoli della spec
+driver-180.c_scope_req	Open decision of type scope that names no requirement ID of the spec	Decisione aperta di tipo scope che non nomina un ID di requisito della spec
+driver-180.c_after_declassed	after the resume that had declassified {k}	dopo la ripresa che aveva declassato {k}
+driver-180.ripresa_decisione	human decision without an executed proof	decisione umana senza prova eseguita
+driver-180.review_unverified	a human decision of the plan that no script verified: judge whether the code still holds it	una decisione umana del piano che nessuno script ha verificato: giudica se il codice la regge ancora
+cycle-state-180.ripresa	resume {n}/{max} ({causa})	ripresa {n}/{max} ({causa})
+cycle-state-180.ripresa_stop	{label} stopped: {why}; change the spec to start again ({run}/log/{label}.ripresa)	{label} fermata: {why}; cambia la spec per ripartire ({run}/log/{label}.ripresa)
+cycle-state-180.stop_umano	{label} printed OK on a plan still DRAFT (a final STOP, in {run}/driver.log): approve the plan or change the spec to start again	{label} ha dato OK su un piano ancora DRAFT (uno STOP finale, in {run}/driver.log): approva il piano o cambia la spec per ripartire
+maat-config-180.s12	ciclo.riprese needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	ciclo.riprese richiede "harness": ">=1.8" o successiva, così una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
+maat-config-180.s13	moduli[].{k} needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	moduli[].{k} richiede "harness": ">=1.8" o successiva, così una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
+maat-config-180.s12_negative	ciclo.riprese is {v}: it must be an integer >= 0 (0 = no resumes)	ciclo.riprese vale {v}: deve essere un intero >= 0 (0 = nessuna ripresa)
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile
@@ -410,7 +509,7 @@ run-phase.chz_no_tree	final tree not computed	tree finale non calcolato
 run-phase.chz_ok	chain closed: full gates PASS, e2e {e2e}	catena chiusa: gate full PASS, e2e {e2e}
 
 # --- plan-check (lingua-converti.py)
-plan-check.usage	usage: {script} delta <baseline> <current> | lint <spec> [--baseline <copy>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <mother> [<child>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]	uso: {script} delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]
+plan-check.usage	usage: {script} delta <baseline> <current> | lint <spec> [--baseline <copy>] | contract <spec> | basis <spec> | lint2 <spec> [--run-dir <dir>] | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <mother> [<child>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]	uso: {script} delta <baseline> <corrente> | lint <spec> [--baseline <copia>] | contract <spec> | basis <spec> | lint2 <spec> [--run-dir <dir>] | gen <spec> [--run-dir <dir>] | route <spec> [--diff <file>] | s2 <spec> --delta <file> --gate <file> [--respinti <n>] | skeleton <spec> | split <madre> [<figlia>…] | closed <spec> | basis <spec> --write-tests | accept|tests|l2 <spec> [--run-dir <dir>] | stubs <spec> [--run-dir <dir>] | rossi <spec> --evidence <dir> [--run-dir <dir>]
 plan-check.delta_no_base	baseline missing or empty ({base}) — redo the round at full scope, never APPROVED	baseline assente o vuota ({base}) — rifai il giro a scope pieno, mai APPROVED
 plan-check.delta_no_cur	current file missing: {cur}	file corrente assente: {cur}
 plan-check.delta_empty	empty diff — no revision recorded, or baseline taken after the Edit. Redo the round at full scope, never APPROVED	diff vuoto — nessuna revisione registrata, oppure baseline presa dopo l'Edit. Rifai il giro a scope pieno, mai APPROVED

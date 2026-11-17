@@ -168,6 +168,9 @@ table `ID | requirement | file | assertion | mutation`, `### Strings and data-te
   base with the `TypeError` of the call. Its `red if:` must be that error (`unexpected keyword argument '<p>'`), not
   the value the implementation will return. `lint2` catches the calls written as Python in the backticks; you
   catch the rest (prose assertions, methods, constructors);
+- **you are read-only, so a `STOP_HUMAN_DECISION_REQUIRED` on a limit of the code is a hypothesis**: name the test
+  that would show it (the file, the input, the error it would print). The caller does not stop on your word: it
+  proves the claim by running code, or turns it into that test, run in test-red;
 - in a **late round** (3 or 4) a product defect you find is still a blocker/major: the caller turns it
   into a test row and a `⚠️ Open risk` line instead of reopening the design. Give it a
   `Required change:` a test can check.
