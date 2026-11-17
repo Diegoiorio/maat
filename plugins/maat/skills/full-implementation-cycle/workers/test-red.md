@@ -7,7 +7,22 @@ agent with the spec path, mode `test-red` and the scope
 (`bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" accept <spec>`). It writes one test per row of
 `### Test plan` (`### Piano di test`) and a stub per new symbol. A prompt line `RIPRESA (driver): … stub mancanti: …`
 goes to the agent as it is. Its `Plan deviation` or `Blocked on` (also the
-Italian `Deviazione dal piano`, `Bloccato su`) → STOP. End with `PHASE RESULT test-red: OK — <tests, stubs>` and the JSON block (`"fase": "test-red"`).
+Italian `Deviazione dal piano`, `Bloccato su`) → STOP, except a `Plan deviation` of the `test-data:` family (below).
+End with `PHASE RESULT test-red: OK — <tests, stubs>` and the JSON block (`"fase": "test-red"`).
+
+## Test deviation (`test-data: <Tn> — <what changes> — <why>`, also `dati-test: `)
+
+Only data, fixtures, internal names or the organization of the tests — never an assertion, a requirement, a file or
+the name of a test. For each one, before closing, launch in the **foreground** (never `run_in_background`) the agent
+`maat:spec-plan-reviewer-light` with this prompt, each block pasted **verbatim** from the commands' output:
+1. `Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — <reason>» and
+   «Requirements still covered: <requirement IDs>». ACCEPT only if the change touches data, fixtures, internal names
+   or test organization and the assertion still proves every requirement of the row.`
+2. The lines `test row:` and `trace row:` of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`
+   (without the prefix), the deviation text, and the output of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh"
+   diff-test <spec> <its test file> --run-dir <run-dir>`, run after the test file is final.
+ACCEPT on all → `PHASE RESULT test-red: OK — …` with `"esito": "OK"`, `"bloccato_su": "nessuno"` and the deviations in
+`deviazioni`; a STOP of the judge → STOP. The driver checks the call in your transcript and recomputes the diff.
 
 The proof that each test is red on its assertion is the driver's, after you (`run-phase.sh`: targeted
 `gates.sh`, then `plan-check.sh rossi`; any other red, a green or a conflict → `.esito` STOP). You do not

@@ -1116,6 +1116,30 @@ sed 's/r"undefined: (\\w+)", //' "$HERE/nomi_test.py" > "$T/nomi-senza-go.py"
 if ! cmp -s "$HERE/nomi_test.py" "$T/nomi-senza-go.py"; then
   expect 1 "^rosso T1: rosso_raccolta" "controprova: senza la regex Go «undefined:» E1 resta rosso_raccolta (STOP senza ripresa: rosso)" -- env NOMI_TEST_PY="$T/nomi-senza-go.py" bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sym" --run-dir "$T/rr.run"
 else echo "FAIL [controprova regex Go: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.0 (B13, A1): deviazione <result|-> <spec> <Tn> (the plan lines of Tn, the verdict on the judge's result) and
+# diff-test <spec> <file> --run-dir <d> (the diff from the test-red .pre-tree to the CURRENT tree, untracked included)
+expect 0 "^test row: \| T1 \| RF1 \| .modules/api/tests/test_calc.py::test_somma" "deviazione -: la riga T1 del piano di test, testuale" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^trace row: \| RF1 \| P1 \| T1, T2 \|" "deviazione -: la riga di tracciabilita' che nomina T1" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^test file: modules/api/tests/test_calc.py$" "deviazione -: il file del test" -- bash "$PC" deviazione - "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT — only the fixture names change\nRequirements still covered: RF1\n' > "$T/giud-ok.txt"
+expect 0 "^Deviazione: ACCETTATA$" "deviazione: verdetto ACCEPT e tutti gli ID di T1 coperti = ACCETTATA" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT — fine\nRequirements still covered: RF2\n' > "$T/giud-manca.txt"
+expect 1 "^Deviazione: STOP — requisito non più coperto: RF1$" "deviazione: un ID della riga mancante = STOP «requisito non più coperto»" -- bash "$PC" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: STOP — the assertion changes\nRequirements still covered: RF1\n' > "$T/giud-stop.txt"
+expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT \(STOP — the assertion changes\)$" "deviazione: verdetto STOP del giudice = STOP" -- bash "$PC" deviazione "$T/giud-stop.txt" "$T/f2t.md" T1
+expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
+if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
+  expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
+else echo "FAIL [controprova requisiti coperti: la mutazione non si applica]"; fail=$((fail+1)); fi
+DTR="$T/dtrepo"; mkdir -p "$DTR/modules/api/tests" "$T/dt.run/log"   # a git repository of its own (the tree of review-surface.sh)
+(cd "$DTR" && git init -q . && git config user.email t@t && git config user.name t && printf 'x\n' > a.txt && git add a.txt && git commit -qm init)
+(cd "$DTR" && bash "$HERE/review-surface.sh" tree) > "$T/dt.run/log/03-test-red.pre-tree"
+printf 'def test_nuovo():\n    assert 1 == 2\n' > "$DTR/modules/api/tests/test_dt.py"
+expect 0 "^\+def test_nuovo\(\):$" "diff-test: un file di test NUOVO e non tracciato compare intero (+ righe)" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
+expect 3 "-" "diff-test: senza .pre-tree di un test-red = uscita 3" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-vuoto.run"
+if mutpc dtwt 's/ "\$pre" "\$cur" -- "\$file")/ "$pre" -- "$file")/'; then
+  refute "^\+def test_nuovo" "controprova: col diff preso dall albero di lavoro il file non tracciato sparisce (rosso)" -- env PLAN_CHECK_ROOT="$DTR" MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-dtwt/plan-check.sh" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
+else echo "FAIL [controprova diff-test dall albero: la mutazione non si applica]"; fail=$((fail+1)); fi
 # accept: a production file of File toccati that already exists → «stub <path>» (additive stubs only)
 printf 'def base():\n    return 1\n' > "$R/modules/api/app/services/base.py"
 sed 's|^### File toccati\r\{0,1\}$|&\n- `modules/api/app/services/base.py`|' "$T/f2t.md" > "$T/f2t-stub.md"

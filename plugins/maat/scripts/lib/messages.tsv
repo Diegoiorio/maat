@@ -288,6 +288,11 @@ plan-check-180.red_symbol	red on a missing symbol ({s}): the unit does not load,
 plan-check-180.red_compile	line {n}: {id}: the red on the base is a compilation error ({t}): a stub is due, the red is its assertion	riga {n}: {id}: il rosso sulla base è un errore di compilazione ({t}): serve uno stub, il rosso è la sua asserzione
 plan-check-180.stub_not_additive	stub not additive: {f}:{n} ({line})	stub non additivo: {f}:{n} ({line})
 plan-check-180.stub_not_measured	not measured	non misurato
+plan-check-180.dev_no_row	{id} is not a row of the test plan	{id} non è una riga del piano di test
+plan-check-180.dev_no_result	the result of the judge cannot be read	il risultato del giudice non è leggibile
+plan-check-180.dev_judge	verdict of the judge not ACCEPT ({v})	verdetto del giudice non ACCEPT ({v})
+plan-check-180.dev_req	requirement no longer covered: {r}	requisito non più coperto: {r}
+plan-check-180.diff_no_tree	diff-test: no .pre-tree of a test-red in {run}/log, or the current tree cannot be computed	diff-test: nessun .pre-tree di un test-red in {run}/log, o albero corrente non calcolabile
 plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignored for the probes	{label}.ripresa non registrato in driver.log: ignorato per le sonde
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
@@ -299,6 +304,14 @@ plan-check-180.red_disproved	green on the base: the probe disproves the declassi
 plan-check-180.red_sum_disproved	probes disproved: {t}	sonde smentite: {t}
 run-phase-180.red_limit	limit proven in test-red ({tests}): a human decision with its proof (log/{label}.rossi, test-red/rossi.json)	limite dimostrato in test-red ({tests}): una decisione umana con la sua prova (log/{label}.rossi, test-red/rossi.json)
 run-phase-180.probe_disproved	probe disproved in test-red: {tests} (the declassified claim is false; the review sees it)	sonda smentita in test-red: {tests} (l'affermazione declassata e' falsa; la review la vede)
+run-phase-180.dev_not_proven	test-data deviation with a test not «dimostrato» in rossi.json: the deviation is not accepted	deviazione test-data con un test non «dimostrato» in rossi.json: la deviazione non è accettata
+run-phase-180.dev_no_tn	test-data deviation without its test ID («test-data: <Tn> — <what> — <why>»): {d}	deviazione test-data senza il suo ID di test («test-data: <Tn> — <cosa> — <perché>»): {d}
+run-phase-180.dev_no_diff	test-data deviation of {tn}: the diff of its test file cannot be computed (plan-check.sh diff-test)	deviazione test-data di {tn}: il diff del suo file di test non è calcolabile (plan-check.sh diff-test)
+run-phase-180.dev_judge_never	test-data deviation of {tn}: the judge maat:spec-plan-reviewer-light was never called in the foreground of the session	deviazione test-data di {tn}: il giudice maat:spec-plan-reviewer-light non è mai stato chiamato in primo piano dalla sessione
+run-phase-180.dev_judge_input	test-data deviation of {tn}: the prompt of the judge lacks inputs ({which}: 1 = the test plan row, then the traceability rows, the deviation, the diff recomputed by plan-check.sh diff-test)	deviazione test-data di {tn}: al prompt del giudice mancano ingressi ({which}: 1 = la riga del piano di test, poi le righe di tracciabilità, la deviazione, il diff ricalcolato da plan-check.sh diff-test)
+run-phase-180.dev_judge_async	test-data deviation of {tn}: the judge has no result in the foreground (an asynchronous launch does not count)	deviazione test-data di {tn}: il giudice non ha un risultato in primo piano (un lancio asincrono non conta)
+run-phase-180.dev_outside	test-data deviation with files changed outside the scope of test-red: {files}	deviazione test-data con file cambiati fuori dallo scope di test-red: {files}
+run-phase-180.accepted_prompt	test-data deviations accepted in test-red by the judge (label, text, verdict): list them in the review section «Accepted test deviations» and judge whether each still leaves the requirement covered	deviazioni test-data accettate in test-red dal giudice (etichetta, testo, verdetto): elencale nella sezione di review «Deviazioni di test accettate» e giudica se ognuna lascia coperto il requisito
 run-phase-180.stub_diff	the diff of the stub files of {label} cannot be computed (git diff -w): the additive check is not possible	il diff dei file stub di {label} non è calcolabile (git diff -w): il controllo additivo non è possibile
 run-phase-180.s3_stop	{n} files parked by a STOP of test-red copied back; the subsession is launched all the same (staging.origine=stop)	{n} file parcheggiati da uno STOP di test-red ricopiati; la sotto-sessione parte comunque (staging.origine=stop)
 run-phase-180.park_no_tree	{label}: STOP of test-red without .pre-tree/.post-tree or scope: its files are not parked	{label}: STOP di test-red senza .pre-tree/.post-tree o scope: i suoi file non sono parcheggiati
@@ -337,6 +350,7 @@ driver-180.ripresa_limite	resume limit: {n}/{tot} in the cycle, {nf}/{max} for {
 driver-180.ripresa_senza	resume without progress (same plan, same open findings): {causa}	ripresa senza progresso (stesso piano, stessi rilievi aperti): {causa}
 driver-180.ripresa_ignorata	{run}/log/{label}.ripresa is not registered in driver.log: ignored	{run}/log/{label}.ripresa non è registrato in driver.log: ignorato
 driver-180.riprese_illeggibili	ciclo.riprese cannot be read ({why}): resumes off (0), the STOP of 1.7	ciclo.riprese illeggibile ({why}): riprese spente (0), lo STOP della 1.7
+cycle-state-180.testred_json	{label}: result.json STOP ({why}); a test-data deviation counts only when {run}/log/{label}.deviazioni-test accepts it	{label}: result.json STOP ({why}); una deviazione test-data vale solo se {run}/log/{label}.deviazioni-test la accetta
 # B10 (D3): the checks of the types of an Open decision (driver.py _verifica_decisione) and the prompt lines of a
 # relaunch on a declassified decision and of the review on a decision that no script verified
 driver-180.c_proof_none	Open decision of type proof without an Executed proof: line	Decisione aperta di tipo proof senza una riga Prova eseguita:

@@ -55,6 +55,11 @@ The caller gives you:
      missing symbol (the unit did not compile or import, `rosso_simbolo`); its files are back in the tree. Write the
      missing stubs, do not touch the tests.
 3. Nothing else: no production code outside the stubs, no fixtures elsewhere, no snapshot files.
+4. **Test deviation** (1.8.0): when the row as written cannot hold only for its DATA — fixtures, inputs, internal names,
+   the organization of the tests (e.g. other base paths so that two routes do not collide) — declare it as
+   `Plan deviation: test-data: <Tn> — <what changes> — <why>` and keep the row's assertion, requirement, file and test
+   name exactly. Anything else that does not hold is a plain `Plan deviation` (a STOP). The caller has the deviation
+   judged; do not change the test file after reporting.
 
 ## Inner loop
 
@@ -96,7 +101,7 @@ Stub:
 - <file> — <exported symbols>
 Gates run:
 - <command> → <FAIL (expected) | PASS | BLOCKED> — <last lines of the REAL output>
-Plan deviation: none | <row> — <what does not hold> — <evidence file:line>
+Plan deviation: none | <row> — <what does not hold> — <evidence file:line> | test-data: <Tn> — <what changes> — <why>
 Blocked on: none | <reason>
 ```
 

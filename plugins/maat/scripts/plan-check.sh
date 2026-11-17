@@ -2503,6 +2503,55 @@ def cmd_stubs(M, root, run, diffp=""):
     return 0
 
 
+DEV_ACCEPT = re.compile(r"^[ \t>*_`-]*Deviation verdict:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
+DEV_COPERTI = re.compile(r"^[ \t>*_`-]*Requirements still covered:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
+
+
+# 1.8.0 (A1): the plan lines a test-data deviation of <Tn> is judged on — «test row: <its line of the test plan>»,
+# «trace row: <each line of the traceability table naming it>», «test file: <path>» — the same bytes the worker puts
+# in the prompt of the judge and run-phase.sh looks for in it. With a result of the judge (a file; «-» = the lines
+# only): the ACCEPTED line when it says Deviation verdict: ACCEPT and Requirements still covered holds every
+# requirement ID of <Tn> (its traceability rows and its requisito column), else the STOP line with the cause.
+# Exit 0 accepted (or lines only), 1 STOP. DEV_STOP / DEV_OK: tokens read by run-phase.sh, the same in every language.
+DEV_STOP, DEV_OK = "Deviazione: STOP — ", "Deviazione: ACCETTATA"
+
+
+def cmd_deviazione(M, ris, tid):
+    righe = dict(M["plan"])
+    T = M["tests"].get(tid)
+    if T is None:
+        print(DEV_STOP + _msg.T("plan-check-180.dev_no_row", id=tid))
+        return 1
+    print("test row: " + righe.get(T["n"], ""))
+    ids = list(T["reqs"])
+    for n, r, ver in M["reqs"]:
+        if tid in items(ver):
+            print("trace row: " + righe.get(n, ""))
+            if r not in ids:
+                ids.append(r)
+    print("test file: " + T["path"])
+    if ris == "-":
+        return 0
+    try:
+        with open(ris, encoding="utf-8", errors="replace") as fh:
+            t = fh.read().replace("\r", "")
+    except OSError:
+        print(DEV_STOP + _msg.T("plan-check-180.dev_no_result"))
+        return 1
+    v = DEV_ACCEPT.findall(t)
+    if not v or not v[-1].startswith("ACCEPT"):  # VERDETTO-ACCEPT
+        print(DEV_STOP + _msg.T("plan-check-180.dev_judge", v=(v[-1] if v else "-")[:200]))
+        return 1
+    c = DEV_COPERTI.findall(t)
+    cov = set(re.findall(r"[A-Za-z]+[0-9]+(?:\.[0-9]+)*", c[-1])) if c else set()
+    miss = [r for r in ids if r not in cov]
+    if miss:  # REQUISITI-COPERTI
+        print(DEV_STOP + _msg.T("plan-check-180.dev_req", r=", ".join(miss)))
+        return 1
+    print(DEV_OK)
+    return 0
+
+
 def cmd_additivo(M, diffp):
     """1.8.0 (D4): the stubs in EXISTING files (accept: `stub <path>`) changed only by extension, on the diff of those
     files (git diff -w --ignore-blank-lines pre-tree post-tree): a removed line is admitted only as a list instruction
@@ -3013,7 +3062,7 @@ M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(0)
-if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo"):
+if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo", "deviazione"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(2)
 if cmd == "accept":
@@ -3024,6 +3073,8 @@ elif cmd == "stubs":
     sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else ""))
 elif cmd == "additivo":
     sys.exit(cmd_additivo(M, sys.argv[3]))
+elif cmd == "deviazione":
+    sys.exit(cmd_deviazione(M, sys.argv[3], sys.argv[4]))
 elif cmd == "rossi":
     sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 elif cmd == "l2":
@@ -3147,6 +3198,45 @@ cmd_f2x() {
       ts=$(cmd_basis "$spec" | sed -n 's/^Tests status: //p')
       printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" l2 "$root" "$run" "${ts:-ASSENTE}" ;;
   esac
+}
+
+# 1.8.0 (A1): a test-data deviation of test-red, judged by maat:spec-plan-reviewer-light on verified input:
+#   deviazione <result|-> <spec> <Tn>   the plan lines of <Tn> («test row:», «trace row:», «test file:»); with the
+#          result of the judge (a file) also «Deviazione: ACCETTATA | STOP — <why>» (verdict ACCEPT, every requirement
+#          of <Tn> in «Requirements still covered:»). Exit 0 accepted / lines only · 1 STOP · 2 usage
+#   diff-test <spec> <file> [--run-dir <d>]   the diff of <file> from the .pre-tree of the last test-red of <d> to the
+#          CURRENT tree photographed with review-surface.sh tree (untracked files included: a new test file shows
+#          whole), CR removed. The worker prints it for the judge, run-phase.sh computes it again after the phase: the
+#          same command, the same bytes. Exit 0 · 2 usage · 3 no pre-tree or tree not computable
+cmd_deviazione() {
+  [ $# -eq 3 ] && [ -f "$2" ] && { [ "$1" = - ] || [ -f "$1" ]; } || die_usage
+  local ris=$1 spec=$2 tn=$3 ann
+  ann=$(annotate "$spec")
+  has_plan_section "$ann" || { echo "Deviazione: STOP — $(msg plan-check.no_plan)"; return 1; }
+  need_py || return 2
+  [ "$ris" = - ] || ris=$(maat_cygm "$ris" 2>/dev/null || printf '%s' "$ris")
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" deviazione "$(repo_root "$spec")" "$ris" "$tn"
+}
+
+cmd_diff_test() {
+  local spec="" file="" run=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      -*) die_usage ;;
+      *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$file" ]; then file="$1"; else die_usage; fi; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] && [ -n "$file" ] || die_usage
+  [ -n "$run" ] || run="${spec%.md}.run"
+  local root pre pf cur rs
+  root=$(repo_root "$spec")
+  pf=$(ls "$run/log" 2>/dev/null | grep -- '-test-red\.pre-tree$' | sort -n | tail -1)
+  pre=$([ -n "$pf" ] && tr -d '\r\n' < "$run/log/$pf")
+  rs=${PLAN_CHECK_RS:-$PC_HERE/review-surface.sh}; [ -f "$rs" ] || rs=$MAAT_SCRIPTS/review-surface.sh
+  cur=$(cd "$root" && bash "$rs" tree 2>/dev/null | tr -d '\r')
+  [ -n "$pre" ] && [ -n "$cur" ] || { echo "$(msg plan-check-180.diff_no_tree run="$run")" >&2; return 3; }
+  (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
 }
 
 cmd_route() {
@@ -3353,6 +3443,8 @@ case "$sub" in
   taglia) cmd_taglia "$@" ;;
   e1) cmd_e1 "$@" ;;
   accept|tests|stubs|rossi|l2|additivo) cmd_f2x "$sub" "$@" ;;
+  deviazione) cmd_deviazione "$@" ;;
+  diff-test) cmd_diff_test "$@" ;;
   *) die_usage ;;
 esac
 exit $?

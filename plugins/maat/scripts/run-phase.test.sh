@@ -47,6 +47,7 @@ tu() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; echo '{"type":"assistant","messag
 [ -n "${FAKE_CMD:-}" ] && eval "$FAKE_CMD"
 [ -n "${FAKE_BREAK:-}" ] && mv "$FAKE_BREAK/.git" "$FAKE_BREAK/.git.rotto"
 echo '{"type":"user","message":{"content":[{"type":"tool_result","content":"ESITO FASE implement: OK — esempio letto da SKILL.md"}]}}'
+[ -n "${FAKE_JUDGE:-}" ] && eval "$FAKE_JUDGE"   # 1.8.0 (A1): the events of a call to the judge of the deviations
 if [ -n "${FAKE_RESULT_N:-}" ]; then
   echo '{"type":"result","result":"ESITO FASE x: OK — finto '"$nc"'","structured_output":{"fase":"'"$FIC_PHASE"'","esito":"OK","motivo":"finto '"$nc"'","deviazioni":[],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[],"copertura":[{"requisito":"R1","test":["tests/test_a.py::test_a"]}]}}'
 elif [ -n "${FAKE_RESULT:-}" ]; then echo "$FAKE_RESULT"
@@ -886,6 +887,89 @@ if mrp_mut 's/^          1) why=\$(printf .*# STUB-ADDITIVO$/          1) ;;/'; 
 else check "controprova additivo: la mutazione si applica" false; fi
 for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
 cp "$RP" "$MRP"
+# 1.8.0 (B13, A1): a test-data deviation through the REAL valida: the fake writes the result event with its
+# structured_output and the call of the judge (giudice.sh: the plan lines from `plan-check.sh deviazione -`, the diff
+# from `plan-check.sh diff-test`, the commands of the worker); run-phase.sh checks it on the transcript.
+export PCK TSP TRUN FIC_PY
+cat > "$T/giudice.sh" <<'EOF'
+#!/usr/bin/env bash
+# giudice.sh <mode> <deviation> <verdict> <covered>: the jsonl events of a foreground call of the judge
+mode=$1 dev=$2 vd=$3 cov=$4
+out=$(bash "$PCK" deviazione - "$TSP" T1 | tr -d '\r')
+row=$(printf '%s\n' "$out" | sed -n 's/^test row: //p'); trc=$(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+dif=$(bash "$PCK" diff-test "$TSP" modules/api/tests/test_calc.py --run-dir "$TRUN")
+tipo=maat:spec-plan-reviewer-light
+case $mode in
+  senza-riga) row="" ;;
+  ritocco) dif=$(printf '%s\n' "$dif" | sed '$d') ;;
+  altro-tipo) tipo=maat:spec-plan-reviewer ;;
+  mai) exit 0 ;;
+esac
+"$FIC_PY" - "$tipo" "Judge a test deviation of test-red.
+$row
+$trc
+$dev
+$dif" "Deviation verdict: $vd
+Requirements still covered: $cov" <<'PY'
+import json, sys
+t, p, r = sys.argv[1:4]
+print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "g1", "name": "Agent", "input": {"subagent_type": t, "prompt": p}}]}}))
+print(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "g1", "content": r}]}}))
+PY
+EOF
+chmod +x "$T/giudice.sh"
+DEV1="test-data: T1 — other fixture names — routes collide"
+devres() { # <deviations JSON list> [bloccato_su] [text]: the result event with the PHASE RESULT line and its JSON
+  printf '{"type":"result","result":"%s","structured_output":{"fase":"test-red","esito":"OK","motivo":"rossi con dati diversi","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}}' \
+    "${3:-lavoro\\nPHASE RESULT test-red: OK — rossi}" "$1" "${2:-nessuno}"; }
+drun() { # <label> <judge mode> <verdict> <covered> [deviations JSON] [bloccato_su] [text] [extra FAKE_CMD] [run-phase]
+  mkspec
+  FAKE_OUT="$T/$1" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-$1" FAKE_CMD="$WRITE_RED${8:+; $8}" \
+    FAKE_JUDGE="bash \"$T/giudice.sh\" $2 \"$DEV1\" \"$3\" \"$4\"" FAKE_RESULT="$(devres "${5:-[\"$DEV1\"]}" "${6:-nessuno}" "${7:-}")" \
+    bash "${9:-$RP}" "$TRUN" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null
+}
+e1() { sed -n 1p "$TRUN/log/$1.esito"; }
+drun 90-test-red pieno "ACCEPT — only the fixture names change" RF1
+check "deviazione test-data + giudice ACCEPT con input completo (diff compreso) + rossi dimostrati → .esito OK" '[ "$(e1 90-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "· tests " "$TSP"'
+check "  .deviazioni-test (testo, verdetto, sha256 del diff) e la riga in deviazioni-accettate.txt" 'grep -q "^$DEV1	ACCEPT — only the fixture names change	[0-9a-f]\{64\}$" "$TRUN/log/90-test-red.deviazioni-test" && grep -qx "90-test-red	$DEV1	ACCEPT — only the fixture names change" "$TRUN/log/deviazioni-accettate.txt"'
+drun 91-test-red pieno "ACCEPT — fine" RF2
+check "deviazione che salta un requisito (il giudice elenca RF2, non RF1) → STOP «requisito non più coperto: RF1»" 'e1 91-test-red | grep -q "^PHASE RESULT test-red: STOP — requisito non più coperto: RF1\( · .*\)\{0,1\}$" && [ ! -f "$TRUN/log/91-test-red.deviazioni-test" ]'
+drun 92-test-red pieno "STOP — the assertion changes" RF1
+check "giudice STOP → STOP" 'e1 92-test-red | grep -q "^PHASE RESULT test-red: STOP — verdetto del giudice non ACCEPT"'
+drun 93-test-red pieno "ACCEPT — ok" RF1 "" "" "" 'echo prod >> "$FIC_REPO/a.py"'
+check "deviazione test-data che tocca un file di produzione → STOP" 'e1 93-test-red | grep -q "^PHASE RESULT test-red: STOP — .*a.py"'
+(cd "$FIC_REPO" && git checkout -q -- a.py)
+drun 94-test-red mai "ACCEPT" RF1 "" "" "lavoro\\nDeviation verdict: ACCEPT\\nPHASE RESULT test-red: OK — rossi"
+check "giudice mai chiamato (verdetto solo nel testo finale) → STOP" 'e1 94-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: il giudice maat:spec-plan-reviewer-light non è mai stato chiamato"'
+drun 95-test-red senza-riga "ACCEPT — ok" RF1
+check "prompt del giudice senza la riga Tn + ACCEPT → STOP (ingressi mancanti: 1)" 'e1 95-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi (1:"'
+drun 96-test-red altro-tipo "ACCEPT — ok" RF1
+check "giudice di un altro subagent_type → STOP" 'e1 96-test-red | grep -q "^PHASE RESULT test-red: STOP — .*non è mai stato chiamato"'
+drun 97-test-red ritocco "ACCEPT — ok" RF1
+check "diff ritoccato nel prompt del giudice (una riga tolta) + ACCEPT → STOP (non e il diff ricalcolato)" 'e1 97-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi"'
+drun 98-test-red pieno "ACCEPT — ok" RF1 '["T1 usa altre basi"]'
+check "deviazione senza prefisso → STOP come 1.7 (la riga di valida, nessun ramo nuovo)" 'e1 98-test-red | grep -q "^PHASE RESULT test-red: STOP — JSON: " && [ ! -f "$T/98-test-red.gates-args" ]'
+drun 99-test-red pieno "ACCEPT — ok" RF1 "" "una decisione"
+check "bloccato_su diverso da nessuno con una test-data → STOP (non entra nel ramo nuovo)" 'e1 99-test-red | grep -q "^PHASE RESULT test-red: STOP — " && [ ! -f "$T/99-test-red.gates-args" ] && [ ! -f "$TRUN/log/99-test-red.deviazioni-test" ]'
+drun 89-test-red pieno "ACCEPT — ok" RF1 "" "" "lavoro fatto"
+check "sessione con solo structured_output (nessuna riga PHASE RESULT, niente originale=) e controlli passati → .esito = riga OK sintetizzata dal motivo" '[ "$(e1 89-test-red)" = "PHASE RESULT test-red: OK — rossi con dati diversi" ]'
+# counterproofs on the copy of the plugin
+if mrp_mut 's/^    why=\$(deviazioni_test "\$devf.elenco")  # CONTROLLI-DEVIAZIONE$/    why=""/'; then
+  drun 88-test-red mai "ACCEPT" RF1 "" "" "" "" "$MRP"
+  check "controprova: accettazione senza i controlli (basta il prefisso) → il giudice mai chiamato passa (rosso)" '[ "$(e1 88-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova controlli deviazione: la mutazione si applica" false; fi
+if mrp_mut 's/^    miss = \[str(k + 1) for k, x in enumerate(ii) if x not in p\]  # INGRESSI-DEL-GIUDICE$/    miss = []/'; then
+  drun 87-test-red senza-riga "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova: senza il controllo dell input del giudice il prompt senza la riga Tn passa (rosso)" '[ "$(e1 87-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova input del giudice: la mutazione si applica" false; fi
+cp "$RP" "$MRP"; cp "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"
+sed -i 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/' "$HC/scripts/plan-check.sh"
+if ! cmp -s "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"; then
+  drun 86-test-red pieno "ACCEPT — fine" RF2 "" "" "" "" "$MRP"
+  check "controprova: senza il controllo degli ID il caso del requisito saltato passa (rosso)" '[ "$(e1 86-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova ID dei requisiti: la mutazione si applica" false; fi
+cp "$T/pc-hc.bak" "$HC/scripts/plan-check.sh"
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
 check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py\( · .*\)\{0,1\}$" && [ ! -f "$T/75b-test-red.gates-args" ]'

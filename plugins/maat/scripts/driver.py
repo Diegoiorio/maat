@@ -336,7 +336,11 @@ def _json_rule(p):
         one = lambda s: " ".join(str(s).split())[:300]
         dev = [one(x) for x in (d.get("deviazioni") or []) if str(x).strip()]
         bs = one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "(assente)")
-        if [x for x in dev if not x.startswith(DIFENSIVA)]:
+        # 1.8.0 (A1): in test-red only, a test-data deviation counts as a difensiva when log/<label>.deviazioni-test
+        # (written by run-phase.sh after the judge, on verified input) accepts it; cmd_valida does not change
+        acc = _accettate(p[:-len(".result.json")] + ".deviazioni-test") \
+            if d.get("fase") == "test-red" and p.endswith(".result.json") else set()
+        if [x for x in dev if not x.startswith(DIFENSIVA) and not (x.startswith(TEST_DATA) and x in acc)]:  # JSON-RULE-TEST-DATA
             s = "STOP|" + T("cycle-state.json_dev", n=len(dev), devs=one("; ".join(dev)))
         elif bs.lower() not in NESSUNO:
             s = "STOP|" + T("cycle-state.json_blocked") + bs
@@ -769,6 +773,19 @@ def _cycle_state(spec_fs, tmp):
                 nxt("STOP — " + T("cycle-state.testred_stop", label=tr_label, l=l1, run=RUN))
         nxt("TEST-RED — " + T("cycle-state.testred"))
 
+    def testred_json_stop():
+        # 1.8.0 (A1, row 7d): the last test-red, after the last implement/fix, with a result.json that _json_rule calls
+        # STOP (a test-data deviation that log/<label>.deviazioni-test does not accept) at this State -> STOP
+        if not tr_label or (last_label and _numkey(last_label) > _numkey(tr_label)):
+            return
+        rj, ep = log(tr_label + ".result.json"), log(tr_label + ".esito")
+        if not os.path.isfile(rj) or not os.path.isfile(ep):
+            return
+        s = _subst("\n".join(r[6:] for r in _records((_read(ep) or "").replace("\r", "")) if r.startswith("state=")))
+        jr = _json_rule(rj)
+        if s and s == STATE and not jr.startswith("OK|"):  # TESTRED-JSON-STOP
+            nxt("STOP — " + T("cycle-state-180.testred_json", label=tr_label, why=jr.split("|", 1)[-1] or "-", run=RUN))
+
     def touched_excluded():
         tp = os.path.join(run_fs, "touched.txt")
         if not (os.path.isfile(tp) and os.path.getsize(tp) > 0 and excl):
@@ -820,6 +837,7 @@ def _cycle_state(spec_fs, tmp):
             nxt("STOP — " + T("cycle-state.basis_stale", basis=basis))
         if not has_review:
             test_red_gate()
+            testred_json_stop()
             json_stop()
             if last_ok("implement"):
                 to_review(T("cycle-state.impl_done", label=last_label))

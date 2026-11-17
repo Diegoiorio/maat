@@ -68,6 +68,9 @@
 #      recorded in the Approved basis → TEST-RED; if the last test-red has an .esito with unchanged state (STOP, or
 #      closed without recording the tests) → STOP with that line. Format 1: never. A format-2 cycle that already went
 #      through implement without test-red (started before the rule) goes on as before.
+#   7d (1.8.0, A1) no review, the last test-red (after the last implement/fix) with a result.json the rule of
+#      _json_rule calls STOP and unchanged state → STOP. In test-red only, a «test-data: »/«dati-test: » deviation counts
+#      as a «difensiva: » when log/<label>.deviazioni-test (run-phase.sh, after the judge on verified input) accepts it
 #   7s no review, last implement/fix with a STOP result.json (rules above) and unchanged state → STOP
 #   7  no review: last implement/fix launched = "implement", outcome OK, unchanged state → REVIEW,
 #      otherwise IMPLEMENT (a review launched that never started does not count: it did not change the spec)

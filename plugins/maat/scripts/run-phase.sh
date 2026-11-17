@@ -962,11 +962,126 @@ chiusura_prep() {
   chz_e2e=$(printf '%s\n' $chz_e2e | grep . | sort -u | tr '\n' ' ' | sed 's/ $//')
 }
 
+# 1.8.0 (A1): the test-data deviations of test-red (DEV_PY). «ammesse <result.json> <jsonl> <originale 0|1>»: exit 0
+# when the ONLY cause of the
+# STOP of `valida` is deviations — esito OK, bloccato_su none, every deviation test-data:/dati-test: or difensiva:/
+# defensive:, at least one test-data — printing «motivo\t<motivo>» then one test-data deviation per line; else exit 1.
+# «giudice <jsonl> <out> <input file>…»: the first call of the MAIN session (transcript.py) to Agent/Task with
+# subagent_type maat:spec-plan-reviewer-light whose prompt holds every input verbatim (CR removed) and that has a result
+# that is not an asynchronous launch: its text into <out>, prints «ok»; else «mai» (no call of that type), «incompleto
+# <n>» (the input files missing in the prompt, 1-based) or «asincrono» (no result in the foreground).
+DEV_PY='
+import importlib.util, json, os, sys
+sys.dont_write_bytecode = True
+one = lambda s: " ".join(str(s).split())
+if sys.argv[1] == "ammesse":
+    d = json.load(open(sys.argv[2], encoding="utf-8"))
+    dev = [one(x) for x in d.get("deviazioni") or [] if str(x).strip()]
+    td = [x for x in dev if x.startswith(("test-data: ", "dati-test: "))]
+    ok = d.get("esito") == "OK" and one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "-").lower() in ("nessuno", "none") \
+        and td and all(x.startswith(("test-data: ", "dati-test: ", "difensiva: ", "defensive: ")) for x in dev)
+    if ok and sys.argv[4] == "0":   # no originale=: valida saw no PHASE RESULT line in the text (structured_output only)
+        res = None
+        for ln in open(sys.argv[3], encoding="utf-8", errors="replace"):
+            try:
+                ev = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(ev, dict) and ev.get("type") == "result":
+                res = ev
+        txt = (res or {}).get("result") or ""
+        ok = res is not None and not any(l.strip().startswith(("PHASE RESULT", "ESITO FASE")) for l in str(txt).splitlines())
+    if not ok:
+        sys.exit(1)
+    sys.stdout.buffer.write(("motivo\t%s\n" % one(d.get("motivo") or "")[:300] + "".join(x + "\n" for x in td)).encode("utf-8"))
+    sys.exit(0)
+s = importlib.util.spec_from_file_location("transcript_rp", os.path.join(os.environ["MAAT_SCRIPTS_PY"], "transcript.py"))
+tr = importlib.util.module_from_spec(s); s.loader.exec_module(tr)
+rr = tr.righe(sys.argv[2])
+ii = [open(f, encoding="utf-8", errors="replace").read().replace("\r", "") for f in sys.argv[4:]]
+calls = [c for c in tr.chiamate(rr) if c["name"] in tr.AGENT_TOOLS and c["input"].get("subagent_type") == "maat:spec-plan-reviewer-light"]
+if not calls:
+    print("mai"); sys.exit(0)
+esito = "asincrono"
+for c in calls:
+    p = tr.testo(c["input"].get("prompt")).replace("\r", "")
+    miss = [str(k + 1) for k, x in enumerate(ii) if x not in p]  # INGRESSI-DEL-GIUDICE
+    if miss:
+        esito = "incompleto " + ",".join(miss)
+        continue
+    for _n, t, err, asin in c["results"]:
+        if not asin and not err:
+            open(sys.argv[3], "w", encoding="utf-8").write(t)
+            print("ok"); sys.exit(0)
+print(esito)
+'
+# The checks of the test-data deviations after the usual verification (A1, all needed; the first that fails is the
+# STOP): every acceptance test «dimostrato» in rossi.json; for each deviation its Tn a row of the plan, the judge in the
+# foreground with the row, its traceability rows, the deviation and the diff RECOMPUTED here with `plan-check.sh diff-test`
+# (the worker's command) in its prompt, and `plan-check.sh deviazione` ACCETTATA on its result. Writes
+# log/<label>.deviazioni-test («<text>\t<verdict>\t<sha256 of the diff>») and the lines of log/deviazioni-accettate.txt.
+deviazioni_test() { # $1 = file with the test-data deviations (one per line); prints the cause of a STOP, nothing if accepted
+  local d tn k=0 dl rc st out vd sha tmp="$dir/log/$label.deviazioni-test.tmp" pfx="$dir/log/$label.dev"
+  "$FIC_PY" -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8")).get("test") or {}
+sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" for v in d.values()) else 1)' "$TR/rossi.json" 2>>"$err" ||
+    { msg run-phase-180.dev_not_proven; return 0; }   # DEV-DIMOSTRATI
+  : > "$tmp"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    k=$((k + 1))
+    tn=$(printf '%s\n' "$d" | sed -n 's/^\(test-data\|dati-test\): *\([A-Za-z0-9._-]*\) *—.*/\2/p')
+    [ -n "$tn" ] || { msg run-phase-180.dev_no_tn d="$d"; return 0; }
+    out=$(bash "$PC" deviazione - "$SPEC_F" "$tn" 2>>"$err" | tr -d '\r'); rc=$?
+    [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }
+    printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')" > "$pfx$k.row"
+    printf '%s\n' "$out" | sed -n 's/^trace row: //p' > "$pfx$k.traces"
+    printf '%s' "$d" > "$pfx$k.text"
+    bash "$PC" diff-test "$SPEC_F" "$(printf '%s\n' "$out" | sed -n 's/^test file: //p')" --run-dir "$dir" > "$pfx$k.diff" 2>>"$err" &&
+      [ -s "$pfx$k.diff" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
+    printf '%s' "$(cat "$pfx$k.diff")" > "$pfx$k.diff-in"   # the diff as the prompt holds it: without the final newline
+    local inputs=("$pfx$k.row") l j=0
+    while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
+    inputs+=("$pfx$k.text" "$pfx$k.diff-in")
+    st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" "${inputs[@]}" 2>>"$err" | tr -d '\r')
+    case "$st" in
+      ok) ;;
+      mai) msg run-phase-180.dev_judge_never tn="$tn"; return 0 ;;   # GIUDICE-CHIAMATO
+      incompleto*) msg run-phase-180.dev_judge_input tn="$tn" which="${st#incompleto }"; return 0 ;;
+      *) msg run-phase-180.dev_judge_async tn="$tn"; return 0 ;;
+    esac
+    out=$(bash "$PC" deviazione "$pfx$k.result" "$SPEC_F" "$tn" 2>>"$err" | tr -d '\r'); rc=$?
+    [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }  # DEVIAZIONE-ACCETTATA
+    vd=$(tr -d '\r' < "$pfx$k.result" | sed -n 's/^[ \t>*_`-]*Deviation verdict:[ \t*_`]*//p' | tail -1 | sed 's/[ \t*_`]*$//')
+    sha=$(sha256sum < "$pfx$k.diff" | cut -c1-64)
+    printf '%s\t%s\t%s\n' "$d" "$vd" "$sha" >> "$tmp"
+  done < "$1"
+  mv -f "$tmp" "$dir/log/$label.deviazioni-test"
+  { [ -f "$dir/log/deviazioni-accettate.txt" ] && tr -d '\r' < "$dir/log/deviazioni-accettate.txt" | grep -v "^$label	"
+    awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
+    mv -f "$dir/log/deviazioni-accettate.txt.tmp" "$dir/log/deviazioni-accettate.txt"
+}
 # --- driver verification for test-red (harness-pt11, see TEST-RED PHASE): prints the final outcome of the phase ---
 verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
-  local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why=""
+  local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why="" devf="" esci="$1"
   e1=$(printf '%s\n' "$1" | sed -n 1p)
-  printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' || { printf '%s\n' "$1"; return 0; }
+  if ! printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; then
+    # 1.8.0 (A1): the STOP of `valida` whose only cause is test-data deviations enters the verification (VERIFY-RED-
+    # DEVIAZIONI); with originale= the OK line of the session, without (only structured_output) one synthesized
+    devf="$dir/log/$label.dev-ammesse"
+    local orig; orig=$(printf '%s\n' "$1" | sed -n 's/^originale=//p' | head -1)
+    if printf '%s\n' "$e1" | grep -Eq '^PHASE RESULT test-red: STOP — ' && [ -f "$dir/log/$label.result.json" ] &&
+       { [ -z "$orig" ] || { printf '%s\n' "$e1" | grep -Eq '^PHASE RESULT test-red: STOP — JSON: ' &&
+                              printf '%s\n' "$orig" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; }; } &&
+       "$FIC_PY" -c "$DEV_PY" ammesse "$dir/log/$label.result.json" "$log" "$([ -n "$orig" ] && echo 1 || echo 0)" > "$devf" 2>>"$err"; then
+      tr -d '\r' < "$devf" | sed -n '2,$p' > "$devf.elenco"
+      e1=$orig
+      [ -n "$e1" ] || e1="PHASE RESULT test-red: OK — $(tr -d '\r' < "$devf" | sed -n '1s/^motivo	//p')"  # RIGA-OK-SINTETIZZATA
+      esci=$e1
+    else
+      rm -f "$devf"; printf '%s\n' "$1"; return 0
+    fi
+  fi
   # writes of the phase outside its scope (also via Bash, which the guard does not see): tree before and after
   local t0 t1 fuori c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi" nm="" nrc=0 p
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
@@ -1006,6 +1121,10 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
         done <<< "$nuovi"
       fi
     else rm -f "$a"; fi
+    # 1.8.0 (A1): with test-data deviations no path outside the scope of accept, not even one of another flow
+    if [ -n "$devf" ] && [ -z "$why" ] && [ -s "$c" ]; then  # DEV-SOLO-SCOPE
+      why="$(msg run-phase-180.dev_outside files="$(head -5 "$c" | paste -sd, -)")"
+    fi
   fi
   # 1.8.0 (D4): the `stub` files of accept (existing production files) changed only by extension, on the diff
   # pre-tree -> post-tree taken with -w --ignore-blank-lines (a realignment of gofmt/rustfmt/prettier removes nothing)
@@ -1053,13 +1172,16 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       esac
     fi
   fi
+  if [ -z "$why" ] && [ -n "$devf" ]; then   # 1.8.0 (A1): the test-data deviations, judged on verified input
+    why=$(deviazioni_test "$devf.elenco")  # CONTROLLI-DEVIAZIONE
+  fi
   if [ -z "$why" ]; then   # closing OK: stubs, test fingerprint (also in the basis), absorbed counterproofs (L2)
     mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base of the prescribed changes (tests_guard): that of THIS test-red
     { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" ${sd:+--diff "$sd"} && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
       bash "$PC" basis "$SPEC_F" --write-tests && bash "$PC" gen "$SPEC_F" --run-dir "$dir"; } >> "$ro" 2>&1 ||
       why="$(msg run-phase.red_closing label="$label")"
   fi
-  if [ -z "$why" ]; then printf '%s\n' "$1"
+  if [ -z "$why" ]; then printf '%s\n' "$esci"
   else printf 'PHASE RESULT test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
 }
 # --- 1.8.0 (D4.5, DA7): a STOP of test-red parks the files the phase wrote (its scope only) in <run-dir>/staging/<path>
@@ -1453,6 +1575,12 @@ stdin_file=$prompt
 if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-difensive.txt" ]; then
   { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — $(msg run-phase.defensive_prompt)"; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
   prompt="$dir/log/$label.prompt-difensive" stdin_file="$dir/log/$label.prompt-difensive"
+fi
+# 1.8.0 (A1): the test-data deviations accepted in test-red, the same way (the review writes them in its section
+# «Deviazioni di test accettate»: the instruction is the text of the line, outside the base load of the review)
+if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-accettate.txt" ]; then
+  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DI TEST ACCETTATE (driver, run-phase.sh): $dir/log/deviazioni-accettate.txt — $(msg run-phase-180.accepted_prompt)"; tr -d '\r' < "$dir/log/deviazioni-accettate.txt"; } > "$dir/log/$label.prompt-deviazioni"  # PROMPT-DEVIAZIONI
+  prompt="$dir/log/$label.prompt-deviazioni" stdin_file="$dir/log/$label.prompt-deviazioni"
 fi
 ring_stop() { echo "$1" | tee -a "$err" >&2; rm -f "$dir/log/$label.running"; finish 7; }
 ring=0 prompt0=$prompt

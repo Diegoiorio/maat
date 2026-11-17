@@ -1669,6 +1669,21 @@ printf 'rossi: esito=OK — altro\n' > "$RR/log/01-test-red.rossi"; rm -rf "$RR/
 rrun ok FIC_CYCLE_STATE="$T/cs-rev2" FIC_MAX_FASI=1
 check "  un rossi.json che non e' quello dell'ultimo test-red (la riga di .rossi non torna) non entra nel prompt" '! grep -q "SONDA SMENTITA" "$FAKE_CALLS.02-review.prompt"'
 rm -f "$T/cs-rev2"
+# (B13, A1) a second invocation after a test-red OK-DEVIAZIONE: _json_rule reads .deviazioni-test (row 7d of next)
+rnuovo APPROVED; mkdir -p "$RR/log"
+ST=$("$FIC_PY" "$DRV" next "$SR" 2>/dev/null | sed -n 's/^State: //p' | tr -d '\r')
+printf '%s\nstate=%s\n' "PHASE RESULT test-red: OK — rossi" "$ST" > "$RR/log/01-test-red.esito"; echo 0 > "$RR/log/01-test-red.exit"; : > "$RR/log/01-test-red.jsonl"
+printf '{"fase":"test-red","esito":"OK","motivo":"m","deviazioni":["test-data: T4 — other base paths — routes collide"],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}\n' > "$RR/log/01-test-red.result.json"
+printf 'test-data: T4 — other base paths — routes collide\tACCEPT — only the bases change\t%064d\n' 0 > "$RR/log/01-test-red.deviazioni-test"
+nx() { "${1:-$FIC_PY}" "${2:-$DRV}" next "$SR" 2>/dev/null | sed -n 's/^Next: //p' | tr -d '\r'; }
+check "next (B13): dopo un test-red OK-DEVIAZIONE con .deviazioni-test → IMPLEMENT" 'nx | grep -q "^IMPLEMENT"'
+mv "$RR/log/01-test-red.deviazioni-test" "$T/dt.bak"
+check "next (B13): lo stesso run dir senza .deviazioni-test → STOP (la deviazione test-data non e accettata)" 'nx | grep -q "^STOP — 01-test-red: result.json STOP"'
+mv "$T/dt.bak" "$RR/log/01-test-red.deviazioni-test"
+if tmut jrtd 's/ and not (x.startswith(TEST_DATA) and x in acc)\]:  # JSON-RULE-TEST-DATA$/]:  # JSON-RULE-TEST-DATA/'; then
+  check "controprova: senza .deviazioni-test letto da _json_rule la deviazione accettata ferma il ciclo (rosso)" 'nx "$FIC_PY" "$T/drv-jrtd.py" | grep -q "^STOP"'
+else check "controprova _json_rule test-data: la mutazione si applica" false; fi
+rm -f "$T/drv-jrtd.py"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"

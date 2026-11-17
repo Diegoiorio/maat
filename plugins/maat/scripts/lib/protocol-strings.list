@@ -162,6 +162,10 @@ scripts/maat-config.py	^"(ciclo|riprese|ciclo\.riprese)"$|^"ciclo => harness >=1
 # --- 1.8.0 (B12): stubs in existing files (D4)
 scripts/plan-check.sh	^"non misurato"$	B12: nota di stub_esistenti in test-red/stubs.json per i linguaggi senza le regex di F13 (token, uguale in ogni lingua)
 
+# --- 1.8.0 (B13): the test-data deviations of test-red, judged on verified input (A1)
+scripts/plan-check.sh	Deviazione: (STOP — |ACCETTATA)|^"deviazione"$	B13: righe di plan-check.sh deviazione lette da run-phase.sh (token uguali in ogni lingua) e il nome del comando
+scripts/run-phase.sh	Deviazione: STOP — |\.deviazioni-test|deviazioni-accettate\.txt|DEVIAZIONI DI TEST ACCETTATE \(driver, run-phase\.sh\): |prompt-deviazioni	B13: lettura delle righe di plan-check.sh deviazione, file del run dir log/<label>.deviazioni-test e log/deviazioni-accettate.txt (letti da classifica, _json_rule e dalla review), riga del prompt della review (come DEVIAZIONI DIFENSIVE)
+
 # --- 1.8.0 (B10): the checks of the types of an Open decision (D3) and the probe line of a declassified decision
 scripts/driver.py	[Dd]ecisione non verificata da script|DECISIONE NON VERIFICATA \(driver\): |Out of scope\|Fuori ambito\|Constraints\|Vincoli|Scheletro: SOPRA IL TETTO	B10: il token «decisione non verificata da script» (uguale in ogni lingua: lo STOP, la riga di driver.log letta da cycle-report.py, la riga del prompt della review), le intestazioni della spec lette dal controllo di scope e la riga di plan-check.sh skeleton riletta per il tipo cut
 scripts/cycle-report.py	Decisione non verificata da script: 	B10: lettura della riga di driver.log scritta dal driver
