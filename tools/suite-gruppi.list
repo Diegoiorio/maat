@@ -7,6 +7,8 @@
 # runs, Linux · macOS): group 1 ≈ 462 · 676 s, group 2 ≈ 408 · 673, group 3 ≈ 464 · 695, group 4 ≈ 509 · 676,
 # group 5 ≈ 604 · 582. The oracle alone is the longest suite (462 · 676 s).
 # tools/esempi-equiv.test.sh (the expected outputs, and their strict checks with MAAT_ATTESE_RICHIESTE) is in group 4.
+# driver-esiti (the 1.8.0 sections of driver.test.sh, split off for the Windows limit) stays with the driver in group 2:
+# the group does the same work as before.
 # A suite red only in the parallel run goes in a group of its own (docs/TESTING-harness.md, «The parallel run»).
 
 # group 1: the oracle
@@ -14,6 +16,7 @@
 
 # group 2: the driver, the plan
 2 driver
+2 driver-esiti
 2 guard
 2 plan-check
 2 bash-node

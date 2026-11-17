@@ -106,7 +106,9 @@ and a cycle can reach `IMPLEMENTED` where it could not. No format Maat reads cha
   Windows (before, five), re-balanced on measured times. `counterproof.test.sh`: a deadline per run with the case's
   line number, deterministic cases for the TERM burst, lock holders that say when they hold the lock, input files that
   no longer collide on a case-insensitive filesystem; `senza_wsl` (the PATH without `wsl` for the tests) is decided by
-  bash and by Python together, before each case. New suites `nomi_test.test.sh` and `transcript.test.sh`.
+  bash and by Python together, before each case. New suites `nomi_test.test.sh`, `transcript.test.sh` and
+  `driver-esiti.test.sh` (the 1.8.0 sections of `driver.test.sh`, split off: the whole file no longer fitted the
+  per-suite limit of the Windows runner).
 
 **Compatibility.** Nothing Maat reads changes incompatibly: `phase-result.schema.json` is the same (an accepted
 deviation is a prefix of a string), and so are the words of `Next:`, `Finalize:`, `touched.txt`, `.gates` and the
@@ -131,11 +133,11 @@ diff-test` and `deviazione`.
 - A module with `radice_pacchetti` in a subfolder syncs the counterproof mirror exactly as before.
 
 **Tests.** Each rule has its counterproof on a mutated copy of the plugin that must turn its test red:
-`driver.test.sh` (classes, limits, progress, the second invocation, each open-decision type valid and forged),
+`driver-esiti.test.sh` (classes, limits, progress, the second invocation, each open-decision type valid and forged),
 `cycle-state.test.sh`, `plan-check.test.sh` (probes, stubs, additive check, F11, absence conflict, nested names),
 `run-phase.test.sh` (through the real `valida`: accepted and refused deviations, stubs, parking), `counterproof.test.sh`
 (root module, mode, link, cleanup), `guard.test.sh`, `stop-hook.test.sh`, `cycle-report.test.sh`,
-`maat-config.test.sh`, `maat-doctor.test.sh`, `suite.test.sh`, and the two new suites above.
+`maat-config.test.sh`, `maat-doctor.test.sh`, `suite.test.sh`, and the new suites above.
 
 ## 1.7.0 — the size of the cycle, decided by a script
 

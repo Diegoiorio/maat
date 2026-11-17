@@ -217,7 +217,8 @@ done («The parallel run», last point).
 |---|---|---|
 | `tools/esempi-equiv.test.sh` (1.6.0: the expected outputs) | the corpus alone (build, 130 `next`, 196 `valida`) about 1 hour, measured on a busy machine; about 18 minutes (1091 s) on the CI runner | about 2 minutes (127 s, both validators) |
 | `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes (1.5.0) | about 6 minutes |
-| `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner | about 1–1.5 minutes (59–85 s) |
+| `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner; 1.8.0, sections 1–13: about 24 minutes (1424 s) | about 1–1.5 minutes (59–85 s); 1.8.0: 272 s |
+| `plugins/maat/scripts/driver-esiti.test.sh` (1.8.0: sections 14 and later of the driver, split off because the whole file passed the 1800 s limit of a suite on the Windows runner) | not measured alone yet | 49 s |
 
 The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
 not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why

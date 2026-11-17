@@ -7,6 +7,9 @@
 # (the longer of its two runs): group 1 ≈ 1424 s, 2 ≈ 1093, 3 ≈ 1050, 4 ≈ 970, 5 ≈ 955, 6 ≈ 941, 7 ≈ 647. The three
 # longest suites (driver, run-phase, the expected outputs) are alone in their groups. The runner is about three times
 # faster than the local Windows machine (gates 234 s against 826, 1.6.0).
+# 1.8.0 (CI of the merged tree): the driver grew past the per-suite limit (TIMEOUT driver dopo 1800 s); its 1.8.0
+# sections went to driver-esiti (driver.test.sh 207 cases + driver-esiti 126 = the 333 of before; on Linux 272 s + 49 s).
+# The driver keeps its group (its sections 1-13 are the 1424 s measured before B8-B13); driver-esiti goes to group 7.
 # Locally the same set: bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list <results dir> (from Git Bash).
 
 # left out on Windows
@@ -49,7 +52,8 @@
 6 cycle-report
 6 phase-events
 
-# group 7: maat-doctor and the short ones
+# group 7: the 1.8.0 sections of the driver (driver-esiti), maat-doctor and the short ones
+7 driver-esiti
 7 maat-doctor
 7 bash-node
 7 guard

@@ -37,3 +37,4 @@ tools/oracolo.test.sh
 cycle-state
 run-phase
 driver
+driver-esiti
