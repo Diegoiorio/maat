@@ -36,4 +36,9 @@ runs its counterproofs, if it has no `copia`; a module **with** `copia` at the r
 counterproof stops with exit 64, `test-fast.sh` refuses the copy), and `maat-doctor` and `maat-config.py valida` say so
 before the cycle: give the counterproof a module without `copia`, or put `radice_pacchetti` in a subfolder.
 
+Resumes (1.8.0): after each phase `driver.py` classifies the outcome (OK, OK with an accepted deviation, resumable,
+human, technical) and relaunches a resumable phase by itself, at most 2 per phase type and 3 per cycle;
+`ciclo.riprese: 0` in `.claude/maat.json` (or `FIC_RIPRESE=0`) restores the STOPs of 1.7. Explained in the repo's
+README and in `docs/GUIDA-FLUSSI.html`.
+
 Flow guide: the repo's `docs/GUIDA-FLUSSI.html`. Plugin tests: the repo's `docs/TESTING-harness.md`.

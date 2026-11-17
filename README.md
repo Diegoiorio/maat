@@ -187,7 +187,7 @@ hours.
 |---|---|---|
 | `IMPLEMENTED` | Code written, reviewed and verified. | Look at the changes and commit. |
 | `NEEDS_VERIFICATION` | The review is approved, but a required check was not run, for example because the module has no tests. The message says which one. | Run that check yourself, then commit. |
-| `STOP` | Maat stopped because a person is needed. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. |
+| `STOP` | Maat stopped because a person is needed, or a technical block. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. Since 1.8.0 a STOP that a script judges resumable does not reach you: see below. |
 
 ### The size of the cycle (since 1.7.0)
 
@@ -209,6 +209,29 @@ script cannot measure counts as full. The model never decides it: at most it can
   piena — …`) and in the final response (`Size: …`); the record is `<run-dir>/taglia.txt`.
 - Thresholds, extra security words, or the automatic size off: the optional key `piano.taglia` of `.claude/maat.json`
   (`docs/GUIDA-FLUSSI.html`); a file that uses it declares `"harness": ">=1.7"`.
+
+### When a phase stops: resumes (since 1.8.0)
+
+After every phase a script (never the model) gives its outcome a class, and the driver acts on it:
+
+| Class | Example | What the driver does |
+|---|---|---|
+| OK | the phase did its job | goes on |
+| OK with an accepted deviation | test-red changed only test data, and an independent reviewer and a script agreed | goes on; the deviation is shown to the code review |
+| Resumable | a plan left `DRAFT`; an `Open decision:` that is not proved; a test that needs a stub (a missing symbol); a background agent not collected | **relaunches the same phase** with the open findings in its prompt |
+| Human | a real decision the code and the tests cannot take, with its proof; a limit shown by a probe; a refused deviation; a conflict with the suite | final STOP (exit 1), the line says why and where the proof is |
+| Technical | a failed run, invalid output, a blocked gate, a busy lock | STOP, WAIT or BUSY, as before |
+
+Limits, counted per cycle and also across invocations: at most **2 resumes per phase type** (plan, test-red) and **3
+per cycle**, and every resume must show progress (another plan, other findings, another cause); otherwise it is a human
+STOP. A phase that is not classified stays a STOP. After a final STOP of test-red the files it wrote are moved to
+`<run-dir>/staging/`: the tree you get back is the one you started from. `driver: …` and `Ripresa: …` lines in
+`<run-dir>/driver.log` and `log/<phase>.ripresa` record each resume.
+
+Some human decisions are **not verified by a script** (the types `recurrence`, `dispute`, `partial` and `spec` of an
+`Open decision:`): the STOP says «decisione non verificata da script» and the review and `cycle-report.py` flag it.
+To get the STOPs of 1.7 back, set `"ciclo": { "riprese": 0 }` in `.claude/maat.json` (or `FIC_RIPRESE=0`); a file
+that uses the key declares `"harness": ">=1.8"`.
 
 ### Useful options
 
@@ -266,6 +289,14 @@ claude plugin update maat@maat --scope project
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.7.x to 1.8.0 the default changes: a STOP that a script judges resumable is relaunched by the driver (above,
+«When a phase stops: resumes»), test-red accepts judged deviations of test data and writes additive stubs in existing
+files, the guard denies an `Agent`/`Task` launched in the background in a sub-session, `lint2` refuses a plan whose red on the base is
+a compilation error, and a module at the repository root runs its counterproofs. `ciclo.riprese: 0` gives back the
+STOPs of 1.7. The harness fingerprint changes: update **between** cycles, never during one (a cycle in progress stops
+with «harness changed»). Specs, approved plans and `maat.json` are read as before, and a 1.7 run dir goes on: no
+resume is counted in it. See `CHANGELOG.md`.
 
 From 1.6.x to 1.7.0 the default changes: a **new** cycle on a small plan takes the small size by itself (above, «The
 size of the cycle»); `--full` gives the flow of 1.6. A cycle started with 1.6 goes on exactly as in 1.6, flags
