@@ -1023,7 +1023,8 @@ def result_errors(path, fase):
 # after every launched phase, OK lines too (B9, resumes below; B9 review). Evaluation order, the first that holds (spec §Tassonomia):
 #   TECNICO        .exit missing or != 0 · no PHASE RESULT line in .esito · a phase with `valida` (plan, test-red,
 #                  implement, review, fix) ended STOP without result.json (invalid output) · result.json invalid ·
-#                  gates or rossi BLOCKED
+#                  gates or rossi BLOCKED · (1.8.1) .exit != 0 with an API error in the last `result` event of
+#                  log/<label>.jsonl: rule `api`, the usage limit or the error in the cause (errore_api)
 #   UMANO proven   plan NEEDS HUMAN DECISION with every `Open decision:` valid · test-red: rossi of this label with a
 #                  limite_dimostrato or a conflict with the suite, a deviation neither difensiva nor test-data, a STOP
 #                  with a test-data deviation not accepted in log/<label>.deviazioni-test · review Review status NEEDS
@@ -1170,6 +1171,10 @@ NON_VERIFICATA_RIGA = "Decisione non verificata da script: "
 # the spec file has that hash; neither computable: state=- (fail-closed: a STOP until a person removes the line)
 STOP_UMANO_RIGA = "Stop umano: "
 STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+|sha:[0-9a-f]{12}|-)$")
+# (1.8.1, G2-3) the driver.log line of a STOP on the usage limit of a sub-session (the last `result` event of its jsonl):
+# «<UTC> Limite d'uso: <label> · <api_error> · <api_error_status>», a protocol prefix the same in every language. It is
+# not a human STOP: no «Stop umano:» line, and the relaunch after the reset runs the same phase again from the start
+LIMITE_USO_RIGA = "Limite d'uso: "
 
 
 def impronta_spec(spec_fs):
@@ -1385,6 +1390,42 @@ def _accettate(p):
     return acc
 
 
+def errore_api(run_fs, label):
+    """(1.8.1, G2-3) the API error of the sub-session: the LAST event `type == "result"` of log/<label>.jsonl, when it
+    has `api_error_status` or `api_error`, as {"limite": usage limit?, "e": api_error, "s": status, "msg": result text};
+    None without the file, if it cannot be read, without a result event or when that event has neither field. Usage
+    limit: status 429, api_error usage_limit_reached or rate_limit*"""
+    ultimo = None
+    try:
+        with open(os.path.join(run_fs, "log", label + ".jsonl"), encoding="utf-8", errors="replace") as fh:  # LEGGE-JSONL
+            for ln in fh:
+                if '"result"' not in ln:
+                    continue
+                try:
+                    o = json.loads(ln)
+                except ValueError:
+                    continue
+                if isinstance(o, dict) and o.get("type") == "result":
+                    ultimo = o
+    except OSError:
+        return None
+    if ultimo is None:
+        return None
+    st, er = ultimo.get("api_error_status"), ultimo.get("api_error")
+    if st in (None, "") and not er:
+        return None
+    er, st = str(er or "-"), "-" if st in (None, "") else str(st)
+    return {"limite": st == "429" or er == "usage_limit_reached" or er.startswith("rate_limit"), "e": er, "s": st,
+            "msg": " ".join(str(ultimo.get("result") or "").split())[:200]}
+
+
+def causa_api(a):
+    """the cause of a STOP on the API error a of errore_api, for a person"""
+    if a["limite"]:
+        return T("driver-181.usage_limit", msg=a["msg"])
+    return T("driver-181.api_error", e=a["e"], s=a["s"], msg=a["msg"])
+
+
 def classifica(fase, run_fs, label, spec_fs):
     log = lambda s: os.path.join(run_fs, "log", label + s)
     rel = lambda s: "log/" + label + s
@@ -1392,6 +1433,9 @@ def classifica(fase, run_fs, label, spec_fs):
     # --- TECNICO ---
     ex = (_read(log(".exit")) or "").strip()
     if ex != "0":
+        a = errore_api(run_fs, label)   # 1.8.1 (G2-3): the usage limit or the API error, not a mute exit
+        if a:
+            return Classe("TECNICO", "api", causa_api(a), rel(".jsonl"))
         return Classe("TECNICO", "exit", T("driver-180.c_exit", rc=ex or "-"), rel(".exit"))
     esito = _first_line(log(".esito"))
     ok, stop = bool(re.match(RIGA_OK, esito)), bool(re.match(RIGA_STOP, esito))
@@ -2611,7 +2655,13 @@ def cmd_run(argv):
         if prc != 0:
             why = {2: T("driver.rp2"), 3: T("driver.rp3"), 5: T("driver.rp5"),
                    6: T("driver.rp6")}.get(prc) or T("driver.rp_other", rc=prc)
-            return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, _tail(err)), 1)
+            # 1.8.1 (G2-3): the usage limit (or another API error) of the sub-session is the reason, from its jsonl;
+            # the usage limit also gets its driver.log line. No error and no stderr: «(stderr vuoto)», never nothing
+            a, t = errore_api(run_fs, label), _tail(err)
+            if a and a["limite"]:
+                ev("%s%s · %s · %s" % (LIMITE_USO_RIGA, label, a["e"], a["s"]))  # RIGA-LIMITE-USO
+            causa = causa_api(a) + (" · " + t if t else "") if a else t or T("driver-181.stderr_empty")
+            return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, causa), 1)
         if rmax > 0 and re.match(RIGA_OK, esito):
             # B9 review: classifica after an OK line too (a plan OK on a DRAFT spec is UMANO, not the uncounted DRAFT ->
             # PLAN row of 1.7); OK and OK-DEVIAZIONE go on, TECNICO goes on to the checks of 1.7 below

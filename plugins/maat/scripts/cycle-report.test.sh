@@ -577,6 +577,34 @@ for b in ("01-implement", "02-implement"):
     print(b, e, m.stop_class(why))' "$(cygpath -m "$CR" 2>/dev/null || printf '%s' "$CR")" 2>&1 | tr -d '\r')
 [ "$eo" = "$(printf '01-implement STOP deviazione\n02-implement STOP deviazione')" ] && ok || ko "riga d'esito inglese e italiana: stesso STOP e stessa causa" "$eo"
 
+# --- 1.8.1 (G2-3): a sub-session ended on the usage limit (the real event: the last `result` with api_error_status 429
+# and api_error usage_limit_reached, reduced and anonymised) has no .esito: it is a STOP of its own cause «limite
+# d'uso», not a phase without an outcome and not a human STOP; another API error (529) is a STOP of the class of its
+# text; the same event with an .esito (the phase ended anyway) changes nothing. Counterproof: without the reading of the
+# last result the phase has no outcome again.
+LU="$W/runs/spec-lim.run/log"; mkdir -p "$LU"
+N9R='{"duration_api_ms":118778,"stop_reason":"stop_sequence","session_id":"s-n9","total_cost_usd":0.7681564000000001,"permission_denials":[],"terminal_reason":"api_error","is_error":true,"num_turns":1,"subtype":"success","api_error_status":429,"api_error_origin":"first_party","api_error":"usage_limit_reached","result":"You'"'"'ve hit your 5-hour limit · resets 5:10pm (Europe/Rome)","type":"result","duration_ms":605,"result_index":2}'
+printf '%s\n' '{"type":"result","session_id":"s-n9","duration_ms":1000,"result":"Reviewer launched in background."}' "$N9R" > "$LU/01-review.jsonl"
+printf '%s\n' '{"type":"result","session_id":"s-529","is_error":true,"api_error_status":529,"api_error":"overloaded_error","result":"Overloaded","duration_ms":300}' > "$LU/02-review.jsonl"
+printf '%s\n' "$N9R" > "$LU/03-review.jsonl"; printf 'PHASE RESULT review: OK — approvata\nstate=x\n' > "$LU/03-review.esito"
+lim_cr() { "$FIC_PY" "$1" --json --projects "$WP/projects" "$WP/runs/spec-lim.run" 2>&1 | tr -d '\r' | "$FIC_PY" -c 'import json, sys
+sys.stdin.reconfigure(encoding="utf-8"); sys.stdout.reconfigure(encoding="utf-8")
+c = json.load(sys.stdin)[0]
+print(";".join("%s=%s=%s" % (p["label"], p["esito"], p["stop_class"]) for p in c["phases"]))
+print(json.dumps(c["stops_by_cause"], sort_keys=True, ensure_ascii=False))
+print(c["stops"][0]["testo"] if c["stops"] else "-")' | tr -d '\r'; }
+o=$(lim_cr "$CR")
+[ "$o" = "$(printf '%s\n' "01-review=STOP=limite d'uso;02-review=STOP=altro;03-review=OK=" '{"altro": 1, "limite d'"'"'uso": 1}' "usage_limit_reached 429: You've hit your 5-hour limit · resets 5:10pm (Europe/Rome)")" ] &&
+  ok || ko "1.8.1: limite d'uso (429) → STOP con la causa propria «limite d'uso»; 529 → STOP «altro»; con un .esito → l'esito della riga" "$o"
+o=$("$FIC_PY" "$CR" --projects "$WP/projects" "$WP/runs/spec-lim.run" 2>&1 | tr -d '\r')
+printf '%s\n' "$o" | grep -qF "STOP 01-review [limite d'uso] usage_limit_reached 429: You've hit your 5-hour limit" && ok || ko "1.8.1: la riga STOP del riepilogo con la causa «limite d'uso»" "$o"
+"$FIC_PY" -c 'import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace("    if api:   # 1.8.1 (G2-3): the API error of the last result is the STOP of the phase  # STOP-API", "    if False:", 1))' \
+  "$(cygpath -m "$CR" 2>/dev/null || printf '%s' "$CR")" "$WP/mut-lim.py"
+if cmp -s "$CR" "$W/mut-lim.py"; then ko "controprova limite d'uso: la mutazione non si applica"
+else o=$(lim_cr "$W/mut-lim.py"); printf '%s\n' "$o" | sed -n 1p | grep -q "^01-review=None=;" && ok || ko "controprova: senza la lettura dell'ultimo result la fase sul limite resta senza esito (deve essere rossa)" "$o"; fi
+
 # --- 1.4.0: English summary, STOP_CLASSES in both languages ---
 # the readable output in English (MAAT_LINGUA=en): same numbers, the class names and the JSON/CSV values of D7 as they are
 out=$(MAAT_LINGUA=en "$FIC_PY" "$CR" --projects "$WP/projects" "$WP/runs/spec-syn.run" "$WP/runs/spec-nb.run" 2>&1)
