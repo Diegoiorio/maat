@@ -286,7 +286,12 @@ test`, `azione | tipo | valore` (`aggiunge` / `toglie`, `stringa` / `data-test`,
   with neither is a `lint2` VIOLATION, and a red with no text or no position is not proven; every string or `data-test` the plan
   adds must be listed as `adds` in `### Strings and data-test` — an existing test asserting its absence is
   a conflict that stops the phase.
-- **Stubs go only into new files.** A new parameter (or an extra positional argument) of a function that already
+- **The red «on the base» is always an assertion, never a compilation or import error** (1.8.0). In Go, Rust,
+  TS under `tsc`, Java — and for an import in any language — a missing symbol does not fail a test: the whole unit does
+  not load. A new symbol on an existing type or module gets an additive stub in that touched file (test-red writes it);
+  the row's red is what the test asserts on the stub (`` red if: `want 79, got 0` ``), never `MaxDepth undefined`:
+  `lint2` gives a VIOLATION for a red that matches a missing-symbol message.
+- **Signature stubs go only into new files.** A new parameter (or an extra positional argument) of a function that already
   exists gets no signature stub: on the base the test fails with the `TypeError` of the call, before its assertion.
   Its red is that one — `` red if: `unexpected keyword argument 'sep'` `` (or `` `positional argument` ``) — not the
   value the implementation will return; the mutation's `red if:` keeps the value (it runs on the implemented code).

@@ -51,7 +51,7 @@ scripts/driver.py	Impronta piano: 	5: lettura dell'impronta del piano
 scripts/run-phase.sh	Impronta piano: 	5: lettura dell'impronta del piano
 scripts/run-phase.sh	DEVIAZIONI DIFENSIVE|EVIDENZE DEI GATE|DIFF DELL'ANELLO|E2E DELLA CATENA|VERIFY IN PARALLELO|CORSIA \$k/2 \(driver, run-phase\.sh\): 	5: marcatori dei prompt, citati da riferimento.md:123/129/302, workers/review.md:5/12-14, workers/chiusura.md:5, workers/implement.md:37, implementation-review-cycle/SKILL.md:116-125
 scripts/plan-check.sh	"nuovo "	5: token di accept («test <path>», «nuovo <path>»), letto da run-phase.sh:1423
-scripts/run-phase.sh	\\\(test\\\|nuovo\\\)	5: lettura dei token di accept
+scripts/run-phase.sh	\\\(test\\\|nuovo\\\|stub\\\)	5: lettura dei token di accept (1.8.0: anche «stub <path>»)
 
 # --- 6. sentinels read as values by another script (and empty values printed in value position)
 scripts/driver.py	\((assente|nessuno|nessuna|nessun file|vuoto)\)|^["'](nessuno|none)["']$	6: sentinella (gemello; driver.py:998-999)
@@ -158,6 +158,9 @@ scripts/driver.py	\.rossi\b|rossi\.json|rossi: esito=|\.deviazioni-test	nomi di 
 # --- 1.8.0 (B9): the resumes of the driver (log/<label>.ripresa, the Ripresa: line of driver.log, ciclo.riprese)
 scripts/driver.py	^"(limite|senza-progresso|ciclo|riprese)"$|^"ciclo\.riprese=%s"$	valori di esito= del file .ripresa (rilancio | limite | senza-progresso), letti da next, lint2 e rossi (B10, B12), e la chiave ciclo.riprese di maat.json: uguali in ogni lingua
 scripts/maat-config.py	^"(ciclo|riprese|ciclo\.riprese)"$|^"ciclo => harness >=1\.8 or newer; ciclo\.riprese >= 0"$	chiave di maat.json ciclo.riprese (S12) e la sua descrizione nella tabella SEMANTICA (documentazione)
+
+# --- 1.8.0 (B12): stubs in existing files (D4)
+scripts/plan-check.sh	^"non misurato"$	B12: nota di stub_esistenti in test-red/stubs.json per i linguaggi senza le regex di F13 (token, uguale in ogni lingua)
 
 # --- 1.8.0 (B10): the checks of the types of an Open decision (D3) and the probe line of a declassified decision
 scripts/driver.py	[Dd]ecisione non verificata da script|DECISIONE NON VERIFICATA \(driver\): |Out of scope\|Fuori ambito\|Constraints\|Vincoli|Scheletro: SOPRA IL TETTO	B10: il token «decisione non verificata da script» (uguale in ogni lingua: lo STOP, la riga di driver.log letta da cycle-report.py, la riga del prompt della review), le intestazioni della spec lette dal controllo di scope e la riga di plan-check.sh skeleton riletta per il tipo cut

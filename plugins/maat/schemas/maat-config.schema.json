@@ -257,6 +257,11 @@
             "type": "array",
             "items": { "type": "string" }
           },
+          "simbolo_mancante": {
+            "description": "1.8.0 (D4): more regexes (Python syntax) of the message of a missing symbol for this module's runner, added to the table of scripts/nomi_test.py (SIMBOLO_MANCANTE: Go, Rust, TypeScript, Python, Java): a collection or import red that matches one is rosso_simbolo in plan-check.sh rossi (never a proof: test-red is resumed with the stubs), and a base `red if` that matches one is a VIOLAZIONE of lint2.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "file_dipendenze": {
             "description": "Globs of the files that decide the dependencies (git :(glob) pathspec): a string (relative to the radice) or {glob, cartella}. If they differ between a worktree's base and the main tree, the linked dependencies are not valid: ciclo-worktree.sh and replay.sh stop.",
             "type": "array",

@@ -284,6 +284,10 @@ plan-check-180.probe_no_resume	line {n}: probe on the decision {k} without a reg
 plan-check-180.probe_same_row	line {n}: a second probe on the row {id}	riga {n}: una seconda sonda sulla riga {id}
 plan-check-180.probe_in_assert	line {n}: the expected text of the probe on {id} is already in the row's red if: a red on the assertion would look like the limit	riga {n}: il testo atteso della sonda su {id} è già nel rosso della riga: un rosso sull'asserzione sembrerebbe il limite
 plan-check-180.probe_in_source	line {n}: the expected text of the probe on {id} is written in {f}: the test would print it itself	riga {n}: il testo atteso della sonda su {id} è scritto in {f}: il test lo stamperebbe da sé
+plan-check-180.red_symbol	red on a missing symbol ({s}): the unit does not load, a stub is due, it proves nothing	rosso su un simbolo mancante ({s}): l'unità non si carica, serve uno stub, non dimostra niente
+plan-check-180.red_compile	line {n}: {id}: the red on the base is a compilation error ({t}): a stub is due, the red is its assertion	riga {n}: {id}: il rosso sulla base è un errore di compilazione ({t}): serve uno stub, il rosso è la sua asserzione
+plan-check-180.stub_not_additive	stub not additive: {f}:{n} ({line})	stub non additivo: {f}:{n} ({line})
+plan-check-180.stub_not_measured	not measured	non misurato
 plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignored for the probes	{label}.ripresa non registrato in driver.log: ignorato per le sonde
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
@@ -295,6 +299,10 @@ plan-check-180.red_disproved	green on the base: the probe disproves the declassi
 plan-check-180.red_sum_disproved	probes disproved: {t}	sonde smentite: {t}
 run-phase-180.red_limit	limit proven in test-red ({tests}): a human decision with its proof (log/{label}.rossi, test-red/rossi.json)	limite dimostrato in test-red ({tests}): una decisione umana con la sua prova (log/{label}.rossi, test-red/rossi.json)
 run-phase-180.probe_disproved	probe disproved in test-red: {tests} (the declassified claim is false; the review sees it)	sonda smentita in test-red: {tests} (l'affermazione declassata e' falsa; la review la vede)
+run-phase-180.stub_diff	the diff of the stub files of {label} cannot be computed (git diff -w): the additive check is not possible	il diff dei file stub di {label} non è calcolabile (git diff -w): il controllo additivo non è possibile
+run-phase-180.s3_stop	{n} files parked by a STOP of test-red copied back; the subsession is launched all the same (staging.origine=stop)	{n} file parcheggiati da uno STOP di test-red ricopiati; la sotto-sessione parte comunque (staging.origine=stop)
+run-phase-180.park_no_tree	{label}: STOP of test-red without .pre-tree/.post-tree or scope: its files are not parked	{label}: STOP di test-red senza .pre-tree/.post-tree o scope: i suoi file non sono parcheggiati
+run-phase-180.parked	{n} files of the phase parked in {dir}/staging/ (staging.origine=stop), the tree back to the pre-tree	{n} file della fase parcheggiati in {dir}/staging/ (staging.origine=stop), l'albero torna al pre-tree
 driver-180.review_disproved	a probe of test-red disproved this claim: judge whether the row really proves it false	una sonda di test-red ha smentito questa affermazione: giudica se la riga la smentisce davvero
 
 # --- transcript-180, driver-180 (1.8.0, B8, written by hand): transcript.py (a Bash call and its result, an agent call
@@ -320,6 +328,7 @@ driver-180.c_dec_form	Open decision not in the form <type> — <text>: {d}	Decis
 driver-180.c_dec_type	Open decision with a type outside the list: {t}	Decisione aperta con un tipo fuori lista: {t}
 driver-180.c_dec_anchor	Open decision of type spec with a code anchor ({a}): it is a proof	Decisione aperta di tipo spec con un'àncora di codice ({a}): è una prova
 driver-180.c_symbol	missing stubs: {s}	stub mancanti: {s}
+driver-180.ripresa_stub	write the additive stubs in the `stub` files of the scope (and the new ones), do not touch the tests	scrivi gli stub additivi nei file `stub` dello scope (e in quelli nuovi), non toccare i test
 driver-180.c_open	agents or background jobs not collected at the closing of the session: {ids}	agenti o job in background non raccolti alla chiusura della sessione: {ids}
 driver-180.c_plan_ok	OK line of a plan phase whose Plan status is {s}: not approved	riga OK di una fase plan con Plan status {s}: non approvato
 driver-180.prova	proof: {f}	prova: {f}

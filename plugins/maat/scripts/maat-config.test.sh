@@ -59,6 +59,12 @@ check "  leggi moduli.0.separatori_test" '[ "$(MAAT_CONFIG=$T/sep.json mc leggi 
 echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": "/"}]}' > "$T/sep-ko.json"
 mc valida "$T/sep-ko.json" > "$T/out" 2>&1; rc=$?
 check "separatori_test non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.separatori_test" "$T/out"'
+# 1.8.0 (D4, B12): moduli[].simbolo_mancante, optional list of regexes (a missing symbol of this runner, nomi_test.py)
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": ["unresolved reference: \\w+"]}]}' > "$T/sm.json"
+mc valida "$T/sm.json" > "$T/out" 2>&1; check "simbolo_mancante: lista di regex valida" '[ $? = 0 ]'
+echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": "x"}]}' > "$T/sm-ko.json"
+mc valida "$T/sm-ko.json" > "$T/out" 2>&1; rc=$?
+check "simbolo_mancante non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.simbolo_mancante" "$T/out"'
 # 1.8.0 (A4, DA3): copia at the root of the repository -> valid (exit 0) with a warning on stderr, before the cycle
 cat > "$T/copia-radice.json" <<'EOF'
 {"versione_schema": 1,

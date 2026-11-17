@@ -1438,15 +1438,14 @@ def classifica(fase, run_fs, label, spec_fs):
         return Classe("RIPRENDIBILE", "decisione", why, spec_fs, tuple(e[2] for e in esami if not e[1]),
                       tuple(e[2] for e in esami if not e[1] and e[4]))
     if fase == "test-red" and rossi:
-        nt = _modulo("nomi_test", "nomi_test.py")
+        # B12: the token rosso_simbolo of rossi (which also applies the module's regexes of maat.json) and its
+        # «simbolo»: the driver does not match the messages again, so rossi and classifica cannot diverge
         sim, simboli = [], []
         for t, v in sorted(((rossi.get("test") or {}) if isinstance(rossi.get("test"), dict) else {}).items()):
             if not isinstance(v, dict):
                 continue
-            m = nt.simbolo_mancante("%s\n%s" % (v.get("messaggio") or "", v.get("motivo") or "")) \
-                if v.get("esito") in ("rosso_raccolta", "rosso_import", "rosso_simbolo") else None
-            if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO
-                simboli.append(m[2] if m else one(v.get("messaggio") or v.get("motivo") or "")[:120])
+            if v.get("esito") == "rosso_simbolo":  # ROSSO-SIMBOLO
+                simboli.append(one(v.get("simbolo") or v.get("messaggio") or v.get("motivo") or "")[:120])
                 sim.append("%s: %s" % (t, simboli[-1]))
         if sim:   # decisioni: the missing symbols (DA9: the progress of a test-red resume)
             return Classe("RIPRENDIBILE", "simbolo", T("driver-180.c_symbol", s="; ".join(sim)[:400]),
@@ -1679,6 +1678,8 @@ def riga_ripresa(rip, spec_fs, label=None):
     testa = "RIPRESA (driver): %s/%s — " % (rip.get("n_fase"), rip.get("max"))
     kk = rip.get("declassata") or []
     f = "log/%s.result.json" % label if label and rip.get("regola") == "decisione" else rip.get("prova")  # RILIEVI-RESULT
+    if rip.get("regola") == "simbolo":   # B12 (D4.3): the missing stubs, and what to do with them
+        return testa + "%s — %s\n" % (rip.get("causa"), T("driver-180.ripresa_stub"))  # RIGA-STUB
     if rip.get("regola") != "decisione" or not kk:
         return testa + "%s — %s\n" % (rip.get("causa"), T("driver-180.ripresa_aperti", f=f))
     testi = {}

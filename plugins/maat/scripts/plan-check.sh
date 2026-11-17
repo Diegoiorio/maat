@@ -1487,6 +1487,11 @@ def lint2(M, root, run=None):
         # table it stops the cycle at test-red. It goes in a note under the table.
         if INVARIANZA.match(tests[tid]["asserzione"]):  # CONTROLLO-NON-REGRESSIONE-LINT2
             E.append(_msg.T("plan-check.test_invariance", n=tests[tid]["n"], id=tid))
+        # 1.8.0 (D4.4): the red on the base is an assertion, never a compilation or import error (a stub is due)
+        mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
+        rc_ = nomi().rosso_di_compilazione(tests[tid]["asserzione"], (mt or {}).get("simbolo_mancante") or [])
+        if rc_:  # ROSSO-COMPILAZIONE-LINT2
+            E.append(_msg.T("plan-check-180.red_compile", n=tests[tid]["n"], id=tid, t=rc_))
     E.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2
     E.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2
     W.extend(report_nessuno(M))
@@ -2379,18 +2384,32 @@ def acc_paths(M):
     return out
 
 
+STUB_ESISTENTI = "stub_esistenti"   # 1.8.0 (D4): the key of stubs.json for the stubs in existing files (never a path)
+STUB_NON_MISURATO = "non misurato"   # its note for a language without the F13 regexes (a token, the same in every language)
+
+
 def stub_files(M):
     """i file che il piano dichiara nuovi e che non sono test di accettazione: vi vanno gli stub"""
     tp = set(acc_paths(M))
     return [f for f in M["new_files"] if f not in tp]
 
 
+def stub_existing(M):
+    """1.8.0 (D4): the production files of File toccati that are NOT new and not acceptance test files: test-red may
+    write in them only ADDITIVE stubs (run-phase.sh verify_red, nomi_test.diff_additivo), never logic"""
+    tp, newf = set(acc_paths(M)), set(M["new_files"])
+    return [f for f in M["files"] if f not in tp and f not in newf]
+
+
 def cmd_accept(M):
-    """scope della fase test-red: test <path> (i file di test del piano) e nuovo <path> (i file nuovi)"""
+    """scope della fase test-red: test <path> (i file di test del piano), nuovo <path> (i file nuovi) e, dalla 1.8.0,
+    stub <path> (i file di produzione esistenti: solo stub additivi)"""
     for p in acc_paths(M):
         print("test " + p)
     for p in stub_files(M):
         print("nuovo " + p)
+    for p in stub_existing(M):  # STUB-ESISTENTI
+        print("stub " + p)
     return 0
 
 
@@ -2454,15 +2473,49 @@ def mentioned(root, paths, sym):
     return False
 
 
-def cmd_stubs(M, root, run):
-    """alla chiusura OK di test-red: i simboli degli stub di ogni file nuovo -> <run>/test-red/stubs.json"""
+def cmd_stubs(M, root, run, diffp=""):
+    """alla chiusura OK di test-red: i simboli degli stub di ogni file nuovo -> <run>/test-red/stubs.json. 1.8.0 (D4):
+    con --diff (il diff pre-tree -> post-tree dei file `stub`, git diff -w) anche stub_esistenti: {path: {simboli}} i
+    nomi pubblici aggiunti (le regex di F13, size_names: Go, Python, JS/TS), per gli altri linguaggi {simboli: null,
+    nota: non misurato}. Fuori da L2: l2_eval guarda solo i file nuovi, e stubs[<file esistente>] non viene scritto"""
     d = {}
     for f in stub_files(M):
         ex = exports(root, f)
         d[f] = {"simboli": ex}
         print("stub %s: %s" % (f, _msg.T("plan-check.stub_absent") if ex is None else (", ".join(ex) or ("(" + _msg.T("plan-check.stub_none") + ")"))))
+    if diffp:
+        sd = size_diff(diffp)
+        es = {}
+        for f in stub_existing(M):
+            if sd is None or f not in sd[1]:
+                continue
+            added, removed = sd[1][f]
+            ext = os.path.splitext(f)[1].lower()
+            if ext == ".py" or ext == ".go" or ext in SIZE_JS:
+                rm = set(size_names(ext, removed))
+                es[f] = {"simboli": sorted(set(x for x in size_names(ext, added) if x not in rm))}
+            else:  # STUB-NON-MISURATO
+                es[f] = {"simboli": None, "nota": STUB_NON_MISURATO}
+            print("stub %s: %s" % (f, ", ".join(es[f]["simboli"] or []) or ("(" + _msg.T("plan-check-180.stub_not_measured") + ")"
+                                                                            if es[f]["simboli"] is None else "(" + _msg.T("plan-check.stub_none") + ")")))
+        d[STUB_ESISTENTI] = es
     jsave(os.path.join(run, "test-red", "stubs.json"), d)
     return 0
+
+
+def cmd_additivo(M, diffp):
+    """1.8.0 (D4): the stubs in EXISTING files (accept: `stub <path>`) changed only by extension, on the diff of those
+    files (git diff -w --ignore-blank-lines pre-tree post-tree): a removed line is admitted only as a list instruction
+    that grows (nomi_test.diff_additivo). Prints one line per violation; exit 0 additive, 1 not, 2 unreadable"""
+    try:
+        with open(diffp, encoding="utf-8", errors="replace") as fh:
+            t = fh.read()
+    except OSError:
+        return 2
+    vv = nomi().diff_additivo(t)  # CONTROLLO-ADDITIVO: every file of the diff (run-phase.sh passes only the stub files)
+    for f, n, x in vv:
+        print(_msg.T("plan-check-180.stub_not_additive", f=f or "?", n=n, line=" ".join(x.split())[:160]))
+    return 1 if vv else 0
 
 
 def l2_why(T, m, stubs, rossi, root, acc, final):
@@ -2839,6 +2892,18 @@ def cmd_rossi(M, root, run, ev):
     # now proven: STOP, exit 1 as every STOP; classifica reads the class from rossi.json); green on the base ->
     # sonda_smentita (not a STOP: the claim is false, the test stays as a regression test); otherwise the rules above.
     # Any other probe line is ignored: its row is a normal row (green = verde, STOP).
+    # 1.8.0 (D4): a collection or import red whose text is a missing symbol (SIMBOLO_MANCANTE of nomi_test.py, plus the
+    # moduli[].simbolo_mancante of the module in maat.json) -> rosso_simbolo: never a proof, the driver resumes test-red with
+    # the stubs (classifica reads this token, and «simbolo», the matched text)
+    simboli = {}
+    for tid in M["order"]:
+        es, why, msg, pos = out.get(tid, ("", "", "", None))
+        if es in ("rosso_raccolta", "rosso_import"):
+            mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
+            sm = nomi().simbolo_mancante(msg, (mt or {}).get("simbolo_mancante") or [])
+            if sm:  # ROSSO-SIMBOLO
+                out[tid] = ("rosso_simbolo", _msg.T("plan-check-180.red_symbol", s=sm[2][:200]), msg, pos)
+                simboli[tid] = sm[2]
     sv, _se, sw = sonde(M, run, root)  # SONDE-ROSSI
     for w in sw:
         print("AVVISO: " + w)
@@ -2914,7 +2979,8 @@ def cmd_rossi(M, root, run, ev):
     jsave(os.path.join(run, "test-red", "rossi.json"), {
         "esito": esito, "riassunto": riass, "evidence": ev, "conflitti": confl,
         "test": {t: dict({"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
-                          "file": tests[t]["path"], "nome": tests[t]["name"]}, **({"sonda": sv[t]} if t in sv else {}))
+                          "file": tests[t]["path"], "nome": tests[t]["name"]}, **({"sonda": sv[t]} if t in sv else {}),
+                         **({"simbolo": simboli[t]} if t in simboli and v[0] == "rosso_simbolo" else {}))
                  for t, v in out.items()}})
     print("rossi: esito=%s \u2014 %s" % (esito, riass))
     return {"OK": 0, "STOP": 1}.get(esito, 3)
@@ -2947,7 +3013,7 @@ M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(0)
-if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2"):
+if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(2)
 if cmd == "accept":
@@ -2955,7 +3021,9 @@ if cmd == "accept":
 elif cmd == "tests":
     sys.exit(cmd_tests(M, sys.argv[2]))
 elif cmd == "stubs":
-    sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3]))
+    sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else ""))
+elif cmd == "additivo":
+    sys.exit(cmd_additivo(M, sys.argv[3]))
 elif cmd == "rossi":
     sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 elif cmd == "l2":
@@ -3051,25 +3119,29 @@ cmd_gen() {
 #   l2     <spec> [--run-dir <d>]          for finalize.sh: "L2 <id>: OK | NO — <motivo>" of the mutations on new
 #          files, on the current code (stub = exported symbols, every symbol in a test, tests fingerprint FRESH)
 cmd_f2x() {
-  local sub=$1 spec="" run="" ev=""; shift
+  local sub=$1 spec="" run="" ev="" dif=""; shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
       --evidence) [ "$sub" = rossi ] && [ $# -ge 2 ] || die_usage; ev="$2"; shift 2 ;;
+      --diff) { [ "$sub" = stubs ] || [ "$sub" = additivo ]; } && [ $# -ge 2 ] && [ -f "$2" ] || die_usage; dif="$2"; shift 2 ;;
       -*) die_usage ;;
       *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
     esac
   done
   [ -n "$spec" ] && [ -f "$spec" ] || die_usage
   [ "$sub" != rossi ] || [ -n "$ev" ] || die_usage
+  [ "$sub" != additivo ] || [ -n "$dif" ] || die_usage
   [ -n "$run" ] || run="${spec%.md}.run"
   local ann root ts; ann=$(annotate "$spec")
   has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   root=$(repo_root "$spec")
+  [ -z "$dif" ] || dif=$(maat_cygm "$dif" 2>/dev/null || printf '%s' "$dif")
   case $sub in
     accept|tests) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" "$sub" "$root" ;;
-    stubs) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" stubs "$root" "$run" ;;
+    stubs) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" stubs "$root" "$run" ${dif:+"$dif"} ;;
+    additivo) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" additivo "$root" "$dif" ;;
     rossi) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" rossi "$root" "$run" "$ev" ;;
     l2)
       ts=$(cmd_basis "$spec" | sed -n 's/^Tests status: //p')
@@ -3280,7 +3352,7 @@ case "$sub" in
   closed) cmd_closed "$@" ;;
   taglia) cmd_taglia "$@" ;;
   e1) cmd_e1 "$@" ;;
-  accept|tests|stubs|rossi|l2) cmd_f2x "$sub" "$@" ;;
+  accept|tests|stubs|rossi|l2|additivo) cmd_f2x "$sub" "$@" ;;
   *) die_usage ;;
 esac
 exit $?

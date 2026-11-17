@@ -1007,6 +1007,26 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       fi
     else rm -f "$a"; fi
   fi
+  # 1.8.0 (D4): the `stub` files of accept (existing production files) changed only by extension, on the diff
+  # pre-tree -> post-tree taken with -w --ignore-blank-lines (a realignment of gofmt/rustfmt/prettier removes nothing)
+  local stubf=() sd="" arc ao
+  if [ -z "$why" ]; then
+    mapfile -t stubf < <(bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^stub //p')
+    if [ ${#stubf[@]} -gt 0 ]; then
+      sd="$dir/log/$label.stub-diff"
+      if ! (cd "$FIC_REPO" && git -c core.quotePath=false diff -w --ignore-blank-lines --no-renames --no-color --no-ext-diff \
+              "$t0" "$t1" -- "${stubf[@]}") > "$sd" 2>>"$err"; then
+        why="$(msg run-phase-180.stub_diff label="$label")"
+      elif [ -s "$sd" ]; then
+        ao=$(bash "$PC" additivo "$SPEC_F" --diff "$sd" 2>>"$err"); arc=$?
+        case $arc in
+          0) ;;
+          1) why=$(printf '%s\n' "$ao" | tr -d '\r' | grep . | head -3 | paste -sd';' - | sed 's/;/; /g') ;;  # STUB-ADDITIVO
+          *) why="$(msg run-phase-180.stub_diff label="$label")" ;;
+        esac
+      fi
+    fi
+  fi
   mapfile -t files < <({ bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^test //p'
                          [ -f "$dir/touched.txt" ] && tr -d '\r' < "$dir/touched.txt"; } | grep -v '^$' | LC_ALL=C sort -u)
   if [ -n "$why" ]; then :
@@ -1035,12 +1055,40 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
   fi
   if [ -z "$why" ]; then   # closing OK: stubs, test fingerprint (also in the basis), absorbed counterproofs (L2)
     mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base of the prescribed changes (tests_guard): that of THIS test-red
-    { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
+    { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" ${sd:+--diff "$sd"} && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
       bash "$PC" basis "$SPEC_F" --write-tests && bash "$PC" gen "$SPEC_F" --run-dir "$dir"; } >> "$ro" 2>&1 ||
       why="$(msg run-phase.red_closing label="$label")"
   fi
   if [ -z "$why" ]; then printf '%s\n' "$1"
   else printf 'PHASE RESULT test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
+}
+# --- 1.8.0 (D4.5, DA7): a STOP of test-red parks the files the phase wrote (its scope only) in <run-dir>/staging/<path>
+# (staging.fp = plan fingerprint, staging.origine = stop) and brings them back to the pre-tree (git cat-file of the
+# blob of the .pre-tree for an existing file, removal for a new one): the tree handed over never holds half-written
+# tests or stubs. The next test-red copies them back (S3) and launches the subsession all the same (ORIGINE-STOP).
+parcheggia() { # $1 = outcome of test-red after verify_red; prints it, the STOP line with where the files are
+  local e1 t0 t1 p n=0 resto
+  e1=$(printf '%s\n' "$1" | sed -n 1p); resto=$(printf '%s\n' "$1" | sed -n '2,$p')
+  printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: STOP' || { printf '%s\n' "$1"; return 0; }
+  t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
+  if [ -z "$t0" ] || [ -z "$t1" ] || [ ! -f "$dir/log/$label.scope" ]; then
+    avviso "AVVISO: $(msg run-phase-180.park_no_tree label="$label")"; printf '%s\n' "$1"; return 0
+  fi
+  rm -rf "$dir/staging"
+  while IFS= read -r p; do
+    [ -n "$p" ] && grep -qxF -- "$p" "$dir/log/$label.scope" || continue   # PARCHEGGIO-SOLO-SCOPE
+    if [ -f "$FIC_REPO/$p" ]; then mkdir -p "$dir/staging/$(dirname "$p")" && cp -p "$FIC_REPO/$p" "$dir/staging/$p"; fi
+    if (cd "$FIC_REPO" && git cat-file -e "$t0:$p") 2>/dev/null; then
+      mkdir -p "$FIC_REPO/$(dirname "$p")" && (cd "$FIC_REPO" && git cat-file blob "$t0:$p") > "$FIC_REPO/$p"
+    else rm -f "$FIC_REPO/$p"; fi
+    n=$((n + 1))
+  done < <(cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1" 2>/dev/null | tr -d '\r')  # PARCHEGGIO
+  if [ $n -gt 0 ]; then
+    echo "$plan_fp" > "$dir/staging.fp"; echo stop > "$dir/staging.origine"
+    e1="$e1 · $(msg run-phase-180.parked n="$n" dir="$dir")"
+  fi
+  printf '%s\n' "$e1"; [ -n "$resto" ] && printf '%s\n' "$resto"
+  return 0
 }
 # --- after implement/fix: the acceptance tests are those of test-red (harness-pt11) ---
 # PRESCRIBED CHANGE (typical case: a plan step changes a helper in a file that also contains an acceptance
@@ -1356,13 +1404,13 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
   scope="$dir/log/$label.scope"
   plan_fp=$(bash "$PC" basis "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^Basis: .*plan \([0-9a-f]*\).*/\1/p')
   if [ "$phase" = test-red ]; then
-    bash "$PC" accept "$SPEC_F" 2>>"$err" | tr -d '\r' | sed -n 's/^\(test\|nuovo\) //p' > "$scope"
+    bash "$PC" accept "$SPEC_F" 2>>"$err" | tr -d '\r' | sed -n 's/^\(test\|nuovo\|stub\) //p' > "$scope"
   else   # test-stage: only <run-dir>/staging/, tied to the fingerprint of the candidate plan
     mkdir -p "$dir/staging"
     sa=$(cd "$dir" && pwd); sa=$(maat_cygm "$sa" 2>/dev/null || printf '%s' "$sa")
     sr=$(maat_cygm "$FIC_REPO" 2>/dev/null || printf '%s' "$FIC_REPO")
     printf '%s/staging/\n' "${sa#"$sr"/}" > "$scope"
-    echo "$plan_fp" > "$dir/staging.fp"
+    echo "$plan_fp" > "$dir/staging.fp"; rm -f "$dir/staging.origine"   # 1.8.0: parked by test-stage, not by a STOP
   fi
   FIC_SCOPE=$(maat_cygm "$scope" 2>/dev/null || printf '%s' "$scope"); export FIC_SCOPE
   if [ "$phase" = test-red ] && { [ -d "$dir/staging" ] || [ -f "$dir/staging.fp" ]; }; then
@@ -1376,10 +1424,17 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
         else echo "AVVISO: S3: $(msg run-phase.s3_outside r="$r")" >> "$err"; fi
       done < <(find "$dir/staging" -type f | LC_ALL=C sort)
       rm -rf "$dir/staging.copiato"; mv "$dir/staging" "$dir/staging.copiato"; rm -f "$dir/staging.fp"
-      [ $nst -gt 0 ] && staged=1
+      # 1.8.0 (D4.5, DA7): files parked by a STOP of test-red (staging.origine=stop): copied back, and the subsession is
+      # launched all the same (they are not the proof of a finished phase, only the work to resume)
+      if [ "$(tr -d '\r\n' < "$dir/staging.origine" 2>/dev/null)" = stop ]; then  # ORIGINE-STOP
+        echo "S3: $(msg run-phase-180.s3_stop n="$nst")" >> "$err"
+      else
+        [ $nst -gt 0 ] && staged=1
+      fi
+      rm -f "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_copied n="$nst" fp="$sfp")" >> "$err"
     else
-      rm -rf "$dir/staging" "$dir/staging.fp"
+      rm -rf "$dir/staging" "$dir/staging.fp" "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_discarded fp="${sfp:-$(msg run-phase.missing)}" plan="${plan_fp:-$(msg cycle-state.not_computable)}")" >> "$err"
     fi
   fi
@@ -1628,7 +1683,7 @@ originale=$orig}"
   fi
   if [ -n "$esito" ]; then   # harness-pt11: red-test verification (test-red), acceptance tests unchanged (implement/fix)
     case "$phase" in
-      test-red) esito=$(verify_red "$esito") ;;
+      test-red) esito=$(verify_red "$esito"); esito=$(parcheggia "$esito") ;;
       implement|fix) esito=$(tests_guard "$esito") ;;
     esac
   fi

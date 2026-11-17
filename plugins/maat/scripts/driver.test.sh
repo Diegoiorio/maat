@@ -1212,13 +1212,16 @@ clp impl-aperti implement 0 "PHASE RESULT implement: STOP — agents pending" "$
 clp rev-aperti review 0 "PHASE RESULT review: STOP — agents pending" "$STV" "$AP"; bg rev-aperti review
 clp tr-aperti test-red 0 "PHASE RESULT test-red: STOP — judge pending" "$STR" "$AP"; bg tr-aperti test-red
 clp tr-simbolo test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
-rossi tr-simbolo STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"},"T2":{"esito":"dimostrato","motivo":"ok","messaggio":"","posizione":null,"file":"a","nome":"b"}}' '[]'
+rossi tr-simbolo STOP "T1 rosso_simbolo" '{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","simbolo":"undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"},"T2":{"esito":"dimostrato","motivo":"ok","messaggio":"","posizione":null,"file":"a","nome":"b"}}' '[]'
 clp tr-token test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-token STOP "T1 rosso_simbolo" '{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"error[E0425]: cannot find value","posizione":null,"file":"a.rs","nome":"t"}}' '[]'
 clp tr-vecchio test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
-rossi tr-vecchio STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '[]' "T1 verde"
+rossi tr-vecchio STOP "T1 rosso_simbolo" '{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"undefined: MaxDepth","simbolo":"undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '[]' "T1 verde"
 clp tr-asserto test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-asserto STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"SyntaxError: invalid syntax","posizione":null,"file":"a","nome":"b"}}' '[]'
+# (B12) a rosso_raccolta whose text is a missing symbol, without the token of rossi: the driver does not match it again
+clp tr-raccolta test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
+rossi tr-raccolta STOP "T1 rosso_raccolta" '{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","posizione":null,"file":"a","nome":"b"}}' '[]'
 clp tr-limite test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-limite STOP "T5 limite_dimostrato" '{"T5":{"esito":"limite_dimostrato","motivo":"probe","messaggio":"TooDeeplyNested","sonda":{"decisione":"c0ffee03","affermazione":"the nesting limit","atteso":"TooDeeplyNested","riga":9},"posizione":null,"file":"a","nome":"b"}}' '[]'
 regcl() { # <name> <key>: a registered .ripresa (01-plan) declassifying <key> in the run dir of a case (B11)
@@ -1245,7 +1248,7 @@ rossi tr-blocked BLOCKED "no runner" '{}' '[]'
 clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
 clp plan-ok-nhd plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$NH"
 clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
-CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-raccolta:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
 cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
 clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
 CLO=$(cla "$DRV")
@@ -1258,8 +1261,9 @@ check "classifica (b): NEEDS HUMAN DECISION senza riga, tipo fuori lista, forma 
 check "classifica (b): una riga in un recinto o nel changelog non conta; una valida e una fuori lista → RIPRENDIBILE" '[ "$(clv nhd-recinto)" = "RIPRENDIBILE decisione nhd-recinto.md" ] && [ "$(clv nhd-mista)" = "RIPRENDIBILE decisione nhd-mista.md" ]'
 check "classifica (d): plan e test-red STOP con un agente in background aperto alla chiusura → RIPRENDIBILE (prova: il jsonl); plan STOP senza → UMANO" '[ "$(clv plan-aperti)" = "RIPRENDIBILE aperti log/01-plan.jsonl" ] && [ "$(clv tr-aperti)" = "RIPRENDIBILE aperti log/01-test-red.jsonl" ] && [ "$(clv plan-stop)" = "UMANO stop log/01-plan.esito" ] && printf "%s\n" "$CLO" | grep -q "^plan-aperti	.*: agx1$"'
 check "classifica (d) solo plan e test-red: implement e review STOP con lo stesso agente non raccolto → UMANO, STOP finale" '[ "$(clv impl-aperti)" = "UMANO stop log/01-implement.esito" ] && [ "$(clv rev-aperti)" = "UMANO stop log/01-review.esito" ]'
-check "classifica (c): rossi di questa fase con un simbolo mancante (rosso_raccolta «undefined: MaxDepth», token rosso_simbolo) → RIPRENDIBILE" '[ "$(clv tr-simbolo)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && [ "$(clv tr-token)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && printf "%s\n" "$CLO" | grep -q "^tr-simbolo	.*stub mancanti: T1: undefined: MaxDepth$"'
+check "classifica (c): rossi di questa fase con il token rosso_simbolo (il suo «simbolo», o il messaggio) → RIPRENDIBILE" '[ "$(clv tr-simbolo)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && [ "$(clv tr-token)" = "RIPRENDIBILE simbolo test-red/rossi.json" ] && printf "%s\n" "$CLO" | grep -q "^tr-simbolo	.*stub mancanti: T1: undefined: MaxDepth$"'
 check "classifica (c): rossi.json di un test-red precedente (la riga di .rossi non torna) o un errore che non e' un simbolo → UMANO" '[ "$(clv tr-vecchio)" = "UMANO stop log/01-test-red.esito" ] && [ "$(clv tr-asserto)" = "UMANO stop log/01-test-red.esito" ]'
+check "classifica (c, B12): un rosso_raccolta «undefined: MaxDepth» senza il token di rossi → UMANO (driver e rossi non divergono)" '[ "$(clv tr-raccolta)" = "UMANO stop log/01-test-red.esito" ]'
 check "classifica UMANO provato in test-red: limite_dimostrato, conflitto con la suite (prima del simbolo mancante), deviazione non test-data" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-conflitto)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-dev)" = "UMANO deviazione log/01-test-red.result.json" ]'
 check "classifica OK-DEVIAZIONE: test-red OK con la test-data accettata in .deviazioni-test (e una difensiva); verdetto STOP → UMANO" '[ "$(clv tr-okdev)" = "OK-DEVIAZIONE deviazione-test log/01-test-red.deviazioni-test" ] && [ "$(clv tr-devno)" = "UMANO deviazione-test log/01-test-red.result.json" ]'
 check "classifica: review con Review status NEEDS HUMAN DECISION → UMANO" '[ "$(clv rev-nhd)" = "UMANO review rev-nhd.md" ]'
@@ -1278,7 +1282,7 @@ clmut solo-plan 's/^\( *\)if fase in FASI_RIPRESA:  # RIPRESA-SOLO-PLAN-TEST-RED
 clmut draft 's/^\( *\)if fase == "plan" and stato.startswith("DRAFT"):  # RIPRESA-DRAFT$/\1if False:/' draft "UMANO stop log/01-plan.esito"
 clmut ancora 's/^\( *\)if tipo == "spec" and a:  # SPEC-CON-ANCORA$/\1if False:/' nhd-ancora "UMANO decisione nhd-ancora.md"
 clmut valida 's/^\( *\)if all(e\[1\] for e in esami):  # DECISIONE-VALIDA$/\1if any(e[1] for e in esami):/' nhd-mista "UMANO decisione nhd-mista.md"
-clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo" or m:  # ROSSO-SIMBOLO$/\1if v.get("esito") == "rosso_simbolo":/' tr-simbolo "UMANO stop log/01-test-red.esito"
+clmut simbolo 's/^\( *\)if v.get("esito") == "rosso_simbolo":  # ROSSO-SIMBOLO$/\1if False:/' tr-simbolo "UMANO stop log/01-test-red.esito"
 clmut rifiutata 's/^\( *\)if fuori:  # DEVIAZIONE-RIFIUTATA$/\1if False:/' tr-devrif "RIPRENDIBILE aperti log/01-test-red.jsonl"
 clmut piano-ok 's/^\( *\)if fase == "plan" and (nhd or stato.startswith("DRAFT")):   # an OK line on a plan not approved  # PIANO-OK$/\1if False:/' plan-ok-draft "OK ok log/01-plan.esito"
 check "classifica (B11): limite_dimostrato con la sonda di una ripresa registrata → UMANO limite; senza la ripresa (rossi.json scritto dalla fase) → UMANO stop" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-limfalso)" = "UMANO stop log/01-test-red.esito" ]'
@@ -1403,8 +1407,8 @@ case "$FAKE_MODE" in
     fi ;;
   tr-uguale|tr-diverso) mkdir -p "$d/test-red"; riga="PHASE RESULT test-red: STOP — rossi"   # (DA9) a missing symbol
     sym=MaxDepth; [ "$FAKE_MODE" = tr-diverso ] && sym="Max${l%%-*}"
-    printf '{"esito":"STOP","riassunto":"T1 rosso_raccolta","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: %s","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' "$sym" > "$d/test-red/rossi.json"
-    printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
+    printf '{"esito":"STOP","riassunto":"T1 rosso_simbolo","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"./decode_test.go:12:5: undefined: %s","simbolo":"undefined: %s","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' "$sym" "$sym" > "$d/test-red/rossi.json"
+    printf 'rossi: esito=STOP — T1 rosso_simbolo\n' > "$d/log/$l.rossi" ;;
   draft-fermo) fnd='{"severita":"major","file":"src/a.py","riga":1,"testo":"the same finding"}' ;;   # no progress
   nhd-valida|nhd-tipo|nhd-proof|nhd-budget) sed -i 's/^Plan status: DRAFT$/Plan status: NEEDS HUMAN DECISION/' "$spec"; bloc="decisione umana"
     case "$FAKE_MODE" in
@@ -1418,8 +1422,8 @@ case "$FAKE_MODE" in
     printf '%s\n' "Open decision: spec — FR1 can be read in two ways and the code does not settle it" >> "$spec" ;;
   tr-rilievi) mkdir -p "$d/test-red"; riga="PHASE RESULT test-red: STOP — rossi"   # (DA9) same symbol, other findings
     fnd='{"severita":"minor","file":"a.go","riga":1,"testo":"finding of '"$l"'"}'
-    printf '{"esito":"STOP","riassunto":"T1 rosso_raccolta","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_raccolta","motivo":"collection","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' > "$d/test-red/rossi.json"
-    printf 'rossi: esito=STOP — T1 rosso_raccolta\n' > "$d/log/$l.rossi" ;;
+    printf '{"esito":"STOP","riassunto":"T1 rosso_simbolo","evidence":"x","conflitti":[],"test":{"T1":{"esito":"rosso_simbolo","motivo":"symbol","messaggio":"./decode_test.go:12:5: undefined: MaxDepth","simbolo":"undefined: MaxDepth","posizione":null,"file":"decode_test.go","nome":"TestDepth"}}}\n' > "$d/test-red/rossi.json"
+    printf 'rossi: esito=STOP — T1 rosso_simbolo\n' > "$d/log/$l.rossi" ;;
   impl-bg) riga="PHASE RESULT implement: STOP — agents pending"
     printf '%s\n' '{"type":"system","subtype":"init"}' \
       '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"l1","name":"Agent","input":{"subagent_type":"maat:plan-implementer","prompt":"lane","run_in_background":true}}]}}' \
@@ -1566,7 +1570,7 @@ printf '%s\n' "State: tr-fisso" "Next: TEST-RED — finto"
 EOF
 chmod +x "$T/cs-tr"
 rnuovo APPROVED; rrun tr-uguale FIC_CYCLE_STATE="$T/cs-tr"
-check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio (prompt 1/2 in 02), 02 senza-progresso, STOP" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito) $(rf 01-test-red regola)" = "rilancio simbolo" ] && grep -q "^RIPRESA (driver): 1/2 — stub mancanti: T1: undefined: MaxDepth — " "$FAKE_CALLS.02-test-red.prompt" && [ "$(rf 02-test-red esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso" "$T/run.out"'
+check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio (prompt 1/2 in 02), 02 senza-progresso, STOP" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito) $(rf 01-test-red regola)" = "rilancio simbolo" ] && grep -qx "RIPRESA (driver): 1/2 — stub mancanti: T1: undefined: MaxDepth — scrivi gli stub additivi nei file \`stub\` dello scope (e in quelli nuovi), non toccare i test" "$FAKE_CALLS.02-test-red.prompt" && [ "$(rf 02-test-red esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso" "$T/run.out"'
 check "  la chiave rilievi di test-red porta l'impronta dei simboli: «-;<8 hex>»" '[ -n "$(rf 01-test-red rilievi | grep -x -- "-;[0-9a-f]\{8\}")" ]'
 rnuovo APPROVED; rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
 check "ripresa test-red (DA9): un simbolo diverso a ogni fase → seconda ripresa, poi il limite 2/2" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red 03-test-red " ] && [ "$(rf 02-test-red esito)" = rilancio ] && [ "$(rf 03-test-red esito)" = limite ]'

@@ -97,10 +97,151 @@ SIMBOLO_MANCANTE = {
 
 
 def simbolo_mancante(testo, extra=()):
-    """(language, regex, matched text) of the first message of a missing symbol in `testo`, or None"""
+    """(language, regex, matched text) of the first message of a missing symbol in `testo`, or None. A regex of
+    maat.json that does not compile is skipped (maat-config valida says it)"""
     for lingua, regs in list(SIMBOLO_MANCANTE.items()) + [("maat.json", list(extra or ()))]:
         for r in regs:
-            m = re.search(r, testo or "")
+            try:
+                m = re.search(r, testo or "")
+            except (re.error, TypeError):
+                continue
             if m:
                 return lingua, r, m.group(0)
     return None
+
+
+# The red a plan declares «on the base» is an assertion, never a compilation or import error (D4.4): lint2 refuses a
+# `red if` that matches SIMBOLO_MANCANTE or the way a plan writes it («MaxDepth undefined», «Decoder.MaxDepth
+# undefined»: an identifier that starts with a capital letter or has a dot, then «undefined»; not «got undefined»).
+ROSSO_COMPILAZIONE = [r"\b[A-Z][A-Za-z0-9_]*(?:\.[A-Za-z_]\w*)*[ \t]+undefined\b",
+                      r"\b[a-z_]\w*\.[A-Za-z_]\w*[ \t]+undefined\b",
+                      r"\b(?:does not|doesn't|won't|will not|fails to) compile\b", r"\bnon compila\b",
+                      r"\bcompil(?:e|ation) error\b", r"\berrore di compilazione\b"]
+
+
+def rosso_di_compilazione(testo, extra=()):
+    """the matched text when a declared red is a compilation / import error (SIMBOLO_MANCANTE, ROSSO_COMPILAZIONE), or
+    None"""
+    m = simbolo_mancante(testo, extra)
+    if m:
+        return m[2]
+    for r in ROSSO_COMPILAZIONE:
+        mm = re.search(r, testo or "")
+        if mm:
+            return mm.group(0)
+    return None
+
+
+# Additive stubs in EXISTING files (D4.1). On the diff `git diff -w --ignore-blank-lines` of a `stub` file, every removed
+# line must be a LIST INSTRUCTION that grows: it matches the table of its language and, in the same hunk, an added
+# line equals it except tokens inserted inside its LAST pair of brackets ((), [], {}), the inserted tokens only
+# identifiers, «,» and quoted names. Everything else (a signature, a condition, a return, a call) is not additive.
+ISTRUZIONE_ELENCO = {
+    ".ts": r"^\s*(?:export|import)\b", ".tsx": r"^\s*(?:export|import)\b", ".js": r"^\s*(?:export|import)\b",
+    ".jsx": r"^\s*(?:export|import)\b", ".mjs": r"^\s*(?:export|import)\b", ".cjs": r"^\s*(?:export|import)\b",
+    ".mts": r"^\s*(?:export|import)\b", ".cts": r"^\s*(?:export|import)\b",
+    ".py": r"^\s*(?:from\s.*\simport|import|__all__\s*=)",
+    ".rs": r"^\s*(?:pub\s+use|use)\b",
+    ".go": r"^\s*import\b",
+}
+ISTRUZIONE_ALTRI = r"^\s*(?:export|import|from\s.*\simport|pub\s+use|use|__all__\s*=)"   # another language: all forms
+_TOKEN = re.compile(r"\s*(\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|`[^`]*`|[A-Za-z_$][\w$]*(?:::[A-Za-z_$][\w$]*)*|,|\S)")
+_APRE, _CHIUDE = "([{", ")]}"
+
+
+def _token(s):
+    out, i = [], 0
+    while i < len(s):
+        m = _TOKEN.match(s, i)
+        if not m or not m.group(1):
+            break
+        out.append(m.group(1))
+        i = m.end()
+    return out
+
+
+def _ultima_coppia(riga):
+    """(start, end) of the inner part of the last pair of brackets of the line, or None"""
+    j = max(riga.rfind(c) for c in _CHIUDE)
+    if j < 0:
+        return None
+    chiusa, apre = riga[j], _APRE[_CHIUDE.index(riga[j])]
+    d = 0
+    for i in range(j, -1, -1):
+        if riga[i] == chiusa:
+            d += 1
+        elif riga[i] == apre:
+            d -= 1
+            if d == 0:
+                return i + 1, j
+    return None
+
+
+def _ammesso(t):
+    return t == "," or t[0] in "\"'`" or re.match(r"^[A-Za-z_$][\w$]*(?:::[A-Za-z_$][\w$]*)*$", t) is not None
+
+
+def elenco_allungato(tolta, aggiunta):
+    """True when `aggiunta` is `tolta` with tokens inserted only inside its last pair of brackets (identifiers, «,»,
+    quoted names): `export { a }` -> `export { a, b }`, `__all__ = ["a"]` -> `__all__ = ["a", "b"]`"""
+    c = _ultima_coppia(tolta)
+    if c is None:
+        return False
+    i, j = c
+    pre, dentro, post = tolta[:i], tolta[i:j], tolta[j:].rstrip()
+    a = aggiunta.rstrip()
+    if not a.startswith(pre) or not a.endswith(post) or len(a) < len(pre) + len(post):
+        return False
+    t_vecchi, t_nuovi = _token(dentro), _token(a[len(pre):len(a) - len(post)])
+    k = 0
+    for t in t_nuovi:   # the old tokens in order, every other one is inserted and must be admitted
+        if k < len(t_vecchi) and t == t_vecchi[k]:
+            k += 1
+        elif not _ammesso(t):
+            return False
+    return k == len(t_vecchi) and len(t_nuovi) > len(t_vecchi)
+
+
+def diff_additivo(diff):
+    """the violations of a unified diff of `stub` files (`git diff -w --ignore-blank-lines`): [(path, line of the old
+    file, text)] of every removed line that is not a list instruction grown in the same hunk; [] = additive"""
+    out, f, ext, rx, old, hunk = [], None, "", None, 0, None
+
+    def chiudi(h):
+        if not h:
+            return
+        for n, t in h["tolte"]:
+            if not t.strip():   # a blank line inside a hunk: layout, not code
+                continue
+            if not (re.match(rx, t) and any(elenco_allungato(t, a) for a in h["aggiunte"])):  # ELENCO-ALLUNGATO
+                out.append((h["f"], n, t))
+    for l in (diff or "").replace("\r", "").split("\n"):
+        if l.startswith("diff --git "):
+            chiudi(hunk)
+            hunk = None
+        elif l.startswith("+++ "):
+            p = l[4:].strip()
+            f = p[2:] if p.startswith("b/") else (None if p == "/dev/null" else p)
+            if f is not None:
+                ext = os.path.splitext(f)[1].lower()
+                rx = ISTRUZIONE_ELENCO.get(ext, ISTRUZIONE_ALTRI)
+        elif l.startswith("--- "):
+            p = l[4:].strip()
+            if p != "/dev/null":
+                f = p[2:] if p.startswith("a/") else p
+                ext = os.path.splitext(f)[1].lower()
+                rx = ISTRUZIONE_ELENCO.get(ext, ISTRUZIONE_ALTRI)
+        elif l.startswith("@@"):
+            chiudi(hunk)
+            m = re.match(r"@@ -([0-9]+)", l)
+            old = int(m.group(1)) if m else 0
+            hunk = {"f": f, "tolte": [], "aggiunte": []}
+        elif hunk is not None and l.startswith("-"):
+            hunk["tolte"].append((old, l[1:]))
+            old += 1
+        elif hunk is not None and l.startswith("+"):
+            hunk["aggiunte"].append(l[1:])
+        elif hunk is not None and l.startswith(" "):
+            old += 1
+    chiudi(hunk)
+    return out

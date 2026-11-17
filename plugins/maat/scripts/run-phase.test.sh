@@ -796,7 +796,7 @@ check "file di test di accettazione in nessuno scrive: → STOP deviazione (mano
 cp "$T/w3/spec-t.prima-fuori" "$TSP"
 mkspec
 FAKE_RED=imp FAKE_CMD="$WRITE_RED" trun 74-test-red
-check "test-red con rosso da import → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — test di accettazione non dimostrato: T1 rosso_import" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
+check "test-red con rosso da import («cannot import name»: dalla 1.8.0 rosso_simbolo) → STOP «non dimostrato», originale= sotto" 'sed -n 1p "$TRUN/log/74-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — test di accettazione non dimostrato: T1 rosso_simbolo" && grep -qx "originale=ESITO FASE x: OK — finto" "$TRUN/log/74-test-red.esito"'
 check "  nessuna impronta dei test registrata, cycle-state STOP" '! grep -q "· tests " "$TSP" && bash "$(dirname "$RP")/cycle-state.sh" "$TSP" | grep -q "^Next: STOP — 74-test-red: test di accettazione non registrati"'
 mkspec
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 75-test-red
@@ -821,9 +821,74 @@ check "test-red con una sonda valida verde sulla base → OK (sonda_smentita), A
 mksonda; rm -f "$TRUN/driver.log"
 FAKE_RED=verde FAKE_CMD="$WRITE_RED" trun 78-test-red
 check "test-red: la stessa sonda con il .ripresa non registrato → ignorata, verde = STOP (non sovra-accetta)" 'sed -n 1p "$TRUN/log/78-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde"'
+# 1.8.0 (B12, D4): additive stubs in EXISTING files (accept: «stub <path>»), checked by verify_red on the diff
+# pre-tree → post-tree with -w --ignore-blank-lines; stub_esistenti in stubs.json, out of L2; a STOP parks the files of
+# the phase in staging/ (origine=stop) and brings the tree back to the pre-tree; the next test-red copies them back and
+# launches the subsession all the same.
+STUBF="modules/api/app/core.py modules/api/app/decode.go modules/api/app/ex.ts modules/api/app/cond.go modules/api/app/call.py modules/api/app/ret.go modules/api/app/exf.ts modules/api/app/del.py"
+stub_base() { # the existing production files, as committed in the repository (the base of the phase)
+  printf 'def a():\n    return 1\n\n__all__ = ["a"]\n' > "$FIC_REPO/modules/api/app/core.py"
+  printf 'package app\n\ntype Decoder struct {\n\tr   int\n\tbuf []byte\n}\n' > "$FIC_REPO/modules/api/app/decode.go"
+  printf 'const a = 1\nexport { a }\n' > "$FIC_REPO/modules/api/app/ex.ts"
+  printf 'package app\n\nfunc c(x bool) int {\n\tif x {\n\t\treturn 1\n\t}\n\treturn 0\n}\n' > "$FIC_REPO/modules/api/app/cond.go"
+  printf 'def g(a, b=0):\n    return a\n\n\ndef h(a):\n    return g(a)\n' > "$FIC_REPO/modules/api/app/call.py"
+  printf 'package app\n\nfunc d(v int) int {\n\treturn 0\n}\n' > "$FIC_REPO/modules/api/app/ret.go"
+  printf 'const a = 1\nexport { a }\n' > "$FIC_REPO/modules/api/app/exf.ts"
+  printf 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' > "$FIC_REPO/modules/api/app/del.py"
+  (cd "$FIC_REPO" && git add $STUBF && git commit -qm "stub base")
+}
+stub_base
+mkstub() { # mkspec + the existing files in File toccati (stub lines of accept), T1's mutation on core.py (existing)
+  mkspec
+  local f l=""; for f in $STUBF; do l="$l- \`$f\`\n"; done
+  sed -i "s|^- \`modules/api/tests/test_calc.py\` (nuovo)\$|&\n${l%\\n}|" "$TSP"
+  sed -i 's#| `modules/api/app/calc.py` · `somma` · `return a + b` → `return 0` ·#| `modules/api/app/core.py` · `a` · `return 1` → `return 0` ·#' "$TSP"
+  local b; b=$(bash "$PCK" basis "$TSP" | sed -n 's/^Basis: //p'); sed -i "s/^Approved basis: .*/Approved basis: $b/" "$TSP"
+}
+mkstub
+check "accept: un file di produzione esistente di File toccati → riga «stub <path>», nello scope di test-red" 'bash "$PCK" accept "$TSP" | tr -d "\r" | grep -qx "stub modules/api/app/core.py" && ! bash "$PCK" accept "$TSP" | tr -d "\r" | grep -q "^stub modules/api/tests/"'
+ADD_OK='printf "def a():\n    return 1\n\n\ndef max_depth(v):\n    raise NotImplementedError\n\n__all__ = [\"a\", \"max_depth\"]\n" > "$FIC_REPO/modules/api/app/core.py"; printf "package app\n\ntype Decoder struct {\n\tr        int\n\tbuf      []byte\n\tMaxDepth int\n}\n" > "$FIC_REPO/modules/api/app/decode.go"; printf "const a = 1\nconst b = 2\nexport { a, b }\n" > "$FIC_REPO/modules/api/app/ex.ts"'
+FAKE_CMD="$WRITE_RED; $ADD_OK" trun 80-test-red
+check "stub additivi in file esistenti: funzione nuova + __all__ allungata, campo Go con gli altri riallineati da gofmt, export { a } → export { a, b } → OK" '[ "$(sed -n 1p "$TRUN/log/80-test-red.esito")" = "ESITO FASE x: OK — finto" ] && grep -q "· tests " "$TSP"'
+. "$HERE/python.sh" >/dev/null 2>&1
+cat > "$T/stubs-esistenti.py" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+e = d.get("stub_esistenti") or {}
+print("|".join("%s=%s" % (k, ",".join(v["simboli"]) if isinstance(v.get("simboli"), list) else "-") for k, v in sorted(e.items())),
+      "nuovo=" + ",".join(d["modules/api/app/calc.py"]["simboli"]))
+EOF
+check "  stubs.json: stub_esistenti con i nomi pubblici aggiunti (F13: core.py max_depth, ex.ts b; un campo Go non e un nome F13), il file nuovo come prima" '[ "$("$FIC_PY" "$T/stubs-esistenti.py" "$TRUN/test-red/stubs.json" | tr -d "\r")" = "modules/api/app/core.py=max_depth|modules/api/app/decode.go=|modules/api/app/ex.ts=b nuovo=somma" ]'
+check "  l2: la controprova sul file esistente core.py non e assorbita" '! grep -q "\"assorbita\": true" "$TRUN/counterproof/mutations.json" && grep -q "modules/api/app/core.py" "$TRUN/counterproof/mutations.json"'
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done
+mkstub
+ADD_KO='printf "package app\n\nfunc c(x bool, y bool) int {\n\tif x && y {\n\t\treturn 1\n\t}\n\treturn 0\n}\n" > "$FIC_REPO/modules/api/app/cond.go"; printf "def g(a, b=0):\n    return a\n\n\ndef h(a):\n    return g(a, 1)\n" > "$FIC_REPO/modules/api/app/call.py"; printf "package app\n\nfunc d(v int) int {\n\treturn depth(v)+0\n}\n" > "$FIC_REPO/modules/api/app/ret.go"; printf "const a = 1\nexport { a, f(b) }\n" > "$FIC_REPO/modules/api/app/exf.ts"; printf "def a():\n    return 1\n" > "$FIC_REPO/modules/api/app/del.py"'
+FAKE_CMD="$WRITE_RED; $ADD_KO" trun 81-test-red
+check "stub non additivi → STOP «stub non additivo: <file>:<riga>», nessun gate" 'sed -n 1p "$TRUN/log/81-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — stub non additivo: modules/api/app/" && [ ! -f "$T/81-test-red.gates-args" ]'
+ADDV=$(bash "$PCK" additivo "$TSP" --diff "$TRUN/log/81-test-red.stub-diff" | tr -d '\r')
+check "  ognuno rifiutato: if x { → if x && y {, f(a) → f(a, b), return 0 → return depth(v)+0, export { a, f(b) }, una riga tolta" 'for s in "cond.go:4 " "cond.go:3 " "call.py:6 " "ret.go:4 " "exf.ts:2 " "del.py:"; do printf "%s\n" "$ADDV" | grep -q "^stub non additivo: modules/api/app/$s" || { echo "manca $s"; exit 1; }; done'
+check "  nessun file corretto e rifiutato: core.py, decode.go, ex.ts non toccati, nessuna loro riga" '! printf "%s\n" "$ADDV" | grep -q "core.py\|decode.go\|ex.ts"'
+check "parcheggio (DA7): dopo lo STOP l albero e il pre-tree sui file della fase, i file in staging/ con origine=stop" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" = "$(cat "$TRUN/log/81-test-red.pre-tree")" ] && [ -f "$TRUN/staging/modules/api/tests/test_calc.py" ] && [ -f "$TRUN/staging/modules/api/app/cond.go" ] && [ "$(cat "$TRUN/staging.origine")" = stop ] && [ ! -f "$FIC_REPO/modules/api/app/calc.py" ] && sed -n 1p "$TRUN/log/81-test-red.esito" | grep -q "file della fase parcheggiati in .*staging/ (staging.origine=stop)"'
+FAKE_CMD="cp \"\$FIC_REPO/modules/api/tests/test_calc.py\" \"$T/82-ricopiato.py\"; (cd \"\$FIC_REPO\" && git checkout -q -- $STUBF)" trun 82-test-red
+check "test-red dopo lo STOP: file ricopiati (S3) e sotto-sessione lanciata comunque (origine=stop), che toglie gli stub non additivi → OK" '[ -f "$T/82-test-red.args" ] && [ -f "$T/82-ricopiato.py" ] && grep -q "file parcheggiati da uno STOP di test-red ricopiati" "$TRUN/log/82-test-red.stderr" && [ -d "$TRUN/staging.copiato" ] && [ ! -f "$TRUN/staging.origine" ] && [ "$(sed -n 1p "$TRUN/log/82-test-red.esito")" = "ESITO FASE x: OK — finto" ]'
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done
+# counterproofs on the copy of the plugin: the parking removed → the tree differs from the pre-tree; the additive check
+# removed → the stub that deletes passes the check (the gates run)
+mrp_mut() { sed "$1" "$RP" > "$MRP"; ! cmp -s "$RP" "$MRP"; }
+if mrp_mut 's/^      test-red) esito=\$(verify_red "\$esito"); esito=\$(parcheggia "\$esito") ;;$/      test-red) esito=$(verify_red "$esito") ;;/'; then
+  mkstub; FAKE_OUT="$T/83-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-83" FAKE_CMD="$WRITE_RED; $ADD_KO" bash "$MRP" "$TRUN" 83-test-red "$T/prompt.md" 2>/dev/null </dev/null
+  check "controprova: senza il parcheggio dopo lo STOP l albero differisce dal pre-tree (rosso)" '[ "$(cd "$FIC_REPO" && bash "$FAKE_RS" tree)" != "$(cat "$TRUN/log/83-test-red.pre-tree")" ]'
+else check "controprova parcheggio: la mutazione si applica" false; fi
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+if mrp_mut 's/^          1) why=\$(printf .*# STUB-ADDITIVO$/          1) ;;/'; then
+  mkstub; FAKE_OUT="$T/84-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-84" FAKE_CMD="$WRITE_RED; $ADD_KO" bash "$MRP" "$TRUN" 84-test-red "$T/prompt.md" 2>/dev/null </dev/null
+  check "controprova: senza il controllo additivo lo stub che cancella passa al gate (rosso)" '[ -f "$T/84-test-red.gates-args" ] && ! sed -n 1p "$TRUN/log/84-test-red.esito" | grep -q "stub non additivo"'
+else check "controprova additivo: la mutazione si applica" false; fi
+for f in $STUBF; do (cd "$FIC_REPO" && git checkout -q -- "$f"); done; rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+cp "$RP" "$MRP"
 mkspec
 FAKE_CMD="$WRITE_RED; echo fuori >> \"\$FIC_REPO/a.py\"" trun 75b-test-red
-check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py$" && [ ! -f "$T/75b-test-red.gates-args" ]'
+check "test-red che scrive fuori dallo scope (via Bash) → STOP, nessun gate" 'sed -n 1p "$TRUN/log/75b-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: a.py\( · .*\)\{0,1\}$" && [ ! -f "$T/75b-test-red.gates-args" ]'
 (cd "$FIC_REPO" && git checkout -q -- a.py)
 # OTHER FLOWS: an out-of-scope path changed during test-red and NEVER named by the subsession (no tool_use
 # cites it) belongs to another flow: do-not-touch, out of touched.txt, warning, gates as for an OK. Named (75b above:
@@ -842,7 +907,7 @@ check "(e) implement con un file mai nominato → esito OK, resta in touched.txt
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_ALTRO="$ALTRO" FAKE_LOGCMD='sed -n 1p NOTE.md' FAKE_CMD="$WRITE_RED" trun 75e-test-red
-check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
+check "(c) test-red: fuori scope con la sola basename nominata → STOP, nessun gate, niente do-not-touch" 'sed -n 1p "$TRUN/log/75e-test-red.esito" | grep -q "^PHASE RESULT test-red: STOP — scritture fuori dallo scope di test-red .*: docs/NOTE.md\( · .*\)\{0,1\}$" && [ ! -f "$T/75e-test-red.gates-args" ] && [ ! -f "$TRUN/do-not-touch.txt" ]'
 (cd "$FIC_REPO" && git checkout -q -- docs/NOTE.md)
 mkspec
 FAKE_RESULT='{"type":"system","subtype":"senza-result"}' FAKE_ALTRO="$ALTRO" FAKE_CMD="$WRITE_RED" trun 75f-test-red
