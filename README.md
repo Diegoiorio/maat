@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.7.0**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.8.0**.
 
 ## When to use Maat
 
@@ -91,11 +91,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.7.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.8.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.7.0` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.8.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -131,7 +131,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.7.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.8.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -187,7 +187,7 @@ hours.
 |---|---|---|
 | `IMPLEMENTED` | Code written, reviewed and verified. | Look at the changes and commit. |
 | `NEEDS_VERIFICATION` | The review is approved, but a required check was not run, for example because the module has no tests. The message says which one. | Run that check yourself, then commit. |
-| `STOP` | Maat stopped because a person is needed. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. |
+| `STOP` | Maat stopped because a person is needed, or a technical block. The message says why and what to decide. | Decide, then run the same command again: it resumes from there. Since 1.8.0 a STOP that a script judges resumable does not reach you: see below. |
 
 ### The size of the cycle (since 1.7.0)
 
@@ -209,6 +209,29 @@ script cannot measure counts as full. The model never decides it: at most it can
   piena — …`) and in the final response (`Size: …`); the record is `<run-dir>/taglia.txt`.
 - Thresholds, extra security words, or the automatic size off: the optional key `piano.taglia` of `.claude/maat.json`
   (`docs/GUIDA-FLUSSI.html`); a file that uses it declares `"harness": ">=1.7"`.
+
+### When a phase stops: resumes (since 1.8.0)
+
+After every phase a script (never the model) gives its outcome a class, and the driver acts on it:
+
+| Class | Example | What the driver does |
+|---|---|---|
+| OK | the phase did its job | goes on |
+| OK with an accepted deviation | test-red changed only test data, and an independent reviewer and a script agreed | goes on; the deviation is shown to the code review |
+| Resumable | a plan that stops with the spec still `DRAFT`; an `Open decision:` that is not proved; a test that needs a stub (a missing symbol); a background agent not collected | **relaunches the same phase** with the open findings in its prompt |
+| Human | a real decision the code and the tests cannot take, with its proof; a limit shown by a probe; a refused deviation; a conflict with the suite; a plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` | final STOP (exit 1), the line says why and where the proof is; a plan `OK` on `DRAFT` is registered (`Stop umano:` in `driver.log`) and stays stopped until the State changes (approve the plan or change the spec) |
+| Technical | a failed run, invalid output, a blocked gate, a busy lock | STOP, WAIT or BUSY, as before |
+
+Limits, counted per cycle and also across invocations: at most **2 resumes per phase type** (plan, test-red) and **3
+per cycle**, and every resume must show progress (another plan, other findings, another cause); otherwise it is a human
+STOP. A phase that is not classified stays a STOP. After a final STOP of test-red the files it wrote are moved to
+`<run-dir>/staging/`: the tree you get back is the one you started from. `driver: …` and `Ripresa: …` lines in
+`<run-dir>/driver.log` and `log/<phase>.ripresa` record each resume.
+
+Some human decisions are **not verified by a script** (the types `recurrence`, `dispute`, `partial` and `spec` of an
+`Open decision:`): the STOP says «decisione non verificata da script» and the review and `cycle-report.py` flag it.
+To get the STOPs of 1.7 back, set `"ciclo": { "riprese": 0 }` in `.claude/maat.json` (or `FIC_RIPRESE=0`); a file
+that uses the key declares `"harness": ">=1.8"`.
 
 ### Useful options
 
@@ -257,15 +280,23 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.7.0`, from the project folder:
+`v1.8.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.7.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.8.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.7.x to 1.8.0 the default changes: a STOP that a script judges resumable is relaunched by the driver (above,
+«When a phase stops: resumes»), test-red accepts judged deviations of test data and writes additive stubs in existing
+files, the guard denies an `Agent`/`Task` launched in the background in a sub-session, `lint2` refuses a plan whose red on the base is
+a compilation error, and a module at the repository root runs its counterproofs. `ciclo.riprese: 0` gives back the
+STOPs of 1.7. The harness fingerprint changes: update **between** cycles, never during one (a cycle in progress stops
+with «harness changed»). Specs, approved plans and `maat.json` are read as before, and a 1.7 run dir goes on: no
+resume is counted in it. See `CHANGELOG.md`.
 
 From 1.6.x to 1.7.0 the default changes: a **new** cycle on a small plan takes the small size by itself (above, «The
 size of the cycle»); `--full` gives the flow of 1.6. A cycle started with 1.6 goes on exactly as in 1.6, flags
@@ -302,8 +333,8 @@ claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK with version 1.5.1. `claude plugin update`
-accepts a lower version (no need to uninstall and install again). To come back to 1.7.0, the same two commands with
-`#v1.7.0`.
+accepts a lower version (no need to uninstall and install again). To come back to 1.8.0, the same two commands with
+`#v1.8.0`.
 
 - **A cycle in progress** stops with «harness changed», as after any change of version, with the remedy of always:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, run from the project folder (on
@@ -335,7 +366,7 @@ yourself.
 | Platform | Status |
 |---|---|
 | Linux | verified with all tests at every push (the CI, on a Linux with no Windows tools) |
-| Windows with WSL | verified in CI at every push, in Git Bash, in 5 jobs of about 16–22 minutes; left out there, with the reason in `tools/suite-gruppi-windows.list`: the oracle (its logic does not depend on the platform; it runs on Linux and macOS) and the four suites below. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
+| Windows with WSL | verified in CI at every push, in Git Bash, in 7 jobs, the longest about 25 minutes; left out there, with the reason in `tools/suite-gruppi-windows.list`: the oracle (its logic does not depend on the platform; it runs on Linux and macOS) and the four suites below. The four suites that need `rsync` and `flock` (`test-fast`, `counterproof`, `vitest-classify`, `comandi-equivalenza`) run in WSL, which the CI runner does not have: they are run by hand from WSL before each release |
 | Windows without WSL | verified by the same CI: the runner has no WSL, so the fallbacks without WSL are what runs there |
 | Mac | verified in CI at every push, with bash and the GNU tools from Homebrew (see «Before you start»); `counterproof` itself runs there, in its serial mode; only the tests of its parallel step need at least 4 CPUs, and on a smaller runner those tests are `SALTATO` with the reason |
 

@@ -2,48 +2,56 @@
 # gruppo) and one Linux clone per group in the parallel run (tools/suite-parallelo.sh). Line: <group> <entry>, the
 # entry spelled as in tools/suite.list. `tools/suite.sh --gruppo <k>/<n>` refuses (exit 2) a file whose groups are not
 # 1..n, an entry of suite.list in no group or in two, an entry here that is not in suite.list.
-# Inside a group the suites run in the order of suite.list. Balanced on the Linux times (seconds, clone in WSL) of the
-# 1.5.0 full run, rollback 218 s and driver 382 s measured for 1.5.1: group 1 ≈ 816 s, group 2 ≈ 818 s, group 3 ≈ 804 s.
-# 1.6.0 (block C): rollback gone, driver 85 s (no section 9, no equiv); plan-check (≈ 53 s) and maat-doctor (≈ 26 s)
-# moved to group 1, tools/suite.test.sh (≈ 25 s) to group 2: group 1 ≈ 600 s, group 2 ≈ 625 s, group 3 ≈ 700 s
-# (estimate on the times of 1.5.0/1.5.1 and of block C; block D rebalances on the times of the CI).
-# tools/esempi-equiv.test.sh (the expected outputs, and their strict checks with MAAT_ATTESE_RICHIESTE) is in group 3.
+# Inside a group the suites run in the order of suite.list.
+# 1.8.0 (CI): five groups instead of three, balanced on the seconds of the first CI of 1.8.0 (the longer of its two
+# runs, Linux · macOS): group 1 ≈ 462 · 676 s, group 2 ≈ 408 · 673, group 3 ≈ 464 · 695, group 4 ≈ 509 · 676,
+# group 5 ≈ 604 · 582. The oracle alone is the longest suite (462 · 676 s).
+# tools/esempi-equiv.test.sh (the expected outputs, and their strict checks with MAAT_ATTESE_RICHIESTE) is in group 4.
+# driver-esiti (the 1.8.0 sections of driver.test.sh, split off for the Windows limit) stays with the driver in group 2:
+# the group does the same work as before.
 # A suite red only in the parallel run goes in a group of its own (docs/TESTING-harness.md, «The parallel run»).
 
-# group 1: the driver and the phases
-1 driver
-1 run-phase
-1 finalize
-1 guard
-1 plan-check
-1 maat-doctor
+# group 1: the oracle
+1 tools/oracolo.test.sh
 
-# group 2: the oracle, the resume table
-2 tools/oracolo.test.sh
-2 cycle-state
-2 messages
-2 phase-events
-2 tools/suite.test.sh
+# group 2: the driver, the plan
+2 driver
+2 driver-esiti
+2 guard
+2 plan-check
+2 bash-node
 
-# group 3: the public examples (expected outputs), the WSL tools, all the short ones
-3 tools/esempi-equiv.test.sh
-3 counterproof
-3 test-fast
-3 spazi
-3 comandi-equivalenza
-3 gates
-3 maat-paths
-3 maat-config
-3 ciclo-worktree
-3 context-pack
-3 cycle-report
-3 harness-merge
-3 stop-hook
-3 blocks-independent
-3 test-review-surface
-3 bash-node
-3 genericita
-3 senza-wsl
-3 session-start
-3 phase-usage
-3 vitest-classify
+# group 3: the phases
+3 run-phase
+3 finalize
+3 maat-doctor
+3 phase-events
+3 tools/suite.test.sh
+
+# group 4: the resume table, the messages, the public examples (expected outputs)
+4 cycle-state
+4 messages
+4 tools/esempi-equiv.test.sh
+4 gates
+
+# group 5: the WSL tools, all the short ones
+5 counterproof
+5 test-fast
+5 spazi
+5 comandi-equivalenza
+5 maat-paths
+5 maat-config
+5 nomi_test
+5 transcript
+5 ciclo-worktree
+5 context-pack
+5 cycle-report
+5 harness-merge
+5 stop-hook
+5 blocks-independent
+5 test-review-surface
+5 genericita
+5 senza-wsl
+5 session-start
+5 phase-usage
+5 vitest-classify

@@ -23,6 +23,9 @@
 #  11 (1.4.0) a whole cycle through the real run-phase.sh, in English and in Italian: the same phases, the same end
 #  12 (1.5.1) the internal readers of cycle-state.sh in the real run-phase.sh: a STOP of its wrapper is a STOP outcome
 #     or a phase not launched, never an OK outcome with state= empty (end of a phase, start and review of a ring, closing)
+#  13 (1.7.0) the size of the cycle
+#  14, 14b, 15 (1.8.0: classifica, the Open decision types, the resumes): in driver-esiti.test.sh (split off in 1.8.0,
+#     CI: the whole file no longer fitted the per-suite limit of the Windows runner)
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -543,7 +546,7 @@ check "controprova: impronta col percorso assoluto → il caso «altro percorso�
 rm -rf "$T/altrove" "$H2"
 
 # --- 6. plan counterproofs (mutations on a copy; the case must turn red) ---
-sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
+sed 's/^        if prev is not None and word == prev\[0\] and state == prev\[1\] and nrip == prev\[3\]:  # ANTI-LOOP\r\?$/        if False:  # ANTI-LOOP tolto/' "$DRV" > "$T/drv-noloop.py"
 check "controprova anti-loop: la mutazione e' applicata" 'grep -q "ANTI-LOOP tolto" "$T/drv-noloop.py"'
 DRUN_DRV="$T/drv-noloop.py" drun nulla "$SP" --max-fasi 3
 check "controprova anti-loop: senza la guardia la stessa fase si rilancia (3 lanci, nessun anti-loop)" '[ "$(calls)" = 3 ] && ! grep -q "anti-loop" "$T/run.out"'
@@ -744,8 +747,8 @@ rm -rf $CW/spec-m*.run $CW/spec-m.md $CW/spec-m-1-a.md $CW/spec-m-2-b.md "$T/loc
 # counterproof: run-phase.sh with the reading of State: of 1.5.0 at the end of a phase (no cycle_state_read): the
 # STOP of the wrapper passes and the outcome stays OK with state= empty. Own spec: the copy has another fingerprint
 cat > "$T/m4" <<'EOF'
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cso=$(bash "$HERE/cycle-state.sh" "$sp_md" 2>>"$err"); fi  # LETTORE-VECCHIO
+    cycle_state_read "$sp_md" || {
+    cso=$(bash "$HERE/cycle-state.sh" "$sp_md" 2>>"$err"); false && {  # LETTORE-VECCHIO
 EOF
 check "controprova lettori: la mutazione e' applicata (run-phase.sh col vecchio sed State: a fine fase)" 'mut "$T/m4" "$CXS/run-phase.sh" "$CXS/rp-lettore.sh" && grep -q LETTORE-VECCHIO "$CXS/rp-lettore.sh"'
 spec_approved; cp "$SP" $CW/spec-v.md
@@ -1097,6 +1100,8 @@ if tmut ok 's/^        if not rs.startswith("APPROVED"):  # REVIEW-SOLO-APPROVED
 else check "controprova review ok: la mutazione si applica" false; fi
 rm -rf "$RT" "$ST" "$FAKE_CALLS"* src/test_t.py src/fuori.py src/n[0-9]*.py; git checkout -q -- src
 
+# Sections 14 and later (1.8.0: classifica, the Open decision types, the resumes, the probes, the test-data
+# deviations): driver-esiti.test.sh, split off for the per-suite limit of the Windows CI.
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]

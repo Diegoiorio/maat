@@ -46,7 +46,7 @@ the explanation after them follows `lingua` of `.claude/maat.json` (Maat 1.4.0).
 | command | what it decides |
 |---|---|
 | `lint <spec> [--baseline <copy>]` | status lines, sections above untouched, surfaces and floors — before every round |
-| `lint2 <spec>` | format 2: requirements ↔ tests ↔ steps ↔ files, blocks, test table and mutations, removed strings still asserted, Python test ids (`::`), reds that need a stub in an existing file; AVVISO for a module without `report` |
+| `lint2 <spec>` | format 2: requirements ↔ tests ↔ steps ↔ files, blocks, test table and mutations, removed strings still asserted, Python test ids (`::`), reds that need a stub in an existing file, probes (`sonda:`) against the registered resumes; AVVISO for a module without `report` |
 | `skeleton <spec>` | the size gate (skeleton and full plan); `Split: rejected` (or `Taglio: rifiutato`) in the spec → exit 0 |
 | `split <mother> <child…>` | a cut: every requirement in exactly one child, `Depends on:` / `Interface for:` (or `Dipende da:` / `Interfaccia per:`) present |
 | `route <spec>` | format 2 branch: `Percorso: leggero \| pieno — <motivo>` |
@@ -72,10 +72,23 @@ Run the whole cycle in one uninterrupted turn: no pause and no confirmation betw
 ## Budget and stops
 
 **4 iterations** (format 2; format 1: `formato-1.md`): one fan-out, one S2 pair, one fresh-eyes run = one
-iteration. At the budget without approval → `Plan status: NEEDS HUMAN DECISION`. Other stops, also →
-`NEEDS HUMAN DECISION`: a `STOP_HUMAN_DECISION_REQUIRED` from any reviewer · a recurrence · a rejected finding
-re-raised by the same producer with no new evidence (disagreement on a verifiable fact) · scope not in the spec
-· an ambiguity the codebase cannot resolve · `skeleton` exit 1 (the cut proposal, Step 1).
+iteration. Every stop → `Plan status: NEEDS HUMAN DECISION` and, below it, one `Open decision: <type> — <text>`
+(`Decisione aperta:`) per decision, its type one of: `budget` (no approval at the budget) · `cut` (`skeleton` exit 1,
+Step 1) · `scope` (scope not in the spec: quote the line of `Out of scope` / `Constraints` and a requirement ID) ·
+`proof` (any claim on what the code can or cannot do: below it `Executed proof: `<command>` → «<excerpt>»`, a Bash
+command you ran that runs code of the repository and changes no tracked file — an existing test, `python -c`, `node -e`;
+never `echo`/`cat`/`grep`, never an excerpt you wrote) · `recurrence` · `dispute` (a rejected finding re-raised with no
+new evidence) · `partial` (the third partial review) · `spec` (an ambiguity the code cannot resolve, no `path:line`).
+The driver checks the first four and resumes the phase when one does not hold; the stop of the others says
+«decisione non verificata da script». A reviewer's `STOP_HUMAN_DECISION_REQUIRED` is not a stop by itself: give its
+cause a type (a claim on the code is `proof`).
+
+## Resume — a `RIPRESA (driver): <n>/<max> — …` line in the prompt
+
+The driver relaunched this stopped phase: no new round 1. Read the `finding` of the result.json it names, verify each
+on its anchor (Findings), then **S2** on them; the budget goes on, a rejected finding stays rejected. With `decisione
+<key>: <text>` (a decision declassified): `Plan status: DRAFT`, the claim becomes the probe of `autore.md` («A
+declassified decision becomes a probe»), then S2 with the other verified findings.
 
 ## Findings
 
@@ -128,7 +141,8 @@ light` with `--light`); its last line is `Taglia: piccola | piena — <motivi>`,
 
 ## Step 2: round 1 — three lenses in one message
 
-Three `maat:spec-plan-reviewer` agents in a single message, each: «Use the maat:spec-plan-reviewer agent. Read
+Three `maat:spec-plan-reviewer` agents in a single message, **in the foreground** (never `run_in_background`: the
+parallel comes from the calls being in the same message, and a sub-session of the cycle denies it), each: «Use the maat:spec-plan-reviewer agent. Read
 `${CLAUDE_PLUGIN_ROOT}/skills/plan-review-cycle/revisori.md`, section «Round 1», and follow it. Lens: <L1|L2|L3>. Spec + plan
 file: <path>. Ranges: spec <offset/limit>, plan <offset/limit>. Context pack: <path | none>. Test level: <lvl>.
 Risk surfaces: <tokens>.» Aggregate. `APPROVED` outright → Step 3, but first one fresh-eyes reviewer
@@ -140,7 +154,8 @@ alone when a critical surface (`permissions`, `data`, `destructive` — `permess
    keep the finding table and the recurrence — an author sub-agent (Task): the spec path, the
    findings to apply with their verified anchors, «read `autore.md`, section «How to revise», apply only these».
    Then `lint --baseline`, `lint2`, `delta <copy> <spec>`. All findings rejected → no author, no delta: step 2.
-2. One message, two `maat:spec-plan-reviewer` agents on the same plan — «read `revisori.md`, section «Delta»» and
+2. One message, two `maat:spec-plan-reviewer` agents on the same plan, in the foreground (never `run_in_background`:
+   same message = already in parallel; the author sub-agent of point 1 too) — «read `revisori.md`, section «Delta»» and
    «… section «Fresh eyes»» — with: the `range:` and `xref:` lines, the pertinent requirement ranges, level and
    surfaces (every round), resolved findings (key + symbol + one line), rejected ones (key + refutation), test
    cases removed as over-testing, budget ~20 → 15 → 12. Save each reply to the scratchpad with, as first line,
@@ -155,7 +170,8 @@ alone when a critical surface (`permissions`, `data`, `destructive` — `permess
   right under `Risk surfaces:` (or `Superfici a rischio:`) (replacing an older one; a ring's `madre`/`prec`/`interfaccia` included);
   `basis` again must say `FRESH`; format 2: `gen <spec>` must exit 0. Never write ` · tests <fp>`: the test-red
   phase does. Then, in the changelog only, the optional findings as notes and the metric line.
-- **Not approved** (budget, stop) → `Plan status: NEEDS HUMAN DECISION`, the open decision, the metric line.
+- **Not approved** (budget, stop) → `Plan status: NEEDS HUMAN DECISION`, the `Open decision:` lines (Budget and stops),
+  the metric line.
 
 The **metric line**, last line of the changelog (no backticks, never the status prefixes; one per run of the
 cycle): `Metrica ciclo: giri=5 · R1=2/3 · delta=1/2 · gate=0/1 · rifiutati=1 · ricorrenze=0 · reintrodotti=1 ·

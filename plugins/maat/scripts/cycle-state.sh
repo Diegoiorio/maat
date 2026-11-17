@@ -45,8 +45,22 @@
 # driver.py `_cycle_state`).
 #   1b (1.3.0, above every other row, chains included) both "## Review implementazione" and "## Implementation
 #      review" in the spec → STOP (the same section in two languages)
+#   R  (1.8.0, below 1b and above every other row) the last phase launched ended STOP and has a log/<label>.ripresa
+#      REGISTERED in driver.log (its line «Ripresa: <label> · esito=… · n=… · declassata=… · sha=<sha of the file>»,
+#      written by driver.py run; a .ripresa without it is ignored, with an «AVVISO:» line above State:) taken at
+#      the current State:
+#      R1 esito=rilancio (plan or test-red, resumes not off: ciclo.riprese / FIC_RIPRESE > 0)
+#         → <PLAN|TEST-RED> — ripresa <n_fase>/<max> (<causa>)   (driver.py run adds «RIPRESA (driver): …» to the prompt)
+#      R2 esito=limite or senza-progresso → STOP with the cause (until the State changes)
 #   1  review section without a plan                            → STOP (nothing to plan on top of)
-#   2  no plan, or Plan status DRAFT without a review             → PLAN
+#   2  no plan, or Plan status DRAFT without a review             → PLAN; R3 (1.8.0): DRAFT and the last plan phase
+#      has a registered .ripresa esito=limite (or senza-progresso) at the current State → STOP (a second invocation
+#      does not relaunch the plan past the limit); R4 (1.8.0): DRAFT and the last plan phase printed OK on it, a
+#      final UMANO STOP that driver.py run registered in driver.log («Stop umano: <label> · regola=… · state=<State>»,
+#      a line the phases do not write) at the current State → STOP (a second invocation does not relaunch it
+#      uncounted); a different State (the spec changed) → PLAN as today; state=sha:<sha256[:12] of the spec file> (the
+#      State not computed when it was written) counts while the spec file has that hash; state=- (neither computed)
+#      counts as the current State (fail-closed: a person deletes the line, the STOP says so)
 #   3  plan DRAFT or NEEDS HUMAN DECISION with a review          → STOP (plan reopened after the review)
 #   4  Plan status NEEDS HUMAN DECISION                           → STOP (open decision)
 #   5  non-standard Plan status                                   → STOP
@@ -56,6 +70,9 @@
 #      recorded in the Approved basis → TEST-RED; if the last test-red has an .esito with unchanged state (STOP, or
 #      closed without recording the tests) → STOP with that line. Format 1: never. A format-2 cycle that already went
 #      through implement without test-red (started before the rule) goes on as before.
+#   7d (1.8.0, A1) no review, the last test-red (after the last implement/fix) with a result.json the rule of
+#      _json_rule calls STOP and unchanged state → STOP. In test-red only, a «test-data: »/«dati-test: » deviation counts
+#      as a «difensiva: » when log/<label>.deviazioni-test (run-phase.sh, after the judge on verified input) accepts it
 #   7s no review, last implement/fix with a STOP result.json (rules above) and unchanged state → STOP
 #   7  no review: last implement/fix launched = "implement", outcome OK, unchanged state → REVIEW,
 #      otherwise IMPLEMENT (a review launched that never started does not count: it did not change the spec)

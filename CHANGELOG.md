@@ -2,6 +2,143 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.8.0 — a cycle that does not die on its own false STOPs
+
+**Why 1.8.0 and not a patch:** the default behaviour changes. Until 1.7.0 any `PHASE RESULT … STOP` ended the cycle.
+Measured on eight real tasks run unattended with 1.7.0 (Go, Rust, bats, Python, TypeScript): none reached
+`IMPLEMENTED`; five died before any code on a STOP nobody could lift, and in two the delivered tree was worse than the
+starting one. Now the driver classifies every finished phase and relaunches by itself one that can be resumed; test-red
+accepts judged deviations of test data and writes stubs in existing files; the guard denies a use of the agents that
+used to pass; `lint2` refuses a plan it used to approve; and on a module at the repository root the counterproof runs
+and a cycle can reach `IMPLEMENTED` where it could not. No format Maat reads changes incompatibly; `ciclo.riprese: 0`
+(or `FIC_RIPRESE=0`) gives back the STOPs of 1.7.
+
+- **The outcome of a phase has a class**, decided by a script from the files of the phase (`driver.py`, `classifica`),
+  never by the model: `OK`; `OK` with an accepted deviation (test-data, below); **resumable**; **human**; **technical**.
+  Technical (exit of `run-phase.sh` ≠ 0, invalid output, a gate `BLOCKED`, a busy lock) is the STOP, WAIT or BUSY of
+  1.7. Human is a final STOP (exit 1) whose line names its proof: a decision the code and the tests cannot take, a
+  limit proved by a probe, a test deviation of another family or refused, a conflict with the suite, a review that
+  asks for a human decision. Anything not classified stays a final STOP (fail-closed).
+- **Resumes.** A resumable STOP makes the driver relaunch **the same phase** with the prompt line `RIPRESA (driver):
+  <n>/<max> — <cause> — <open findings file>`. Resumable: a plan that stops (`STOP` line) with the spec still
+  `DRAFT` (the reviews of round 1 not applied), an `Open decision:` that is not valid, a test-red with a missing stub
+  (`rosso_simbolo`), and, only in plan and test-red, an agent or a job in the background not collected at the end. Limits, **per cycle** (counted from
+  `driver.log`, so also across invocations of the driver): at most **2 resumes per phase type** (plan, test-red) and
+  **3 per cycle**; every resume must **show progress** (another plan fingerprint or other open findings; in test-red
+  another cause), otherwise it is a human STOP; over the limit, a human STOP («limite delle riprese»). The record is
+  `log/<label>.ripresa` on the stopped phase and a `Ripresa:` line in `driver.log`; a `.ripresa` without its line is
+  ignored (`AVVISO`), and deleting one does not lower the count. A second invocation after a final STOP stays stopped
+  until the spec changes. A plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` is not resumable:
+  it is a final human STOP, registered as a `Stop umano: <label> · regola=… · state=<State>` line in `driver.log`, and
+  it stays stopped until the State changes (approve the plan or change the spec). When the State cannot be computed
+  the line records `state=sha:<12>`, the sha256 of the spec file, and stays a STOP while the file has that hash; when
+  the spec cannot be read either, `state=-` stays a STOP (fail-closed) until a person, after checking the spec,
+  deletes that line. `cycle-state.sh` has the matching rows. It applies in interactive use too. New optional key
+  `ciclo.riprese` (integer ≥ 0, default 2; `0` = 1.7) and the environment variable `FIC_RIPRESE`.
+- **Open decisions are typed and checked.** A plan that stops for a human decision writes `Open decision: <type> —
+  <text>` (`Decisione aperta:`), type from a closed list. The driver checks what a script can check: `cut` (it runs
+  `plan-check.sh skeleton` again), `budget` (the reviewer results in the transcripts of the plan phases, not the
+  `giri=` the plan writes itself), `scope` (a quoted line of the spec's out-of-scope and a requirement id) and `proof`
+  (`Executed proof: <command> → «<excerpt>»`, found in the transcript of the phase; a command that only prints, or an
+  excerpt copied from the command or the spec, does not count). A claim about the code without an executed proof is
+  not a human decision: the plan is resumed with it **declassified** to a risk line with a probe
+  (`⚠️ Rischio da verificare in test-red: … — sonda: <Tn> — decisione: <key> — se vera: «…»`).
+- **Probes in test-red.** `plan-check.sh rossi` runs the probe: red with the expected text → `limite_dimostrato` (a
+  human STOP, now with its proof); green on the base → `sonda_smentita` (not a STOP: the claim was false; it is shown
+  to the reviewer). A probe is valid only if a resume registered in `driver.log` declassified its key, once per key,
+  and its expected text is not already in the red-if. `lint2` checks the same.
+- **Weakened checks, declared.** The types `recurrence`, `dispute`, `partial` and `spec` have **no mechanical check**:
+  the phase that writes the line could forge what a script would read. Such a STOP is valid, but it says «decisione non
+  verificata da script: <type>», the review prompt flags it and `cycle-report.py` prints it (and
+  `decisioni_non_verificate` in its JSON). After a resume that already declassified a decision in the same cycle the
+  STOP adds «dopo la ripresa che aveva declassato <key>». The `proof` filter and the `budget` count can still be
+  defeated with effort (a command that composes the excerpt; re-runs of a review count as reviewer results): their
+  limits are declared, and the command is quoted in the STOP. A weaker, declared check was preferred to a forgeable one.
+- **Test-data deviations are judged.** In test-red a deviation `test-data: <Tn> — <what> — <why>` (`dati-test:`) is
+  allowed only for data, fixtures, internal names or the organisation of the tests, never an assertion, a requirement,
+  a file or a test name. The worker asks `spec-plan-reviewer-light`, in the foreground, with the exact plan row, the
+  traceability row, the deviation and the diff recomputed by `plan-check.sh diff-test` (it sees new untracked test
+  files). The phase is accepted only if a script confirms it: no file outside the scope, every test red on its own
+  assertion, the judge found in the transcript with that input and `Deviation verdict: ACCEPT`, and `plan-check.sh
+  deviazione` finds every requirement of the row still covered. Recorded in `log/<label>.deviazioni-test` and
+  `log/deviazioni-accettate.txt`, and passed to the review. Anything else is a STOP as in 1.7.
+- **Stubs in existing files.** In compiled languages a new symbol on an existing type made the whole package fail to
+  compile, and the red was on the compiler, not on the test. `plan-check.sh accept` now also prints `stub <path>` for
+  the existing production files of the plan, and test-red may add stubs there, **only additive**: checked on the diff
+  (`git diff -w`), a removed line is allowed only as a list statement that grows inside its last brackets
+  (`export { a }` → `export { a, b }`, `__all__`, `pub use`); `if x {` → `if x && y {` or a changed signature is
+  «stub non additivo». A collection or import error that names a missing symbol (a per-language table, extendable
+  with the new `moduli[].simbolo_mancante`) is `rosso_simbolo` and is resumable. `lint2` refuses a plan whose red on
+  the base is a compilation error. Stubs in existing files are not absorbed by L2.
+- **A STOP of test-red leaves a clean tree.** Before a final STOP (a technical end, and an `OK` that becomes a STOP
+  because the State cannot be read at the end of the phase, included) and before each resume, the files written by
+  the phase move to `<run-dir>/staging/` (`staging.origine=stop`) and the tree goes back to the start; the next
+  test-red copies them back and still launches its sub-session.
+- **Names of nested tests.** One rule, in the new `scripts/nomi_test.py`, for `rossi` and the counterproof: a Go
+  subtest (`TestX/case`, the space written `_`), a pytest parameter (`test_x[a]`) or class (`TestX::test_a`), a Rust
+  `mod::t`, a vitest `describe` are attributed to the test the plan names, with the texts joined in report order; a
+  parent whose subtests are green is `verde`, a red unrelated subtest is still a conflict. A prefix with a space is not
+  a parent. Per-module separators: the new optional `moduli[].separatori_test`.
+- **F11 ignores negated lists.** The plan template makes every plan write «…, permissions, …: no implication», which
+  counted as a security word and sent small plans to the full size. In each sentence the list right before `: no
+  implication` / `: nessuna implicazione` no longer counts; only those two canonical forms, the rest of the line and
+  every other sentence count as before, and a declared `permissions` surface is still `piena`. `autore.md` says when
+  to declare it.
+- **Counterproof.** A module at the repository root (`"radice": "."`) without `copia` now runs its counterproofs: the
+  mirror sync excludes `.git`, the cycles folder, `.fic-*` at any depth and the `collega_nel_worktree` folders of every
+  module, and takes the lock of every module under one total `FIC_LOCK_WAIT`. A module **with** `copia` at the root is
+  still not supported (exit 64 with the remedy; `maat-doctor` and `maat-config.py valida` say so before the cycle).
+  The mutation **keeps the mode** (and owner) of the file and a **symbolic link stays a link** (one pointing outside
+  the module is `bloccato`; a changed mode or type after the restore is exit 5). The runs are registered before they
+  exist, and the cleanup waits at most 5 s for the process groups and the children, so a TERM burst no longer leaves
+  stray processes or a copy behind.
+- **Agents in the foreground.** The guard denies `Agent`/`Task` with `run_in_background` in a sub-session (also with
+  `--universal`); the stop hook refuses to close a phase while an asynchronous agent has not notified. In the plan
+  phase, reviewers launched in the background used to close the session on a STOP «reviews not collected», and the
+  driver ended the cycle on it. The prompts now ask for several calls in one message instead.
+- **The static absence conflict.** `rossi` no longer counts, as a conflict with the existing suite, an absence
+  assertion inside the body of an acceptance test of the plan itself (`ESCLUDI-ACCETTAZIONE`); the same assertion in
+  any other test is still a conflict, and a dynamic title or an unreadable file keeps the conflict.
+- **CI and test harness.** `tools/suite.sh`: a limit per suite (`MAAT_SUITE_TIMEOUT`, default 5400 s) and for the whole
+  group (`MAAT_GRUPPO_TIMEOUT`, set below the job's limit; the suites not started are `NON ESEGUITA`), a `suite: avvio
+  <name>` line before each suite, a `TIMEOUT <name> dopo <s> s` line with the tail of its log, and the `FAIL` lines of
+  a failed suite in the output and in `riepilogo.txt`. CI: five groups on Linux and macOS (before, three), seven on
+  Windows (before, five), re-balanced on measured times. `counterproof.test.sh`: a deadline per run with the case's
+  line number, deterministic cases for the TERM burst, lock holders that say when they hold the lock, input files that
+  no longer collide on a case-insensitive filesystem; `senza_wsl` (the PATH without `wsl` for the tests) is decided by
+  bash and by Python together, before each case. New suites `nomi_test.test.sh`, `transcript.test.sh` and
+  `driver-esiti.test.sh` (the 1.8.0 sections of `driver.test.sh`, split off: the whole file no longer fitted the
+  per-suite limit of the Windows runner).
+
+**Compatibility.** Nothing Maat reads changes incompatibly: `phase-result.schema.json` is the same (an accepted
+deviation is a prefix of a string), and so are the words of `Next:`, `Finalize:`, `touched.txt`, `.gates` and the
+output of `route`, `skeleton` and `taglia` (only the value of F11 changes on some lines). New files appear only in a
+1.8 run dir (`log/*.ripresa`, `log/*.deviazioni-test`, `log/deviazioni-accettate.txt`, `staging.origine`). New
+tokens: `rosso_simbolo`, `limite_dimostrato`, `sonda_smentita`, `Open decision:`, `Executed proof:`, `Deviation
+verdict:`, `Requirements still covered:`, `test-data: `, the line `stub <path>`, and the commands `plan-check.sh
+diff-test` and `deviazione`.
+
+- **A run dir of 1.7** has no `.ripresa`, so no resume is counted; a STOP left by 1.7 stays a STOP at the next
+  invocation (except a plan that stopped on `DRAFT`, which already gave `PLAN`; a plan that printed `OK` on `DRAFT`
+  is a final STOP only in a 1.8 run dir, where its `Stop umano:` line exists). **Approved 1.7 plans** are accepted
+  by `lint`; `lint2` refuses an «undefined» red on the base only on a plan still to be approved or reopened; the
+  fingerprint of an approved plan does not change.
+- **The fingerprint of the harness changes** (every script and prompt of the plugin is part of it): update the plugin
+  **between cycles**, not during one; a cycle in progress stops with «harness changed» and the usual remedy.
+- **`maat.json`:** new optional keys `ciclo.riprese`, `moduli[].simbolo_mancante` (a list of regexes) and
+  `moduli[].separatori_test` (a list among `/`, `::`, `[`: any other value is refused). A file that uses them declares
+  `"harness": ">=1.8"`: an older Maat refuses the keys, and `maat-config.py valida` enforces it, with the check S12
+  for `ciclo` and S13 for `moduli[].simbolo_mancante` and `moduli[].separatori_test`.
+- **The guard** has one new denial, only in sub-sessions (`FIC_PHASE`): `Agent`/`Task` in the background.
+- A module with `radice_pacchetti` in a subfolder syncs the counterproof mirror exactly as before.
+
+**Tests.** Each rule has its counterproof on a mutated copy of the plugin that must turn its test red:
+`driver-esiti.test.sh` (classes, limits, progress, the second invocation, each open-decision type valid and forged),
+`cycle-state.test.sh`, `plan-check.test.sh` (probes, stubs, additive check, F11, absence conflict, nested names),
+`run-phase.test.sh` (through the real `valida`: accepted and refused deviations, stubs, parking), `counterproof.test.sh`
+(root module, mode, link, cleanup), `guard.test.sh`, `stop-hook.test.sh`, `cycle-report.test.sh`,
+`maat-config.test.sh`, `maat-doctor.test.sh`, `suite.test.sh`, and the new suites above.
+
 ## 1.7.0 — the size of the cycle, decided by a script
 
 **Why 1.7.0 and not a patch:** the default behaviour changes. On a small plan a new cycle now takes a lighter flow by

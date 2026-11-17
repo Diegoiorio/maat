@@ -113,6 +113,11 @@ the two languages are tested.
 - **Frozen lines.** `protocol-strings.list` says, line by line, which Italian text stays in every language and why
   (the lines that scripts pass to each other, the keywords `VIOLAZIONE`, `AVVISO`, `ERRORE DURO`, `Percorso:`,
   `Scheletro:`, `S2:`). A new Italian literal goes either into the catalog or into the list, with its reason.
+- **`tools/suite.sh` is not in the catalog.** It is a tool of this repo, not of the plugin, and prints one language
+  per kind of line, never both: the lines of the run, on stdout and in `riepilogo.txt`, are Italian, the words the
+  CI log and `tools/suite.test.sh` read (`suite: avvio <entry>`, `<entry> ESCLUSA: …`, `TIMEOUT <entry> dopo <s> s`,
+  `<entry> NON ESEGUITA: tempo del gruppo finito (…)`, `FINE`); the refusals on stderr (usage, a bad list or groups
+  file, a variable that is not a positive integer) are English. A new line follows the kind it belongs to.
 
 ## How to run the suites from the plugin
 
@@ -123,7 +128,7 @@ project. From Git Bash:
 bash plugins/maat/scripts/<name>.test.sh
 ```
 
-- Short: `maat-paths`, `maat-config`, `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
+- Short: `maat-paths`, `maat-config`, `nomi_test` (1.8.0: the relation of the test names), `gates`, `finalize`, `ciclo-worktree`, `context-pack`, `cycle-report`,
   `harness-merge`, `guard`, `stop-hook`, `session-start`, `phase-usage`, `blocks-independent`, `phase-events`,
   `test-review-surface.sh`, `plan-check`,
   `senza-wsl` (pk08: Windows without WSL, PATH without `wsl`/`wsl.exe`; about 5 minutes, two `run-phase.sh` phases),
@@ -185,9 +190,8 @@ always `~/maat-linux` (another one with `MAAT_LINUX_CLONE`). For example:
 40 minutes on Linux, about 10 hours on Windows (1.5.0), because of the long suites. Two options (1.5.1), before the
 arguments:
 
-- `--linux-parallelo`: the Linux part with `tools/suite-parallelo.sh` (below), three clones at once, about 15 minutes
-  instead of 40. Clones in `MAAT_LINUX_CLONI` (relative to the WSL home, default `maat-linux maat-linux-2
-  maat-linux-3`). If the machine is busy the run stops before the Windows part.
+- `--linux-parallelo`: the Linux part with `tools/suite-parallelo.sh` (below), one clone per group at once (five since
+  1.8.0), about 15 minutes instead of 40. Clones in `MAAT_LINUX_CLONI` (relative to the WSL home, default `maat-linux` … `maat-linux-5`). If the machine is busy the run stops before the Windows part.
 - `--windows-breve`: the Windows part runs only the short proof (below), about 50 minutes.
 
 For a release since 1.5.1: `bash tools/giro-completo.sh --windows-breve <folder> <worktree> <branch>` (the Linux part
@@ -213,7 +217,8 @@ done («The parallel run», last point).
 |---|---|---|
 | `tools/esempi-equiv.test.sh` (1.6.0: the expected outputs) | the corpus alone (build, 130 `next`, 196 `valida`) about 1 hour, measured on a busy machine; about 18 minutes (1091 s) on the CI runner | about 2 minutes (127 s, both validators) |
 | `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes (1.5.0) | about 6 minutes |
-| `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner | about 1–1.5 minutes (59–85 s) |
+| `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner; 1.8.0, sections 1–13: about 24 minutes (1424 s) | about 1–1.5 minutes (59–85 s); 1.8.0: 272 s |
+| `plugins/maat/scripts/driver-esiti.test.sh` (1.8.0: sections 14 and later of the driver, split off because the whole file passed the 1800 s limit of a suite on the Windows runner) | not measured alone yet | 49 s |
 
 The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
 not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why
@@ -225,23 +230,24 @@ from the repo root (`tools/esempi-equiv.test.sh`). Both scripts resolve an entry
 `tools/lib/guardia-plugin.sh`). A new suite goes into the list: `tools/suite.sh` refuses (exit 2) a list that misses a
 `*.test.sh` of the plugin or a `tools/*.test.sh`, or names a file that does not exist.
 
-**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`: three groups of similar length on
-Linux (about 13.5 minutes each on the clone in WSL), used by the CI (one job per group) and by the parallel run (one
-clone per group). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k only, in the order of `suite.list`, and
+**The groups (1.5.1)** are `tools/suite-gruppi.list`, one line `<group> <entry>`, used by the CI (one job per group)
+and by the parallel run (one clone per group): five groups since 1.8.0, balanced on the seconds of the first CI of
+1.8.0, about 7–10 minutes each on Linux and 10–12 on macOS (the times per group are in the head of the file; 1.5.1:
+three groups of about 13.5 minutes each on the clone in WSL). `bash tools/suite.sh --gruppo <k>/<n> <folder>` runs group k only, in the order of `suite.list`, and
 refuses (exit 2) a groups file that does not cover `suite.list` exactly (an entry in no group or in two, an entry not
 in the list) or that has not exactly the groups 1..n. A new suite goes into both files; to rebalance, move a line
 using the times of the last `riepilogo.txt`. `tools/esempi-equiv.test.sh`, the one that reads `MAAT_ATTESE_RICHIESTE`,
-is in group 3. Since 1.6.0 the same three groups run on macOS, and Windows has its own groups file,
-`tools/suite-gruppi-windows.list` (five groups balanced on the times of the CI runner, and lines `- <entry> <reason>`
-for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/5
-<folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. Since 1.6.0 the Linux groups are
-shorter (block C) and not rebalanced: the longest job is about 12 minutes.
+is in group 4. Since 1.6.0 the same groups run on macOS (five since 1.8.0, balanced on the times of its first CI), and Windows has its own groups file,
+`tools/suite-gruppi-windows.list` (seven groups since 1.8.0, balanced on the times of the CI runner, and lines `- <entry> <reason>`
+for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/7
+<folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. The longest group, since 1.8.0, is
+about 10 minutes on Linux (1.6.0: three groups, not rebalanced after block C, the longest job about 12 minutes).
 
 ### The parallel run (1.5.1)
 
 `bash tools/suite-parallelo.sh <folder> <ref>`, from Linux or WSL, from any checkout of the repo: group k of
 `tools/suite-gruppi.list` runs in clone k (`MAAT_LINUX_CLONI`, one clone per group, relative to `$HOME` or absolute,
-default `maat-linux maat-linux-2 maat-linux-3`), all at the same time, each with `tools/suite.sh --gruppo k/n`. Create
+default `maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5`), all at the same time, each with `tools/suite.sh --gruppo k/n`. Create
 the clones once (`git clone <repo> ~/maat-linux-2`, …) with origin pointing to a repo that has `<ref>`; the script
 realigns them (fetch, `checkout --detach`, `clean`), so nothing must be changed inside them.
 
@@ -281,25 +287,34 @@ with the bash engine.
 ## CI
 
 `.github/workflows/ci.yml` runs at every push and pull request on GitHub, and by hand (`workflow_dispatch`). Since
-1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the three groups of
-`tools/suite-gruppi.list`, Windows the five of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
+1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the five groups of
+`tools/suite-gruppi.list`, Windows the seven of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
 `windows` are green only if all the groups of their platform are, and **`ci`** only if all three are: `ci` is the
 check to require on `main`. `concurrency`: on a branch a new push stops the run of the same event and branch still
 going; on `main` and on tags every commit has its own run, never cancelled. Limits per job (about 1.5 × the longest
 measured job, rounded up to 5 minutes): Linux 25 minutes, Windows 40 (worst job 1546 s), macOS 30 (longest 984 s,
-with the Homebrew setup). **Windows**:
+with the Homebrew setup). Since 1.8.0 each job also sets `MAAT_SUITE_TIMEOUT`, the limit of each suite in
+`tools/suite.sh`, below the job's: 1200 s on Linux and macOS, 1800 s on Windows (`tools/suite.test.sh` checks that
+every job of the groups sets it below `timeout-minutes` × 60), and `MAAT_GRUPPO_TIMEOUT`, the seconds of all the
+suites of the group, at least 300 below the job's: each suite gets at most what is left of it, and the suites after
+its end get `NON ESEGUITA` (first CI of 1.8.0: a suite cut at 1200 s six minutes into its group, the job cancelled
+17 s later, the rest of the group never run). A suite that hangs then ends with `rc=124` and a line
+`TIMEOUT <entry> dopo <s> s` followed by the last 20 lines of its log, and the job goes on with the next suite instead
+of dying without saying which one. In the log of every job, a line `suite: avvio <entry>` before each suite; after a
+red suite, its `^FAIL` lines (at most 10) are printed and written in `riepilogo.txt` under its line, so the case
+that failed is read in the job log, without downloading the artifact. **Windows**:
 Git Bash of the runner, `FIC_PYTHON` = the Python 3.10 of `setup-python` (otherwise `py -3` would choose the newest),
 the `jsonschema` venv in `Scripts/python.exe`, `core.autocrlf false`, `TEMP` rewritten in its long form (the runner
 gives `C:\Users\RUNNER~1\…`, which Python expands and bash does not). The whole Windows run goes at every push: the
-rule is complete at every push if it fits in at most 8 jobs of at most 45 minutes, and it is 5 jobs of about 16–22
-minutes. Left out on Windows, with the reason in its groups file: `test-fast`, `counterproof`, `vitest-classify`,
+rule is complete at every push if it fits in at most 8 jobs of at most 45 minutes, and it is 7 jobs since 1.8.0 (the longest about 25 minutes; 1.6.0: 5 jobs of about 16–22
+minutes). Left out on Windows, with the reason in its groups file: `test-fast`, `counterproof`, `vitest-classify`,
 `comandi-equivalenza` (they need `rsync` and `flock`; on Windows they run in WSL, which the runner does not have: run
 them locally from WSL before each release) and `tools/oracolo.test.sh` (it runs on Linux and macOS). **macOS**:
 `setup-python` first, then `brew install` of bash and the GNU tools (with a cache of the downloads), their `gnubin`
 folders first in `PATH`, `awk` = gawk, `TMPDIR=$RUNNER_TEMP`; the runner usually has 3 CPUs, so the step 2 cases of
-`counterproof` (they want at least 4) are `SALTATO` there with the reason. The longest job: Linux about 12 minutes,
-macOS about 16, Windows about 22. **On Linux**, since
-1.5.1 in **three jobs at the same time**, one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
+`counterproof` (they want at least 4) are `SALTATO` there with the reason. The longest job since 1.8.0: Linux about 10
+minutes, macOS about 12 (plus the setup), Windows about 25 (1.6.0: 12, 16 and 22). **On Linux**, since
+1.5.1 in **one job per group at the same time** (five since 1.8.0), one per group of `tools/suite-gruppi.list` («The groups»): each one `ubuntu-latest`, Python 3.10 (the lowest
 supported version), Node 20, a test git identity, the `jsonschema` venv, then `bash tools/suite.sh --gruppo <k>/<n>
 esiti`, one suite at a time with `FIC_WT_WSL=0` like the Linux run. `n` is not written by hand: it is
 `strategy.job-total`, the number of jobs of the matrix, and `k` (`matrix.gruppo`) must be the job's position
@@ -549,6 +564,9 @@ Seven small git repositories, built from models, with 65 specs and 49 counted js
 | `oracolo.sh --motore bash\|predefinito` | `oracolo.sh` | the engine of `cycle-state.sh` of the OLD side: `FIC_DRIVER=0` (default) or unset; the new side always decides with its default engine |
 | `--rigenera` with `MAAT_RIF_REPO` | `comandi-equivalenza.test.sh` | rewrites the frozen reference from the private history (see «The commands of the gates») |
 | `suite.sh --gruppo <k>/<n>` | `tools/suite.sh` | group k of `tools/suite-gruppi.list` only (CI, parallel run) |
+| `MAAT_SUITE_TIMEOUT` | `tools/suite.sh` | the limit of each suite in seconds (default 5400; the CI: 1200 on Linux and macOS, 1800 on Windows); over it `rc=124` and a `TIMEOUT` line; not a positive integer → exit 2 |
+| `MAAT_GRUPPO_TIMEOUT` | `tools/suite.sh` | the limit of the whole run in seconds (default none; the CI: at least 300 below each job's); a suite gets at most what is left, the suites after its end `NON ESEGUITA` and exit 1; not a positive integer → exit 2 |
+| `CP_CASO_LIMITE` | `counterproof.test.sh` | the deadline of each run of `counterproof.sh` in the suite, in seconds (default 240); each run is preceded by a line `caso: riga <n> (<function>) <time>` on stderr, and over the deadline it gets TERM, the line `TIMEOUT caso: …` and the next check FAILs with it (a hang names its case in the `TIMEOUT` tail of `tools/suite.sh`) |
 | `MAAT_LINUX_CLONI`, `MAAT_PARALLELO_FORZA=1`, `MAAT_PARALLELO_LOCK` | `suite-parallelo.sh`, `giro-completo.sh --linux-parallelo` | the clones, one per group; skip the check of the processes; the lock file |
 | `--linux-parallelo`, `--windows-breve` | `giro-completo.sh` | the Linux part in parallel; the short proof on Windows (`tools/prova-breve-windows.list`) |
 

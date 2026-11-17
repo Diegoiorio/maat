@@ -6,7 +6,7 @@ measurements and a guard. Version in `.claude-plugin/plugin.json`; what's new in
 Installation, from the main folder of the project:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.7.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.8.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
@@ -30,5 +30,15 @@ project files: everything that depends on the project lives in the project's `.c
 
 Read-only diagnostics: `bash <plugin root>/scripts/maat-doctor.sh` (`--piattaforma` prints `windows-wsl`,
 `windows-senza-wsl` or `altro`; `--prova-test` also runs one test per module and so is no longer read-only).
+
+Counterproofs and modules at the root (1.8.0): a module whose `radice_pacchetti` is the repository root (`"radice": "."`)
+runs its counterproofs, if it has no `copia`; a module **with** `copia` at the root is still not supported (the
+counterproof stops with exit 64, `test-fast.sh` refuses the copy), and `maat-doctor` and `maat-config.py valida` say so
+before the cycle: give the counterproof a module without `copia`, or put `radice_pacchetti` in a subfolder.
+
+Resumes (1.8.0): after each phase `driver.py` classifies the outcome (OK, OK with an accepted deviation, resumable,
+human, technical) and relaunches a resumable phase by itself, at most 2 per phase type and 3 per cycle;
+`ciclo.riprese: 0` in `.claude/maat.json` (or `FIC_RIPRESE=0`) restores the STOPs of 1.7. Explained in the repo's
+README and in `docs/GUIDA-FLUSSI.html`.
 
 Flow guide: the repo's `docs/GUIDA-FLUSSI.html`. Plugin tests: the repo's `docs/TESTING-harness.md`.

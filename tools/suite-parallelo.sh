@@ -5,7 +5,7 @@
 # Usage: bash tools/suite-parallelo.sh <results dir> <ref>
 #   <ref>: what the clones fetch from their origin (a branch, a tag, a commit sha that origin has).
 #   MAAT_LINUX_CLONI="<clone 1> … <clone n>": one clone per group, a path relative to $HOME or absolute (default
-#     "maat-linux maat-linux-2 maat-linux-3"). Each one is a git clone whose origin has <ref>; it is realigned
+#     "maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5"). Each one is a git clone whose origin has <ref>; it is realigned
 #     (fetch, checkout --detach, clean): no changes inside the clones. Create them once with git clone.
 #   MAAT_PARALLELO_FORZA=1: skips the check of what runs on the machine (step 1). MAAT_PARALLELO_LOCK: the lock file
 #     (default ${TMPDIR:-/tmp}/maat-suite-parallelo.lock).
@@ -33,7 +33,7 @@ command -v flock >/dev/null || { echo "suite-parallelo: flock missing (Linux onl
 mkdir -p "$OUT" && OUT=$(cd "$OUT" && pwd) || return 2
 local -a CL=()
 local c
-for c in ${MAAT_LINUX_CLONI:-maat-linux maat-linux-2 maat-linux-3}; do
+for c in ${MAAT_LINUX_CLONI:-maat-linux maat-linux-2 maat-linux-3 maat-linux-4 maat-linux-5}; do
   case $c in /*) ;; *) c=$HOME/$c ;; esac
   CL+=("$c")
 done

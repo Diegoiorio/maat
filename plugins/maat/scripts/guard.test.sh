@@ -477,6 +477,40 @@ if GUARD=$(gmutante taglia-maiuscole '.lower() if path else ""' ' if path else "
   prun 0 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"   # counterproof: case-sensitive, the upper case passes
 else fail=$((fail + 1)); echo "FAIL: controprova maiuscole non applicabile"; fi
 GUARD=$GUARD_SALVA
+# 10. 1.8.0 (D2): in a sub-session (FIC_PHASE) an Agent/Task in background is denied, also with --universal (the plugin
+#     hook runs it that way); the main session and the foreground agents are unchanged
+arun() { # $1 expected (0|2), $2 FIC_PHASE (empty = main session), $3 universal|fase, $4 tool, $5 run_in_background (true|false|-)
+  n=$((n + 1)); local got j u=()
+  [ "$3" = universal ] && u=(--universal)
+  j=$("$FIC_PY" -c 'import json,sys
+ti = {"description": "L1", "subagent_type": "maat:spec-plan-reviewer", "prompt": "x"}
+if sys.argv[2] != "-":
+    ti["run_in_background"] = sys.argv[2] == "true"
+print(json.dumps({"tool_name": sys.argv[1], "tool_input": ti, "cwd": sys.argv[3]}))' "$4" "$5" "$REPO")
+  printf '%s' "$j" | env -u FIC_REPO FIC_PHASE="$2" MAAT_CONFIG="$SSJ" "$FIC_PY" "$GUARD" "${u[@]}" >/dev/null 2>&1; got=$?
+  [ "$got" = "$1" ] || { fail=$((fail + 1)); echo "FAIL (atteso $1, ottenuto $got) [agente $4 bg=$5 fase=$2 $3]"; }
+}
+arun 2 plan universal Agent true      # the hook's mode: denied
+arun 2 plan fase Agent true
+arun 2 test-red universal Task true
+arun 2 review universal Agent true
+arun 0 "" universal Agent true        # main session: unchanged (no ask either)
+arun 0 plan universal Agent false
+arun 0 plan universal Agent -
+arun 0 plan fase Agent -
+n=$((n + 1))
+m=$("$FIC_PY" -c 'import json; print(json.dumps({"tool_name": "Agent", "tool_input": {"prompt": "x", "run_in_background": True}, "cwd": "/"}))' |
+    FIC_PHASE=plan MAAT_CONFIG="$SSJ" "$FIC_PY" "$GUARD" --universal 2>&1 >/dev/null)
+grep -q "lancia gli agenti in primo piano: più chiamate Agent nello stesso messaggio girano già in parallelo" <<< "$m" ||
+  { fail=$((fail + 1)); echo "FAIL: motivo del diniego dell'agente in background: $m"; }
+tre agent_bg "$(sed 's/^guardia di sessione: //' <<< "$m")"
+GUARD_SALVA=$GUARD
+# counterproof: the check moved after `elif MODE["universal"]: pass` → with --universal it allows (red); in phase mode it still denies
+if GUARD=$(gmutante agente-dopo $'    elif tool in AGENT_TOOLS and os.environ.get("FIC_PHASE") and ti.get("run_in_background"):   # AGENTE-BG\n        deny("agent_bg", what=tool, fase=os.environ.get("FIC_PHASE"))   # 1.8.0 (D2): before the universal pass\n    elif MODE["universal"]:\n        pass   # the per-phase rules (FIC_PHASE) apply only in sub-sessions\n' $'    elif MODE["universal"]:\n        pass   # the per-phase rules (FIC_PHASE) apply only in sub-sessions\n    elif tool in AGENT_TOOLS and os.environ.get("FIC_PHASE") and ti.get("run_in_background"):   # AGENTE-BG\n        deny("agent_bg", what=tool, fase=os.environ.get("FIC_PHASE"))   # 1.8.0 (D2): before the universal pass\n'); then
+  arun 0 plan universal Agent true    # counterproof: red on the hook's mode
+  arun 2 plan fase Agent true
+else fail=$((fail + 1)); echo "FAIL: controprova agente dopo universal non applicabile"; fi
+GUARD=$GUARD_SALVA
 
 echo "guard.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

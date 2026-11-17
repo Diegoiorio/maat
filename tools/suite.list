@@ -6,6 +6,8 @@
 tools/suite.test.sh
 maat-paths
 maat-config
+nomi_test
+transcript
 messages
 gates
 finalize
@@ -35,3 +37,4 @@ tools/oracolo.test.sh
 cycle-state
 run-phase
 driver
+driver-esiti

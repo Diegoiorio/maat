@@ -63,9 +63,12 @@ check "result intermedio + .exit=1 -> ✖ (exit 1), nessun ■" '[ "$rc" = 1 ] &
 # 6. watch-phase.sh (pk08, D5): FIC_PY from python.sh and native paths, without WSL — PATH without wsl/wsl.exe (on Windows
 #    System32 removed too: FIC_PYTHON keeps the same interpreter), run dir with spaces. Counterproof: hard-coded `wsl`
 #    reintroduced in a mutant (as it was before pk08) => no end line, red.
-PATH_SENZA_WSL=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ]; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
+# 1.8.0 (CI): the PATH without wsl of lib/senza-wsl.sh (bash, a new bash and the suite's Python decide), computed right
+# before each read
+. "$HERE/lib/senza-wsl.sh"
 wp() { # <watch-phase.sh> <run dir>: one read with .exit already present
   mkdir -p "$2/log"; cp "$L" "$2/log/f.jsonl"; echo 0 > "$2/log/f.exit"
+  PATH_SENZA_WSL=$(senza_wsl)
   PATH=$PATH_SENZA_WSL FIC_PYTHON=$FIC_PY timeout 20 bash "$1" "$2" f > "$T/out" 2>&1
 }
 wp "$HERE/watch-phase.sh" "$T/run con spazi"; rc=$?

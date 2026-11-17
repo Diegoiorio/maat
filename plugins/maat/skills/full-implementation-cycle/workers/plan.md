@@ -7,4 +7,5 @@ size (`Taglia:` and any `Escalation:`). `OK` only if the plan section now has `^
 `STOP` with the open decision (the cut proposal of a spec over the ceiling included). A prompt line `RIAPERTURA
 (driver): <cause> — …` (E2: the approved plan is above the small size): re-open the approved plan with the
 re-opening procedure of `plan-review-cycle`, with no amendment, and review it in the full branch (`--full`, from
-Step 2); its metric line says `taglia=piena`. JSON: `"fase": "plan"`.
+Step 2); its metric line says `taglia=piena`. A prompt line `RIPRESA (driver): …`: pass it to the skill, which follows
+its «Resume» section. JSON: `"fase": "plan"`.

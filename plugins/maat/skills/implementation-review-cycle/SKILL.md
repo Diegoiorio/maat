@@ -98,7 +98,7 @@ Review rounds: <n>/3 · post-approval NEEDS_CHANGES: <k>/1
 6. The section already has a `Reviewed snapshot:` line → read `freschezza.md`: full round, delta round,
    gate-only path or promotion path.
 
-## Step 2: the reviewer
+## Step 2: the reviewer, in the foreground (never `run_in_background`: a sub-session of the cycle denies it)
 
 «Use the maat:implementation-reviewer agent. Read `${CLAUDE_PLUGIN_ROOT}/skills/implementation-review-cycle/prompt-revisore.md` and
 follow it.» plus its parameters: the specification (mode a: its range; mode b: NONE) and plan ranges; the

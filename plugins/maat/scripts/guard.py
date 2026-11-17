@@ -44,6 +44,9 @@ TWO LAYERS OF RULES (R3.6, pk05):
      given by FIC_SCOPE (one per line, relative to the repo; a line ending with / acts as a prefix):
      test-red = the plan's test files + the files the plan declares new (stubs); test-stage = only
      <run-dir>/staging/. Scope missing or unreadable: everything denied. No full suites, as in `plan`.
+  6. Every sub-session (FIC_PHASE set, also with --universal, 1.8.0): `Agent`/`Task` with `run_in_background: true`
+     denied — a -p sub-session that waits for a background agent closes with nobody to wake it up (D2); several
+     Agent calls in the same message already run in parallel. The main session (no FIC_PHASE) is unchanged.
 
 WHAT STAYS UNCOVERED, by choice (no sandbox on native Windows; every test goes through `wsl bash -lc`,
 so a real capability allowlist is not applicable here): obfuscated commands (base64, variables
@@ -131,6 +134,8 @@ GIT_ENV_RE = re.compile(r"GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)\b", re.IGNOR
 CD_LIKE = {"cd", "chdir", "set-location", "sl"}
 CD_UNKNOWN = {"pushd", "popd", "push-location", "pop-location"}
 SHELL_TOOLS = {"Bash", "PowerShell"}
+# 1.8.0 (D2): the sub-agent tools; in a sub-session (FIC_PHASE) never in background (main(): agent_bg)
+AGENT_TOOLS = {"Agent", "Task"}
 # network commands: in the content of a script, produzione counts only as their argument (or as a command)
 NET_TOOLS = {"ssh", "scp", "sftp", "rsync", "curl", "wget", "http", "https", "nc", "ncat", "telnet", "ping"}
 # heredoc: `<<EOF`, `<<-'EOF'`, `<< "EOF"` (not `<<<`)
@@ -338,6 +343,14 @@ MSG = {
         "en": ("`{what}`: write outside {lav} in phase {fase}",
                "core rule (read-only phases: writes only in the work folder)",
                "counterproof revert and restore are done with Bash (git show … >, cp)")},
+    # 1.8.0 (D2): an agent in background leaves a -p sub-session waiting with nobody to wake it up
+    "agent_bg": {
+        "it": ("`{what}`: agente in background nella fase {fase}",
+               "regola del nucleo (sotto-sessioni: agenti solo in primo piano)",
+               "lancia gli agenti in primo piano: più chiamate Agent nello stesso messaggio girano già in parallelo"),
+        "en": ("`{what}`: agent in background in phase {fase}",
+               "core rule (sub-sessions: agents in the foreground only)",
+               "launch the agents in the foreground: several Agent calls in the same message already run in parallel")},
 }
 
 # Project rules (load_config). stato: None = valid maat.json, "assente", "non_valido".
@@ -1058,6 +1071,8 @@ def main():
         if tool == "PowerShell":   # in PowerShell `\` is a path separator, not an escape
             cmd = cmd.replace("\\", "/")
         check_command(cmd)
+    elif tool in AGENT_TOOLS and os.environ.get("FIC_PHASE") and ti.get("run_in_background"):   # AGENTE-BG
+        deny("agent_bg", what=tool, fase=os.environ.get("FIC_PHASE"))   # 1.8.0 (D2): before the universal pass
     elif MODE["universal"]:
         pass   # the per-phase rules (FIC_PHASE) apply only in sub-sessions
     elif tool in WRITE_TOOLS:

@@ -135,6 +135,7 @@ details summary { cursor: pointer; font-weight: 600; }
   <a href="#plan">2 · Plan: /plan-review-cycle</a>
   <a href="#light">2b · Light variant</a>
   <a href="#taglia">The size of the cycle</a>
+  <a href="#esiti">Outcome of a phase and resumes</a>
   <a href="#livelli">Test levels</a>
   <a href="#implement">3 · Implementation</a>
   <a href="#review">4 · Review: /implementation-review-cycle</a>
@@ -444,6 +445,56 @@ stateDiagram-v2
 <div class="note"><b>Overrides and configuration.</b> <code>--full</code>: always full. <code>--light</code>: small above the numeric thresholds (F1–F6, F13), never above the barriers (F7–F12, F14, a file outside the plan). Both together: usage error, no phase launched. In <code>.claude/maat.json</code> the optional key <code>piano.taglia</code>: <code>automatica</code> (default <code>true</code>; <code>false</code> = always full unless <code>--light</code>), <code>soglie</code> (<code>file_sorgente</code>, <code>file_nuovi</code>, <code>passi</code>, <code>requisiti</code>, <code>test</code>, <code>righe</code>, <code>simboli_pubblici</code>), <code>parole_sicurezza</code> (added, never removed); a file that uses it declares <code>"harness": "&gt;=1.7"</code>.</div>
 
 <!-- ====================================================================== -->
+<h2 class="sec" id="esiti">The outcome of a phase and the resumes <span class="tag ok">1.8.0</span></h2>
+<p>Until 1.7.0 every <code>PHASE RESULT … STOP</code> ended the cycle: if nobody was there to answer, a plan left
+<code>DRAFT</code> because its reviews had not been applied, or a test that needed a stub, killed a cycle that was a
+step away. Since 1.8.0, after every phase <code>driver.py</code> calls <code>classifica</code>: a function that reads
+only files (<code>.esito</code>, <code>result.json</code>, the spec, <code>rossi.json</code>, the phase log) and gives
+one of five classes. The model never decides it. The order of evaluation is: technical, a human decision with its proof,
+OK with a deviation, resumable, human (a STOP that matches nothing stays final: fail-closed).</p>
+<div class="tablewrap"><table>
+<tr><th>Class</th><th>When</th><th>What the driver does</th></tr>
+<tr><td><span class="tag ok">OK</span></td><td><code>PHASE RESULT … OK</code> and a valid <code>result.json</code></td><td>the <code>Next:</code> of <code>cycle-state.sh</code>, as always</td></tr>
+<tr><td><span class="tag ok">OK with accepted deviation</span></td><td>test-red: every deviation is <code>test-data: </code> (<code>dati-test: </code>) and was accepted (below)</td><td>as OK; the deviations go to <code>log/deviazioni-accettate.txt</code> and to the review prompt</td></tr>
+<tr><td><span class="tag warn">Resumable</span></td><td>plan that stops (<code>STOP</code> line) with the spec still <code>DRAFT</code>; plan with an <code>Open decision:</code> that is not valid or not proved; test-red with a <code>rosso_simbolo</code> (a missing stub); in plan and test-red only, an agent or a job in the background not collected at the end. In implement, review and fix the same cases stay final STOPs</td><td><b>relaunches the same phase</b> with the line <code>RIPRESA (driver): &lt;n&gt;/&lt;max&gt; — &lt;cause&gt; — &lt;open findings&gt;</code>; before a test-red resume the files of the phase are parked (below)</td></tr>
+<tr><td><span class="tag bad">Human</span></td><td>a plan with a valid <code>Open decision:</code>; test-red: a limit shown by a probe (<code>limite_dimostrato</code>), a deviation of another family or refused, a conflict with the suite; a review that asks for a human decision; the guard that denies; a resume over the limit or without progress; a plan that prints <code>OK</code> on a spec still <code>DRAFT</code> or <code>NEEDS HUMAN DECISION</code></td><td>final STOP, exit 1; the line names the proof (a file). A plan <code>OK</code> on <code>DRAFT</code> is registered (<code>Stop umano: &lt;label&gt; · regola=… · state=&lt;State&gt;</code> in <code>driver.log</code>) and stays stopped until the State changes; State not computable: <code>state=sha:&lt;12&gt;</code> of the spec file, until the file changes; neither: <code>state=-</code>, until a person deletes that line</td></tr>
+<tr><td><span class="tag">Technical</span></td><td><code>run-phase.sh</code> exit ≠ 0, invalid output, a gate <code>BLOCKED</code>, a busy lock</td><td>STOP / BUSY / WAIT, as in 1.7</td></tr>
+</table></div>
+<h3>Limits of the resumes</h3>
+<div class="grid">
+  <div class="card"><h4>Per cycle</h4>at most <b>2 resumes per phase type</b> (plan, test-red) and <b>3 in all</b>, counted from the <code>Ripresa: … esito=rilancio</code> lines of <code>driver.log</code>, so across invocations too. Editing or deleting a <code>.ripresa</code> does not lower the count. The plan's own budget of 4 iterations goes on between resumes. <code>FIC_MAX_FASI</code> still bounds one invocation.</div>
+  <div class="card"><h4>Progress required</h4>a resume with the same plan fingerprint <b>and</b> the same open findings as the previous one of its type is a human STOP (<code>senza-progresso</code>); in test-red the progress is measured on the cause (the missing symbols, or the normalised cause). Over the limit: human STOP (<code>limite</code>).</div>
+  <div class="card"><h4>The record</h4><code>log/&lt;label&gt;.ripresa</code> sits on the phase that stopped, not on the relaunch; the same write is a <code>Ripresa:</code> line in <code>driver.log</code>, which the phases cannot write. A <code>.ripresa</code> without its line is ignored (<code>AVVISO</code>). After a final STOP the next invocation stays stopped until the spec changes.</div>
+  <div class="card"><h4>Switching it off</h4><code>ciclo.riprese</code> in <code>maat.json</code> (integer ≥ 0, default 2) or <code>FIC_RIPRESE</code>: <code>0</code> gives the STOPs of 1.7. It applies in interactive use too. A file that uses the key declares <code>"harness": "&gt;=1.8"</code>.</div>
+</div>
+<h3>The plan phase: typed human decisions</h3>
+<p>A plan that stops with <code>Plan status: NEEDS HUMAN DECISION</code> writes <code>Open decision: &lt;type&gt; — &lt;text&gt;</code> (<code>Decisione aperta:</code>). The driver verifies what a script can verify:</p>
+<div class="tablewrap"><table>
+<tr><th>Type</th><th>Check</th></tr>
+<tr><td><code>cut</code></td><td>mechanical: <code>plan-check.sh skeleton</code> run again gives «above the ceiling»</td></tr>
+<tr><td><code>budget</code></td><td>mechanical: at least 9 results of <code>spec-plan-reviewer</code> in the transcripts of the plan phases (or a light reviewer result on which <code>e1</code> says STOP); the <code>giri=</code> the plan writes does not count. Limit: re-runs count too</td></tr>
+<tr><td><code>scope</code></td><td>mechanical: a quoted line of the spec's <code>Out of scope</code> / <code>Constraints</code> above the plan, and a requirement id</td></tr>
+<tr><td><code>proof</code></td><td>mechanical: every <code>Executed proof: &lt;command&gt; → «&lt;excerpt&gt;»</code> is found in the transcript of the phase, the command runs repository code (a command that only prints is refused) and the excerpt is not written in the command or in the spec. Limit: a command that composes the string with effort</td></tr>
+<tr><td><code>recurrence</code>, <code>dispute</code>, <code>partial</code>, <code>spec</code></td><td><b>no mechanical check</b> (the phase could forge the lines it would read): valid, but the STOP says «decisione non verificata da script: &lt;type&gt;», the review prompt and <code>cycle-report.py</code> flag it. <code>spec</code> with a <code>path:line</code> anchor of code is a claim about the code, so it needs a <code>proof</code></td></tr>
+</table></div>
+<p>A claim about what the code can or cannot do, without a proof that ran, is not a human decision: the plan is resumed
+and the claim becomes a <b>risk line with a probe</b> (<code>⚠️ Rischio da verificare in test-red: … — sonda: &lt;Tn&gt; —
+decisione: &lt;key&gt; — se vera: «…»</code>; the key is the first 8 hex digits of the sha256 of the normalised text,
+recorded as <code>declassata:</code> in the <code>.ripresa</code>). In test-red <code>rossi</code> runs the probe: red with the expected
+text is <code>limite_dimostrato</code> (human STOP, now with its proof); green on the base is <code>sonda_smentita</code>
+(not a STOP: the limit was an error, shown to the reviewer). A probe is valid only for a key that a registered resume
+declassified, once per key, with an expected text not already in the red-if; <code>lint2</code> checks it. After a resume that
+already declassified a decision, a non-mechanical type stays a human STOP.</p>
+<h3>Test-red: deviations of data, stubs, a clean tree</h3>
+<div class="grid">
+  <div class="card"><h4>Test-data deviation</h4>declared <code>test-data: &lt;Tn&gt; — &lt;what&gt; — &lt;why&gt;</code>, only for data, fixtures, internal names, organisation; never an assertion, requirement, file or test name. The worker asks <code>spec-plan-reviewer-light</code> in the foreground, with the plan row, the traceability row, the deviation and the diff <code>plan-check.sh diff-test</code> recomputes (it sees untracked files). <code>run-phase.sh</code> accepts only if: no file outside the scope, every test red on its assertion, the judge is in the transcript with that input and says <code>Deviation verdict: ACCEPT</code>, and <code>plan-check.sh deviazione</code> finds every requirement of the row still covered. Otherwise STOP as before.</div>
+  <div class="card"><h4>Additive stubs</h4>a symbol a test names must exist, with its signature and a body that fails the assertion, also in an <b>existing</b> file (<code>plan-check.sh accept</code> prints <code>stub &lt;path&gt;</code>). Checked on the diff (<code>git diff -w</code>): only added lines, or a list statement that grows inside its last brackets (<code>export { a, b }</code>, <code>__all__</code>, <code>pub use</code>); anything else is «stub non additivo». A compile or import error that names a missing symbol is <code>rosso_simbolo</code> (resumable); <code>lint2</code> refuses a base red that is a compile error.</div>
+  <div class="card"><h4>The tree after a STOP</h4>on a final STOP and before each resume, the files the phase wrote move to <code>&lt;run-dir&gt;/staging/</code> (<code>staging.origine=stop</code>) and the tree goes back to its start: no test that does not compile is left. The next test-red copies them back and launches its sub-session.</div>
+  <div class="card"><h4>Agents in the foreground</h4>the guard denies <code>Agent</code>/<code>Task</code> with <code>run_in_background</code> in a sub-session; the stop hook waits for an asynchronous agent that has not notified. Several calls in one message already run in parallel.</div>
+</div>
+<div class="note warn"><b>What stays weak, declared:</b> the four types of decision without a mechanical check, the <code>proof</code> filter and the <code>budget</code> count (above) can be defeated with effort; they were chosen over checks the phase itself could forge. A resume does not make a decision valid: it relaunches a phase, and the same STOP twice is final.</div>
+
+<!-- ====================================================================== -->
 <h2 class="sec" id="livelli">Test levels: <code>--tests=min|std|full</code></h2>
 <p>The level is the <b>verification budget</b>. It is written in the plan (<code>Test level:</code>) and the review reads it back from there. It is chosen by the <i>shape</i> of the change: pure logic in one module → <code>min</code>; everything else → <code>std</code>; <code>full</code> when lint or more than 5 cases are needed.</p>
 <div class="tablewrap"><table>
@@ -687,6 +738,7 @@ flowchart TB
 <tr><td><code>log/&lt;label&gt;.pre-tree · .post-tree</code>, <code>touched.txt</code></td><td>measured attribution</td></tr>
 <tr><td><code>base.txt · do-not-touch.txt · mixed.txt</code></td><td>review base; other people's work; mixed files</td></tr>
 <tr><td><code>counterproof/</code></td><td><code>mutations.json</code> and one outcome <code>&lt;id&gt;.json</code> per counterproof (the <code>cp-run.sh</code> files and sidecars of old run directories are history)</td></tr>
+<tr><td><code>log/&lt;label&gt;.ripresa</code>, <code>log/&lt;label&gt;.deviazioni-test</code>, <code>log/deviazioni-accettate.txt</code>, <code>staging/</code> <span class="tag ok">1.8.0</span></td><td>the record of a resume on the stopped phase (also a <code>Ripresa:</code> line in <code>driver.log</code>); the test-data deviations accepted by the judge; the test files parked by a STOP of test-red</td></tr>
 <tr><td><code>input.md</code></td><td>the pasted text when there was no spec file</td></tr>
 </table></div>
 <div class="note warn"><b>The real end of a phase</b>: only the <code>log/&lt;label&gt;.exit</code> file. In <code>-p</code> mode a subsession waiting for background agents emits intermediate <code>result</code> events, which the reader can mistake for the end.</div>
@@ -709,6 +761,7 @@ flowchart TB
 <tr><td><code>piano</code></td><td><code>superfici_critiche</code> and <code>migrazioni</code> as regexes on the path</td><td><code>plan-check.sh route</code></td></tr>
 <tr><td><code>verifica_remota</code></td><td>optional: the project skill that verifies on a test environment. Missing ⇒ the cycle runs <code>--no-dev</code></td><td>review, chain closing</td></tr>
 <tr><td><code>lingua</code></td><td>the language of what Maat prints for a person: <code>en</code> (default) or <code>it</code>. Since 1.4.0 it covers the messages of the scripts too (the text after <code>STOP — </code>, errors, remedies, reports); with <code>"lingua": "it"</code> the output is the one of 1.3.0. The environment variable <code>MAAT_LINGUA</code> (<code>it</code> or <code>en</code>) wins over it. The keywords <code>VIOLAZIONE</code>, <code>AVVISO</code>, <code>ERRORE DURO</code>, <code>Percorso:</code>, <code>Scheletro:</code>, <code>S2:</code> and the lines the scripts pass to each other stay the same in every language. The language is part of the harness fingerprint: changing it stops a cycle in progress</td><td>every script (catalog <code>scripts/lib/messages.tsv</code>), <code>guard.py</code>, the <code>▶ </code> lines and the free text of the agents</td></tr>
+<tr><td><code>ciclo</code> <span class="tag ok">1.8.0</span></td><td><code>riprese</code>: how many times the driver may relaunch a resumable phase (default 2 per phase type, 3 per cycle; <code>0</code> = the STOPs of 1.7). Also per module: <code>simbolo_mancante</code> (regexes that recognise a missing-symbol error), <code>separatori_test</code> (<code>/</code>, <code>::</code>, <code>[</code>: how the test names of the runner nest). A file that uses any of them declares <code>"harness": "&gt;=1.8"</code></td><td><code>driver.py</code>, <code>plan-check.sh rossi</code>, <code>counterproof.sh</code></td></tr>
 <tr><td><code>cartelle</code>, <code>da_non_toccare</code>, <code>piattaforma</code>, <code>contesto</code>, <code>framework</code></td><td>working folder, forbidden paths, WSL copy yes/no, DB schema for the context pack, adapters (for example <code>nuxt-autoimport</code>)</td><td>the respective scripts</td></tr>
 </table></div>
 <p><b>Profiles</b> (<code>${CLAUDE_PLUGIN_ROOT}/profiles/</code>): ready-made modules for common stacks (<code>fastapi-pytest</code>,
@@ -980,7 +1033,10 @@ pie showData
 <h2 class="sec" id="stop">When it stops: what to do</h2>
 <div class="tablewrap"><table>
 <tr><th>Message / state</th><th>Meaning</th><th>What to do</th></tr>
-<tr><td><code>Plan status: NEEDS HUMAN DECISION</code></td><td>disagreement on a fact, recurrence, 10 iterations, scope outside the spec</td><td>read the open findings in the changelog, decide, possibly fix the spec and re-run</td></tr>
+<tr><td><code>Plan status: NEEDS HUMAN DECISION</code></td><td>disagreement on a fact, recurrence, 10 iterations, scope outside the spec. Since 1.8.0 the line <code>Open decision: &lt;type&gt;</code> says which, and the STOP quotes its proof (or «decisione non verificata da script»)</td><td>read the open findings in the changelog, decide, possibly fix the spec and re-run</td></tr>
+<tr><td>«limite delle riprese» / «ripresa senza progresso» <span class="tag ok">1.8.0</span></td><td>the same phase was relaunched 2 times (3 in the cycle) or the resume changed nothing: the cause is in the line and in <code>log/&lt;label&gt;.ripresa</code></td><td>read the cause, fix the spec or decide; the next invocation stays stopped until the spec changes. <code>ciclo.riprese: 0</code> gives the old STOP at once</td></tr>
+<tr><td>«limite dimostrato in test-red» <span class="tag ok">1.8.0</span></td><td>a probe turned a claim «the spec cannot be done» into a test red on its expected text: the decision is real and proved</td><td>decide with the proof in <code>test-red/rossi.json</code></td></tr>
+<tr><td>«stub non additivo: &lt;file&gt;:&lt;line&gt;» <span class="tag ok">1.8.0</span></td><td>test-red changed an existing file beyond adding a stub</td><td>the files are in <code>&lt;run-dir&gt;/staging/</code>; fix the plan or write the stub by hand</td></tr>
 <tr><td><code>Approved basis STALE</code></td><td>spec or plan modified after approval</td><td>re-run <code>/plan-review-cycle</code> on the same spec (reopening)</td></tr>
 <tr><td>Deviation from the plan</td><td>a step is impossible or wrong against the code</td><td>decide whether to reopen the plan; the plan is not edited by hand</td></tr>
 <tr><td>Migration to apply</td><td>the migration file is written, not applied</td><td>apply it by hand with the project's procedure (never from the automation: the options that write to the DB are among the <code>opzioni_negate</code>), then re-run the cycle</td></tr>
@@ -1064,6 +1120,8 @@ pie showData
 <tr><td>Skills launched by hand: only the session guard (universal rules, no per-phase rules); they query the lock but do not take it</td><td>declared</td></tr>
 <tr><td>Over-inclusion in <code>touched.txt</code> of other people's changes made during a phase</td><td>safe direction (more review); possible spurious STOPs</td></tr>
 <tr><td>New-file rule (two greps) applied by the LLM: a file with no references passes it if the plan does not name it</td><td>declared</td></tr>
+<tr><td>Open decisions of type <code>recurrence</code>, <code>dispute</code>, <code>partial</code>, <code>spec</code> have no mechanical check; <code>proof</code> and <code>budget</code> can be defeated with effort <span class="tag ok">1.8.0</span></td><td>declared: a weaker check was chosen over a forgeable one; the STOP says «decisione non verificata da script», the review and <code>cycle-report.py</code> flag it</td></tr>
+<tr><td>A module with <code>copia</code> at the repository root: the counterproof (and <code>test-fast.sh</code>) refuses it <span class="tag ok">1.8.0</span></td><td>declared: <code>maat-doctor</code> and <code>maat-config.py valida</code> say so before the cycle; use a module without <code>copia</code> for the counterproof, or a <code>radice_pacchetti</code> in a subfolder</td></tr>
 <tr><td>Intermediate <code>result</code> events may look like the end of a phase</td><td>closed <span class="tag ok">2026-09-29</span>: <code>phase-events.py</code> emits the end only with <code>.exit</code></td></tr>
 <tr><td>Efficiency measurements on a single run per side</td><td>to be confirmed on real cycles</td></tr>
 <tr><td>A measurement in the WSL mirror while <code>counterproof.sh</code> applies a mutation there sees mutated code (since 2026-09-29 the counterproofs no longer touch the repo)</td><td>the mirror lock serializes them, and <code>counterproof.sh</code> holds it for the whole run, tier 2 included: <code>test-fast.sh</code> waits with <code>flock -w</code> and exits BLOCKED 3 beyond the cap, without falling back to the repo</td></tr>
@@ -1096,6 +1154,8 @@ pie showData
 <tr><td>Anchor</td><td>the verifiable proof of a blocking finding: code, spec/plan line, absence, measurement</td></tr>
 <tr><td>Lens (L1/L2/L3)</td><td>a reviewer's disjoint mandate in round 1 of the plan</td></tr>
 <tr><td>Delta</td><td>the lines rewritten since the last round, computed by a script</td></tr>
+<tr><td>Resume (<code>ripresa</code>)</td><td>the driver relaunching the same phase after a resumable STOP, with the open findings in the prompt (1.8.0)</td></tr>
+<tr><td>Probe (<code>sonda</code>)</td><td>a risk line of the plan that turns a claim about the code into a test of test-red: red on the expected text proves the limit, green disproves it (1.8.0)</td></tr>
 <tr><td>Fresh-eyes gate</td><td>a full-scope reviewer before approving, with the mandate "which premise was never questioned?"</td></tr>
 <tr><td>Floor</td><td>the one verification owed to a critical surface, outside the level's caps</td></tr>
 <tr><td>Obligation</td><td>critical surface with neither floor nor waiver: it closes only with the user's evidence</td></tr>

@@ -3,9 +3,13 @@
 # Lines: «<group> [VAR=value …] <entry>» (the entry runs in that group, with those variables) and «- <entry> <reason>»
 # (left out on Windows: counted as covered, written as ESCLUSA in riepilogo.txt). Every entry of suite.list in exactly
 # one line; groups 1..n (tools/suite.sh refuses otherwise, tools/suite.test.sh checks the link with ci.yml).
-# Balanced on the seconds of the first CI of 1.6.0 on the Windows runner (before block C; driver.test.sh measured
-# after it at 409-412 s on the runner, 59-85 s on Linux): group 1 ≈ 1150 s, 2 ≈ 1160, 3 ≈ 1170, 4 ≈ 1140, 5 ≈ 1000. The runner is about
-# three times faster than the local Windows machine (gates 234 s against 826).
+# 1.8.0 (CI): seven groups instead of five, balanced on the seconds of the first CI of 1.8.0 on the Windows runner
+# (the longer of its two runs): group 1 ≈ 1424 s, 2 ≈ 1093, 3 ≈ 1050, 4 ≈ 970, 5 ≈ 955, 6 ≈ 941, 7 ≈ 647. The three
+# longest suites (driver, run-phase, the expected outputs) are alone in their groups. The runner is about three times
+# faster than the local Windows machine (gates 234 s against 826, 1.6.0).
+# 1.8.0 (CI of the merged tree): the driver grew past the per-suite limit (TIMEOUT driver dopo 1800 s); its 1.8.0
+# sections went to driver-esiti (driver.test.sh 207 cases + driver-esiti 126 = the 333 of before; on Linux 272 s + 49 s).
+# The driver keeps its group (its sections 1-13 are the 1424 s measured before B8-B13); driver-esiti goes to group 7.
 # Locally the same set: bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list <results dir> (from Git Bash).
 
 # left out on Windows
@@ -15,39 +19,46 @@
 - comandi-equivalenza  needs rsync and flock: on Windows it runs in WSL, which the runner does not have (locally at release)
 - tools/oracolo.test.sh  about 70 minutes in Git Bash on the local machine; logic that does not depend on the platform: it runs on Linux and macOS
 
-# group 1: run-phase (1047 s)
-1 run-phase
-1 tools/suite.test.sh
-1 phase-usage
-1 session-start
-1 stop-hook
+# group 1: the driver (1424 s)
+1 driver
 
-# group 2: the expected outputs of the public corpus (1009 s)
-2 tools/esempi-equiv.test.sh
-2 bash-node
-2 cycle-report
+# group 2: run-phase (1093 s)
+2 run-phase
 
-# group 3: cycle-state (726 s), plan-check (440 s)
-3 cycle-state
-3 plan-check
+# group 3: the expected outputs of the public corpus (1050 s)
+3 tools/esempi-equiv.test.sh
 
-# group 4: finalize, gates, messages, ciclo-worktree, maat-doctor
-4 finalize
-4 gates
-4 messages
-4 ciclo-worktree
-4 maat-doctor
+# group 4: cycle-state (888 s) and short ones
+4 cycle-state
+4 tools/suite.test.sh
+4 stop-hook
+4 session-start
+4 phase-usage
+4 nomi_test
+4 transcript
+4 blocks-independent
 
-# group 5: the driver and the short ones
-5 driver
-5 spazi
-5 guard
-5 test-review-surface
-5 maat-paths
-5 senza-wsl
-5 phase-events
+# group 5: plan-check (644 s), gates (243 s) and short ones
+5 plan-check
+5 gates
 5 context-pack
-5 genericita
-5 maat-config
 5 harness-merge
-5 blocks-independent
+5 maat-config
+
+# group 6: finalize, messages, ciclo-worktree, cycle-report, phase-events
+6 finalize
+6 messages
+6 ciclo-worktree
+6 cycle-report
+6 phase-events
+
+# group 7: the 1.8.0 sections of the driver (driver-esiti), maat-doctor and the short ones
+7 driver-esiti
+7 maat-doctor
+7 bash-node
+7 guard
+7 test-review-surface
+7 genericita
+7 senza-wsl
+7 spazi
+7 maat-paths

@@ -12,9 +12,10 @@ The caller gives you:
   section (format 2: `Plan format: 2`). A plan written before Maat 1.3.0 has the Italian headings and keywords
   (`## Piano di implementazione`, `### Piano di test`, `### File toccati`, `### Decisioni`, `asserzione`,
   `rosso se:`, `(nuovo)`): they mean the same as the English ones below;
-- the **scope**: the only files you may write — the plan's test files and the files it declares new
-  (`(new)` after the path in `### Touched files`). It is `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh"
-  accept <spec>`: `test <path>` lines and `nuovo <path>` lines. The guard (`FIC_SCOPE`) denies every other
+- the **scope**: the only files you may write — the plan's test files, the files it declares new
+  (`(new)` after the path in `### Touched files`) and, since 1.8.0, the other production files of `### Touched files`
+  for **additive stubs only**. It is `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh"
+  accept <spec>`: `test <path>`, `nuovo <path>` and `stub <path>` lines. The guard (`FIC_SCOPE`) denies every other
   write in the repository;
 - the mode: `test-red` (write in the working tree) or `test-stage` (write the same files under
   `<run-dir>/staging/<path relative to the repository>` — the working tree is not yours: the plan is
@@ -39,7 +40,26 @@ The caller gives you:
    - A function that **already exists** gets no stub, not even of its signature: a test of its new parameter fails
      on the base with the `TypeError` of the call, and that is the red the plan declares (`unexpected keyword
      argument …`). If the row's red holds only with a signature stub, it is a deviation of the plan: say so.
+   - **The red is local to the test** (1.8.0): on the base with stubs the unit the runner loads (Go package, Rust
+     crate/target, ES module, Python module) loads and compiles, and the test fails on its assertion. A new symbol a
+     test names that has no place yet — a field or a method on an existing type (`Decoder.MaxDepth` in `decode.go`), a
+     new export of an existing module, an import that does not resolve — gets an **additive stub in its `stub` file**:
+     exact signature, zero value or a body that does not satisfy the assertion (Go `return dec` / zero value, Rust
+     `Default::default()`, TS `return undefined as unknown as T`, Python `raise NotImplementedError`).
+   - In a `stub` file you **only add lines**. The one removed line allowed is a list instruction that grows inside
+     its last brackets with names only: `export { a }` → `export { a, b }`, `__all__ = ["a"]` → `__all__ = ["a", "b"]`,
+     `pub use x::{a}` → `pub use x::{a, b}`. A formatter realignment (gofmt, rustfmt, prettier) is fine. Any other
+     change of an existing line — a signature, a condition, a return, a call — is refused by the driver («stub non
+     additivo: <file>:<line>») and the phase stops.
+   - A prompt line `RIPRESA (driver): <n>/<max> — stub mancanti: <symbols> — …`: the previous attempt was red on a
+     missing symbol (the unit did not compile or import, `rosso_simbolo`); its files are back in the tree. Write the
+     missing stubs, do not touch the tests.
 3. Nothing else: no production code outside the stubs, no fixtures elsewhere, no snapshot files.
+4. **Test deviation** (1.8.0): when the row as written cannot hold only for its DATA — fixtures, inputs, internal names,
+   the organization of the tests (e.g. other base paths so that two routes do not collide) — declare it as
+   `Plan deviation: test-data: <Tn> — <what changes> — <why>` and keep the row's assertion, requirement, file and test
+   name exactly. Anything else that does not hold is a plain `Plan deviation` (a STOP). The caller has the deviation
+   judged; do not change the test file after reporting.
 
 ## Inner loop
 
@@ -81,7 +101,7 @@ Stub:
 - <file> — <exported symbols>
 Gates run:
 - <command> → <FAIL (expected) | PASS | BLOCKED> — <last lines of the REAL output>
-Plan deviation: none | <row> — <what does not hold> — <evidence file:line>
+Plan deviation: none | <row> — <what does not hold> — <evidence file:line> | test-data: <Tn> — <what changes> — <why>
 Blocked on: none | <reason>
 ```
 

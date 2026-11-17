@@ -36,9 +36,11 @@ trap 'rm -rf "$T"' EXIT
 check() { if eval "$2"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; sed 's/^/    /' "$T/out" 2>/dev/null; fi; }
 cygm() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 WIN=0; case "${OSTYPE:-}:$(uname -s 2>/dev/null)" in *msys*|*cygwin*|*:MINGW*|*:MSYS*|*:CYGWIN*) WIN=1 ;; esac
-# 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see (an app execution alias of
-# WindowsApps is a reparse point: Git Bash does not stat it, Python's shutil.which finds it; on some CI runners)
-PATH_SENZA_WSL=$(out=""; IFS=:; for d in $PATH; do { [ -e "$d/wsl.exe" ] || [ -e "$d/wsl" ] || ls -A "$d" 2>/dev/null | grep -qixE 'wsl(\.exe)?'; } && continue; out+="${out:+:}$d"; done; printf '%s' "$out")
+# 1.6.0: a folder is left out also when its listing has a wsl entry that `-e` does not see; 1.8.0 (CI): also when the
+# doctor's Python finds one (shutil.which, os.listdir) or a new bash does (`command -v`), recomputed right before each
+# case — senza_wsl of lib/senza-wsl.sh, shared with senza-wsl.test.sh and phase-events.test.sh
+. "$HERE/lib/senza-wsl.sh"
+PATH_SENZA_WSL=$(senza_wsl)
 
 mkdir -p "$T/bin" "$T/home/.claude" "$T/py38"
 printf '#!/bin/sh\necho "2.1.285 (Claude Code)"\n' > "$T/bin/claude"
@@ -214,16 +216,40 @@ V8=$(variante copia-anche 'c["moduli"][0]["copia_anche"] = ["dati", "non-esiste"
 caso_copia_anche() { DOCX=${1:-} doc MAAT_CONFIG="$V8"; [ "$rc" = 1 ] && ha "^MANCA copia_anche del modulo m: non-esiste non esiste" && ha "^OK copia_anche del modulo m: dati"; }
 check "copia_anche verso una cartella inesistente -> MANCA (e la cartella vera OK)" 'caso_copia_anche'
 
+# --- 8b. (1.8.0, A4, DA3) copia at the root of the repository: not supported, said before the cycle (ATTENZIONE with the
+#     remedy); the module at the root without copia (the base project) has no such line. Counterproof at the end.
+V8B=$(variante copia-radice 'c["moduli"][0]["copia"] = {"test": "true {test}"}')
+caso_copia_radice() { DOCX=${1:-} doc MAAT_CONFIG="$V8B"; ha "^ATTENZIONE modulo m: copia con radice_pacchetti alla radice del repository non e' supportata \(1\.8\.0\): la controprova si ferma con exit 64 e test-fast\.sh rifiuta la copia — per la controprova usa un modulo senza copia \(alla radice gira\), o metti radice_pacchetti in una sottocartella$"; }
+check "copia alla radice -> ATTENZIONE col rimedio" 'caso_copia_radice'
+doc
+check "  modulo alla radice senza copia -> nessuna riga sulla copia alla radice" '! ha "copia con radice_pacchetti alla radice"'
+
 # --- 9. Windows without WSL: copia_wsl auto, nativo modules --------------------------------------------------------------
 V9=$(variante wsl-auto 'c["piattaforma"]["copia_wsl"] = "auto"')
-caso_wsl_assente() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
-caso_piattaforma() { DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
+caso_wsl_assente() { PATH_SENZA_WSL=$(senza_wsl); DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"; }
+caso_piattaforma() { PATH_SENZA_WSL=$(senza_wsl); DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc -- --piattaforma; [ "$rc" = 0 ] && [ "$(tr -d '\r' < "$T/out")" = windows-senza-wsl ]; }
 if [ "$WIN" = 1 ]; then
   check "copia_wsl auto, moduli nativi, PATH senza wsl -> exit 0 con «WSL assente»" 'caso_wsl_assente'
   caso_wsl_assente || (   # detail of a red: which wsl the Python of the doctor finds on that PATH, and from which folder
     . "$HERE/python.sh" >/dev/null 2>&1   # in a subshell: python.sh does not change the shell of the test
     echo "    wsl per shutil.which con il PATH senza wsl: $(PATH="$T/bin:$PATH_SENZA_WSL" "$FIC_PY" -c 'import shutil; print(shutil.which("wsl"), shutil.which("wsl.exe"))' 2>&1)" )
   check "--piattaforma con PATH senza wsl -> windows-senza-wsl" 'caso_piattaforma'
+  # the Python decision of senza_wsl (SENZA-WSL-PY): a folder first in the PATH with a wsl that only Python sees, as
+  # the alias of those runners (wsl.cmd: shutil.which finds it through PATHEXT, the doctor too; `-e` and the listing of
+  # bash look for wsl and wsl.exe only). Counterproof: senza_wsl without that line keeps the folder, the doctor finds
+  # that wsl (it exits 0) and WSL is not missing -> red
+  mkdir -p "$T/wsl-solo-py"; printf '@exit /b 0\r\n' > "$T/wsl-solo-py/wsl.cmd"
+  caso_solo_py() { # <function computing the PATH without wsl>
+    local p; p=$(PATH="$T/wsl-solo-py:$PATH" "$1")
+    DPATH=$p doc MAAT_CONFIG="$V9"; [ "$rc" = 0 ] && ha "^OK WSL assente: copia veloce dei test non disponibile \(wsl\.exe fuori dal PATH\)"
+  }
+  check "  un wsl che vede solo Python (wsl.cmd in testa al PATH): la cartella tolta, exit 0 con «WSL assente»" \
+    '! [ -e "$T/wsl-solo-py/wsl.exe" ] && ! [ -e "$T/wsl-solo-py/wsl" ] && ! ls -A "$T/wsl-solo-py" | grep -qixE "wsl(\.exe)?" &&
+     [ -n "$(PATH="$T/wsl-solo-py" "$FIC_PY" -c "import shutil; print(shutil.which(\"wsl\") or \"\")")" ] && caso_solo_py senza_wsl'
+  MUT=$(sed -n '/^senza_wsl() {$/,/^}$/p' "$HERE/lib/senza-wsl.sh" | sed '1s/^senza_wsl()/senza_wsl_mut()/; s/^\( *\)\[ .* || continue   # SENZA-WSL-PY$/\1:   # SENZA-WSL-PY tolto/')
+  eval "$MUT"
+  check "controprova: senza_wsl senza la decisione di Python (SENZA-WSL-PY) -> la cartella resta, WSL non manca: rosso" \
+    'printf "%s\n" "$MUT" | grep -q "SENZA-WSL-PY tolto" && ! printf "%s\n" "$MUT" | grep -q "|| continue   # SENZA-WSL-PY$" && ! caso_solo_py senza_wsl_mut && ! ha "WSL assente"'
 else
   echo "SALTATO [WSL assente, --piattaforma windows-senza-wsl]: la piattaforma non è Windows (uname/OSTYPE)"
   DPATH=$PATH doc -- --piattaforma
@@ -233,6 +259,7 @@ fi
 # --- 10. wsl module without WSL (or outside Windows) -----------------------------------------------------------------------
 V10=$(variante modulo-wsl 'c["moduli"][0]["ambiente"] = "wsl"')
 caso_modulo_wsl() {
+  PATH_SENZA_WSL=$(senza_wsl)
   DOCX=${1:-} DPATH=$PATH_SENZA_WSL doc MAAT_CONFIG="$V10"
   [ "$rc" = 1 ] || return 1
   if [ "$WIN" = 1 ]; then ha "^MANCA modulo m ambiente: wsl ma WSL assente: i suoi gate saranno BLOCKED — metti \`ambiente: nativo\` o installa WSL"
@@ -483,6 +510,8 @@ mutante() { # <name> <sed expression> -> path of the mutated doctor (with the pl
 }
 m=$(mutante copia-anche 's/ok = os.path.isdir(posixpath.join(ROOT, mc.norm(d)))/ok = True/')
 check "controprova: copia_anche senza controllo -> la cartella inesistente passa, rosso" '[ -n "$m" ] && ! caso_copia_anche "$m"'
+m=$(mutante copia-radice 's/    if m.get("copia") and not mc.norm(m\["radice_pacchetti"\]):   # COPIA-RADICE/    if False:   # COPIA-RADICE/')
+check "controprova (1.8.0, A4): senza il controllo della copia alla radice -> niente ATTENZIONE, rosso" '[ -n "$m" ] && ! caso_copia_radice "$m"'
 m=$(mutante modulo-wsl 's/elif amb == "wsl" and not wsl:/elif False:/; s/if amb == "wsl" and not WIN:/if False:/')
 check "controprova: modulo wsl senza la riga MANCA -> rosso" '[ -n "$m" ] && ! caso_modulo_wsl "$m"'
 m=$(mutante sonda 's/ok = any(x.search(cmd) for _p, x in rx)/ok = True/')

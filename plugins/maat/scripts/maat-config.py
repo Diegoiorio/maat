@@ -283,6 +283,31 @@ def s11(cfg):
         yield "harness", T("maat-config-170.s11")
 
 
+def s12(cfg):
+    """1.8.0: ciclo (ciclo.riprese, the resumes of a stopped phase) exists from 1.8: a file that uses it declares
+    "harness": ">=1.8" or newer; ciclo.riprese is an integer >= 0 (0 = the STOP of 1.7)."""
+    if "ciclo" not in cfg:
+        return
+    r = (cfg.get("ciclo") or {}).get("riprese")
+    if isinstance(r, int) and not isinstance(r, bool) and r < 0:  # RIPRESE-NON-NEGATIVE
+        yield "ciclo.riprese", T("maat-config-180.s12_negative", v=r)
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-CICLO
+        yield "harness", T("maat-config-180.s12")
+
+
+def s13(cfg):
+    """1.8.0 (B12-B13 review): the module keys of 1.8 (moduli[].simbolo_mancante, moduli[].separatori_test) need
+    "harness": ">=1.8" or newer, as ciclo (S12): an older Maat refuses the file instead of ignoring the key."""
+    usate = [(i, k) for i, md in moduli(cfg) for k in ("simbolo_mancante", "separatori_test") if k in md]
+    if not usate:
+        return
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-MODULI-180
+        for i, k in usate:
+            yield "moduli.%d.%s" % (i, k), T("maat-config-180.s13", k=k)
+
+
 # Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
 # maat-config.s* keys of the catalog).
 SEMANTICA = [
@@ -297,6 +322,8 @@ SEMANTICA = [
     ("S9", "generati[]: no golden, snapshot or lint baseline", s9),
     ("S10", "moduli[].preparati => preparazione present", s10),
     ("S11", "piano.taglia => harness >=1.7 or newer", s11),
+    ("S12", "ciclo => harness >=1.8 or newer; ciclo.riprese >= 0", s12),
+    ("S13", "moduli[].simbolo_mancante or separatori_test => harness >=1.8 or newer", s13),
 ]
 
 
@@ -581,6 +608,11 @@ def cmd_valida(args):
     if len(args) > 1:
         raise Uscita(64, T("maat-config.usage_valida"))
     _cfg, p = carica(args[0] if args else None)
+    # 1.8.0 (A4, DA3): a module with copia at the root of the repository is not supported (counterproof exit 64,
+    # test-fast.sh refuses it): a warning here, before the cycle, not an error (the file stays valid)
+    for i, m in moduli(_cfg):   # AVVISO-COPIA-RADICE
+        if m.get("copia") and norm(m.get("radice_pacchetti", m.get("radice", ""))) == "":
+            err(T("maat-config-180.root_copy", name=p, i=i, nome=m.get("nome", "")))
     print("maat-config: " + T("maat-config.valid", p=p))
 
 

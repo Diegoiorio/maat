@@ -787,7 +787,7 @@ STOP_CMD=""
 if [ -f "$STOP_PY" ]; then STOP_CMD="\"$FIC_PY\" \"$(cd "$(dirname "$STOP_PY")" && { pwd -W 2>/dev/null || pwd; })/stop-hook.py\""
 else echo "AVVISO: $(msg run-phase.stop_hook_missing stop="$STOP_PY")" >> "$err"; fi
 SETTINGS=$("$FIC_PY" -c 'import json, sys
-h = {"PreToolUse": [{"matcher": "Bash|Edit|Write|NotebookEdit|MultiEdit", "hooks": [{"type": "command", "command": sys.argv[1]}]}]}
+h = {"PreToolUse": [{"matcher": "Bash|Edit|Write|NotebookEdit|MultiEdit|Agent|Task", "hooks": [{"type": "command", "command": sys.argv[1]}]}]}
 if sys.argv[2]:
     h["Stop"] = [{"hooks": [{"type": "command", "command": sys.argv[2]}]}]
 print(json.dumps({"hooks": h}))' "$HOOK_CMD" "$STOP_CMD")
@@ -962,25 +962,147 @@ chiusura_prep() {
   chz_e2e=$(printf '%s\n' $chz_e2e | grep . | sort -u | tr '\n' ' ' | sed 's/ $//')
 }
 
+# 1.8.0 (A1): the test-data deviations of test-red (DEV_PY). «ammesse <result.json> <jsonl> <originale 0|1>»: exit 0
+# when the ONLY cause of the
+# STOP of `valida` is deviations — esito OK, bloccato_su none, every deviation test-data:/dati-test: or difensiva:/
+# defensive:, at least one test-data — printing «motivo\t<motivo>» then one test-data deviation per line; else exit 1.
+# «giudice <jsonl> <out> <input file>…»: the first call of the MAIN session (transcript.py) to Agent/Task with
+# subagent_type maat:spec-plan-reviewer-light whose prompt holds every input verbatim (CR removed) and that has a result
+# that is not an asynchronous launch: its text into <out>, prints «ok»; else «mai» (no call of that type), «incompleto
+# <n>» (the input files missing in the prompt, 1-based) or «asincrono» (no result in the foreground).
+DEV_PY='
+import importlib.util, json, os, sys
+sys.dont_write_bytecode = True
+one = lambda s: " ".join(str(s).split())
+if sys.argv[1] == "ammesse":
+    d = json.load(open(sys.argv[2], encoding="utf-8"))
+    dev = [one(x) for x in d.get("deviazioni") or [] if str(x).strip()]
+    td = [x for x in dev if x.startswith(("test-data: ", "dati-test: "))]
+    ok = d.get("esito") == "OK" and one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "-").lower() in ("nessuno", "none") \
+        and td and all(x.startswith(("test-data: ", "dati-test: ", "difensiva: ", "defensive: ")) for x in dev)
+    if ok and sys.argv[4] == "0":   # no originale=: valida saw no PHASE RESULT line in the text (structured_output only)
+        res = None
+        for ln in open(sys.argv[3], encoding="utf-8", errors="replace"):
+            try:
+                ev = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(ev, dict) and ev.get("type") == "result":
+                res = ev
+        txt = (res or {}).get("result") or ""
+        ok = res is not None and not any(l.strip().startswith(("PHASE RESULT", "ESITO FASE")) for l in str(txt).splitlines())
+    if not ok:
+        sys.exit(1)
+    sys.stdout.buffer.write(("motivo\t%s\n" % one(d.get("motivo") or "")[:300] + "".join(x + "\n" for x in td)).encode("utf-8"))
+    sys.exit(0)
+s = importlib.util.spec_from_file_location("transcript_rp", os.path.join(os.environ["MAAT_SCRIPTS_PY"], "transcript.py"))
+tr = importlib.util.module_from_spec(s); s.loader.exec_module(tr)
+rr = tr.righe(sys.argv[2])
+ii = [open(f, encoding="utf-8", errors="replace").read().replace("\r", "") for f in sys.argv[4:]]
+calls = [c for c in tr.chiamate(rr) if c["name"] in tr.AGENT_TOOLS and c["input"].get("subagent_type") == "maat:spec-plan-reviewer-light"]
+if not calls:
+    print("mai"); sys.exit(0)
+esito = "asincrono"
+for c in calls:
+    p = tr.testo(c["input"].get("prompt")).replace("\r", "")
+    miss = [str(k + 1) for k, x in enumerate(ii) if x not in p]  # INGRESSI-DEL-GIUDICE
+    if miss:
+        esito = "incompleto " + ",".join(miss)
+        continue
+    for _n, t, err, asin in c["results"]:
+        if not asin and not err:
+            open(sys.argv[3], "w", encoding="utf-8").write(t)
+            print("ok"); sys.exit(0)
+print(esito)
+'
+# The checks of the test-data deviations after the usual verification (A1, all needed; the first that fails is the
+# STOP): every acceptance test «dimostrato» in rossi.json; for each deviation its Tn a row of the plan, the judge in the
+# foreground with the row, its traceability rows, the deviation and the diff RECOMPUTED here with `plan-check.sh diff-test`
+# (the worker's command) in its prompt, and `plan-check.sh deviazione` ACCETTATA on its result. Writes
+# log/<label>.deviazioni-test («<text>\t<verdict>\t<sha256 of the diff>») and the lines of log/deviazioni-accettate.txt.
+deviazioni_test() { # $1 = file with the test-data deviations (one per line); prints the cause of a STOP, nothing if accepted
+  local d tn k=0 dl rc st out vd sha tmp="$dir/log/$label.deviazioni-test.tmp" pfx="$dir/log/$label.dev"
+  "$FIC_PY" -c 'import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8")).get("test") or {}
+sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" for v in d.values()) else 1)' "$TR/rossi.json" 2>>"$err" ||
+    { msg run-phase-180.dev_not_proven; return 0; }   # DEV-DIMOSTRATI
+  : > "$tmp"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    k=$((k + 1))
+    tn=$(printf '%s\n' "$d" | sed -n 's/^\(test-data\|dati-test\): *\([A-Za-z0-9._-]*\) *—.*/\2/p')
+    [ -n "$tn" ] || { msg run-phase-180.dev_no_tn d="$d"; return 0; }
+    out=$(bash "$PC" deviazione - "$SPEC_F" "$tn" 2>>"$err" | tr -d '\r'); rc=$?
+    [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }
+    printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')" > "$pfx$k.row"
+    printf '%s\n' "$out" | sed -n 's/^trace row: //p' > "$pfx$k.traces"
+    printf '%s' "$d" > "$pfx$k.text"
+    bash "$PC" diff-test "$SPEC_F" "$(printf '%s\n' "$out" | sed -n 's/^test file: //p')" --run-dir "$dir" > "$pfx$k.diff" 2>>"$err" &&
+      [ -s "$pfx$k.diff" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
+    printf '%s' "$(cat "$pfx$k.diff")" > "$pfx$k.diff-in"   # the diff as the prompt holds it: without the final newline
+    printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')" > "$pfx$k.instr"   # the fixed block (review)
+    [ -s "$pfx$k.instr" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
+    local inputs=("$pfx$k.instr" "$pfx$k.row") l j=0
+    while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
+    inputs+=("$pfx$k.text" "$pfx$k.diff-in")
+    st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" "${inputs[@]}" 2>>"$err" | tr -d '\r')
+    case "$st" in
+      ok) ;;
+      mai) msg run-phase-180.dev_judge_never tn="$tn"; return 0 ;;   # GIUDICE-CHIAMATO
+      incompleto*) msg run-phase-180.dev_judge_input tn="$tn" which="${st#incompleto }"; return 0 ;;
+      *) msg run-phase-180.dev_judge_async tn="$tn"; return 0 ;;
+    esac
+    out=$(bash "$PC" deviazione "$pfx$k.result" "$SPEC_F" "$tn" 2>>"$err" | tr -d '\r'); rc=$?
+    [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }  # DEVIAZIONE-ACCETTATA
+    vd=$(tr -d '\r' < "$pfx$k.result" | sed -n 's/^[ \t>*_`-]*Deviation verdict:[ \t*_`]*//p' | tail -1 | sed 's/[ \t*_`]*$//')
+    sha=$(sha256sum < "$pfx$k.diff" | cut -c1-64)
+    printf '%s\t%s\t%s\n' "$d" "$vd" "$sha" >> "$tmp"
+  done < "$1"
+  mv -f "$tmp" "$dir/log/$label.deviazioni-test"
+  { [ -f "$dir/log/deviazioni-accettate.txt" ] && tr -d '\r' < "$dir/log/deviazioni-accettate.txt" | grep -v "^$label	"
+    awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
+    mv -f "$dir/log/deviazioni-accettate.txt.tmp" "$dir/log/deviazioni-accettate.txt"
+}
 # --- driver verification for test-red (harness-pt11, see TEST-RED PHASE): prints the final outcome of the phase ---
 verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
-  local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why=""
+  local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why="" devf="" esci="$1"
   e1=$(printf '%s\n' "$1" | sed -n 1p)
-  printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK' || { printf '%s\n' "$1"; return 0; }
+  if ! printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; then
+    # 1.8.0 (A1): the STOP of `valida` whose only cause is test-data deviations enters the verification (VERIFY-RED-
+    # DEVIAZIONI); with originale= the OK line of the session, without (only structured_output) one synthesized
+    devf="$dir/log/$label.dev-ammesse"
+    local orig; orig=$(printf '%s\n' "$1" | sed -n 's/^originale=//p' | head -1)
+    if printf '%s\n' "$e1" | grep -Eq '^PHASE RESULT test-red: STOP — ' && [ -f "$dir/log/$label.result.json" ] &&
+       { [ -z "$orig" ] || { printf '%s\n' "$e1" | grep -Eq '^PHASE RESULT test-red: STOP — JSON: ' &&
+                              printf '%s\n' "$orig" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; }; } &&
+       "$FIC_PY" -c "$DEV_PY" ammesse "$dir/log/$label.result.json" "$log" "$([ -n "$orig" ] && echo 1 || echo 0)" > "$devf" 2>>"$err"; then
+      tr -d '\r' < "$devf" | sed -n '2,$p' > "$devf.elenco"
+      e1=$orig
+      [ -n "$e1" ] || e1="PHASE RESULT test-red: OK — $(tr -d '\r' < "$devf" | sed -n '1s/^motivo	//p')"  # RIGA-OK-SINTETIZZATA
+      esci=$e1
+    else
+      rm -f "$devf"; printf '%s\n' "$1"; return 0
+    fi
+  fi
   # writes of the phase outside its scope (also via Bash, which the guard does not see): tree before and after
   local t0 t1 fuori c="$dir/log/$label.cambiati-fase" a="$dir/log/$label.altri-flussi" nm="" nrc=0 p
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
   if [ -z "$t0" ] || [ -z "$t1" ]; then why="$(msg run-phase.red_no_attr)"
   else
+    # (B12-B13 review) the files of the run dir itself (when it lies in the repository and is not gitignored) are the
+    # harness's own, never a write of the phase
+    local rdp; rdp=$(cd "$dir" 2>/dev/null && pwd); rdp=${rdp#"$(cd "$FIC_REPO" && pwd)"/}
     (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1") 2>/dev/null | tr -d '\r' |
-      grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' > "$c"   # SCOPE-DOPO-LA-FASE
+      grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' | { [ -n "$rdp" ] && [ "${rdp#/}" = "$rdp" ] && grep -vF -- "$rdp/" || cat; } > "$c"   # SCOPE-DOPO-LA-FASE
     # OTHER FLOWS: an out-of-scope path that the subsession never named belongs to another flow
     : > "$a"
-    if [ -s "$c" ]; then
+    if [ -n "$devf" ] && [ -s "$c" ]; then  # DEV-SOLO-SCOPE: before do-not-touch.txt / touched.txt are rewritten
+      why="$(msg run-phase-180.dev_outside files="$(head -5 "$c" | paste -sd, -)")"
+    elif [ -s "$c" ]; then
       nm=$(nominati "$c"); nrc=$?
       [ $nrc -eq 0 ] && printf '%s\n' "$nm" | awk -F'\t' '$1 == "mai" { print $2 }' > "$a"
     fi
-    fuori=$(grep -vxF -f "$a" "$c" | head -5 | paste -sd, -)
+    fuori=""; [ -n "$why" ] || fuori=$(grep -vxF -f "$a" "$c" | head -5 | paste -sd, -)
     if [ -n "$fuori" ]; then
       why="$(msg run-phase.red_outside out="$fuori")"
       [ $nrc -ne 0 ] && why="$why ($(msg run-phase.red_names))"
@@ -1007,6 +1129,32 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       fi
     else rm -f "$a"; fi
   fi
+  # 1.8.0 (D4): the `stub` files of accept (existing production files) changed only by extension, on the diff
+  # pre-tree -> post-tree taken with -w --ignore-blank-lines (a realignment of gofmt/rustfmt/prettier removes nothing)
+  local stubf=() sd="" arc ao
+  if [ -z "$why" ]; then
+    mapfile -t stubf < <(bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^stub //p')
+    if [ ${#stubf[@]} -gt 0 ]; then
+      sd="$dir/log/$label.stub-diff"
+      # (B12-B13 review) where indentation is syntax (.py, .yml, .yaml) only the end-of-line spaces are ignored: a
+      # dedent of `return a` out of an `if` is a removed and an added line, not an invisible change
+      local sw=() si=() f_
+      for f_ in "${stubf[@]}"; do case "${f_,,}" in *.py|*.yml|*.yaml) si+=("$f_") ;; *) sw+=("$f_") ;; esac; done  # INDENTAZIONE
+      if ! { [ ${#sw[@]} -eq 0 ] || (cd "$FIC_REPO" && git -c core.quotePath=false diff -w --ignore-blank-lines --no-renames \
+                 --no-color --no-ext-diff "$t0" "$t1" -- "${sw[@]}"); } > "$sd" 2>>"$err" ||
+         ! { [ ${#si[@]} -eq 0 ] || (cd "$FIC_REPO" && git -c core.quotePath=false diff --ignore-space-at-eol --ignore-blank-lines \
+                 --no-renames --no-color --no-ext-diff "$t0" "$t1" -- "${si[@]}"); } >> "$sd" 2>>"$err"; then
+        why="$(msg run-phase-180.stub_diff label="$label")"
+      elif [ -s "$sd" ]; then
+        ao=$(bash "$PC" additivo "$SPEC_F" --diff "$sd" 2>>"$err"); arc=$?
+        case $arc in
+          0) ;;
+          1) why=$(printf '%s\n' "$ao" | tr -d '\r' | grep . | head -3 | paste -sd';' - | sed 's/;/; /g') ;;  # STUB-ADDITIVO
+          *) why="$(msg run-phase-180.stub_diff label="$label")" ;;
+        esac
+      fi
+    fi
+  fi
   mapfile -t files < <({ bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^test //p'
                          [ -f "$dir/touched.txt" ] && tr -d '\r' < "$dir/touched.txt"; } | grep -v '^$' | LC_ALL=C sort -u)
   if [ -n "$why" ]; then :
@@ -1018,22 +1166,60 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
     if [ -z "$ev" ] || [ "$ev" = - ]; then why="$(msg run-phase.red_no_evidence rc="$rc" label="$label")"
     else
       bash "$PC" rossi "$SPEC_F" --evidence "$ev" --run-dir "$dir" > "$ro" 2>&1; rc=$?
+      # 1.8.0 (B11, D3): the probes of rossi. limite_dimostrato: the STOP says the limit is proven (exit as every
+      # STOP: classifica reads the class UMANO from rossi.json); sonda_smentita: not a STOP, an AVVISO (the review sees it)
+      local lim sm
+      lim=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): limite_dimostrato.*/\1/p' | paste -sd, - | sed 's/,/, /g')
+      sm=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): sonda_smentita.*/\1/p' | paste -sd, - | sed 's/,/, /g')
+      [ -n "$sm" ] && avviso "AVVISO: $(msg run-phase-180.probe_disproved tests="$sm")"
       case $rc in
         0) ;;
         1) why=$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=STOP — //p' | tail -1)
-           why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")" ;;
+           if [ -n "$lim" ]; then why="$(msg run-phase-180.red_limit tests="$lim" label="$label")"  # LIMITE-NELLO-STOP
+           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")"; fi ;;
         *) why="$(msg run-phase.red_blocked det="$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1)" label="$label")" ;;
       esac
     fi
   fi
+  if [ -z "$why" ] && [ -n "$devf" ]; then   # 1.8.0 (A1): the test-data deviations, judged on verified input
+    why=$(deviazioni_test "$devf.elenco")  # CONTROLLI-DEVIAZIONE
+  fi
   if [ -z "$why" ]; then   # closing OK: stubs, test fingerprint (also in the basis), absorbed counterproofs (L2)
     mkdir -p "$TR"; rm -f "$TR/tests.red.txt"   # base of the prescribed changes (tests_guard): that of THIS test-red
-    { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
+    { bash "$PC" stubs "$SPEC_F" --run-dir "$dir" ${sd:+--diff "$sd"} && bash "$PC" tests "$SPEC_F" | tr -d '\r' > "$TR/tests.txt" &&
       bash "$PC" basis "$SPEC_F" --write-tests && bash "$PC" gen "$SPEC_F" --run-dir "$dir"; } >> "$ro" 2>&1 ||
       why="$(msg run-phase.red_closing label="$label")"
   fi
-  if [ -z "$why" ]; then printf '%s\n' "$1"
+  if [ -z "$why" ]; then printf '%s\n' "$esci"
   else printf 'PHASE RESULT test-red: STOP — %s\noriginale=%s\n' "$why" "$e1"; fi
+}
+# --- 1.8.0 (D4.5, DA7): a STOP of test-red parks the files the phase wrote (its scope only) in <run-dir>/staging/<path>
+# (staging.fp = plan fingerprint, staging.origine = stop) and brings them back to the pre-tree (git cat-file of the
+# blob of the .pre-tree for an existing file, removal for a new one): the tree handed over never holds half-written
+# tests or stubs. The next test-red copies them back (S3) and launches the subsession all the same (ORIGINE-STOP).
+parcheggia() { # $1 = outcome of test-red after verify_red; prints it, the STOP line with where the files are
+  local e1 t0 t1 p n=0 resto
+  e1=$(printf '%s\n' "$1" | sed -n 1p); resto=$(printf '%s\n' "$1" | sed -n '2,$p')
+  printf '%s\n' "$e1" | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: STOP' || { printf '%s\n' "$1"; return 0; }
+  t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
+  if [ -z "$t0" ] || [ -z "$t1" ] || [ ! -f "$dir/log/$label.scope" ]; then
+    avviso "AVVISO: $(msg run-phase-180.park_no_tree label="$label")"; printf '%s\n' "$1"; return 0
+  fi
+  rm -rf "$dir/staging"
+  while IFS= read -r p; do
+    [ -n "$p" ] && grep -qxF -- "$p" "$dir/log/$label.scope" || continue   # PARCHEGGIO-SOLO-SCOPE
+    if [ -f "$FIC_REPO/$p" ]; then mkdir -p "$dir/staging/$(dirname "$p")" && cp -p "$FIC_REPO/$p" "$dir/staging/$p"; fi
+    if (cd "$FIC_REPO" && git cat-file -e "$t0:$p") 2>/dev/null; then
+      mkdir -p "$FIC_REPO/$(dirname "$p")" && (cd "$FIC_REPO" && git cat-file blob "$t0:$p") > "$FIC_REPO/$p"
+    else rm -f "$FIC_REPO/$p"; fi
+    n=$((n + 1))
+  done < <(cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1" 2>/dev/null | tr -d '\r')  # PARCHEGGIO
+  if [ $n -gt 0 ]; then
+    echo "$plan_fp" > "$dir/staging.fp"; echo stop > "$dir/staging.origine"
+    e1="$e1 · $(msg run-phase-180.parked n="$n" dir="$dir")"
+  fi
+  printf '%s\n' "$e1"; [ -n "$resto" ] && printf '%s\n' "$resto"
+  return 0
 }
 # --- after implement/fix: the acceptance tests are those of test-red (harness-pt11) ---
 # PRESCRIBED CHANGE (typical case: a plan step changes a helper in a file that also contains an acceptance
@@ -1349,13 +1535,13 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
   scope="$dir/log/$label.scope"
   plan_fp=$(bash "$PC" basis "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^Basis: .*plan \([0-9a-f]*\).*/\1/p')
   if [ "$phase" = test-red ]; then
-    bash "$PC" accept "$SPEC_F" 2>>"$err" | tr -d '\r' | sed -n 's/^\(test\|nuovo\) //p' > "$scope"
+    bash "$PC" accept "$SPEC_F" 2>>"$err" | tr -d '\r' | sed -n 's/^\(test\|nuovo\|stub\) //p' > "$scope"
   else   # test-stage: only <run-dir>/staging/, tied to the fingerprint of the candidate plan
     mkdir -p "$dir/staging"
     sa=$(cd "$dir" && pwd); sa=$(maat_cygm "$sa" 2>/dev/null || printf '%s' "$sa")
     sr=$(maat_cygm "$FIC_REPO" 2>/dev/null || printf '%s' "$FIC_REPO")
     printf '%s/staging/\n' "${sa#"$sr"/}" > "$scope"
-    echo "$plan_fp" > "$dir/staging.fp"
+    echo "$plan_fp" > "$dir/staging.fp"; rm -f "$dir/staging.origine"   # 1.8.0: parked by test-stage, not by a STOP
   fi
   FIC_SCOPE=$(maat_cygm "$scope" 2>/dev/null || printf '%s' "$scope"); export FIC_SCOPE
   if [ "$phase" = test-red ] && { [ -d "$dir/staging" ] || [ -f "$dir/staging.fp" ]; }; then
@@ -1369,10 +1555,22 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
         else echo "AVVISO: S3: $(msg run-phase.s3_outside r="$r")" >> "$err"; fi
       done < <(find "$dir/staging" -type f | LC_ALL=C sort)
       rm -rf "$dir/staging.copiato"; mv "$dir/staging" "$dir/staging.copiato"; rm -f "$dir/staging.fp"
-      [ $nst -gt 0 ] && staged=1
+      # 1.8.0 (D4.5, DA7): files parked by a STOP of test-red (staging.origine=stop): copied back, and the subsession is
+      # launched all the same (they are not the proof of a finished phase, only the work to resume)
+      if [ "$(tr -d '\r\n' < "$dir/staging.origine" 2>/dev/null)" = stop ]; then  # ORIGINE-STOP
+        echo "S3: $(msg run-phase-180.s3_stop n="$nst")" >> "$err"
+      else
+        [ $nst -gt 0 ] && staged=1
+      fi
+      rm -f "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_copied n="$nst" fp="$sfp")" >> "$err"
     else
-      rm -rf "$dir/staging" "$dir/staging.fp"
+      if [ "$(tr -d '\r\n' < "$dir/staging.origine" 2>/dev/null)" = stop ] && [ -d "$dir/staging" ]; then  # SCARTATO-CONSERVATO
+        # (B12-B13 review) files parked by a STOP are work, not a cache: kept in staging.scartato (the last one)
+        rm -rf "$dir/staging.scartato"; mv "$dir/staging" "$dir/staging.scartato"
+        echo "AVVISO: S3: $(msg run-phase-180.s3_kept fp="${sfp:-$(msg run-phase.missing)}")" >> "$err"
+      fi
+      rm -rf "$dir/staging" "$dir/staging.fp" "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_discarded fp="${sfp:-$(msg run-phase.missing)}" plan="${plan_fp:-$(msg cycle-state.not_computable)}")" >> "$err"
     fi
   fi
@@ -1391,6 +1589,12 @@ stdin_file=$prompt
 if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-difensive.txt" ]; then
   { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DIFENSIVE (driver, run-phase.sh): $dir/log/deviazioni-difensive.txt — $(msg run-phase.defensive_prompt)"; tr -d '\r' < "$dir/log/deviazioni-difensive.txt"; } > "$dir/log/$label.prompt-difensive"
   prompt="$dir/log/$label.prompt-difensive" stdin_file="$dir/log/$label.prompt-difensive"
+fi
+# 1.8.0 (A1): the test-data deviations accepted in test-red, the same way (the review writes them in its section
+# «Deviazioni di test accettate»: the instruction is the text of the line, outside the base load of the review)
+if [ "$phase" = review ] && [ -s "$dir/log/deviazioni-accettate.txt" ]; then
+  { cat "$prompt"; printf '\n%s\n' "DEVIAZIONI DI TEST ACCETTATE (driver, run-phase.sh): $dir/log/deviazioni-accettate.txt — $(msg run-phase-180.accepted_prompt)"; tr -d '\r' < "$dir/log/deviazioni-accettate.txt"; } > "$dir/log/$label.prompt-deviazioni"  # PROMPT-DEVIAZIONI
+  prompt="$dir/log/$label.prompt-deviazioni" stdin_file="$dir/log/$label.prompt-deviazioni"
 fi
 ring_stop() { echo "$1" | tee -a "$err" >&2; rm -f "$dir/log/$label.running"; finish 7; }
 ring=0 prompt0=$prompt
@@ -1613,6 +1817,12 @@ fi
 if [ "$phase" = review ] && [ "$(sed -n 's/^exit=//p' "$dir/log/$label.counterproof" 2>/dev/null | tail -1)" = 5 ]; then
   fin_fail="counterproof.sh exit 5: $(msg run-phase.cp_mirror label="$label")${fin_fail:+; $fin_fail}"
 fi
+# (B12-B13 review, DA7) a test-red that ends technically (subsession exit != 0, killed, no outcome) is parked as well:
+# the .post-tree is already written (close_pre above); its line is an AVVISO in the phase stderr
+if [ "$phase" = test-red ] && { [ $code -ne 0 ] || [ -z "${esito:-}" ]; }; then  # PARCHEGGIO-TECNICO
+  pk=$(parcheggia "PHASE RESULT test-red: STOP — $(msg run-phase-180.park_technical code="$code")" | sed -n 1p)
+  case "$pk" in *" · "*) echo "AVVISO: ${pk##* · }" >> "$err" ;; esac
+fi
 if [ $code -eq 0 ]; then
   if [ -n "$fin_fail" ]; then
     orig=$(printf '%s\n' "$esito" | sed -n '1p')
@@ -1621,7 +1831,7 @@ originale=$orig}"
   fi
   if [ -n "$esito" ]; then   # harness-pt11: red-test verification (test-red), acceptance tests unchanged (implement/fix)
     case "$phase" in
-      test-red) esito=$(verify_red "$esito") ;;
+      test-red) esito=$(verify_red "$esito"); esito=$(parcheggia "$esito") ;;
       implement|fix) esito=$(tests_guard "$esito") ;;
     esac
   fi
@@ -1635,7 +1845,15 @@ originale=$orig}"
   cs_stop() { orig=$(printf '%s\n' "$esito" | sed -n 's/^originale=//p' | head -1); [ -n "$orig" ] ||
     orig=$(printf '%s\n' "$esito" | sed -n '1p'); cs_ok=0; esito="PHASE RESULT $phase: STOP — $cs_why${orig:+
 originale=$orig}"; }
-  if [ -n "$esito" ] && [ -f "$sp_md" ]; then cycle_state_read "$sp_md" || cs_stop; fi
+  if [ -n "$esito" ] && [ -f "$sp_md" ]; then
+    # (final review 1.8.0, R4/DA7) a test-red OK turned into a STOP here was not parked above (parcheggia parks only a
+    # STOP line, and only once: a second call would copy the restored tree over the parked files): park it now
+    cs_gia=$(printf '%s\n' "$esito" | sed -n 1p | grep -Ec '^(PHASE RESULT|ESITO FASE) [^:]*: STOP')
+    cycle_state_read "$sp_md" || {
+      cs_stop
+      if [ "$phase" = test-red ] && [ "$cs_gia" = 0 ]; then esito=$(parcheggia "$esito"); fi  # PARCHEGGIO-CS-STOP
+    }
+  fi
   case "$phase" in implement|fix)   # DEFENSIVE DEVIATIONS: recorded only on an OK outcome (before the state)
     if [ $cs_ok -eq 1 ] && printf '%s\n' "$esito" | sed -n 1p | grep -Eq '^(PHASE RESULT|ESITO FASE) [^:]*: OK'; then
       sp_sum=$(cksum < "$sp_md" 2>/dev/null)
