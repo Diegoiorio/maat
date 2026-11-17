@@ -481,7 +481,12 @@ sed 's/| rosso se: il venditore aggiorna |/| rosso se: `want 79, got 0` |/' "$T/
 expect 0 "^lint2: OK$" "lint2: red if «want 79, got 0» (un'asserzione) = 0 violazioni" -- bash "$PC" lint2 "$T/f2-want.md"
 sed 's/| rosso se: il venditore aggiorna |/| rosso se: `expected 3, got undefined` |/' "$T/f2.md" > "$T/f2-gotund.md"
 expect 0 "^lint2: OK$" "lint2: «got undefined» (un valore JS) non e' un errore di compilazione" -- bash "$PC" lint2 "$T/f2-gotund.md"
-if mutpc compila 's/^        if rc_:  # ROSSO-COMPILAZIONE-LINT2$/        if False:/'; then
+sed 's/| rosso se: il venditore aggiorna |/| rosso se: `Expected undefined to be 3` |/' "$T/f2.md" > "$T/f2-expund.md"
+expect 0 "^lint2: OK$" "lint2 (review B12-B13): «Expected undefined to be 3» e' un'asserzione, non un errore di compilazione" -- bash "$PC" lint2 "$T/f2-expund.md"
+tgl() { bash "$PC" taglia "$1" 2>&1 | tr -d '\r' | sed "s#$1##g"; }
+check_tg=$( [ "$(tgl "$T/f2.md")" = "$(tgl "$T/f2-und.md")" ] && echo uguale )
+[ "$check_tg" = uguale ] && pass=$((pass+1)) || { echo "FAIL [taglia (review B12-B13): il rosso «undefined» non cambia la taglia di un piano (lint2 di taglia non lo conta)]"; fail=$((fail+1)); }
+if mutpc compila 's/^        if rc_ and run is not None:  # ROSSO-COMPILAZIONE-LINT2.*$/        if False:/'; then
   expect 0 "^lint2: OK$" "controprova: senza il controllo il rosso «undefined» passa lint2 (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-compila/plan-check.sh" lint2 "$T/f2-und.md"
 else echo "FAIL [controprova rosso di compilazione: la mutazione non si applica]"; fail=$((fail+1)); fi
 # (B10-B11 review) the .ripresa the driver writes for a falsified budget: registered, rule decisione, no declassata:
@@ -1098,6 +1103,14 @@ mkev "$T/ev-sym-fe" "$JU_RED" FAIL " FAIL  tests/fmt.test.ts [ tests/fmt.test.ts
 SyntaxError: The requested module '../utils/fmt' does not provide an export named 'fmt'
 vitest-fast: esito=FAIL luogo=copia" FAIL
 expect 1 "^rosso T2: rosso_simbolo" "rossi: vitest «does not provide an export named» = rosso_simbolo" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sym-fe" --run-dir "$T/rr.run"
+# (B12-B13 review) «cannot import name X» is a missing symbol only for a name of the plan; another name may be a typo
+JU_TYPO='<testcase classname="tests.test_calc" name="test_somma"><failure message="ImportError">ImportError: cannot import name sommma
+tests/test_calc.py:1: ImportError</failure></testcase>'
+mkev "$T/ev-typo" "$JU_TYPO" FAIL "$FE_RED" FAIL
+expect 1 "^rosso T1: rosso_import " "rossi: «cannot import name sommma» (nome fuori dal piano: un refuso del test) resta rosso_import" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-typo" --run-dir "$T/rr.run"
+if mutpc nelpiano 's/^                sm = None$/                pass/'; then
+  expect 1 "^rosso T1: rosso_simbolo " "controprova: senza il controllo del nome nel piano il refuso diventa rosso_simbolo (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-nelpiano/plan-check.sh" rossi "$T/f2t.md" --evidence "$T/ev-typo" --run-dir "$T/rr.run"
+else echo "FAIL [controprova nome nel piano: la mutazione non si applica]"; fail=$((fail+1)); fi
 JU_SYN='<testcase classname="" name="tests.test_calc"><error message="collection failure">E   SyntaxError: invalid syntax</error></testcase>'
 mkev "$T/ev-syn" "$JU_SYN" FAIL "$FE_RED" FAIL
 expect 1 "^rosso T1: rosso_(raccolta|import) " "rossi: un errore di sintassi qualunque resta rosso_raccolta/rosso_import, mai rosso_simbolo (non sovra-accetta)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-syn" --run-dir "$T/rr.run"
@@ -1109,6 +1122,7 @@ import json, sys
 c = json.load(open(sys.argv[1], encoding="utf-8"))
 for m in c["moduli"]:
     m["simbolo_mancante"] = [r"unresolved reference: \w+"]
+c["harness"] = ">=1.8"   # S13: the module keys of 1.8 need it
 json.dump(c, open(sys.argv[2], "w", encoding="utf-8"))
 EOF
 expect 1 "^rosso T1: rosso_simbolo .*unresolved reference: maxDepth" "rossi: moduli[].simbolo_mancante di maat.json estende la tabella → rosso_simbolo" -- env MAAT_CONFIG="$T/maat-sym.json" bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-kt" --run-dir "$T/rr.run"
@@ -1127,6 +1141,12 @@ printf 'Deviation verdict: ACCEPT — fine\nRequirements still covered: RF2\n' >
 expect 1 "^Deviazione: STOP — requisito non più coperto: RF1$" "deviazione: un ID della riga mancante = STOP «requisito non più coperto»" -- bash "$PC" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
 printf 'Deviation verdict: STOP — the assertion changes\nRequirements still covered: RF1\n' > "$T/giud-stop.txt"
 expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT \(STOP — the assertion changes\)$" "deviazione: verdetto STOP del giudice = STOP" -- bash "$PC" deviazione "$T/giud-stop.txt" "$T/f2t.md" T1
+printf 'Deviation verdict: ACCEPT | STOP — <reason>\nRequirements still covered: RF1\n' > "$T/giud-modello.txt"
+expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT" "deviazione (review B12-B13): il modello ripetuto «ACCEPT | STOP — <reason>» non e' un ACCEPT" -- bash "$PC" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
+if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].startswith("ACCEPT")/'; then
+  expect 0 "^Deviazione: ACCETTATA$" "controprova: con «comincia con ACCEPT» il modello ripetuto passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-modello/plan-check.sh" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
+else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
+expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\.$" "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
 expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
 if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
@@ -1167,6 +1187,25 @@ addt ret 'func d() int {\n\treturn 0\n}\n' 'func d() int {\n\treturn depth(v)+0\
 expect 1 "^stub non additivo: .*f.go:2" "additivo: return 0 → return depth(v)+0 = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ret.diff"
 addt exf 'export { a }\n' 'export { a, f(b) }\n' .ts
 expect 1 "^stub non additivo: .*f.ts:1" "additivo: export { a } → export { a, f(b) } = non additivo (token non ammesso)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-exf.diff"
+# (B12-B13 review) not a list instruction: an assignment that starts with «imported», a declaration exported, a Java call
+addt imp2 'imported = load(path)\n' 'imported = load(path, strict)\n'
+expect 1 "^stub non additivo: .*f.py:1" "additivo: imported = load(path) → load(path, strict) = non additivo (import senza confine di parola)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-imp2.diff"
+addt efn 'export function decode(v) {\n  return v\n}\n' 'export function decode(v, maxDepth) {\n  return v\n}\n' .ts
+expect 1 "^stub non additivo: .*f.ts:1" "additivo: export function decode(v) { → decode(v, maxDepth) { = non additivo (una firma)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-efn.diff"
+addt ecs 'export const handlers = [auth]\n' 'export const handlers = [auth, debugBypass]\n' .ts
+expect 1 "^stub non additivo: .*f.ts:1" "additivo: export const handlers = [auth] → [auth, debugBypass] = non additivo (una dichiarazione)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ecs.diff"
+addt jv 'class A {\n  void f() {\n    user = repo.find(id);\n  }\n}\n' 'class A {\n  void f() {\n    user = repo.find(id, admin);\n  }\n}\n' .java
+expect 1 "^stub non additivo: .*f.java:3" "additivo: user = repo.find(id); → find(id, admin) = non additivo (use senza confine di parola)" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-jv.diff"
+addt fimp 'from x import (a)\n' 'from x import (a, b)\n'
+expect 0 "-" "additivo: from x import (a) → from x import (a, b) = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-fimp.diff"
+addt imts "import { a } from './m'\n" "import { a, b } from './m'\n" .ts
+expect 0 "-" "additivo: import { a } from './m' → import { a, b } from './m' = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-imts.diff"
+addt ets 'export type { A }\n' 'export type { A, B }\n' .ts
+expect 0 "-" "additivo: export type { A } → export type { A, B } = additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ets.diff"
+sed 's/^_ELENCO_JS = .*$/_ELENCO_JS = r"^\\s*(?:export|import)"/' "$HERE/nomi_test.py" > "$T/nomi-js-largo.py"
+if ! cmp -s "$HERE/nomi_test.py" "$T/nomi-js-largo.py"; then
+  expect 0 "-" "controprova: con la regola JS larga (ogni export) la dichiarazione esportata passa (rosso)" -- env NOMI_TEST_PY="$T/nomi-js-largo.py" bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-ecs.diff"
+else echo "FAIL [controprova regola JS: la mutazione non si applica]"; fail=$((fail+1)); fi
 addt del 'def a():\n    return 1\n\n\ndef b():\n    return 2\n' 'def a():\n    return 1\n'
 expect 1 "^stub non additivo: .*f.py:5" "additivo: una riga tolta = non additivo" -- bash "$PC" additivo "$T/f2t-stub.md" --diff "$T/add-del.diff"
 addt sost 'X = 1\n' 'X = 2\n'

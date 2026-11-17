@@ -14,13 +14,11 @@ End with `PHASE RESULT test-red: OK — <tests, stubs>` and the JSON block (`"fa
 
 Only data, fixtures, internal names or the organization of the tests — never an assertion, a requirement, a file or
 the name of a test. For each one, before closing, launch in the **foreground** (never `run_in_background`) the agent
-`maat:spec-plan-reviewer-light` with this prompt, each block pasted **verbatim** from the commands' output:
-1. `Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — <reason>» and
-   «Requirements still covered: <requirement IDs>». ACCEPT only if the change touches data, fixtures, internal names
-   or test organization and the assertion still proves every requirement of the row.`
-2. The lines `test row:` and `trace row:` of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`
-   (without the prefix), the deviation text, and the output of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh"
-   diff-test <spec> <its test file> --run-dir <run-dir>`, run after the test file is final.
+`maat:spec-plan-reviewer-light` with a prompt made of these blocks, each pasted **verbatim** (without its prefix):
+the lines `judge instructions:`, `test row:` and `trace row:` of
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`, the deviation text, and the output of
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" diff-test <spec> <its test file> --run-dir <run-dir>`, run after
+the test file is final.
 ACCEPT on all → `PHASE RESULT test-red: OK — …` with `"esito": "OK"`, `"bloccato_su": "nessuno"` and the deviations in
 `deviazioni`; a STOP of the judge → STOP. The driver checks the call in your transcript and recomputes the diff.
 

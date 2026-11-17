@@ -1336,7 +1336,13 @@ clp nm-dopo-del plan 0 "$NHS" "$STP" "$NH" "Open decision: spec — FR2 can be r
 printf '2026-11-16T10:00:00Z Ripresa: 00-plan · esito=rilancio · n=1 · declassata=0badc0de · sha=000000000000\n' > "$CL/nm-dopo-del.run/driver.log"
 for c in "p-cdsemi|cd src; printf 'impossibile %s' 65536|impossibile 65536" "p-gitshow|git show HEAD:src/name.rs|let depth: u16 = 0;" \
          "p-shc|bash -c 'cat src/name.rs'|let depth: u16 = 0;" "p-env|env X=1 nice -n 5 rg u16 src|let depth: u16 = 0;" \
-         "p-graffa|{ tr a-z A-Z < src/name.rs; }|LET DEPTH: U16"; do
+         "p-graffa|{ tr a-z A-Z < src/name.rs; }|LET DEPTH: U16" \
+         "p-nopager|git --no-pager show HEAD:src/name.rs|let depth: u16 = 0;" "p-gitp|git -P grep -n u16|let depth: u16 = 0;" \
+         "p-gitc|git -c core.pager=cat show HEAD:src/name.rs|let depth: u16 = 0;" \
+         "p-gitdir|git --git-dir=.git show HEAD:src/name.rs|let depth: u16 = 0;" "p-usrenv|/usr/bin/env cat src/name.rs|let depth: u16 = 0;" \
+         "p-bashl|bash -l -c 'cat src/name.rs'|let depth: u16 = 0;" "p-timeout|timeout 5 cat src/name.rs|let depth: u16 = 0;" \
+         "p-backslash|\\cat src/name.rs|let depth: u16 = 0;" "p-stdbuf|stdbuf -oL cat src/name.rs|let depth: u16 = 0;" \
+         "p-xargs|xargs cat < files.txt|let depth: u16 = 0;"; do
   IFS='|' read -r nm cmd res <<< "$c"
   clp "$nm" plan 0 "$NHS" "$STP" "$NH" "Open decision: proof — the 16-bit counter cannot hold 100000 levels" "Executed proof: \`$cmd\` → «$res»"
   jl "$CL/$nm.run/log/01-plan.jsonl" "$cmd" "$res"
@@ -1346,7 +1352,7 @@ jl "$CL/p-due.run/log/01-plan.jsonl" "$CMDP" "RecursionError: depth 65536"
 clp s-r plan 0 "$NHS" "$STP" "$NH"
 printf '%s\n' "# Spec" "" "## Requisiti" "" "- R1. Esportare il report." "" "## Fuori ambito" "" "- L'esportazione in CSV resta fuori da questa modifica." "" \
   "## Piano di implementazione" "" "$NH" "Open decision: scope — R1 vuole un file CSV, ma la spec dice «L'esportazione in CSV resta fuori da questa modifica.»" > "$CL/s-r.md"
-CASI="p-ok:plan p-nessuna:plan p-inventata:plan p-echo:plan p-pyc:plan p-spec:plan p-side:plan b-ok:plan b-giri:plan b-light:plan b-light-ok:plan c-ok:plan c-sotto:plan s-ok:plan s-inventata:plan s-noid:plan nm-recurrence:plan nm-ricorrenza:plan nm-dispute:plan nm-partial:plan nm-dopo:plan nhd-spec:plan nm-dopo-del:plan p-cdsemi:plan p-gitshow:plan p-shc:plan p-env:plan p-graffa:plan p-due:plan s-r:plan"
+CASI="p-ok:plan p-nessuna:plan p-inventata:plan p-echo:plan p-pyc:plan p-spec:plan p-side:plan b-ok:plan b-giri:plan b-light:plan b-light-ok:plan c-ok:plan c-sotto:plan s-ok:plan s-inventata:plan s-noid:plan nm-recurrence:plan nm-ricorrenza:plan nm-dispute:plan nm-partial:plan nm-dopo:plan nhd-spec:plan nm-dopo-del:plan p-cdsemi:plan p-gitshow:plan p-shc:plan p-env:plan p-graffa:plan p-due:plan s-r:plan p-nopager:plan p-gitp:plan p-gitc:plan p-gitdir:plan p-usrenv:plan p-bashl:plan p-timeout:plan p-backslash:plan p-stdbuf:plan p-xargs:plan"
 CLO=$(cla "$DRV")
 check "tipi: la funzione risponde su tutti i casi nuovi" '[ "$(printf "%s\n" "$CLO" | grep -c "	")" = "$(echo $CASI | wc -w)" ] && ! grep -q Traceback "$T/cl.out"'
 cln() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $6 }'; }   # <name> → the cause
@@ -1360,7 +1366,8 @@ check "scope: riga di Out of scope citata ed esistente + ID FR1 → UMANO; riga 
 check "non meccanici (recurrence, ricorrenza, dispute, partial, spec): UMANO con «decisione non verificata da script: <tipo>»" 'for x in nm-recurrence nm-ricorrenza nm-dispute nm-partial; do [ "$(clv $x)" = "UMANO decisione $x.md" ] || exit 1; done; cln nm-ricorrenza | grep -q "· decisione non verificata da script: recurrence$" && cln nm-partial | grep -q "decisione non verificata da script: partial$" && cln nhd-spec | grep -q "decisione non verificata da script: spec$"'
 check "non meccanico dopo una ripresa che aveva declassato una chiave → UMANO e «dopo la ripresa che aveva declassato <chiave>»" '[ "$(clv nm-dopo)" = "UMANO decisione nm-dopo.md" ] && cln nm-dopo | grep -q "decisione non verificata da script: spec · dopo la ripresa che aveva declassato 0badc0de$" && ! cln nhd-spec | grep -q "dopo la ripresa"'
 check "(review B10-B11) dopo una declassata il cui .ripresa e' stato cancellato: il segnale viene da driver.log (DA10)" '[ "$(clv nm-dopo-del)" = "UMANO decisione nm-dopo-del.md" ] && cln nm-dopo-del | grep -q "dopo la ripresa che aveva declassato 0badc0de$"'
-check "(review B10-B11) filtro: «cd x;», git show, bash -c '"'"'cat'"'"', env/nice + rg, «{ tr …; }» → comando che stampa, RIPRENDIBILE" 'for x in p-cdsemi p-gitshow p-shc p-env p-graffa; do [ "$(clv $x)" = "RIPRENDIBILE decisione $x.md" ] && cln $x | grep -q "stampa soltanto" || exit 1; done'
+check "(review B10-B11) filtro: «cd x;», git show, bash -c '"'"'cat'"'"', env/nice + rg, «{ tr …; }» → comando che stampa, RIPRENDIBILE" '(for x in p-cdsemi p-gitshow p-shc p-env p-graffa; do [ "$(clv $x)" = "RIPRENDIBILE decisione $x.md" ] && cln $x | grep -q "stampa soltanto" || exit 1; done)'
+check "(review B12-B13) filtro: git --no-pager/-P/-c/--git-dir, /usr/bin/env, bash -l -c, timeout 5, \\cat, stdbuf, xargs → comando che stampa, RIPRENDIBILE" '(for x in p-nopager p-gitp p-gitc p-gitdir p-usrenv p-bashl p-timeout p-backslash p-stdbuf p-xargs; do [ "$(clv $x)" = "RIPRENDIBILE decisione $x.md" ] && cln $x | grep -q "stampa soltanto" || { echo "$x: $(clv $x)"; exit 1; }; done)'
 check "(review B10-B11) due Executed proof sotto una decisione, la seconda inventata → RIPRENDIBILE" '[ "$(clv p-due)" = "RIPRENDIBILE decisione p-due.md" ] && cln p-due | grep -q "non trovata in log/01-plan.jsonl"'
 check "(review B10-B11) scope con «## Requisiti» e l ID R1 delle spec di Maat → UMANO" '[ "$(clv s-r)" = "UMANO decisione s-r.md" ]'
 if tmut dopodel 's/^\( *\)dk = declassate_registro(run_fs) .*$/\1dk = sorted(set(k for _l, r in riprese(run_fs)[0] for k in r.get("declassata") or []))/'; then
@@ -1370,6 +1377,8 @@ else check "controprova dopodel: la mutazione si applica" false; fi
 clmut puntoevirgola 's/\[ \\t\]\*(?:&&|;)\[ \\t\]\*"),$/[ \\t]*\&\&[ \\t]*"),/' p-cdsemi "UMANO decisione p-cdsemi.md"
 clmut gitshow 's/^STAMPA_GIT = ("grep", "show")$/STAMPA_GIT = ()/' p-gitshow "UMANO decisione p-gitshow.md"
 clmut shc 's/^\( *\)s = _SHELL_C.match(t)$/\1s = None/' p-shc "UMANO decisione p-shc.md"
+clmut envp 's/(?:env|command|exec|time|nice|builtin|timeout|stdbuf|xargs|nohup)/(?:NIENTE)/' p-env "UMANO decisione p-env.md"
+clmut gitopz 's/^\( *\)g = _GIT_SUB.match(t)  # GIT-OPZIONI$/\1g = re.match(r"git(?:[ \\t]+-[Cc][ \\t]+\\S+)*[ \\t]+(\\S+)", t)/' p-nopager "UMANO decisione p-nopager.md"
 clmut copiato 's/^\( *\)if estr in cmd or estr in "\\n".join(_sopra_piano(spec_fs)):$/\1if False:/' p-pyc "UMANO decisione p-pyc.md"
 clmut leggero 's/^\( *\)if rc == 0 and any(l.startswith("E1: STOP") for l in .*$/\1if False:/' b-light "RIPRENDIBILE decisione b-light.md"
 clmut reqr 's/(?:RF|CA|FR|AC|R)\[0-9\]+/(?:RF|CA|FR|AC)[0-9]+/' s-r "RIPRENDIBILE decisione s-r.md"
@@ -1381,6 +1390,7 @@ clmut taglio 's/^\( *\)if rc == 1 and "Scheletro: SOPRA IL TETTO" in out:  # TAG
 clmut ambito 's/^\( *\)if not any(c in t for c in citabili):  # AMBITO-CITATO$/\1if False:/' s-inventata "UMANO decisione s-inventata.md"
 clmut tipo 's/^\( *\)if not vale:  # CONTROLLO-DEL-TIPO$/\1if False:/' p-nessuna "UMANO decisione p-nessuna.md"
 rm -f "$T"/drv-jsonl.py "$T"/drv-stampa.py "$T"/drv-budget.py "$T"/drv-taglio.py "$T"/drv-ambito.py "$T"/drv-tipo.py
+rm -f "$T"/drv-envp.py "$T"/drv-graffa.py "$T"/drv-gitopz.py
 rm -f "$T"/drv-dopodel.py "$T"/drv-puntoevirgola.py "$T"/drv-gitshow.py "$T"/drv-shc.py "$T"/drv-copiato.py "$T"/drv-leggero.py "$T"/drv-reqr.py
 rm -rf "$CL" "$T"/drv-solo-plan.py "$T"/drv-draft.py "$T"/drv-ancora.py "$T"/drv-valida.py "$T"/drv-simbolo.py "$T"/drv-vecchio.py "$T"/drv-rifiutata.py "$T"/drv-piano-ok.py "$T"/drv-limite.py
 
@@ -1570,7 +1580,7 @@ printf '%s\n' "State: tr-fisso" "Next: TEST-RED — finto"
 EOF
 chmod +x "$T/cs-tr"
 rnuovo APPROVED; rrun tr-uguale FIC_CYCLE_STATE="$T/cs-tr"
-check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio (prompt 1/2 in 02), 02 senza-progresso, STOP" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito) $(rf 01-test-red regola)" = "rilancio simbolo" ] && grep -qx "RIPRESA (driver): 1/2 — stub mancanti: T1: undefined: MaxDepth — scrivi gli stub additivi nei file \`stub\` dello scope (e in quelli nuovi), non toccare i test" "$FAKE_CALLS.02-test-red.prompt" && [ "$(rf 02-test-red esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso" "$T/run.out"'
+check "ripresa test-red (DA9): stesso simbolo mancante due volte → 01 rilancio (prompt 1/2 in 02), 02 senza-progresso, STOP" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red " ] && [ "$(rf 01-test-red esito) $(rf 01-test-red regola)" = "rilancio simbolo" ] && grep -qx "RIPRESA (driver): 1/2 — stub mancanti: T1: undefined: MaxDepth — scrivi gli stub additivi nei file \`stub\` dello scope (e in quelli nuovi), solo per nomi del piano; un «cannot import name» può essere anche un refuso nell'"'"'import del test stesso: confrontalo col piano; non cambiare mai un'"'"'asserzione" "$FAKE_CALLS.02-test-red.prompt" && [ "$(rf 02-test-red esito)" = senza-progresso ] && grep -q "Driver result: STOP — ripresa senza progresso" "$T/run.out"'
 check "  la chiave rilievi di test-red porta l'impronta dei simboli: «-;<8 hex>»" '[ -n "$(rf 01-test-red rilievi | grep -x -- "-;[0-9a-f]\{8\}")" ]'
 rnuovo APPROVED; rrun tr-diverso FIC_CYCLE_STATE="$T/cs-tr"
 check "ripresa test-red (DA9): un simbolo diverso a ogni fase → seconda ripresa, poi il limite 2/2" '[ $rc -eq 1 ] && [ "$(rcalls)" = "01-test-red 02-test-red 03-test-red " ] && [ "$(rf 02-test-red esito)" = rilancio ] && [ "$(rf 03-test-red esito)" = limite ]'
@@ -1684,6 +1694,17 @@ if tmut jrtd 's/ and not (x.startswith(TEST_DATA) and x in acc)\]:  # JSON-RULE-
   check "controprova: senza .deviazioni-test letto da _json_rule la deviazione accettata ferma il ciclo (rosso)" 'nx "$FIC_PY" "$T/drv-jrtd.py" | grep -q "^STOP"'
 else check "controprova _json_rule test-data: la mutazione si applica" false; fi
 rm -f "$T/drv-jrtd.py"
+# (review B12-B13) a deviation longer than 300 characters is compared whole; the echoed template is not an ACCEPT
+LUNGA="test-data: T4 — $(printf 'other base paths %.0s' $(seq 1 25))— routes collide"
+printf '{"fase":"test-red","esito":"OK","motivo":"m","deviazioni":["%s"],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}\n' "$LUNGA" > "$RR/log/01-test-red.result.json"
+printf '%s\tACCEPT — only the bases change\t%064d\n' "$LUNGA" 0 > "$RR/log/01-test-red.deviazioni-test"
+check "next (review B12-B13): deviazione accettata di oltre 300 caratteri → IMPLEMENT (confronto sul testo intero)" '[ ${#LUNGA} -gt 300 ] && nx | grep -q "^IMPLEMENT"'
+if tmut intere 's/^\( *\)dev = \[" ".join(str(x).split()) for x in .*# DEV-INTERE$/\1dev = [one(x) for x in (d.get("deviazioni") or []) if str(x).strip()]/'; then
+  check "controprova: troncando a 300 caratteri la deviazione accettata ferma il ciclo (rosso)" 'nx "$FIC_PY" "$T/drv-intere.py" | grep -q "^STOP"'
+else check "controprova deviazione intera: la mutazione si applica" false; fi
+printf '%s\tACCEPT | STOP — <reason>\t%064d\n' "$LUNGA" 0 > "$RR/log/01-test-red.deviazioni-test"
+check "next (review B12-B13): un verdetto «ACCEPT | STOP — <reason>» (il modello ripetuto) non accetta → STOP" 'nx | grep -q "^STOP — 01-test-red: result.json STOP"'
+rm -f "$T/drv-intere.py"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
 cd /
 echo "driver.test.sh: $pass passati, $fail falliti"

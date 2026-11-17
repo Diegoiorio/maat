@@ -456,6 +456,8 @@ stopumano() { # $1 label, $2 state
   echo "2026-11-16T10:00:00Z Stop umano: $1 · regola=piano · state=$2" >> "$RUN/driver.log"; }
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"
 expect "R4: DRAFT e l ultima plan con «Stop umano:» registrato in driver.log, State uguale → STOP (non PLAN)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
+reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan -
+expect "R4 (review B12-B13): «Stop umano:» scritto con state=- (State ignoto) → STOP (fail-closed)" "^STOP — 01-plan ha dato OK su un piano ancora DRAFT"
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan 000000000000
 expect "R4: «Stop umano:» di un altro State (la spec e cambiata) → PLAN come oggi" "^PLAN — piano in DRAFT$"
 reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan "$(state)"; : > "$RUN/log/02-plan.jsonl"
@@ -479,6 +481,11 @@ if csmut 's/^\( *\)if lp and stop_umani(run_fs).*# DRAFT-STOP-UMANO$/\1if False:
   o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
   if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4: senza la riga DRAFT → PLAN rilancia il piano]"; printf '    %s\n' "$o"; fi
 else fail=$((fail + 1)); echo "FAIL [controprova R4: la mutazione si applica]"; fi
+if csmut 's/stop_umani(run_fs).get(lp\[-1\]) in (STATE, "-"):/stop_umani(run_fs).get(lp[-1]) == STATE:/'; then
+  reset; { above; plan DRAFT; } > "$SP"; stopumano 01-plan -
+  o=$(FIC_DRIVER_ROOT="$(cd "$HERE/.." && pwd)" FIC_DRIVER_PY="$O/driver.py" bash "$CS" "$SP" 2>&1 | sed -n 's/^Next: //p')
+  if printf '%s\n' "$o" | grep -q "^PLAN — piano in DRAFT$"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [controprova R4 state=-: senza il caso ignoto la riga DRAFT → PLAN rilancia]"; printf '    %s\n' "$o"; fi
+else fail=$((fail + 1)); echo "FAIL [controprova R4 state=-: la mutazione si applica]"; fi
 rm -f "$O/driver.py" "$O/maat_paths.py" "$O/maat_msg.py"; rm -rf "$O/lib"
 reset
 

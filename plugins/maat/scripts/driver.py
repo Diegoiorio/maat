@@ -334,7 +334,8 @@ def _json_rule(p):
     try:
         d = json.load(open(p, encoding="utf-8"))
         one = lambda s: " ".join(str(s).split())[:300]
-        dev = [one(x) for x in (d.get("deviazioni") or []) if str(x).strip()]
+        # (B12-B13 review) the deviations whole (whitespace compressed): truncated only for the text of the line
+        dev = [" ".join(str(x).split()) for x in (d.get("deviazioni") or []) if str(x).strip()]  # DEV-INTERE
         bs = one(d.get("bloccato_su") if d.get("bloccato_su") is not None else "(assente)")
         # 1.8.0 (A1): in test-red only, a test-data deviation counts as a difensiva when log/<label>.deviazioni-test
         # (written by run-phase.sh after the judge, on verified input) accepts it; cmd_valida does not change
@@ -825,7 +826,8 @@ def _cycle_state(spec_fs, tmp):
                     nxt("STOP — " + T("cycle-state-180.ripresa_stop", label=lp[-1], why=messaggio_ripresa(dp), run=RUN))
                 # R4 (B9 fix 2): the last plan phase printed OK on a spec still DRAFT, a final UMANO STOP the driver
                 # registered in driver.log at this State: STOP again (a phase cannot write that line)
-                if lp and stop_umani(run_fs).get(lp[-1]) == STATE:  # DRAFT-STOP-UMANO
+                # (B12-B13 review) a line written with state=- (State unknown) counts as this State: fail-closed
+                if lp and stop_umani(run_fs).get(lp[-1]) in (STATE, "-"):  # DRAFT-STOP-UMANO
                     nxt("STOP — " + T("cycle-state-180.stop_umano", label=lp[-1], run=RUN))
                 nxt("PLAN — " + T("cycle-state.plan_draft"))
             nxt("STOP — " + T("cycle-state.plan_nhd"))
@@ -1162,7 +1164,7 @@ NON_VERIFICATA_RIGA = "Decisione non verificata da script: "
 # «<UTC> Stop umano: <label> · regola=<rule> · state=<State after the phase>». The phases do not write driver.log (the
 # guard denies it); row R4 of `next` reads it: DRAFT and the last plan label stopped so at this State -> STOP, not PLAN
 STOP_UMANO_RIGA = "Stop umano: "
-STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+)$")
+STOP_UMANO_RX = re.compile(r" Stop umano: (\S+) · regola=\S+ · state=([0-9a-f]+|-)$")   # «-»: State unknown
 AMBITO_H = re.compile(r"^#+[ \t]+(?:[0-9]+\.[ \t]*)?(?:Out of scope|Fuori ambito|Constraints|Vincoli)\b", re.I)
 # (B10-B11 review) also «## Requisiti» / «## Requirements» and the ids R<n> of the Maat specs
 REQ_H = re.compile(r"^##[ \t]+(?:[0-9]+\.[ \t]*)?(?:requisiti|criteri di accettazione|(?:functional )?requirements"
@@ -1205,10 +1207,17 @@ def _decisioni_e_prove(spec_fs):
 _PREFISSI_CMD = (   # what runs nothing by itself before the command (B10-B11 review: more ways around the filter)
     re.compile(r"cd[ \t]+(?:\"[^\"]*\"|'[^']*'|[^ \t;&|]+)[ \t]*(?:&&|;)[ \t]*"),
     re.compile(r"[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|[^ \t]*)[ \t]+"),
-    re.compile(r"(?:env|command|exec|time|nice|builtin)(?:[ \t]+-[A-Za-z-]+(?:[ \t]+[0-9]+)?)*[ \t]+"),
-    re.compile(r"[{(][ \t]*"),
+    # (B12-B13 review) with their path (/usr/bin/env), their options and a numeric argument (timeout 5, nice -n 5)
+    re.compile(r"(?:\S*/)?(?:env|command|exec|time|nice|builtin|timeout|stdbuf|xargs|nohup)"
+               r"(?:[ \t]+(?:-[A-Za-z-]+(?:=\S*)?(?:[ \t]+[0-9]+)?|[0-9]+(?:\.[0-9]+)?[smhd]?))*[ \t]+"),  # PREFISSO-ENV
+    re.compile(r"[{(][ \t]*"),  # PREFISSO-GRAFFA
+    re.compile(r"\\(?=[A-Za-z])"),   # \cat: the alias bypass
 )
-_SHELL_C = re.compile(r"(?:\S*/)?(?:ba|da|z)?sh[ \t]+(?:-[A-Za-z]*c[A-Za-z]*)[ \t]+(?:'([^']*)'|\"([^\"]*)\")")
+_SHELL_C = re.compile(r"(?:\S*/)?(?:ba|da|z)?sh(?:[ \t]+-[A-Za-z]+)*?[ \t]+(?:-[A-Za-z]*c[A-Za-z]*)[ \t]+"
+                      r"(?:'([^']*)'|\"([^\"]*)\")")
+# git and its global options before the subcommand (-C dir, -c k=v, --no-pager, -P, --git-dir=…, --work-tree …)
+_GIT_SUB = re.compile(r"(?:\S*/)?git(?:[ \t]+(?:-[Cc][ \t]+\S+|--?[A-Za-z][\w-]*=\S+|--(?:git-dir|work-tree|namespace)[ \t]+\S+"
+                      r"|--?[A-Za-z][\w-]*))*[ \t]+([A-Za-z][\w-]*)")
 
 
 def _comando_stampa(cmd):
@@ -1230,7 +1239,7 @@ def _comando_stampa(cmd):
         return True
     p = os.path.basename(w.group(0).strip("\"'"))
     if p == "git":   # git grep / git show print what is already in the repository
-        g = re.match(r"git(?:[ \t]+-[Cc][ \t]+\S+)*[ \t]+(\S+)", t)
+        g = _GIT_SUB.match(t)  # GIT-OPZIONI
         return bool(g) and g.group(1) in STAMPA_GIT
     return p in STAMPA  # FILTRO-STAMPA
 
@@ -1348,7 +1357,7 @@ def _accettate(p):
     acc = set()
     for l in (_read(p) or "").replace("\r", "").split("\n"):
         f = l.split("\t")
-        if len(f) >= 2 and f[1].strip().startswith("ACCEPT"):
+        if len(f) >= 2 and re.match(r"ACCEPT\b(?!\s*\|)", f[1].strip()):  # ACCEPT-NON-MODELLO (not the echoed template)
             acc.add(" ".join(f[0].split()))
     return acc
 

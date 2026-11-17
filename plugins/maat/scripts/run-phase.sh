@@ -1040,7 +1040,9 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     bash "$PC" diff-test "$SPEC_F" "$(printf '%s\n' "$out" | sed -n 's/^test file: //p')" --run-dir "$dir" > "$pfx$k.diff" 2>>"$err" &&
       [ -s "$pfx$k.diff" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
     printf '%s' "$(cat "$pfx$k.diff")" > "$pfx$k.diff-in"   # the diff as the prompt holds it: without the final newline
-    local inputs=("$pfx$k.row") l j=0
+    printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')" > "$pfx$k.instr"   # the fixed block (review)
+    [ -s "$pfx$k.instr" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
+    local inputs=("$pfx$k.instr" "$pfx$k.row") l j=0
     while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
     inputs+=("$pfx$k.text" "$pfx$k.diff-in")
     st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" "${inputs[@]}" 2>>"$err" | tr -d '\r')
@@ -1087,15 +1089,20 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
   t0=$(cat "$dir/log/$label.pre-tree" 2>/dev/null); t1=$(cat "$dir/log/$label.post-tree" 2>/dev/null)
   if [ -z "$t0" ] || [ -z "$t1" ]; then why="$(msg run-phase.red_no_attr)"
   else
+    # (B12-B13 review) the files of the run dir itself (when it lies in the repository and is not gitignored) are the
+    # harness's own, never a write of the phase
+    local rdp; rdp=$(cd "$dir" 2>/dev/null && pwd); rdp=${rdp#"$(cd "$FIC_REPO" && pwd)"/}
     (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$t1") 2>/dev/null | tr -d '\r' |
-      grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' > "$c"   # SCOPE-DOPO-LA-FASE
+      grep -vxF -f "$dir/log/$label.scope" | grep -v '^$' | { [ -n "$rdp" ] && [ "${rdp#/}" = "$rdp" ] && grep -vF -- "$rdp/" || cat; } > "$c"   # SCOPE-DOPO-LA-FASE
     # OTHER FLOWS: an out-of-scope path that the subsession never named belongs to another flow
     : > "$a"
-    if [ -s "$c" ]; then
+    if [ -n "$devf" ] && [ -s "$c" ]; then  # DEV-SOLO-SCOPE: before do-not-touch.txt / touched.txt are rewritten
+      why="$(msg run-phase-180.dev_outside files="$(head -5 "$c" | paste -sd, -)")"
+    elif [ -s "$c" ]; then
       nm=$(nominati "$c"); nrc=$?
       [ $nrc -eq 0 ] && printf '%s\n' "$nm" | awk -F'\t' '$1 == "mai" { print $2 }' > "$a"
     fi
-    fuori=$(grep -vxF -f "$a" "$c" | head -5 | paste -sd, -)
+    fuori=""; [ -n "$why" ] || fuori=$(grep -vxF -f "$a" "$c" | head -5 | paste -sd, -)
     if [ -n "$fuori" ]; then
       why="$(msg run-phase.red_outside out="$fuori")"
       [ $nrc -ne 0 ] && why="$why ($(msg run-phase.red_names))"
@@ -1121,10 +1128,6 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
         done <<< "$nuovi"
       fi
     else rm -f "$a"; fi
-    # 1.8.0 (A1): with test-data deviations no path outside the scope of accept, not even one of another flow
-    if [ -n "$devf" ] && [ -z "$why" ] && [ -s "$c" ]; then  # DEV-SOLO-SCOPE
-      why="$(msg run-phase-180.dev_outside files="$(head -5 "$c" | paste -sd, -)")"
-    fi
   fi
   # 1.8.0 (D4): the `stub` files of accept (existing production files) changed only by extension, on the diff
   # pre-tree -> post-tree taken with -w --ignore-blank-lines (a realignment of gofmt/rustfmt/prettier removes nothing)
@@ -1133,8 +1136,14 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
     mapfile -t stubf < <(bash "$PC" accept "$SPEC_F" 2>/dev/null | tr -d '\r' | sed -n 's/^stub //p')
     if [ ${#stubf[@]} -gt 0 ]; then
       sd="$dir/log/$label.stub-diff"
-      if ! (cd "$FIC_REPO" && git -c core.quotePath=false diff -w --ignore-blank-lines --no-renames --no-color --no-ext-diff \
-              "$t0" "$t1" -- "${stubf[@]}") > "$sd" 2>>"$err"; then
+      # (B12-B13 review) where indentation is syntax (.py, .yml, .yaml) only the end-of-line spaces are ignored: a
+      # dedent of `return a` out of an `if` is a removed and an added line, not an invisible change
+      local sw=() si=() f_
+      for f_ in "${stubf[@]}"; do case "${f_,,}" in *.py|*.yml|*.yaml) si+=("$f_") ;; *) sw+=("$f_") ;; esac; done  # INDENTAZIONE
+      if ! { [ ${#sw[@]} -eq 0 ] || (cd "$FIC_REPO" && git -c core.quotePath=false diff -w --ignore-blank-lines --no-renames \
+                 --no-color --no-ext-diff "$t0" "$t1" -- "${sw[@]}"); } > "$sd" 2>>"$err" ||
+         ! { [ ${#si[@]} -eq 0 ] || (cd "$FIC_REPO" && git -c core.quotePath=false diff --ignore-space-at-eol --ignore-blank-lines \
+                 --no-renames --no-color --no-ext-diff "$t0" "$t1" -- "${si[@]}"); } >> "$sd" 2>>"$err"; then
         why="$(msg run-phase-180.stub_diff label="$label")"
       elif [ -s "$sd" ]; then
         ao=$(bash "$PC" additivo "$SPEC_F" --diff "$sd" 2>>"$err"); arc=$?
@@ -1556,6 +1565,11 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
       rm -f "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_copied n="$nst" fp="$sfp")" >> "$err"
     else
+      if [ "$(tr -d '\r\n' < "$dir/staging.origine" 2>/dev/null)" = stop ] && [ -d "$dir/staging" ]; then  # SCARTATO-CONSERVATO
+        # (B12-B13 review) files parked by a STOP are work, not a cache: kept in staging.scartato (the last one)
+        rm -rf "$dir/staging.scartato"; mv "$dir/staging" "$dir/staging.scartato"
+        echo "AVVISO: S3: $(msg run-phase-180.s3_kept fp="${sfp:-$(msg run-phase.missing)}")" >> "$err"
+      fi
       rm -rf "$dir/staging" "$dir/staging.fp" "$dir/staging.origine"
       echo "S3: $(msg run-phase.s3_discarded fp="${sfp:-$(msg run-phase.missing)}" plan="${plan_fp:-$(msg cycle-state.not_computable)}")" >> "$err"
     fi
@@ -1802,6 +1816,12 @@ fi
 # driver counterproofs with the mirror not restored (counterproof.sh exit 5): we stop, as in the worker
 if [ "$phase" = review ] && [ "$(sed -n 's/^exit=//p' "$dir/log/$label.counterproof" 2>/dev/null | tail -1)" = 5 ]; then
   fin_fail="counterproof.sh exit 5: $(msg run-phase.cp_mirror label="$label")${fin_fail:+; $fin_fail}"
+fi
+# (B12-B13 review, DA7) a test-red that ends technically (subsession exit != 0, killed, no outcome) is parked as well:
+# the .post-tree is already written (close_pre above); its line is an AVVISO in the phase stderr
+if [ "$phase" = test-red ] && { [ $code -ne 0 ] || [ -z "${esito:-}" ]; }; then  # PARCHEGGIO-TECNICO
+  pk=$(parcheggia "PHASE RESULT test-red: STOP — $(msg run-phase-180.park_technical code="$code")" | sed -n 1p)
+  case "$pk" in *" · "*) echo "AVVISO: ${pk##* · }" >> "$err" ;; esac
 fi
 if [ $code -eq 0 ]; then
   if [ -n "$fin_fail" ]; then

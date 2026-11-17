@@ -113,8 +113,10 @@ def simbolo_mancante(testo, extra=()):
 # The red a plan declares «on the base» is an assertion, never a compilation or import error (D4.4): lint2 refuses a
 # `red if` that matches SIMBOLO_MANCANTE or the way a plan writes it («MaxDepth undefined», «Decoder.MaxDepth
 # undefined»: an identifier that starts with a capital letter or has a dot, then «undefined»; not «got undefined»).
-ROSSO_COMPILAZIONE = [r"\b[A-Z][A-Za-z0-9_]*(?:\.[A-Za-z_]\w*)*[ \t]+undefined\b",
-                      r"\b[a-z_]\w*\.[A-Za-z_]\w*[ \t]+undefined\b",
+# (B12-B13 review) in compiler-message shape only: «<identifier> undefined» as the whole red (after `rosso se:`, a
+# backtick, a colon, at the end of it), «'<name>' is not defined»; «Expected undefined to be 3» is an assertion
+ROSSO_COMPILAZIONE = [r"(?:^|[`:]|rosso se|red if)\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*[ \t]+undefined)[ \t]*(?:[`.;,)]|$)",
+                      r"['\"][A-Za-z_]\w*['\"] is not defined\b",
                       r"\b(?:does not|doesn't|won't|will not|fails to) compile\b", r"\bnon compila\b",
                       r"\bcompil(?:e|ation) error\b", r"\berrore di compilazione\b"]
 
@@ -128,7 +130,7 @@ def rosso_di_compilazione(testo, extra=()):
     for r in ROSSO_COMPILAZIONE:
         mm = re.search(r, testo or "")
         if mm:
-            return mm.group(0)
+            return mm.group(1) if mm.groups() else mm.group(0)
     return None
 
 
@@ -136,15 +138,20 @@ def rosso_di_compilazione(testo, extra=()):
 # line must be a LIST INSTRUCTION that grows: it matches the table of its language and, in the same hunk, an added
 # line equals it except tokens inserted inside its LAST pair of brackets ((), [], {}), the inserted tokens only
 # identifiers, «,» and quoted names. Everything else (a signature, a condition, a return, a call) is not additive.
+# (B12-B13 review) every alternative ends on a word boundary; JS/TS only the list forms (`export {…}`, `export type {…}`,
+# `import {…} from …`, `import x, {…} from …`), never `export function`/`export const` (a declaration)
+_ELENCO_JS = r"^\s*(?:export\s*(?:type\s*)?\{|import\s*(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{[^}]*\}\s*from\b)"
 ISTRUZIONE_ELENCO = {
-    ".ts": r"^\s*(?:export|import)\b", ".tsx": r"^\s*(?:export|import)\b", ".js": r"^\s*(?:export|import)\b",
-    ".jsx": r"^\s*(?:export|import)\b", ".mjs": r"^\s*(?:export|import)\b", ".cjs": r"^\s*(?:export|import)\b",
-    ".mts": r"^\s*(?:export|import)\b", ".cts": r"^\s*(?:export|import)\b",
-    ".py": r"^\s*(?:from\s.*\simport|import|__all__\s*=)",
-    ".rs": r"^\s*(?:pub\s+use|use)\b",
+    ".ts": _ELENCO_JS, ".tsx": _ELENCO_JS, ".js": _ELENCO_JS, ".jsx": _ELENCO_JS, ".mjs": _ELENCO_JS, ".cjs": _ELENCO_JS,
+    ".mts": _ELENCO_JS, ".cts": _ELENCO_JS,
+    ".py": r"^\s*(?:from\s+[\w.]+\s+import\b|import\b|__all__\s*=)",
+    ".rs": r"^\s*(?:pub\s+)?use\b",
     ".go": r"^\s*import\b",
 }
-ISTRUZIONE_ALTRI = r"^\s*(?:export|import|from\s.*\simport|pub\s+use|use|__all__\s*=)"   # another language: all forms
+ISTRUZIONE_ALTRI = (r"^\s*(?:export\s*(?:type\s*)?\{|import\s*\{[^}]*\}\s*from\b|from\s+[\w.]+\s+import\b|(?:pub\s+)?use\b"
+                    r"|__all__\s*=)")   # another language: all the list forms, each on a word boundary
+# the extensions whose indentation is syntax: their stub diff is taken without -w (run-phase.sh, verify_red)
+INDENTAZIONE = (".py", ".yml", ".yaml")
 _TOKEN = re.compile(r"\s*(\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|`[^`]*`|[A-Za-z_$][\w$]*(?:::[A-Za-z_$][\w$]*)*|,|\S)")
 _APRE, _CHIUDE = "([{", ")]}"
 
@@ -188,6 +195,11 @@ def elenco_allungato(tolta, aggiunta):
     if c is None:
         return False
     i, j = c
+    prima = tolta[:i - 1].rstrip()
+    # (B12-B13 review) a bracket after a call or a subscript (`f(`, `x[`) or a `{` after `)` (a body) is not a list
+    if (tolta[i - 1] in "([" and re.search(r"[\w$)\]]$", prima) and not re.search(r"\bimport$", prima)) \
+            or (tolta[i - 1] == "{" and prima.endswith(")")):  # NON-CHIAMATA
+        return False
     pre, dentro, post = tolta[:i], tolta[i:j], tolta[j:].rstrip()
     a = aggiunta.rstrip()
     if not a.startswith(pre) or not a.endswith(post) or len(a) < len(pre) + len(post):

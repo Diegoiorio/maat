@@ -53,14 +53,14 @@ MIN=$T/min/.claude/maat.json
 mc valida "$MIN" > "$T/out" 2>&1; check "maat.json minimo valido" '[ $? = 0 ]'
 check "  modulo alla radice senza copia: nessun avviso sulla copia alla radice" '! grep -q "copia con radice_pacchetti" "$T/out"'
 # 1.8.0 (D1-bis): moduli[].separatori_test, optional list of strings (the levels of the test names, nomi_test.py)
-echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": ["/", "::"]}]}' > "$T/sep.json"
+echo '{"versione_schema": 1, "harness": ">=1.8", "moduli": [{"nome": "app", "radice": ".", "separatori_test": ["/", "::"]}]}' > "$T/sep.json"
 mc valida "$T/sep.json" > "$T/out" 2>&1; check "separatori_test: lista di stringhe valida" '[ $? = 0 ]'
 check "  leggi moduli.0.separatori_test" '[ "$(MAAT_CONFIG=$T/sep.json mc leggi moduli.0.separatori_test 2>/dev/null | tr -d "\r")" != "" ]'
 echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "separatori_test": "/"}]}' > "$T/sep-ko.json"
 mc valida "$T/sep-ko.json" > "$T/out" 2>&1; rc=$?
 check "separatori_test non lista -> exit 1 con la chiave" '[ $rc = 1 ] && grep -qF "moduli.0.separatori_test" "$T/out"'
 # 1.8.0 (D4, B12): moduli[].simbolo_mancante, optional list of regexes (a missing symbol of this runner, nomi_test.py)
-echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": ["unresolved reference: \\w+"]}]}' > "$T/sm.json"
+echo '{"versione_schema": 1, "harness": ">=1.8", "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": ["unresolved reference: \\w+"]}]}' > "$T/sm.json"
 mc valida "$T/sm.json" > "$T/out" 2>&1; check "simbolo_mancante: lista di regex valida" '[ $? = 0 ]'
 echo '{"versione_schema": 1, "moduli": [{"nome": "app", "radice": ".", "simbolo_mancante": "x"}]}' > "$T/sm-ko.json"
 mc valida "$T/sm-ko.json" > "$T/out" 2>&1; rc=$?
@@ -558,6 +558,14 @@ printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","rad
 mc valida "$T/s12s.json" > "$T/out" 2>&1; check "non valido: ciclo.riprese stringa" '[ $? = 1 ] && grep -qF "ciclo.riprese" "$T/out"'
 printf '%s\n' '{"versione_schema":1,"harness":">=1.8","moduli":[{"nome":"a","radice":"."}],"ciclo":{"tentativi":2}}' > "$T/s12k.json"
 mc valida "$T/s12k.json" > "$T/out" 2>&1; check "non valido: una chiave sconosciuta in ciclo" '[ $? = 1 ] && grep -qF "ciclo.tentativi" "$T/out"'
+# 1.8.0 (B12-B13 review): the module keys of 1.8 (simbolo_mancante, separatori_test) need "harness": ">=1.8" too (S13)
+caso_s13() { # <reader> <key> <value JSON>
+  printf '{"versione_schema":1,"harness":">=1.7","moduli":[{"nome":"a","radice":".","%s":%s}]}\n' "$2" "$3" > "$T/ks13.json"
+  "$FIC_PY" "$1" valida "$T/ks13.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ": moduli.0.$2: moduli[].$2 richiede \"harness\": \">=1.8\" o successiva" "$T/out"; }
+check "non valido: moduli[].simbolo_mancante con harness >=1.7 (S13)" 'caso_s13 "$MC" simbolo_mancante "[\"x\"]"'
+check "non valido: moduli[].separatori_test con harness >=1.7 (S13)" 'caso_s13 "$MC" separatori_test "[\"/\"]"'
+printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","simbolo_mancante":["x"]}]}' > "$T/ks13n.json"
+mc valida "$T/ks13n.json" > "$T/out" 2>&1; check "non valido: moduli[].simbolo_mancante senza harness (S13, fail-closed)" '[ $? = 1 ] && grep -qF "moduli.0.simbolo_mancante" "$T/out"'
 MAAT_CONFIG=$T/s11c.json mc leggi ciclo.riprese > "$T/out" 2>&1; rcl=$?
 check "compatibilita: senza ciclo nessun default scritto nella configurazione risolta (il default 2 e del driver)" '[ $rcl = 3 ]'
 imp() { # <reader> -> the outputs of the imported functions (MAAT_CONFIG_PY like plan-check.sh), one per line
@@ -604,6 +612,9 @@ m=$(mutante s12 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # H
 check "controprova: S12 disattivato -> ciclo con harness >=1.7 passa, rosso" '[ -n "$m" ] && ! caso_s12 "$m"'
 m=$(mutante s12n 's/and r < 0:  # RIPRESE-NON-NEGATIVE/and False:/')
 check "controprova: S12 senza il controllo del segno -> ciclo.riprese -1 passa, rosso" '[ -n "$m" ] && ! caso_s12n "$m"'
+m=$(mutante s13 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-MODULI-180/if False:/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"   # the catalog next to the mutant: it runs for real
+check "controprova: S13 disattivato -> simbolo_mancante con harness >=1.7 passa (valida esce 0), rosso" '[ -n "$m" ] && ! caso_s13 "$m" simbolo_mancante "[\"x\"]" && "$FIC_PY" "$m" valida "$T/ks13.json" >/dev/null 2>&1'
 m=$(mutante moddi 's/^    return instrada(r, percorso)$/    return None/')
 check "controprova: modulo_di importato che non instrada -> diverso dalla CLI, rosso" '[ -n "$m" ] && [ "$(MAAT_ROOT=$PLUGIN imp "$m")" != "$IMP" ]'
 m=$(mutante corta 's/key=lambda c: -c\[0\]/key=lambda c: c[0]/g')

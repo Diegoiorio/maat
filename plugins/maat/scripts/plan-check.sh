@@ -1490,7 +1490,7 @@ def lint2(M, root, run=None):
         # 1.8.0 (D4.4): the red on the base is an assertion, never a compilation or import error (a stub is due)
         mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
         rc_ = nomi().rosso_di_compilazione(tests[tid]["asserzione"], (mt or {}).get("simbolo_mancante") or [])
-        if rc_:  # ROSSO-COMPILAZIONE-LINT2
+        if rc_ and run is not None:  # ROSSO-COMPILAZIONE-LINT2 (not in taglia: the size of an approved plan does not change)
             E.append(_msg.T("plan-check-180.red_compile", n=tests[tid]["n"], id=tid, t=rc_))
     E.extend(id_py(M))  # CONTROLLO-ID-PY-LINT2
     E.extend(firma_base(M, root))  # CONTROLLO-FIRMA-LINT2
@@ -2514,6 +2514,12 @@ DEV_COPERTI = re.compile(r"^[ \t>*_`-]*Requirements still covered:[ \t*_`]*(.*?)
 # requirement ID of <Tn> (its traceability rows and its requisito column), else the STOP line with the cause.
 # Exit 0 accepted (or lines only), 1 STOP. DEV_STOP / DEV_OK: tokens read by run-phase.sh, the same in every language.
 DEV_STOP, DEV_OK = "Deviazione: STOP — ", "Deviazione: ACCETTATA"
+# (B12-B13 review) the fixed instructions of the judge, printed first («judge instructions: …») and looked for verbatim in
+# its prompt by run-phase.sh: the phase cannot replace them
+DEV_ISTRUZIONI = ("Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — "
+                  "<reason>» and «Requirements still covered: <requirement IDs>». ACCEPT only if the change "
+                  "touches data, fixtures, internal names or the organization of the tests, never an assertion, a "
+                  "requirement, a file or a test name, and the assertion still proves every requirement of the row.")
 
 
 def cmd_deviazione(M, ris, tid):
@@ -2522,6 +2528,7 @@ def cmd_deviazione(M, ris, tid):
     if T is None:
         print(DEV_STOP + _msg.T("plan-check-180.dev_no_row", id=tid))
         return 1
+    print("judge instructions: " + DEV_ISTRUZIONI)
     print("test row: " + righe.get(T["n"], ""))
     ids = list(T["reqs"])
     for n, r, ver in M["reqs"]:
@@ -2539,7 +2546,7 @@ def cmd_deviazione(M, ris, tid):
         print(DEV_STOP + _msg.T("plan-check-180.dev_no_result"))
         return 1
     v = DEV_ACCEPT.findall(t)
-    if not v or not v[-1].startswith("ACCEPT"):  # VERDETTO-ACCEPT
+    if not v or not re.match(r"ACCEPT\b(?!\s*\|)", v[-1]):  # VERDETTO-ACCEPT (never the template «ACCEPT | STOP»)
         print(DEV_STOP + _msg.T("plan-check-180.dev_judge", v=(v[-1] if v else "-")[:200]))
         return 1
     c = DEV_COPERTI.findall(t)
@@ -2950,6 +2957,12 @@ def cmd_rossi(M, root, run, ev):
         if es in ("rosso_raccolta", "rosso_import"):
             mt, _k = modulo(tests[tid]["path"]) if tests[tid]["path"] else (None, None)
             sm = nomi().simbolo_mancante(msg, (mt or {}).get("simbolo_mancante") or [])
+            # (B12-B13 review) «cannot import name X» is a missing symbol only if X is a name of the plan (File toccati,
+            # the test table, the steps): otherwise it may be a typo of the test itself and stays rosso_import
+            nm_ = re.search(r"cannot import name \W?([A-Za-z_]\w*)", msg) if sm and sm[0] == "python" else None
+            if nm_ and not re.search(r"(?<![\w$])" + re.escape(nm_.group(1)) + r"(?![\w$])",
+                                     "\n".join(t for _n, t in M["plan"])):  # IMPORT-NEL-PIANO
+                sm = None
             if sm:  # ROSSO-SIMBOLO
                 out[tid] = ("rosso_simbolo", _msg.T("plan-check-180.red_symbol", s=sm[2][:200]), msg, pos)
                 simboli[tid] = sm[2]
