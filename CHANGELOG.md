@@ -19,7 +19,7 @@ running 1.8.0 unattended on real tasks: three STOPs that no person could act on,
   (one conflict, «(+N tests not run)»), and says when a red is claimed by no acceptance test.
 - **The judge of a test-data deviation gets its inputs whole.** The deviation text may be pasted with or without its
   `test-data:` label; a diff longer than 200 lines (up to 2000) goes to the judge as a file
-  (`plan-check.sh diff-test … --file`, one line `diff file: <path> · sha256 <sha>`), and the driver checks that the
+  (`plan-check.sh diff-test … --file`, one line `diff file: <path> · sha256 <sha>`), and `run-phase.sh` checks that the
   judge's own sub-agent read that file whole, with the same hash.
 - **A usage limit is a STOP with its reason.** When a sub-session ends on an API error, the driver reads the last
   `result` event of its transcript: a usage or rate limit (429) gives «limite d'uso raggiunto (…)» and a line
