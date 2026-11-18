@@ -1140,6 +1140,78 @@ else
   FAKE_CMD="$WRITE_RED" FAKE_OUT="$T/7m-test-red" FIC_GATES="$T/gates-red" FAKE_EVDIR="$T/ev-7m" bash "$MRP" "$TRUN" 7m-test-red "$T/prompt.md" 2>"$T/7m-test-red.err" </dev/null
   check "controprova (touched-pre): col redirect senza [ -f ] l'errore «touched.txt: …» torna nello stderr (il caso 71 sarebbe rosso)" 'touched_err 7m-test-red'
 fi
+# 1.8.1 (G2-1): the second round of verify_red (N3 of the development round 2). gates-giri keeps the evidence per key
+# in <run>/evidence/k1 and REUSES it when the folder exists, as gates.sh does; each run that does not reuse is a round
+# and writes the JUnit named by its word of FAKE_GIRI: rosso (T1 red + an existing test red), altro (T1 red + another
+# existing test red), verde (T1 red only),
+# t1verde (T1 green + the existing red), crollo3/crollo2 (an existing red and 3/2 «did not run» of its package),
+# blocked. The class of the phase is asked to driver.py classifica, on the files run-phase wrote (R1).
+cat > "$T/gates-giri" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$FAKE_OUT.gates-args"
+ev="$2/evidence/k1"
+if [ -d "$ev" ]; then echo riuso >> "$FAKE_OUT.gates-esito"; echo "gates: esito=FAIL chiave=k1 evidence=$ev"; exit 1; fi
+echo x >> "$FAKE_OUT.gates-giri"; n=$(wc -l < "$FAKE_OUT.gates-giri")
+r=$(printf '%s\n' $FAKE_GIRI | sed -n "${n}p")
+[ "$r" = blocked ] && { echo "gates: esito=BLOCKED chiave=k1 evidence=-"; exit 3; }
+mkdir -p "$ev"; echo eseguito >> "$FAKE_OUT.gates-esito"
+t1='<testcase classname="tests.test_calc" name="test_somma"><failure message="assert 0 == 3">E  assert 0 == 3
+tests/test_calc.py:4: AssertionError</failure></testcase>'
+old='<testcase classname="tests.test_old" name="test_vecchio"><failure message="ConnectionError">E  ConnectionError: EOF</failure></testcase>'
+srv='<testcase classname="server_test.go" name="TestServer"><failure message="FAIL: TestServer">server_test.go:9: EOF</failure></testcase>'
+dnr() { printf '<testcase classname="%s" name="%s"><failure message="did not run: %s">the package failed before this test ran\nFAIL\texample.com/x\t1.0s\n</failure></testcase>' "$1" "$2" "$2"; }
+case $r in
+  verde) b=$t1 ;;
+  rosso) b=$t1$old ;;
+  altro) b=$t1'<testcase classname="tests.test_old" name="test_altro"><failure message="x">E  assert 1 == 2</failure></testcase>' ;;
+  t1verde) b='<testcase classname="tests.test_calc" name="test_somma"/>'$old ;;
+  crollo3) b=$t1$srv$(dnr a_test.go TestA)$(dnr b_test.go TestB)$(dnr c_test.go TestC) ;;
+  crollo2) b=$t1$srv$(dnr a_test.go TestA)$(dnr b_test.go TestB) ;;
+esac
+printf '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' "$b" > "$ev/tests-be.junit.xml"
+printf '{"gate":"tests-be","esito":"FAIL","report":"tests-be.junit.xml","motivo":""}\n' > "$ev/tests-be.json"
+printf '{"gate":"tests-fe","esito":"SKIPPED","report":null,"motivo":"nessun file"}\n' > "$ev/tests-fe.json"
+echo "gates: esito=FAIL chiave=k1 evidence=$ev"; exit 1
+EOF
+chmod +x "$T/gates-giri"
+cat > "$T/cl181.py" <<'EOF'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("drv181", sys.argv[1]); d = importlib.util.module_from_spec(s); s.loader.exec_module(d)
+r = d.classifica("test-red", sys.argv[2], sys.argv[3], sys.argv[4])
+print("%s %s" % (r.classe, r.regola))
+EOF
+nat181() { cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
+cl181() { "$FIC_PY" "$(nat181 "$T/cl181.py")" "$(nat181 "$(dirname "$RP")/driver.py")" "$(nat181 "$TRUN")" "$1" "$(nat181 "$TSP")" 2>&1 | tr -d '\r'; }
+grun() { # <label> <rounds> [run-phase]
+  mkspec
+  FAKE_OUT="$T/$1" FIC_GATES="$T/gates-giri" FAKE_GIRI="$2" FAKE_CMD="$WRITE_RED" FAKE_RESULT="$(devres '[]')" \
+    bash "${3:-$RP}" "$TRUN" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null
+}
+INST='AVVISO: test esistente instabile: rosso in un solo giro su due, non è un conflitto: tests.test_old::test_vecchio'
+grun 7g1-test-red "rosso verde"
+check "secondo giro: test esistente rosso al 1° giro e verde al 2° → test-red OK, AVVISO «test esistente instabile» in .esito" '[ "$(e1 7g1-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -qxF "$INST" "$TRUN/log/7g1-test-red.esito" && grep -q "· tests " "$TSP"'
+check "  giro 1 conservato: .gates1, .rossi1 col conflitto, evidenza in k1.giro1; giro 2 in .gates2, .rossi2; .rossi e rossi.json finali OK, U in .instabili" 'grep -q "^conflitto: tests.test_old::test_vecchio" "$TRUN/log/7g1-test-red.rossi1" && grep -q "^gates: esito=FAIL" "$TRUN/log/7g1-test-red.gates1" && grep -q test_vecchio "$TRUN/evidence/k1.giro1/tests-be.junit.xml" && ! grep -q test_vecchio "$TRUN/evidence/k1/tests-be.junit.xml" && [ -s "$TRUN/log/7g1-test-red.gates2" ] && [ -s "$TRUN/log/7g1-test-red.rossi2" ] && grep -q "^rossi: esito=OK" "$TRUN/log/7g1-test-red.rossi" && grep -q "\"esito\": \"OK\"" "$TRUN/test-red/rossi.json" && grep -qx "tests.test_old::test_vecchio" "$TRUN/log/7g1-test-red.instabili" && [ "$(grep -c . "$T/7g1-test-red.gates-giri")" = 2 ]'
+check "  classifica sui file scritti da run-phase: caso instabile → OK" '[ "$(cl181 7g1-test-red)" = "OK ok" ]'
+grun 7g1b-test-red "rosso altro"
+check "secondo giro: due test esistenti diversi, ognuno rosso in un solo giro → OK, «instabile:» del 2° giro in .rossi e rossi.json, un AVVISO per ciascuno" '[ "$(e1 7g1b-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "^instabile: tests.test_old::test_altro — " "$TRUN/log/7g1b-test-red.rossi" && grep -q "\"id\": \"tests.test_old::test_altro\"" "$TRUN/test-red/rossi.json" && grep -qxF "$INST" "$TRUN/log/7g1b-test-red.esito" && grep -qxF "${INST%test_vecchio}test_altro" "$TRUN/log/7g1b-test-red.esito"'
+grun 7g2-test-red "rosso rosso"
+check "secondo giro: rosso in entrambi i giri → STOP «(confermato su due giri)»" 'e1 7g2-test-red | grep -q "^PHASE RESULT test-red: STOP — test di accettazione conflitto con la suite esistente: tests.test_old::test_vecchio .*(log/7g2-test-red.rossi) (confermato su due giri)"' "$(e1 7g2-test-red)"
+check "  classifica sui file scritti da run-phase: conflitto confermato → UMANO conflitto (.rossi e rossi.json dello stesso giro)" '[ "$(cl181 7g2-test-red)" = "UMANO conflitto" ] && cmp -s "$TRUN/log/7g2-test-red.rossi2" "$TRUN/log/7g2-test-red.rossi"' "$(cl181 7g2-test-red)"
+grun 7g3-test-red "rosso blocked"
+check "secondo giro BLOCKED → STOP del 1° giro (senza «confermato»), .rossi e rossi.json del 1° giro, AVVISO" 'e1 7g3-test-red | grep -q "^PHASE RESULT test-red: STOP — test di accettazione conflitto con la suite esistente: tests.test_old::test_vecchio" && ! e1 7g3-test-red | grep -q "confermato" && cmp -s "$TRUN/log/7g3-test-red.rossi1" "$TRUN/log/7g3-test-red.rossi" && cmp -s "$TRUN/log/7g3-test-red.rossi1.json" "$TRUN/test-red/rossi.json" && grep -q "^AVVISO: secondo giro dei gate non confrontabile" "$TRUN/log/7g3-test-red.esito" && [ "$(cl181 7g3-test-red)" = "UMANO conflitto" ]' "$(e1 7g3-test-red)"
+grun 7g4-test-red "t1verde rosso"
+check "T1 verde al 1° giro → nessun secondo giro, STOP come 1.8.0" 'e1 7g4-test-red | grep -q "^PHASE RESULT test-red: STOP — .*T1 verde" && [ "$(grep -c . "$T/7g4-test-red.gates-giri")" = 1 ] && [ ! -f "$TRUN/log/7g4-test-red.rossi1" ]' "$(e1 7g4-test-red)"
+grun 7g5-test-red "rosso t1verde"
+check "esito di T1 diverso tra i giri → STOP del 1° giro ripristinato, AVVISO" 'e1 7g5-test-red | grep -q "^PHASE RESULT test-red: STOP — test di accettazione conflitto con la suite esistente: tests.test_old::test_vecchio" && ! e1 7g5-test-red | grep -q "confermato" && cmp -s "$TRUN/log/7g5-test-red.rossi1" "$TRUN/log/7g5-test-red.rossi" && cmp -s "$TRUN/log/7g5-test-red.rossi1.json" "$TRUN/test-red/rossi.json" && grep -q "^AVVISO: secondo giro dei gate non confrontabile (gli esiti dei test di accettazione" "$TRUN/log/7g5-test-red.esito"' "$(e1 7g5-test-red)"
+grun 7g6-test-red "crollo3 crollo2"
+check "pacchetto caduto in entrambi i giri con N diverso → conflitto PERSISTENTE, STOP confermato" 'e1 7g6-test-red | grep -q "server_test.go::TestServer — (+2 test non eseguiti) .*(confermato su due giri)"' "$(e1 7g6-test-red)"
+if mrp_mut 's/^  mv "\$ev" "\$ev.giro1" 2>>"\$err" || .*# EVIDENZA-GIRO1$/  :/'; then
+  grun 7g7-test-red "rosso verde" "$MRP"
+  check "controprova: senza la rinomina dell evidenza il 2° giro riusa il FAIL del 1° → STOP (il caso instabile sarebbe rosso)" 'e1 7g7-test-red | grep -q "^PHASE RESULT test-red: STOP — .*(confermato su due giri)" && grep -qx riuso "$T/7g7-test-red.gates-esito"' "$(e1 7g7-test-red)"
+else check "controprova rinomina dell evidenza: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
 # PLAN_CHECK_ROOT stays the fake repo for the lanes too (before, it went back to the current folder: see 8b)
 
 # 11. lanes (harness-pt13): two independent blocks -> two subsessions TOGETHER under a single lock, with FIC_LANE

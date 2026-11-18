@@ -192,7 +192,9 @@
 # driver's verification: targeted gates.sh (std level, the plan's test files + touched.txt; outcome in .gates) and
 # `plan-check.sh rossi` on the evidence (.rossi, <run-dir>/test-red/rossi.json): every test red on its own
 # assertion, no import/collection errors, no green, no existing suite in conflict; otherwise .esito =
-# "PHASE RESULT test-red: STOP — …" (originale= below). Closing OK: test-red/stubs.json, test-red/tests.txt,
+# "PHASE RESULT test-red: STOP — …" (originale= below). 1.8.1: a STOP whose only cause are conflicts of an existing
+# suite gets ONE second round (secondo_giro): red in one round only = unstable test (AVVISO), red in both = STOP
+# «(confirmed on two rounds)». Closing OK: test-red/stubs.json, test-red/tests.txt,
 # " · tests <fp>" in the Approved basis (plan-check.sh basis --write-tests) and gen (absorbed counterproofs, L2).
 # After implement and fix OK: the acceptance test files compared with test-red/tests.txt; different ->
 # .esito STOP «deviazione: test di accettazione modificati» regardless of the report (stubs do not count), except for a
@@ -1063,6 +1065,76 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
     mv -f "$dir/log/deviazioni-accettate.txt.tmp" "$dir/log/deviazioni-accettate.txt"
 }
+# 1.8.1 (G2-1): the second round of verify_red (RED2_PY). «ammesso <rossi.json>»: exit 0 when the STOP of rossi has
+# only suite conflicts (len(conflitti) == len(conflitti_suite) > 0: no static conflict, no vitest summary) and every
+# acceptance test is dimostrato or sonda_smentita. «confronta <rossi1.json> <rossi2.json> <U>»: exit 1 when round 2 is
+# not comparable (unreadable, BLOCKED, a conflict without identity, an outcome of a T different from round 1); else
+# prints «P <n>» (the identities red in both rounds) and writes U, those red in one round only, one per line.
+RED2_PY='
+import json, sys
+def load(p):
+    try:
+        d = json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) else None
+def pura(d):
+    c, cs, t = d.get("conflitti"), d.get("conflitti_suite"), d.get("test")
+    return (isinstance(c, list) and isinstance(cs, list) and isinstance(t, dict) and bool(t) and len(c) == len(cs)
+            and all(isinstance(x, dict) and isinstance(x.get("id"), str) for x in cs)
+            and all(isinstance(v, dict) and v.get("esito") in ("dimostrato", "sonda_smentita") for v in t.values()))
+if sys.argv[1] == "ammesso":
+    d = load(sys.argv[2])
+    sys.exit(0 if d is not None and d.get("esito") == "STOP" and pura(d) and d["conflitti"] else 1)
+d1, d2 = load(sys.argv[2]), load(sys.argv[3])
+if d1 is None or d2 is None or d2.get("esito") not in ("OK", "STOP") or not pura(d1) or not pura(d2):
+    sys.exit(1)
+if {k: v.get("esito") for k, v in d1["test"].items()} != {k: v.get("esito") for k, v in d2["test"].items()}:  # ESITI-UGUALI
+    sys.exit(1)
+c1 = [x["id"] for x in d1["conflitti_suite"]]
+c2 = [x["id"] for x in d2["conflitti_suite"]]
+p = set(c1) & set(c2)
+u = [x for x in dict.fromkeys(c1 + c2) if x not in p]
+open(sys.argv[4], "w", encoding="utf-8", newline="\n").write("".join(x + "\n" for x in u))
+print("P %d" % len(p))
+'
+# 1.8.1 (G2-1, R1-R5): after a rossi STOP whose only cause are suite conflicts, ONE second round: the evidence of round 1
+# renamed <ev>.giro1 (kept; gates.sh does not reuse its key), round 1 kept in log/<label>.gates1, .rossi1, .rossi1.json;
+# the same gates.sh -> .gates2, rossi -> .rossi2. P (red in both) empty -> rossi a third time on the evidence of round 2
+# with --instabili U, into .rossi and rossi.json, one AVVISO per unstable test; P not empty -> the STOP of round 2,
+# «(confirmed on two rounds)». The round that decides also writes .gates and .rossi (classifica compares .rossi with
+# rossi.json). Round 2 not usable or not comparable -> the STOP of round 1, restored (fail-closed). Declared limit (R5):
+# a real conflict that is also unstable is reported as unstable. Sets rc and conf of verify_red.
+giro1_resta() { # $1 = why round 2 is not used
+  avviso "AVVISO: $(msg run-phase-181.round2_kept why="$1" label="$label")"
+  cp -f "$dir/log/$label.gates1" "$g"; cp -f "$dir/log/$label.rossi1" "$ro"; cp -f "$dir/log/$label.rossi1.json" "$TR/rossi.json"
+}
+secondo_giro() {
+  local g2="$dir/log/$label.gates2" r2="$dir/log/$label.rossi2" u="$dir/log/$label.instabili" ev2 rc2 cmp id
+  "$FIC_PY" -c "$RED2_PY" ammesso "$TR/rossi.json" 2>>"$err" || return 0   # SECONDO-GIRO-AMMESSO
+  cp -f "$g" "$dir/log/$label.gates1" && cp -f "$ro" "$dir/log/$label.rossi1" && cp -f "$TR/rossi.json" "$dir/log/$label.rossi1.json" || return 0
+  rm -rf "$ev.giro1"
+  mv "$ev" "$ev.giro1" 2>>"$err" || { giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0; }   # EVIDENZA-GIRO1
+  FIC_GATES_ROOT="$FIC_REPO" bash "$GATES" --run-dir "$dir" std ${files[@]+"${files[@]}"} > "$g2" 2>&1; rc2=$?
+  echo "exit=$rc2 livello=std ($(msg run-phase.red_level))" >> "$g2"
+  ev2=$(sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$g2" | tail -1)
+  if [ -z "$ev2" ] || [ "$ev2" = - ] || grep -q '^gates: esito=BLOCKED' "$g2"; then
+    giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0
+  fi
+  bash "$PC" rossi "$SPEC_F" --evidence "$ev2" --run-dir "$dir" > "$r2" 2>&1; rc2=$?
+  [ $rc2 -le 1 ] || { giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0; }
+  cmp=$("$FIC_PY" -c "$RED2_PY" confronta "$dir/log/$label.rossi1.json" "$TR/rossi.json" "$u" 2>>"$err" | tr -d '\r')
+  case $cmp in "P "[0-9]*) ;; *) giro1_resta "$(msg run-phase-181.r2_differ)"; return 0 ;; esac
+  cp -f "$g2" "$g"
+  if [ "$cmp" = "P 0" ]; then
+    bash "$PC" rossi "$SPEC_F" --evidence "$ev2" --run-dir "$dir" --instabili "$u" > "$ro" 2>&1; rc=$?
+    while IFS= read -r id; do
+      [ -n "$id" ] && avviso "AVVISO: $(msg run-phase-181.unstable id="$id")"
+    done < "$u"
+  else
+    cp -f "$r2" "$ro"; rc=$rc2; conf=" $(msg run-phase-181.confirmed)"   # CONFERMATO-DUE-GIRI
+  fi
+}
 # --- driver verification for test-red (harness-pt11, see TEST-RED PHASE): prints the final outcome of the phase ---
 verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
   local e1 g="$dir/log/$label.gates" ro="$dir/log/$label.rossi" ev rc files=() why="" devf="" esci="$1"
@@ -1172,11 +1244,13 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       lim=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): limite_dimostrato.*/\1/p' | paste -sd, - | sed 's/,/, /g')
       sm=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): sonda_smentita.*/\1/p' | paste -sd, - | sed 's/,/, /g')
       [ -n "$sm" ] && avviso "AVVISO: $(msg run-phase-180.probe_disproved tests="$sm")"
+      local conf=""
+      [ $rc -eq 1 ] && [ -z "$lim" ] && secondo_giro   # 1.8.1 (G2-1): only suite conflicts -> one second round
       case $rc in
         0) ;;
         1) why=$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=STOP — //p' | tail -1)
            if [ -n "$lim" ]; then why="$(msg run-phase-180.red_limit tests="$lim" label="$label")"  # LIMITE-NELLO-STOP
-           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")"; fi ;;
+           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")$conf"; fi ;;
         *) why="$(msg run-phase.red_blocked det="$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1)" label="$label")" ;;
       esac
     fi

@@ -200,10 +200,31 @@ printf 'test-data: T4 — other fixture names — routes collide\tSTOP — requi
 clp nhd-aperti plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — four iterations used"; bg nhd-aperti plan
 clp tr-blocked test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-blocked BLOCKED "no runner" '{}' '[]'
+# 1.8.1 (G2-1, R1): the files of the second round of verify_red. Confirmed on two rounds: round 1 in .rossi1/.gates1,
+# the final .rossi and rossi.json of round 2 (the same «rossi: esito=» line) → UMANO conflitto; .rossi left at round 1
+# with rossi.json of round 2 (what R1 forbids) → the rossi.json is not read, UMANO stop. Unstable test: the final rossi
+# of round 2 with --instabili, esito OK → OK.
+CJ='"conflitti":["tests.test_old::test_vecchio — EOF <-> (no acceptance test claims it)"],"conflitti_suite":[{"id":"tests.test_old::test_vecchio","testo":"tests.test_old::test_vecchio — EOF <-> (no acceptance test claims it)"}],"instabili":[]'
+TJ='"test":{"T1":{"esito":"dimostrato","motivo":"ok","messaggio":"assert 0 == 3","posizione":"t.py:4","file":"t.py","nome":"test_somma"}}'
+for c in tr-2giri tr-2giri-misto; do
+  clp $c test-red 0 "PHASE RESULT test-red: STOP — test di accettazione conflitto (log/01-test-red.rossi) (confermato su due giri)" "$STR" "$AP"
+  mkdir -p "$CL/$c.run/test-red"
+  printf '{"esito":"STOP","riassunto":"conflict round 2","evidence":"x",%s,%s}\n' "$CJ" "$TJ" > "$CL/$c.run/test-red/rossi.json"
+  printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 1\n' > "$CL/$c.run/log/01-test-red.rossi1"
+  printf 'gates: esito=FAIL chiave=k1 evidence=x\n' | tee "$CL/$c.run/log/01-test-red.gates1" > "$CL/$c.run/log/01-test-red.gates"
+done
+printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 2\n' > "$CL/tr-2giri.run/log/01-test-red.rossi"
+cp "$CL/tr-2giri-misto.run/log/01-test-red.rossi1" "$CL/tr-2giri-misto.run/log/01-test-red.rossi"
+clp tr-instab test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_json test-red OK '[]' nessuno)" "$AP"
+mkdir -p "$CL/tr-instab.run/test-red"
+printf '{"esito":"OK","riassunto":"1/1 ok","evidence":"x","conflitti":[],"conflitti_suite":[],"instabili":[{"id":"tests.test_old::test_vecchio","testo":"tests.test_old::test_vecchio — EOF"}],%s}\n' "$TJ" > "$CL/tr-instab.run/test-red/rossi.json"
+printf 'instabile: tests.test_old::test_vecchio — EOF\nrossi: esito=OK — 1/1 ok\nstubs: ok\n' > "$CL/tr-instab.run/log/01-test-red.rossi"
+printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 1\n' > "$CL/tr-instab.run/log/01-test-red.rossi1"
+printf 'gates: esito=FAIL chiave=k1 evidence=x\n' > "$CL/tr-instab.run/log/01-test-red.gates"
 clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
 clp plan-ok-nhd plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$NH"
 clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
-CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-raccolta:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-raccolta:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan tr-2giri:test-red tr-2giri-misto:test-red tr-instab:test-red"
 cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
 clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
 CLO=$(cla "$DRV")
@@ -222,6 +243,8 @@ check "classifica (c, B12): un rosso_raccolta «undefined: MaxDepth» senza il t
 check "classifica UMANO provato in test-red: limite_dimostrato, conflitto con la suite (prima del simbolo mancante), deviazione non test-data" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-conflitto)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-dev)" = "UMANO deviazione log/01-test-red.result.json" ]'
 check "classifica OK-DEVIAZIONE: test-red OK con la test-data accettata in .deviazioni-test (e una difensiva); verdetto STOP → UMANO" '[ "$(clv tr-okdev)" = "OK-DEVIAZIONE deviazione-test log/01-test-red.deviazioni-test" ] && [ "$(clv tr-devno)" = "UMANO deviazione-test log/01-test-red.result.json" ]'
 check "classifica: review con Review status NEEDS HUMAN DECISION → UMANO" '[ "$(clv rev-nhd)" = "UMANO review rev-nhd.md" ]'
+check "classifica 1.8.1 (R1): conflitto confermato su due giri, .rossi e rossi.json del 2° giro → UMANO conflitto; caso instabile → OK" '[ "$(clv tr-2giri)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-instab)" = "OK ok log/01-test-red.esito" ]'
+check "classifica 1.8.1 (R1): .rossi lasciato al 1° giro con rossi.json del 2° → rossi.json non letto (UMANO stop): il giro che decide scrive .rossi" '[ "$(clv tr-2giri-misto)" = "UMANO stop log/01-test-red.esito" ]'
 cld() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $5 }'; }   # <name> → the decision texts
 check "classifica (review B8): deviazione test-data rifiutata con un agente aperto → UMANO (prima di (d)); decisione valida con un agente aperto → UMANO" '[ "$(clv tr-devrif)" = "UMANO deviazione-test log/01-test-red.result.json" ] && [ "$(clv nhd-aperti)" = "UMANO decisione nhd-aperti.md" ]'
 check "classifica (review B8): rossi BLOCKED → TECNICO; riga OK di un piano DRAFT o NEEDS HUMAN DECISION → UMANO (fail-closed)" '[ "$(clv tr-blocked)" = "TECNICO blocked test-red/rossi.json" ] && [ "$(clv plan-ok-draft)" = "UMANO piano plan-ok-draft.md" ] && [ "$(clv plan-ok-nhd)" = "UMANO piano plan-ok-nhd.md" ]'

@@ -2995,9 +2995,9 @@ def cmd_rossi(M, root, run, ev, inst=""):
     # under the only real red of that package (same classname prefix): one conflict, identity <cn>::<nm>, with
     # \u00ab(+N tests not run)\u00bb after \u00ab \u2014 \u00bb. More than one real red in the package, or one owned by an acceptance test:
     # not bindable with certainty, each stays a conflict of its own (as in 1.8.0).
-    def pacchetto(cn):
+    def pacchetto(cn):   # go-junit classnames only (<dir>.<file>.go): a Python module path is never a package here
         p = cn.split(".")
-        return ".".join(p[:-2]) if len(p) >= 2 else None
+        return ".".join(p[:-2]) if len(p) >= 2 and p[-1] == "go" else None
     def non_eseguito(c):
         return any(x.startswith("did not run") and "the package failed before this test ran" in x for x in c["bad"])
     for g in [x for x in gates if fmt[x] == "junit"]:   # JUnit first, then vitest: the previous order

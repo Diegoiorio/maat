@@ -2349,6 +2349,8 @@ expect 1 "^conflitto: $GO_IDN — FAIL: " "rossi 1.8.1: due rossi veri nel pacch
 expect 1 "^conflitto: vhost_test.go::TestVirtualHostHandler — did not run" "rossi 1.8.1: due rossi veri nel pacchetto = i «did not run» restano conflitti a se'" -- d1r "$D1/padre.md" --evidence "$D1/ev-due" --run-dir "$D1/r.run"
 expect 1 "^conflitto: m.other_test.go::TestZ — did not run" "rossi 1.8.1: «did not run» nel pacchetto di T1 (unico rosso: del piano) = conflitto a se'" -- d1r "$D1/padre.md" --evidence "$D1/ev-altro" --run-dir "$D1/r.run"
 expect 1 "^conflitto: $GO_IDN — FAIL: " "rossi 1.8.1: rosso in un altro pacchetto = nessun legame" -- d1r "$D1/padre.md" --evidence "$D1/ev-altro" --run-dir "$D1/r.run"
+d1ev "$D1/ev-py" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF$GO_DNR3"'<testcase classname="tests.test_old" name="test_vecchio"><failure message="x">E  assert 1 == 2</failure></testcase>'
+expect 1 "^conflitto: $GO_IDN — \(\+3 test non eseguiti\)" "rossi 1.8.1: un classname Python (tests.test_old) non e' un pacchetto go: il legame resta" -- d1r "$D1/padre.md" --evidence "$D1/ev-py" --run-dir "$D1/r.run"
 printf '%s\n' "$GO_IDN" > "$D1/inst.txt"
 expect 0 "^instabile: $GO_IDN — \(\+3 test non eseguiti\)" "rossi 1.8.1 --instabili: l identita elencata = instabile, exit 0" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst.txt"
 refute "^conflitto:" "rossi 1.8.1 --instabili: nessun conflitto" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst.txt"
