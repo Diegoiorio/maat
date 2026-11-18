@@ -21,6 +21,8 @@
 #      eol=), the worktree alone gets core.autocrlf false and core.eol lf (config.worktree; extensions.worktreeConfig turned
 #      on in the main repository, eol_ext=1 in the marker, turned off by rimuovi if no other config.worktree is left) and
 #      its files are checked out again with LF; with core.bare=true or core.worktree set only a WARNING (fail-closed);
+#      nothing when .gitattributes decides for * (eol=, -text, binary); an extension already on passes its ownership
+#      (eol_ext=1) to the new worktree if another worktree of Maat owns it;
 #   2. BEFORE creating anything: the files that decide the dependencies (the `file_dipendenze` files of the
 #      maat.json modules) must match between the base and the main working tree (deps_diff, the same logic as
 #      replay.sh). If not: STOP, no worktree — never link the wrong dependencies;
@@ -267,9 +269,15 @@ attr_text_senza_eol() { # $1 .gitattributes → 0 if one of its lines gives text
          if (t && !e) { f = 1; exit } }
        END { exit !f }' "$1"
 }
+attr_star_decides() { # $1 .gitattributes → 0 if a line for * gives eol=, -text or binary (the project has decided)
+  [ -f "$1" ] || return 1
+  awk '{ sub(/\r$/, "") } $1 == "*" { for (i = 2; i <= NF; i++) if ($i ~ /^eol=/ || $i == "-text" || $i == "binary") { f = 1; exit } }
+       END { exit !f }' "$1"
+}
 eol_crlf_possibile() { # $1 worktree → 0 if its checkout can write CRLF (effective core.autocrlf true, core.eol crlf, or
-  # on Windows a text attribute without eol= while core.eol is native)
+  # on Windows a text attribute without eol= while core.eol is native); never when .gitattributes decides for *
   local a e
+  attr_star_decides "$1/.gitattributes" && return 1
   a=$(git -C "$1" config --get core.autocrlf 2>/dev/null)
   e=$(git -C "$1" config --get core.eol 2>/dev/null | tr '[:upper:]' '[:lower:]')
   eol_vero "$a" && return 0
@@ -285,17 +293,31 @@ eol_riestrai() { # $1 worktree: the checkout just made, again with LF (an eol= o
     say "$(msg worktree-cycle-182.eol_failed wt="$1")"
   fi
 }
-EOL_EXT=0   # 1 = extensions.worktreeConfig turned on by this crea (eol_ext=1 in the marker, for rimuovi)
+EOL_EXT=0   # 1 = extensions.worktreeConfig owned by this crea (eol_ext=1 in the marker, for rimuovi)
+eol_ext_inherited() { # $1 new worktree → 0 if another registered worktree's marker has eol_ext=1: the extension was
+  # turned on by a crea of Maat, and the ownership passes on (otherwise the last rimuovi would find no owner)
+  local w m c
+  c=$(canon "$1")
+  while IFS= read -r w; do
+    [ -n "$w" ] && [ "$(canon "$w")" != "$c" ] || continue
+    for m in "$w/$AIW"/spec-*.worktree; do
+      [ -f "$m" ] && tr -d '\r' < "$m" | grep -qx 'eol_ext=1' && return 0
+    done
+  done < <(git -C "$MAIN" worktree list --porcelain | sed -n 's/^worktree //p')
+  return 1
+}
 eol_worktree() { # $1 worktree just created
   local st ext bare cwt
   eol_crlf_possibile "$1" || return 0
-  st=$(git -C "$1" status --porcelain 2>/dev/null)   # before anything: a new worktree is clean
-  ext=$(git -C "$MAIN" config --get extensions.worktreeConfig 2>/dev/null)
+  st=$(git -C "$1" status --porcelain 2>/dev/null) || st="?"   # before anything: a new worktree is clean
+  ext=$(git -C "$MAIN" config --local --get extensions.worktreeConfig 2>/dev/null)
   bare=$(git -C "$MAIN" config --local --get core.bare 2>/dev/null)   # git init/clone always write bare = false
   cwt=$(git -C "$MAIN" config --local --get core.worktree 2>/dev/null)
   if eol_vero "$ext" || { ! eol_vero "$bare" && [ -z "$cwt" ]; }; then
     if ! eol_vero "$ext" && git -C "$MAIN" config extensions.worktreeConfig true; then
       EOL_EXT=1; say "$(msg worktree-cycle-182.eol_ext_on)"
+    elif eol_vero "$ext"; then
+      eol_ext_inherited "$1" && EOL_EXT=1
     fi
     if { eol_vero "$ext" || [ $EOL_EXT -eq 1 ]; } && git -C "$1" config --worktree core.autocrlf false &&
        git -C "$1" config --worktree core.eol lf; then
@@ -309,9 +331,11 @@ eol_worktree() { # $1 worktree just created
   if [ -z "$st" ]; then eol_riestrai "$1"; else say "$(msg worktree-cycle-182.eol_dirty n="$(printf '%s\n' "$st" | grep -c .)")"; fi
 }
 eol_ext_spegni() { # extensions.worktreeConfig turned on by crea: off if no other config.worktree with content is left
-  # (the other worktrees' and the main tree's, e.g. core.sparseCheckout written by git sparse-checkout)
-  local f others=""
+  # (the other worktrees' and the main tree's, e.g. core.sparseCheckout written by git sparse-checkout); $1 (optional)
+  # the git dir of a worktree whose config.worktree does not count (the one crea leaves behind on a failure)
+  local f others="" skip=${1:-}
   for f in "$common/config.worktree" "$common"/worktrees/*/config.worktree; do
+    [ -n "$skip" ] && [ "$(dirname "$f")" = "$skip" ] && continue
     [ -f "$f" ] && [ -n "$(git config -f "$f" --list 2>/dev/null)" ] && others="${others:+$others, }$f"
   done
   if [ -n "$others" ]; then say "$(msg worktree-cycle-182.ext_kept f="$others")"
@@ -348,7 +372,8 @@ if [ "$CMD" = crea ]; then
     eol_worktree "$WT"   # 1.8.2 (D1): before any other write in the worktree
     mkdir -p "$WT/$AIW" && printf 'fic-ciclo-worktree\npath=%s\nbranch=%s\nbase=%s\nprincipale=%s\nprincipale_run=%s\ncreato=%s\n' \
       "$(canon "$WT")" "$BRANCH" "$BASE" "$(sha "$MAINC/$SPEC_REL")" "$(dir_fp "$MAINC/$RUN_REL")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$WT/$MK_REL" ||
-      die "$(msg worktree-cycle.marker_unwritable wt="$WT" mk="$MK_REL")"
+      { [ $EOL_EXT -eq 0 ] || eol_ext_spegni "$(git -C "$WT" rev-parse --absolute-git-dir 2>/dev/null)"
+        die "$(msg worktree-cycle.marker_unwritable wt="$WT" mk="$MK_REL")"; }
     [ $EOL_EXT -eq 0 ] || mk_set eol_ext 1
     if ! git -C "$WT" check-ignore -q "$MK_REL"; then   # the marker must never be review surface
       git -C "$MAIN" worktree remove --force "$WT" && git -C "$MAIN" branch -D -q "$BRANCH"

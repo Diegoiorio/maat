@@ -574,6 +574,56 @@ check "premessa: mutazione 7 applicata" 'grep -q ": MUTANTE" "$MU/scripts/ciclo-
 r=$(caso_eol_autocrlf "$MU/scripts/ciclo-worktree.sh" "$T/eol9/proj"); rc=$?
 check "controprova 7: senza la riestrazione in LF il caso core.autocrlf=true è rosso" '[ $rc -eq 1 ] && printf "%s" "$r" | grep -q "a.txt del worktree in CRLF"' || printf '  %s\n' "$r"
 cp "$CW" "$MU/scripts/ciclo-worktree.sh"
+# review D1 (1): two cycles side by side. crea A turns the extension on, crea B finds it on and inherits the ownership
+# (A's marker has eol_ext=1); rimuovi A keeps it (B's config.worktree), rimuovi B turns it off. With the extension on
+# before any crea of Maat, nobody owns it: it stays on.
+caso_eol_due() { # $1 script, $2 repo folder, $3 1 = extension on before → 0 if at the end it is absent ($3 empty) or on ($3=1)
+  local S=$1 R=$2 pre=${3:-} out k
+  mkrepo "$R" >/dev/null 2>&1 && git -C "$R" config core.autocrlf true || { echo "repo finto non creato"; return 2; }
+  [ -z "$pre" ] || git -C "$R" config extensions.worktreeConfig true
+  for k in "crea .claude/.ai-workflow/spec-uno.md" "crea .claude/.ai-workflow/spec-due.md" "rimuovi uno" "rimuovi due"; do
+    out=$(cwr "$R" "$S" $k) || { echo "$k: fallito"; printf '%s\n' "$out"; return 2; }
+  done
+  if [ -n "$pre" ]; then
+    [ "$(git -C "$R" config --get extensions.worktreeConfig)" = true ] || { echo "estensione dell'utente spenta"; return 1; }
+  else
+    ! git -C "$R" config --get extensions.worktreeConfig >/dev/null || { echo "estensione rimasta accesa"; return 1; }
+  fi
+  return 0
+}
+r=$(caso_eol_due "$CW" "$T/eol10/proj"); rc=$?
+check "1.8.2 due cicli affiancati (crea A, crea B, rimuovi A, rimuovi B): estensione assente alla fine" '[ $rc -eq 0 ]' || printf '  %s\n' "$r"
+r=$(caso_eol_due "$CW" "$T/eol11/proj" 1); rc=$?
+check "1.8.2 due cicli con l'estensione accesa prima di ogni crea: resta accesa" '[ $rc -eq 0 ]' || printf '  %s\n' "$r"
+# review D1 (2): .gitattributes decides for * (eol=, -text, binary): no action at all
+R="$T/eol12/proj"; mkrepo "$R" >/dev/null 2>&1; printf '* text=auto eol=lf\n' > "$R/.gitattributes"
+git -C "$R" add .gitattributes 2>/dev/null && git -C "$R" commit -qm attr && git -C "$R" config core.autocrlf true
+out=$(cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md); rc=$?; W=$(wt_uno "$R")
+check "1.8.2 * text=auto eol=lf con core.autocrlf=true: nessuna estensione, nessun config.worktree, file LF" '[ $rc -eq 0 ] && ! git -C "$R" config --get extensions.worktreeConfig >/dev/null && [ ! -e "$(gd_of "$W")/config.worktree" ] && [ -f "$W/a.txt" ] && ! ha_cr "$W/a.txt" && ! printf "%s" "$out" | grep -q "fine riga"' || printf '%s\n' "$out"
+# review D1 (4): the not_ignored exit removes the new worktree and the extension crea turned on
+caso_eol_non_ignorato() { # $1 script, $2 repo folder → 0 if STOP not_ignored and the extension absent afterwards
+  local S=$1 R=$2 out rc
+  mkrepo "$R" >/dev/null 2>&1 || { echo "repo finto non creato"; return 2; }
+  printf 'node_modules\n.venv\n.venv312\n.nuxt\n' > "$R/.gitignore"
+  git -C "$R" add .gitignore && git -C "$R" commit -qm noignore && git -C "$R" config core.autocrlf true || { echo "repo finto non creato"; return 2; }
+  out=$(cwr "$R" "$S" crea .claude/.ai-workflow/spec-uno.md); rc=$?
+  [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "non e' gitignorato" || { echo "crea: rc $rc"; printf '%s\n' "$out"; return 2; }
+  ! git -C "$R" config --get extensions.worktreeConfig >/dev/null || { echo "estensione rimasta accesa"; return 1; }
+  return 0
+}
+r=$(caso_eol_non_ignorato "$CW" "$T/eol13/proj"); rc=$?
+check "1.8.2 uscita not_ignored: worktree rimosso, estensione assente" '[ $rc -eq 0 ]' || printf '  %s\n' "$r"
+# counterproof 8: without the inherited ownership the two-cycle case is red (the extension stays on)
+sed 's/^      eol_ext_inherited "\$1" \&\& EOL_EXT=1$/      : MUTANTE/' "$CW" > "$MU/scripts/ciclo-worktree.sh"
+check "premessa: mutazione 8 applicata" 'grep -q "^      : MUTANTE$" "$MU/scripts/ciclo-worktree.sh"'
+r=$(caso_eol_due "$MU/scripts/ciclo-worktree.sh" "$T/eol14/proj"); rc=$?
+check "controprova 8: senza la proprietà ereditata il caso dei due cicli è rosso" '[ $rc -eq 1 ] && printf "%s" "$r" | grep -q "estensione rimasta accesa"' || printf '  %s\n' "$r"
+# counterproof 9: not_ignored without turning the extension off → red
+sed 's/^      \[ \$EOL_EXT -eq 0 \] || eol_ext_spegni   # the extension turned on above does not stay on$/      : MUTANTE/' "$CW" > "$MU/scripts/ciclo-worktree.sh"
+check "premessa: mutazione 9 applicata" 'grep -q "^      : MUTANTE$" "$MU/scripts/ciclo-worktree.sh"'
+r=$(caso_eol_non_ignorato "$MU/scripts/ciclo-worktree.sh" "$T/eol15/proj"); rc=$?
+check "controprova 9: not_ignored senza spegnere l'estensione è rosso" '[ $rc -eq 1 ]' || printf '  %s\n' "$r"
+cp "$CW" "$MU/scripts/ciclo-worktree.sh"
 unset GIT_CONFIG_NOSYSTEM
 
 echo "ciclo-worktree.test.sh: $((n - fail))/$n ok"
