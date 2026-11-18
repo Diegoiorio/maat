@@ -170,3 +170,7 @@ scripts/run-phase.sh	Deviazione: STOP — |\.deviazioni-test|deviazioni-accettat
 scripts/driver.py	[Dd]ecisione non verificata da script|DECISIONE NON VERIFICATA \(driver\): |Out of scope\|Fuori ambito\|Constraints\|Vincoli|Scheletro: SOPRA IL TETTO	B10: il token «decisione non verificata da script» (uguale in ogni lingua: lo STOP, la riga di driver.log letta da cycle-report.py, la riga del prompt della review), le intestazioni della spec lette dal controllo di scope e la riga di plan-check.sh skeleton riletta per il tipo cut
 scripts/cycle-report.py	Decisione non verificata da script: 	B10: lettura della riga di driver.log scritta dal driver
 scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi dell'oggetto «sonda» di rossi.json (decisione, affermazione, testo atteso, riga), lette dal driver per il prompt della review
+# --- 13. 1.8.1 (G2-3): literals read by other code that the anti-leak scanner does not flag (only the weak word
+# «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
+# same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);
+# scripts/cycle-report.py LIMITE_USO "limite d'uso" (name of a stop cause in metrics.csv, D7).
