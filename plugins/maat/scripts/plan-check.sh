@@ -2519,7 +2519,9 @@ DEV_STOP, DEV_OK = "Deviazione: STOP — ", "Deviazione: ACCETTATA"
 DEV_ISTRUZIONI = ("Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — "
                   "<reason>» and «Requirements still covered: <requirement IDs>». ACCEPT only if the change "
                   "touches data, fixtures, internal names or the organization of the tests, never an assertion, a "
-                  "requirement, a file or a test name, and the assertion still proves every requirement of the row.")
+                  "requirement, a file or a test name, and the assertion still proves every requirement of the row. "
+                  "If the prompt has a `diff file:` line, read that file whole with Read before judging; it is the "
+                  "diff of the test file.")
 
 
 def cmd_deviazione(M, ris, tid):
@@ -3285,6 +3287,9 @@ cmd_f2x() {
 #          CURRENT tree photographed with review-surface.sh tree (untracked files included: a new test file shows
 #          whole), CR removed. The worker prints it for the judge, run-phase.sh computes it again after the phase: the
 #          same command, the same bytes. Exit 0 · 2 usage · 3 no pre-tree or tree not computable
+#          1.8.1 (G2-2) --file: exactly those bytes into <d>/test-red/diff-test-<first 16 of their sha256>.diff and
+#          ONE line, «diff file: <path> · sha256 <full sha256>» (<path> relative to the repository root; absolute when
+#          the run dir is outside it): a long diff reaches the judge as a file it Reads whole (run-phase.sh checks it)
 cmd_deviazione() {
   [ $# -eq 3 ] && [ -f "$2" ] && { [ "$1" = - ] || [ -f "$1" ]; } || die_usage
   local ris=$1 spec=$2 tn=$3 ann
@@ -3296,10 +3301,11 @@ cmd_deviazione() {
 }
 
 cmd_diff_test() {
-  local spec="" file="" run=""
+  local spec="" file="" run="" afile=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      --file) afile=1; shift ;;
       -*) die_usage ;;
       *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$file" ]; then file="$1"; else die_usage; fi; shift ;;
     esac
@@ -3313,7 +3319,22 @@ cmd_diff_test() {
   rs=${PLAN_CHECK_RS:-$PC_HERE/review-surface.sh}; [ -f "$rs" ] || rs=$MAAT_SCRIPTS/review-surface.sh
   cur=$(cd "$root" && bash "$rs" tree 2>/dev/null | tr -d '\r')
   [ -n "$pre" ] && [ -n "$cur" ] || { echo "$(msg plan-check-180.diff_no_tree run="$run")" >&2; return 3; }
-  (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
+  if [ $afile -eq 0 ]; then
+    (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
+    return
+  fi
+  # --file: the bytes of the call without it (one place that makes them), the name and the line from their sha256
+  local td tmp sha out ab rt rc
+  td="$run/test-red"; tmp="$TMPD/diff-test.out"
+  cmd_diff_test "$spec" "$file" --run-dir "$run" > "$tmp"; rc=$?
+  [ $rc -eq 0 ] || return $rc
+  sha=$(sha256sum < "$tmp" | cut -c1-64)
+  out="$td/diff-test-${sha:0:16}.diff"
+  mkdir -p "$td" && cp "$tmp" "$out.tmp" && mv -f "$out.tmp" "$out" || { rm -f "$out.tmp"; return 3; }
+  ab=$(cd "$td" && pwd)/${out##*/}; rt=$(cd "$root" 2>/dev/null && pwd)
+  if [ -n "$rt" ] && [ "${ab#"$rt"/}" != "$ab" ]; then ab=${ab#"$rt"/}   # DIFF-FILE-RELATIVO
+  else ab=$(maat_cygm "$ab" 2>/dev/null || printf '%s' "$ab"); fi   # outside the repository: absolute
+  printf 'diff file: %s · sha256 %s\n' "$ab" "$sha"
 }
 
 cmd_route() {

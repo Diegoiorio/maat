@@ -1148,7 +1148,10 @@ expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT" "deviazione (re
 if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].startswith("ACCEPT")/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: con «comincia con ACCEPT» il modello ripetuto passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-modello/plan-check.sh" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
 else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
-expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\.$" "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\. " "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
+# 1.8.1 (G2-2, R8): the sentence of the diff file, on the same single line judge instructions:
+expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\.$" "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+refute "^If the prompt|^diff of the test file" "deviazione - (1.8.1): la frase nuova non va a capo (una sola riga di istruzioni)" -- bash "$PC" deviazione - "$T/f2t.md" T1
 expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
 if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
@@ -1162,6 +1165,30 @@ expect 3 "-" "diff-test: senza .pre-tree di un test-red = uscita 3" -- env PLAN_
 if mutpc dtwt 's/ "\$pre" "\$cur" -- "\$file")/ "$pre" -- "$file")/'; then
   refute "^\+def test_nuovo" "controprova: col diff preso dall albero di lavoro il file non tracciato sparisce (rosso)" -- env PLAN_CHECK_ROOT="$DTR" MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-dtwt/plan-check.sh" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
 else echo "FAIL [controprova diff-test dall albero: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.1 (G2-2, R6): diff-test --file — exactly the bytes of stdout without --file in <d>/test-red/diff-test-<16>.diff,
+# ONE line «diff file: <path> · sha256 <sha>»; the path relative to the repository root (run dir inside it), absolute
+# outside; without --file nothing is written
+printf 'def test_due():\r\n    assert 2 == 3\r\n' > "$DTR/modules/api/tests/test_dt2.py"   # CRs: removed in both outputs
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" > "$T/dt-stdout" 2>&1
+fl=$(env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --file 2>&1); rc=$?
+sh=$(sha256sum < "$T/dt-stdout" | cut -c1-64); dtf="$T/dt.run/test-red/diff-test-${sh:0:16}.diff"
+dta=$(cd "$T/dt.run/test-red" 2>/dev/null && pwd)/diff-test-${sh:0:16}.diff; dta=$(cygpath -m "$dta" 2>/dev/null || printf '%s' "$dta")
+if [ $rc -eq 0 ] && [ "$(printf '%s\n' "$fl" | grep -c .)" = 1 ] && [ "$fl" = "diff file: $dta · sha256 $sh" ]; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: una riga «diff file: <assoluto fuori dal repo> · sha256 <sha dello stdout>»] uscita $rc"; printf '%s\n' "$fl" "atteso: diff file: $dta · sha256 $sh" | sed 's/^/    /'; fail=$((fail+1)); fi
+if [ -s "$dtf" ] && cmp -s "$dtf" "$T/dt-stdout" && grep -q '^+def test_nuovo' "$dtf"; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: i byte del file = lo stdout senza --file]"; fail=$((fail+1)); fi
+mkdir -p "$DTR/wf/dt.run/log"; cp "$T/dt.run/log/03-test-red.pre-tree" "$DTR/wf/dt.run/log/"
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt2.py --run-dir "$DTR/wf/dt.run" > "$T/dt2-stdout" 2>&1
+expect 0 "^diff file: wf/dt\.run/test-red/diff-test-[0-9a-f]{16}\.diff · sha256 [0-9a-f]{64}$" "diff-test --file: run dir nel repository = percorso relativo alla radice" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt2.py --run-dir "$DTR/wf/dt.run" --file
+sh2=$(sha256sum < "$T/dt2-stdout" | cut -c1-64)
+if cmp -s "$DTR/wf/dt.run/test-red/diff-test-${sh2:0:16}.diff" "$T/dt2-stdout" && ! tr -d '\n' < "$T/dt2-stdout" | grep -q "$(printf '\r')" && grep -q '^+def test_due' "$T/dt2-stdout"; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: file con CR nel test = stdout senza CR, stessi byte]"; fail=$((fail+1)); fi
+rm -rf "$T/dt-x.run"; mkdir -p "$T/dt-x.run/log"; cp "$T/dt.run/log/03-test-red.pre-tree" "$T/dt-x.run/log/"
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-x.run" > /dev/null 2>&1
+if [ ! -e "$T/dt-x.run/test-red" ]; then pass=$((pass+1)); else echo "FAIL [diff-test senza --file: nessun file scritto]"; fail=$((fail+1)); fi
+expect 3 "-" "diff-test --file: senza .pre-tree = uscita 3, come senza --file" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-vuoto.run" --file
+[ ! -e "$T/dt-vuoto.run/test-red" ] && pass=$((pass+1)) || { echo "FAIL [diff-test --file senza .pre-tree: nessun file scritto]"; fail=$((fail+1)); }
+rm -rf "$DTR/wf" "$DTR/modules/api/tests/test_dt2.py"
 # accept: a production file of File toccati that already exists → «stub <path>» (additive stubs only)
 printf 'def base():\n    return 1\n' > "$R/modules/api/app/services/base.py"
 sed 's|^### File toccati\r\{0,1\}$|&\n- `modules/api/app/services/base.py`|' "$T/f2t.md" > "$T/f2t-stub.md"
