@@ -8,7 +8,8 @@
 # sync, STOP if the main tree's spec or run dir changed), rimuovi with changes / with spec or run dir not
 # synced back / with lock, live plan.lock or running phase / with an UNREGISTERED link (sentinel intact) /
 # clean (the source's node_modules INTACT: entries and content), per-worktree lock (run-phase.sh --lock-status),
-# --forza --branch, WSL copies of the worktree and of the lanes really deleted (forget_mirror, fake HOME).
+# --forza --branch, WSL copies of the worktree and of the lanes really deleted (forget_mirror, fake HOME); 1.8.2 (case 15):
+# line endings of a new worktree (core.autocrlf=true, text=auto with core.eol=crlf, core.worktree, eol=crlf, rimuovi, resume).
 # Counterproofs by mutation, ONLY in the fake repos: (1) rimuovi without scollega_e_verifica ⇒ the source's
 # node_modules is emptied (git worktree remove follows junctions), the «intact» check turns red; (2) links_left() { return 0; }
 # ⇒ an unregistered link no longer stops the removal and the sentinel is emptied.
@@ -496,6 +497,84 @@ check "premessa: mutazione 6 applicata" 'grep -q "# MUTANTE" "$MU/scripts/ciclo-
 r=$(caso_catena "$MU/scripts/ciclo-worktree.sh" "$T/cat2/proj"); rc=$?
 check "controprova 6: senza gli anelli il caso «catena» è rosso (crea non li copia)" '[ $rc -eq 1 ] && printf "%s" "$r" | grep -q "anelli non copiati"' || printf '  %s\n' "$r"
 cp "$CW" "$MU/scripts/ciclo-worktree.sh"
+
+# 15. 1.8.2 (D1): line endings of the cycle's worktree. With core.autocrlf=true (Git for Windows' default; it converts
+# on every OS) the checkout of `worktree add` writes CRLF; crea gives the worktree alone core.autocrlf false and
+# core.eol lf (config.worktree, extensions.worktreeConfig turned on in the main repository) and checks the files out
+# again with LF; `* text=auto` with core.eol=crlf simulates Git for Windows on Linux/macOS too. Fail-closed: core.worktree
+# set in the main repository → no config change, a WARNING line, files LF all the same; an eol= of .gitattributes wins
+# (the project decides). rimuovi turns the extension off only if crea turned it on and no other config.worktree is left
+# (the main tree's included); resume changes nothing. Counterproof 7: without the second checkout (1c) the first case is
+# red. GIT_CONFIG_NOSYSTEM: the system config of Git for Windows (core.autocrlf=true) does not enter these repos.
+export GIT_CONFIG_NOSYSTEM=1
+ha_cr() { [ "$(tr -cd '\r' < "$1" | wc -c)" -gt 0 ]; }
+cwr() { local R=$1 S=$2; shift 2; (cd "$R" && bash "$S" "$@") 2>&1; }
+wt_uno() { printf '%s/proj-fic-uno' "$(dirname "$(canon "$1")")"; }
+gd_of() { git -C "$1" rev-parse --absolute-git-dir 2>/dev/null; }
+caso_eol_autocrlf() { # $1 script, $2 repo folder → 0 if the worktree is LF with its own config and the main's unchanged,
+  # and rimuovi turns the extension off; the reason on stdout
+  local S=$1 R=$2 out rc W
+  mkrepo "$R" >/dev/null 2>&1 && git -C "$R" config core.autocrlf true || { echo "repo finto non creato"; return 2; }
+  out=$(cwr "$R" "$S" crea .claude/.ai-workflow/spec-uno.md); rc=$?
+  W=$(wt_uno "$R")
+  [ $rc -eq 0 ] && [ -d "$W" ] || { echo "crea: rc $rc"; printf '%s\n' "$out"; return 2; }
+  ! ha_cr "$W/a.txt" || { echo "a.txt del worktree in CRLF"; return 1; }
+  [ "$(git -C "$W" config core.autocrlf)" = false ] && [ "$(git -C "$W" config core.eol)" = lf ] ||
+    { echo "config del worktree: autocrlf=$(git -C "$W" config core.autocrlf) eol=$(git -C "$W" config core.eol)"; return 1; }
+  [ "$(git -C "$R" config core.autocrlf)" = true ] || { echo "core.autocrlf del principale cambiato"; return 1; }
+  [ -f "$(gd_of "$W")/config.worktree" ] || { echo "config.worktree del worktree assente"; return 1; }
+  printf '%s' "$out" | grep -q "^ciclo-worktree: fine riga del worktree: core.autocrlf false e core.eol lf" &&
+    printf '%s' "$out" | grep -q "^ciclo-worktree: extensions.worktreeConfig accesa nel repository principale" ||
+    { echo "righe di crea assenti"; printf '%s\n' "$out"; return 1; }
+  [ -z "$(git -C "$W" status --porcelain --untracked-files=all)" ] || { echo "worktree non pulito"; return 1; }
+  out=$(cwr "$R" "$S" rimuovi uno); rc=$?
+  [ $rc -eq 0 ] && ! git -C "$R" config --get extensions.worktreeConfig >/dev/null &&
+    printf '%s' "$out" | grep -q "^ciclo-worktree: extensions.worktreeConfig spenta nel repository principale" ||
+    { echo "rimuovi: rc $rc, estensione=$(git -C "$R" config --get extensions.worktreeConfig)"; printf '%s\n' "$out"; return 1; }
+  return 0
+}
+r=$(caso_eol_autocrlf "$CW" "$T/eol1/proj"); rc=$?
+check "1.8.2 core.autocrlf=true: worktree in LF, config solo del worktree, principale invariato; rimuovi spegne l'estensione" '[ $rc -eq 0 ]' || printf '  %s\n' "$r"
+# text=auto, core.autocrlf absent, core.eol=crlf (Git for Windows' native, here on every OS)
+R="$T/eol2/proj"; mkrepo "$R" >/dev/null 2>&1; printf '* text=auto\n' > "$R/.gitattributes"
+git -C "$R" add .gitattributes 2>/dev/null && git -C "$R" commit -qm attr && git -C "$R" config --unset core.autocrlf && git -C "$R" config core.eol crlf
+out=$(cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md); rc=$?; W=$(wt_uno "$R")
+check "1.8.2 * text=auto con core.eol=crlf: worktree in LF" '[ $rc -eq 0 ] && [ -f "$W/a.txt" ] && ! ha_cr "$W/a.txt" && [ "$(git -C "$W" config core.eol)" = lf ]' || printf '%s\n' "$out"
+# core.worktree set in the main repository: no extension, a WARNING, files LF all the same
+R="$T/eol3/proj"; mkrepo "$R" >/dev/null 2>&1; git -C "$R" config core.autocrlf true; git -C "$R" config core.worktree "$(canon "$R")"
+out=$(cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md); rc=$?; W=$(wt_uno "$R")
+check "1.8.2 core.worktree impostato: nessuna extensions.worktreeConfig, riga AVVISO, file comunque LF" '[ $rc -eq 0 ] && ! git -C "$R" config --get extensions.worktreeConfig >/dev/null && printf "%s" "$out" | grep -q "^ciclo-worktree: AVVISO — il checkout può scrivere CRLF ma il repository principale ha core.bare=true o core.worktree impostato" && [ -f "$W/a.txt" ] && ! ha_cr "$W/a.txt" && [ ! -e "$(gd_of "$W")/config.worktree" ]' || printf '%s\n' "$out"
+# an eol=crlf of .gitattributes wins: the file stays CRLF (the project decides)
+R="$T/eol4/proj"; mkrepo "$R" >/dev/null 2>&1; printf '* text eol=crlf\n' > "$R/.gitattributes"
+git -C "$R" add .gitattributes 2>/dev/null && git -C "$R" commit -qm attr && git -C "$R" config core.autocrlf true
+out=$(cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md); rc=$?; W=$(wt_uno "$R")
+check "1.8.2 * text eol=crlf nel .gitattributes: il file resta CRLF" '[ $rc -eq 0 ] && [ -f "$W/a.txt" ] && ha_cr "$W/a.txt"' || printf '%s\n' "$out"
+# rimuovi: an extension that was already on stays on
+R="$T/eol5/proj"; mkrepo "$R" >/dev/null 2>&1; git -C "$R" config core.autocrlf true; git -C "$R" config extensions.worktreeConfig true
+cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md >/dev/null; out=$(cwr "$R" "$CW" rimuovi uno); rc=$?
+check "1.8.2 rimuovi con l'estensione già accesa prima di crea: resta accesa" '[ $rc -eq 0 ] && [ "$(git -C "$R" config --get extensions.worktreeConfig)" = true ] && ! printf "%s" "$out" | grep -q "spenta"' || printf '%s\n' "$out"
+# rimuovi: the main tree has a config.worktree that is not empty (e.g. git sparse-checkout) → stays on, with the line
+R="$T/eol6/proj"; mkrepo "$R" >/dev/null 2>&1; git -C "$R" config core.autocrlf true
+cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md >/dev/null; git -C "$R" config --worktree maat.prova 1
+out=$(cwr "$R" "$CW" rimuovi uno); rc=$?
+check "1.8.2 rimuovi col config.worktree del tree principale non vuoto: estensione accesa, con la riga" '[ $rc -eq 0 ] && [ "$(git -C "$R" config --get extensions.worktreeConfig)" = true ] && printf "%s" "$out" | grep -q "^ciclo-worktree: extensions.worktreeConfig lasciata accesa nel repository principale: altri config.worktree non sono vuoti (.*config.worktree)"' || printf '%s\n' "$out"
+# resume: nothing changes (a worktree created before the main repository got core.autocrlf=true)
+R="$T/eol7/proj"; mkrepo "$R" >/dev/null 2>&1
+cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md >/dev/null; W=$(wt_uno "$R"); git -C "$R" config core.autocrlf true
+out=$(cwr "$R" "$CW" crea .claude/.ai-workflow/spec-uno.md); rc=$?
+check "1.8.2 ripresa: nessuna modifica (niente estensione, niente config.worktree, nessuna riga del fine riga)" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -q "ripresa" && ! git -C "$R" config --get extensions.worktreeConfig >/dev/null && [ ! -e "$(gd_of "$W")/config.worktree" ] && ! printf "%s" "$out" | grep -q "fine riga"' || printf '%s\n' "$out"
+# en: the line of crea in English
+R="$T/eol8/proj"; mkrepo "$R" >/dev/null 2>&1; git -C "$R" config core.autocrlf true
+out=$(cd "$R" && MAAT_LINGUA=en bash "$CW" crea .claude/.ai-workflow/spec-uno.md 2>&1); rc=$?
+check "1.8.2 en: righe di crea in inglese" '[ $rc -eq 0 ] && printf "%s" "$out" | grep -q "^ciclo-worktree: line endings of the worktree: core.autocrlf false and core.eol lf" && ! printf "%s" "$out" | grep -q "fine riga"' || printf '%s\n' "$out"
+# counterproof 7: without the second checkout (1c) the first case is red (the file stays CRLF)
+cp "$CW" "$MU/scripts/ciclo-worktree.sh" && cp "$HERE/worktree-lib.sh" "$MU/scripts/worktree-lib.sh"
+sed -i 's/then eol_riestrai "\$1";/then : MUTANTE;/' "$MU/scripts/ciclo-worktree.sh"
+check "premessa: mutazione 7 applicata" 'grep -q ": MUTANTE" "$MU/scripts/ciclo-worktree.sh"'
+r=$(caso_eol_autocrlf "$MU/scripts/ciclo-worktree.sh" "$T/eol9/proj"); rc=$?
+check "controprova 7: senza la riestrazione in LF il caso core.autocrlf=true è rosso" '[ $rc -eq 1 ] && printf "%s" "$r" | grep -q "a.txt del worktree in CRLF"' || printf '  %s\n' "$r"
+cp "$CW" "$MU/scripts/ciclo-worktree.sh"
+unset GIT_CONFIG_NOSYSTEM
 
 echo "ciclo-worktree.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]
