@@ -2,6 +2,26 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.8.2 — LF in the cycle worktrees, expected texts checked against the code
+
+A patch: no default and no format Maat reads changes.
+
+- **Cycle worktrees are checked out in LF** (`ciclo-worktree.sh crea`). When git could write CRLF there (`core.autocrlf
+  true`, `core.eol crlf`, or on Windows `text` attributes without `eol=`), the new worktree gets its own
+  `core.autocrlf false` and `core.eol lf` (`extensions.worktreeConfig`, turned on in the main repository only when
+  `core.bare` is not true and `core.worktree` is not set; otherwise a warning and no config change) and is checked out
+  again in LF if nothing changed in it yet. The main repository and the other worktrees keep their settings. A root
+  `.gitattributes` that decides for `*` (`eol=`, `-text`, `binary`) is left to decide. `rimuovi` turns the extension
+  off again when Maat turned it on and no other `config.worktree` is left (the main tree's included); ownership passes
+  from one cycle to the next. While the extension is on, tools based on libgit2 or JGit may not read the repository.
+  The copy of the spec into the worktree keeps the line endings of the main tree.
+- **`maat-doctor`** warns (never blocks) when the project's checkouts can be written in CRLF and the `.gitattributes`
+  does not decide for `*`.
+- **The plan reviewers check expected texts against the code that produces them**
+  (`spec-plan-reviewer-light` and `spec-plan-reviewer`, lens L1): a regex or expected literal that misses a form the
+  code emits (singular and plural, numbers, units, language), or two parts of the spec that give different expected
+  values for the same output, is a `major` finding with the code line quoted.
+
 ## 1.8.1 — three STOPs of 1.8.0 nobody could act on
 
 A patch: no default changes and no format Maat reads changes incompatibly (`rossi.json` only gains fields). Found by
