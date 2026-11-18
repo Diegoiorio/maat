@@ -16,9 +16,11 @@ Only data, fixtures, internal names or the organization of the tests — never a
 the name of a test. For each one, before closing, launch in the **foreground** (never `run_in_background`) the agent
 `maat:spec-plan-reviewer-light` with a prompt made of these blocks, each pasted **verbatim** (without its prefix):
 the lines `judge instructions:`, `test row:` and `trace row:` of
-`bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`, the deviation text, and the output of
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`, the deviation text (with or without its
+`test-data:` label), and the output of
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" diff-test <spec> <its test file> --run-dir <run-dir>`, run after
-the test file is final.
+the test file is final. A diff of up to 200 lines is pasted verbatim; a longer one (up to 2000 lines): run the same
+command with `--file` and paste its one line `diff file: <path> · sha256 <sha>` instead of the diff.
 ACCEPT on all → `PHASE RESULT test-red: OK — …` with `"esito": "OK"`, `"bloccato_su": "nessuno"` and the deviations in
 `deviazioni`; a STOP of the judge → STOP. The driver checks the call in your transcript and recomputes the diff.
 

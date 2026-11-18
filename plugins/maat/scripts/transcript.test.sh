@@ -191,6 +191,46 @@ check "aperti: chiusi da BashOutput e TaskOutput con uno stato finale e da KillS
 tr_ "$TRX" bash "make probe" "running in background" < "$T/ricevuta.jsonl" > "$T/o" 2>&1; rc=$?
 check "bash: la ricevuta di un lancio in background non e' il risultato del comando → non trovato" '[ $rc -eq 1 ]' "$(cat "$T/o")"
 
+# --- chiamate_figlie (1.8.1, G2-2; imported, as run-phase.sh does) ---
+# The shape of the record N11 (stream-json): the judge called in the foreground by the main session (toolu_j1), the
+# events of its sub-agent with parent_tool_use_id = toolu_j1 (a Read and its result, without is_error, and a Grep); a
+# second call (toolu_j2) whose sub-agent reads another file, in error; a Read of the main session.
+{ printf '%s\n' '{"type":"system","subtype":"init"}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"toolu_j1","name":"Agent","input":{"subagent_type":"maat:spec-plan-reviewer-light","prompt":"judge","run_in_background":false}}]}}'
+  printf '%s\n' '{"type":"system","subtype":"task_started","task_id":"af1","tool_use_id":"toolu_j1"}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"toolu_j1","agent_id":"af1","message":{"role":"user","content":[{"type":"text","text":"judge"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":"toolu_j1","agent_id":"af1","message":{"content":[{"type":"tool_use","id":"toolu_r1","name":"Read","input":{"file_path":"/w/run/test-red/diff-test-0123456789abcdef.diff"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"toolu_j1","agent_id":"af1","message":{"role":"user","content":[{"tool_use_id":"toolu_r1","type":"tool_result","content":"     1\t--- a/t.py"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":"toolu_j1","agent_id":"af1","message":{"content":[{"type":"tool_use","id":"toolu_g1","name":"Grep","input":{"pattern":"def _ini","path":"/w/tests/t.py"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"toolu_j1","agent_id":"af1","message":{"role":"user","content":[{"tool_use_id":"toolu_g1","type":"tool_result","content":"3:def _ini"}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"toolu_j1","content":[{"type":"text","text":"Deviation verdict: ACCEPT"}]}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"toolu_j2","name":"Agent","input":{"subagent_type":"maat:spec-plan-reviewer-light","prompt":"judge again"}}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":"toolu_j2","message":{"content":[{"type":"tool_use","id":"toolu_r2","name":"Read","input":{"file_path":"/w/other.diff","limit":5}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":"toolu_j2","message":{"content":[{"tool_use_id":"toolu_r2","type":"tool_result","content":"File does not exist.","is_error":true}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"toolu_j2","content":"Deviation verdict: ACCEPT"}]}}'
+  printf '%s\n' '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"toolu_r9","name":"Read","input":{"file_path":"/w/main.diff"}}]}}'
+  printf '%s\n' '{"type":"user","parent_tool_use_id":null,"message":{"content":[{"type":"tool_result","tool_use_id":"toolu_r9","content":"x"}]}}'
+  printf '%s\n' '{"type":"result","subtype":"success","result":"PHASE RESULT test-red: OK — done"}'
+} > "$T/figlie.jsonl"
+cat > "$T/fg.py" <<'EOF'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("trx_fg", sys.argv[1]); tr = importlib.util.module_from_spec(s)
+s.loader.exec_module(tr)
+rr = tr.righe(sys.argv[2])
+for pid in ("toolu_j1", "toolu_j2", "", None, "toolu_zz"):
+    cc = tr.chiamate_figlie(rr, pid)
+    print("%s\t%s" % (pid, ";".join("%s:%s:%s:%s" % (c["name"], c["input"].get("file_path") or c["input"].get("pattern"), c["line"],
+                                                   ",".join("%d/%s/%s" % (n, e, a) for n, _t, e, a in c["results"])) for c in cc) or "-"))
+print("main\t" + ";".join(c["id"] for c in tr.chiamate(rr)))
+EOF
+fig() { "$FIC_PY" "$(nat "$T/fg.py")" "$(nat "$1")" "$(nat "$T/figlie.jsonl")" 2>&1 | tr -d '\r'; }
+o=$(fig "$TRX")
+check "chiamate_figlie: le chiamate del sotto-agente di toolu_j1 (Read e Grep, risultati senza errore), nell ordine" 'printf "%s\n" "$o" | grep -qx "toolu_j1	Read:/w/run/test-red/diff-test-0123456789abcdef.diff:5:6/False/False;Grep:def _ini:7:8/False/False"' "$o"
+check "chiamate_figlie: il sotto-agente di un altra chiamata (toolu_j2) ha solo la sua Read, in errore" 'printf "%s\n" "$o" | grep -qx "toolu_j2	Read:/w/other.diff:11:12/True/False"' "$o"
+check "chiamate_figlie: id vuoto, assente o sconosciuto → nessuna chiamata" 'printf "%s\n" "$o" | grep -qx "	-" && printf "%s\n" "$o" | grep -qx "None	-" && printf "%s\n" "$o" | grep -qx "toolu_zz	-"' "$o"
+check "chiamate: la sessione principale non vede le chiamate dei sotto-agenti" 'printf "%s\n" "$o" | grep -qx "main	toolu_j1;toolu_j2;toolu_r9"' "$o"
+
 # --- counterproofs: a mutated copy of the module, its cases go red ---
 mutx() { # <name> <marker> <replacement line> → $T/mut-<name>.py (1 if the marker is not on exactly one line)
   "$FIC_PY" - "$(nat "$TRX")" "$(nat "$T/mut-$1.py")" "$2" "$3" <<'EOF'
@@ -233,5 +273,9 @@ mutap bashtesto "# BASH-APERTO-DALLA-CHIAMATA" 'if nome == "Bash":' finti.jsonl 
 mutap agentetesto "# AGENTE-APERTO-DALLA-CHIAMATA" 'or AGENT_BG_RE.search(t[:300]) or tur.get("status") == "async_launched"):' finti.jsonl fk2
 mutap result "# CHIUSURA-RESULT" 'if False:' result.jsonl -
 mutap notifiche "# NOTIFICHE-PRINCIPALE" 'if False:' sotto.jsonl sub1
+if mutx figlie "# FIGLIE-DI-QUELLA-CHIAMATA" 'return _chiamate(rr, lambda ev: not principale(ev))'; then
+  o=$(fig "$T/mut-figlie.py")
+  check "controprova: figlie di ogni sotto-agente (non di quella chiamata) → la Read di toolu_j2 entra in toolu_j1 (rosso)" 'printf "%s\n" "$o" | grep -q "^toolu_j1	.*/w/other.diff"' "$o"
+else check "controprova figlie: la mutazione si applica" false; fi
 echo "transcript.test.sh: $pass ok, $fail falliti"
 [ "$fail" = 0 ]

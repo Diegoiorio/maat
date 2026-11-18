@@ -26,6 +26,8 @@ Exits: bash, agente: 0 found (stdout: one line with the lines of the call and of
 transcript unreadable. conta: 0 and the number on stdout; 2 usage or a file unreadable (no number: a count that misses
 a file is no proof).
 
+1.8.1 (G2-2): chiamate_figlie(righe, parent_id) — the calls of the sub-agent of one Agent/Task call (its events carry
+that call's id as parent_tool_use_id), the same structures as chiamate; read by run-phase.sh (the judge's Read).
 Imported (driver.py classifica, 1.8.0 B8; the checks of B10/B13), the same rules: righe(path), bash_trovato(righe, …),
 agente_trovato(righe, …), conta_risultati(paths, tipo), aperti_alla_chiusura(righe) — the agents and background jobs
 of the main session still open at a CLOSING of the session: a `system/init` after the first (the session woken up
@@ -96,9 +98,22 @@ def _blocchi(ev):
 def chiamate(rr):
     """the tool calls of the main session, in order: [{id, name, input, line, results: [(line, text, error,
     async)]}]"""
+    return _chiamate(rr, principale)
+
+
+def chiamate_figlie(rr, parent_id):
+    """1.8.1 (G2-2): the tool calls of the sub-agent of ONE Agent/Task call, the same structures as chiamate: only the
+    events whose parent_tool_use_id is exactly parent_id (stream-json: the messages of that sub-agent). An empty or
+    missing parent_id has no children."""
+    if not isinstance(parent_id, str) or not parent_id:
+        return []
+    return _chiamate(rr, lambda ev: ev.get("parent_tool_use_id") == parent_id)  # FIGLIE-DI-QUELLA-CHIAMATA
+
+
+def _chiamate(rr, scelta):
     per_id, ordine = {}, []
     for n, ev in _eventi(rr):
-        if not principale(ev):
+        if not scelta(ev):
             continue
         tipo = ev.get("type")
         for b in _blocchi(ev):
