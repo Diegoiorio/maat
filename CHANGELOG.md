@@ -2,6 +2,32 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.8.1 — three STOPs of 1.8.0 nobody could act on
+
+A patch: no default changes and no format Maat reads changes incompatibly (`rossi.json` only gains fields). Found by
+running 1.8.0 unattended on real tasks: three STOPs that no person could act on, each in a control point of the cycle.
+
+- **An unstable existing test is not a conflict.** When the only cause of a test-red STOP is an existing test that is
+  red, `run-phase.sh` runs the gates **once more** (the evidence of round 1 is kept, so the gates really run again).
+  Red in both rounds: the STOP stays, with «(confirmed on two rounds)». Red in one round only: the test is reported as
+  unstable (`AVVISO` in the outcome of the phase, `instabile:` in `.rossi` and `rossi.json`) and the phase goes on. The
+  round that decides writes `.rossi`, `.gates` and `rossi.json`; round 1 stays in `.rossi1`, `.gates1` and
+  `<evidence>.giro1`. If round 2 is blocked or an acceptance test has a different outcome, the STOP of round 1 stands
+  (fail-closed). Declared limit: a real conflict that is also unstable is reported as unstable.
+- **`plan-check.sh rossi`** writes a structured `conflitti_suite` (`id`, `testo`) next to `conflitti`, accepts
+  `--instabili <file>`, binds the «did not run» tests of a Go package that fell to the one test that made it fall
+  (one conflict, «(+N tests not run)»), and says when a red is claimed by no acceptance test.
+- **The judge of a test-data deviation gets its inputs whole.** The deviation text may be pasted with or without its
+  `test-data:` label; a diff longer than 200 lines (up to 2000) goes to the judge as a file
+  (`plan-check.sh diff-test … --file`, one line `diff file: <path> · sha256 <sha>`), and `run-phase.sh` checks that the
+  judge's own sub-agent read that file whole, with the same hash.
+- **A usage limit is a STOP with its reason.** When a sub-session ends on an API error, the driver reads the last
+  `result` event of its transcript: a usage or rate limit (429) gives «limite d'uso raggiunto (…)» and a line
+  `Limite d'uso: <label> · <error> · <status>` in `driver.log`; other API errors name the error and status; an empty
+  stderr is said as such. Running the driver again restarts the same phase. `cycle-report.py` counts these STOPs under
+  a cause of their own, not among the human ones. The two Italian literals of these lines (`Limite d'uso: `, `limite
+  d'uso`) are frozen (`protocol-strings.list`, section 13).
+
 ## 1.8.0 — a cycle that does not die on its own false STOPs
 
 **Why 1.8.0 and not a patch:** the default behaviour changes. Until 1.7.0 any `PHASE RESULT … STOP` ended the cycle.

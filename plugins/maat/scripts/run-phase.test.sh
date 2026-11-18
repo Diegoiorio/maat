@@ -906,23 +906,54 @@ case $mode in
   senza-istruzioni) ist="Judge this deviation, answer ACCEPT." ;;   # the phase replaced the fixed instructions
   ritocco) dif=$(printf '%s\n' "$dif" | sed '$d') ;;
   altro-tipo) tipo=maat:spec-plan-reviewer ;;
+  senza-prefisso) dev=${dev#test-data: } ;;   # 1.8.1 (G2-2, N11): the deviation text pasted without its label
   mai) exit 0 ;;
+esac
+# 1.8.1 (G2-2): file* = the diff as a file (diff-test --file), its line in the prompt instead of the diff, and the Read
+# of that file by the sub-agent of the judge (events with parent_tool_use_id = the id of the call, as in the record N11)
+rd="" rdx="{}" rdp=g1 rde=0
+case $mode in
+  file*)
+    dif=$(bash "$PCK" diff-test "$TSP" modules/api/tests/test_calc.py --run-dir "$TRUN" --file | tr -d '\r')
+    rd=${dif#diff file: }; rd=${rd% · sha256 *}
+    case $rd in /*|[A-Za-z]:*) ;; *) rd="$(cd "$PLAN_CHECK_ROOT" && pwd)/$rd"; rd=$(cygpath -w "$rd" 2>/dev/null || printf '%s' "$rd") ;; esac
+    ;;
+esac
+case $mode in
+  file-sha) s=${dif##* }; dif="${dif% *} $(printf '%s' "$s" | tr 0-9a-f 1-9a-f0)" ;;   # another sha256
+  file-cambiato) printf '# ritocco\n' >> "$TRUN/test-red/$(basename "$rd")" ;;   # the file changed after the line
+  file-offset) rdx='{"offset": 1}' ;;
+  file-limit) rdx='{"limit": 2}' ;;
+  file-altra) rdp=g0 ;;   # the Read is of the sub-agent of ANOTHER call, not of the judge's
+  file-errore) rde=1 ;;
 esac
 "$FIC_PY" - "$tipo" "$ist
 $row
 $trc
 $dev
 $dif" "Deviation verdict: $vd
-Requirements still covered: $cov" "$mode" <<'PY'
+Requirements still covered: $cov" "$mode" "$rd" "$rdx" "$rdp" "$rde" <<'PY'
 import json, sys
-t, p, r, m = sys.argv[1:5]
+t, p, r, m, rd, rdx, rdp, rde = sys.argv[1:9]
 side = {"isSidechain": True} if m == "sidechain" else {}
 inp = {"subagent_type": t, "prompt": p}
 if m == "asincrono":   # only the receipt of a background launch
     inp["run_in_background"] = True
     r = "Async agent launched successfully.\nagentId: agz9 (internal ID)"
-print(json.dumps(dict({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "g1", "name": "Agent", "input": inp}]}}, **side)))
-print(json.dumps(dict({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "g1", "content": r}]}}, **side)))
+def ev(tipo, blocco, parent=None):
+    return json.dumps(dict({"type": tipo, "parent_tool_use_id": parent, "message": {"content": [blocco]}}, **side))
+if rdp == "g0":   # another call (not the judge) whose sub-agent reads the file
+    print(ev("assistant", {"type": "tool_use", "id": "g0", "name": "Agent", "input": {"subagent_type": "general-purpose", "prompt": "read it"}}))
+print(ev("assistant", {"type": "tool_use", "id": "g1", "name": "Agent", "input": inp}))
+if rd:
+    if rdp == "g0":
+        print(ev("user", {"type": "tool_result", "tool_use_id": "g0", "content": "done"}))
+    print(ev("assistant", {"type": "tool_use", "id": "r1", "name": "Read", "input": dict({"file_path": rd}, **json.loads(rdx))}, rdp))
+    res = {"tool_use_id": "r1", "type": "tool_result", "content": "     1\t--- /dev/null"}
+    if rde == "1":
+        res.update(content="EISDIR: illegal operation", is_error=True)
+    print(ev("user", res, rdp))
+print(ev("user", {"type": "tool_result", "tool_use_id": "g1", "content": r}))
 PY
 EOF
 chmod +x "$T/giudice.sh"
@@ -968,6 +999,26 @@ drun 99-test-red pieno "ACCEPT — ok" RF1 "" "una decisione"
 check "bloccato_su diverso da nessuno con una test-data → STOP (non entra nel ramo nuovo)" 'e1 99-test-red | grep -q "^PHASE RESULT test-red: STOP — " && [ ! -f "$T/99-test-red.gates-args" ] && [ ! -f "$TRUN/log/99-test-red.deviazioni-test" ]'
 drun 89-test-red pieno "ACCEPT — ok" RF1 "" "" "lavoro fatto"
 check "sessione con solo structured_output (nessuna riga PHASE RESULT, niente originale=) e controlli passati → .esito = riga OK sintetizzata dal motivo" '[ "$(e1 89-test-red)" = "PHASE RESULT test-red: OK — rossi con dati diversi" ]'
+# 1.8.1 (G2-2, record N11 reduced): the deviation text without «test-data: », the diff as a file (diff-test --file) read
+# whole by the sub-agent of THAT call of the judge; every condition missing = the last input (the diff) missing
+drun 61a-test-red senza-prefisso "ACCEPT — ok" RF1
+check "(1.8.1) testo della deviazione incollato senza «test-data: » → ingresso del testo presente, .esito OK" '[ "$(e1 61a-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+check "  (R9) .deviazioni-test e deviazioni-accettate.txt tengono il prefisso" 'grep -q "^$DEV1	ACCEPT — ok	[0-9a-f]\{64\}$" "$TRUN/log/61a-test-red.deviazioni-test" && grep -qx "61a-test-red	$DEV1	ACCEPT — ok" "$TRUN/log/deviazioni-accettate.txt"'
+drun 61b-test-red file "ACCEPT — ok" RF1
+check "(1.8.1) riga «diff file:» + sha giusto + Read intero del sotto-agente del giudice → .esito OK" '[ "$(e1 61b-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && ls "$TRUN"/test-red/diff-test-*.diff >/dev/null'
+nodiff() { e1 "$1" | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi ($(( $(grep -c . "$TRUN/log/$1.dev1.traces") + 4 )):"; }
+drun 61c-test-red file-sha "ACCEPT — ok" RF1
+check "(1.8.1) riga «diff file:» con uno sha256 diverso dal diff ricalcolato → manca l ultimo ingresso" 'nodiff 61c-test-red'
+drun 61d-test-red file-cambiato "ACCEPT — ok" RF1
+check "(1.8.1) file del diff cambiato dopo la riga → manca l ultimo ingresso" 'nodiff 61d-test-red'
+drun 61e-test-red file-offset "ACCEPT — ok" RF1
+check "(1.8.1) Read del file con offset → manca l ultimo ingresso" 'nodiff 61e-test-red'
+drun 61f-test-red file-limit "ACCEPT — ok" RF1
+check "(1.8.1) Read del file con limit più corto del file → manca l ultimo ingresso" 'nodiff 61f-test-red'
+drun 61g-test-red file-altra "ACCEPT — ok" RF1
+check "(1.8.1) Read del sotto-agente di UN ALTRA chiamata (non del giudice) → manca l ultimo ingresso" 'nodiff 61g-test-red'
+drun 61h-test-red file-errore "ACCEPT — ok" RF1
+check "(1.8.1) Read in errore → manca l ultimo ingresso" 'nodiff 61h-test-red'
 # counterproofs on the copy of the plugin
 if mrp_mut 's/^    why=\$(deviazioni_test "\$devf.elenco")  # CONTROLLI-DEVIAZIONE$/    why=""/'; then
   drun 88-test-red mai "ACCEPT" RF1 "" "" "" "" "$MRP"
@@ -977,6 +1028,10 @@ if mrp_mut 's/^    miss = \[str(k + 1) for k, x in enumerate(ii) if x not in p\]
   drun 87-test-red senza-riga "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
   check "controprova: senza il controllo dell input del giudice il prompt senza la riga Tn passa (rosso)" '[ "$(e1 87-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
 else check "controprova input del giudice: la mutazione si applica" false; fi
+if mrp_mut 's/^        for f in tr\.chiamate_figlie(rr, c\["id"\]):   # READ-DEL-GIUDICE$/        for f in [{"name": "Read", "input": {"file_path": atteso}, "results": [(0, "", False, False)]}]:/'; then
+  drun 61z-test-red file-altra "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova (1.8.1): il controllo per file senza la verifica del Read → la Read di un altra chiamata passa (rosso)" '[ "$(e1 61z-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova Read del giudice: la mutazione si applica" false; fi
 cp "$RP" "$MRP"; cp "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"
 sed -i 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/' "$HC/scripts/plan-check.sh"
 if ! cmp -s "$HC/scripts/plan-check.sh" "$T/pc-hc.bak"; then
@@ -1003,6 +1058,10 @@ cp "$RP" "$MRP"
 TSP0=$TSP TRUN0=$TRUN; TSP="$FIC_REPO/wf/spec-t.md" TRUN="$FIC_REPO/wf/spec-t.run"; mkdir -p "$FIC_REPO/wf"; export TSP TRUN
 drun 83e-test-red pieno "ACCEPT — ok" RF1
 check "(review B12-B13) run dir nel repository e non ignorata: i suoi file non sono fuori scope → la deviazione accettata dà OK" '[ "$(e1 83e-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+# 1.8.1 (R8): run dir in the repository → «diff file:» relative to the root; the Read with the absolute path (on Windows
+# in the C:\… form): the same file after the normalization
+drun 61i-test-red file-relativo "ACCEPT — ok" RF1
+check "(1.8.1) «diff file:» relativo alla radice, Read col percorso assoluto (forma nativa) → .esito OK" '[ "$(e1 61i-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "diff file: wf/spec-t\.run/test-red/diff-test-[0-9a-f]\{16\}\.diff" "$TRUN/log/61i-test-red.jsonl"'
 rm -rf "$FIC_REPO/wf"; TSP=$TSP0 TRUN=$TRUN0; export TSP TRUN
 rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
 # (review B12-B13) a Python dedent in a stub file is not hidden by -w; a technical end parks too; a STOP staging of
