@@ -373,6 +373,9 @@ driver-180.c_scope_req	Open decision of type scope that names no requirement ID 
 driver-180.c_after_declassed	after the resume that had declassified {k}	dopo la ripresa che aveva declassato {k}
 driver-180.ripresa_decisione	human decision without an executed proof	decisione umana senza prova eseguita
 driver-180.review_unverified	a human decision of the plan that no script verified: judge whether the code still holds it	una decisione umana del piano che nessuno script ha verificato: giudica se il codice la regge ancora
+driver-181.usage_limit	usage limit reached ({msg}): relaunch the driver after that time; the phase starts again from the beginning	limite d'uso raggiunto ({msg}): rilancia il driver dopo quell'ora; la fase riparte da capo
+driver-181.api_error	API error {e} (status {s}): {msg} — relaunch the driver; the phase starts again from the beginning	errore API {e} (stato {s}): {msg} — rilancia il driver; la fase riparte da capo
+driver-181.stderr_empty	(stderr empty)	(stderr vuoto)
 cycle-state-180.ripresa	resume {n}/{max} ({causa})	ripresa {n}/{max} ({causa})
 cycle-state-180.ripresa_stop	{label} stopped: {why}; change the spec to start again ({run}/log/{label}.ripresa)	{label} fermata: {why}; cambia la spec per ripartire ({run}/log/{label}.ripresa)
 cycle-state-180.stop_umano	{label} printed OK on a plan still DRAFT (a final STOP, in {run}/driver.log): approve the plan or change the spec to start again	{label} ha dato OK su un piano ancora DRAFT (uno STOP finale, in {run}/driver.log): approva il piano o cambia la spec per ripartire

@@ -35,7 +35,8 @@ It builds on the plugin's `scripts/phase-usage.py`, which stays as it is. Per cy
 - `total_cost_usd` (maximum per phase: it is cumulative), tokens from `modelUsage` (maximum per session and model:
   cumulative, includes the sub-agents), 5h quota before/after (`rate_limit_event`), STOPs by cause (lines
   `PHASE RESULT <phase>: STOP — <cause>`, or the Italian `ESITO FASE …` of old run dirs, from `.esito`, otherwise
-  from the `result` text or from `.jsonl.result`).
+  from the `result` text or from `.jsonl.result`); 1.8.1: a phase without `.esito` whose last `result` is an API error
+  is a STOP of that error, the usage limit in a cause of its own («limite d'uso»).
 """
 import argparse
 import csv
@@ -217,6 +218,27 @@ def esito_of(path, results):
     return None, ""
 
 
+# 1.8.1 (G2-3): a phase whose sub-session ended on an API error (the last `result` event has api_error_status or
+# api_error) and that has no .esito (run-phase writes none on an exit != 0) is a STOP of that error, not a phase without
+# an outcome; the usage limit (429, usage_limit_reached, rate_limit*) has a class of its own, never a human STOP
+LIMITE_USO = "limite d'uso"   # value of metrics.csv (stop_cause) like the other class names (D7)
+
+
+def api_stop_of(path, results):
+    """(class, cause) of the STOP on an API error of the last result event, or None (no error, or an .esito)"""
+    base = path[:-len(".jsonl")] if path.endswith(".jsonl") else path
+    if not results or os.path.isfile(base + ".esito"):
+        return None
+    r = results[-1]
+    st, er = r.get("api_error_status"), r.get("api_error")
+    if st in (None, "") and not er:
+        return None
+    er, st = str(er or "-"), "-" if st in (None, "") else str(st)
+    cause = "%s %s: %s" % (er, st, " ".join(str(r.get("result") or "").split()))
+    usage = st == "429" or er == "usage_limit_reached" or er.startswith("rate_limit")
+    return (LIMITE_USO if usage else stop_class(cause)), cause
+
+
 def wall_share(work):
     """Parallel threads (background or concurrent sub-agent, orchestrator working while a sub-agent
     runs): the same wall-clock second is not counted twice. In each stretch between two consecutive endpoints,
@@ -391,6 +413,10 @@ def analyse_phase(path):
         tok = [sum(u.get(f) or 0 for u in us)
                for f in ("cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens")]
     esito, cause = esito_of(path, results)
+    klass = stop_class(cause) if esito == "STOP" else ""
+    api = api_stop_of(path, results)
+    if api:   # 1.8.1 (G2-3): the API error of the last result is the STOP of the phase  # STOP-API
+        esito, klass, cause = "STOP", api[0], api[1]
     return {
         "label": label,
         "phase": m.group(1) if m else label,
@@ -404,7 +430,7 @@ def analyse_phase(path):
         "quota_5h": [rl[0], rl[-1]] if rl else None,
         "esito": esito,
         "stop_cause": cause if esito == "STOP" else "",
-        "stop_class": stop_class(cause) if esito == "STOP" else "",
+        "stop_class": klass,
         "buckets_s": buckets,
         "model_by_thread_s": model_by_thread,
         "passive_wait_s": passive,
