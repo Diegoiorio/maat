@@ -79,6 +79,7 @@ rest and say which lens you were given.
 | 8 | API / payload / data persistence implications | **L1** |
 | 10 | Backward compatibility | **L1** |
 | — | Verify **every** `no implication` (`nessuna implicazione`) the plan declares (do not take it on trust) | **L1** |
+| — | <!-- 182-testi-attesi --> Every regex, pattern or expected literal that the spec or the plan gives for text produced by existing code: open the code that produces it (search the literal's stem) and check that the pattern matches every form the code can emit (singular and plural, numbers, units, language). A pattern that misses a form the code emits, or two parts of the spec/plan that give different expected values for the same output, is `major`; quote the code line. | **L1** |
 | — | The `Risk surfaces:` line is complete (a touched surface left undeclared is a finding: it silently skips the verification floor and the fresh-eyes gate) · the `### Requirement traceability` table: no requirement without steps, no significant step serving no requirement, each verification able to verify its requirement (a plan approved before 2026-09-21 and re-opened has no table: that is not a finding) | **L1** |
 | 4 | Does the plan reuse existing project patterns? | **L2** |
 | 5 | Does the plan change more code than necessary? | **L2** |
