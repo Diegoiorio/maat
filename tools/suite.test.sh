@@ -263,7 +263,7 @@ ci_limite() {
 check "  ci.yml: linux, macos e windows (i job dei gruppi) impostano MAAT_SUITE_TIMEOUT minore di timeout-minutes × 60" \
   'ci_limite "$CIY" linux-gruppo && ci_limite "$CIY" macos-gruppo && ci_limite "$CIY" windows-gruppo'
 awk '/^  linux-gruppo:$/ { s = 1 } /^  macos-gruppo:$/ { s = 0 } s && /MAAT_SUITE_TIMEOUT:/ { sub(/[0-9]+/, "1500") } 1' "$CIY" > "$T/ci-l.yml"
-grep -v 'MAAT_SUITE_TIMEOUT: "1800"' "$CIY" > "$T/ci-wt.yml"
+awk '/^  windows-gruppo:$/ { s = 1 } /^  [a-z][a-z-]*:$/ && !/windows-gruppo/ { s = 0 } !(s && /MAAT_SUITE_TIMEOUT:/)' "$CIY" > "$T/ci-wt.yml"   # 1.8.1: any value
 check "controprova: linux con MAAT_SUITE_TIMEOUT 1500 (= 25 × 60), o windows senza la variabile → rosso" \
   '! cmp -s "$CIY" "$T/ci-l.yml" && ! ci_limite "$T/ci-l.yml" linux-gruppo && ! cmp -s "$CIY" "$T/ci-wt.yml" && ! ci_limite "$T/ci-wt.yml" windows-gruppo'
 # MAAT_GRUPPO_TIMEOUT (CI of 1.8.0): the limit of the whole run. 3 s for two suites, the first one sleeping 8 s with
