@@ -192,7 +192,9 @@
 # driver's verification: targeted gates.sh (std level, the plan's test files + touched.txt; outcome in .gates) and
 # `plan-check.sh rossi` on the evidence (.rossi, <run-dir>/test-red/rossi.json): every test red on its own
 # assertion, no import/collection errors, no green, no existing suite in conflict; otherwise .esito =
-# "PHASE RESULT test-red: STOP — …" (originale= below). Closing OK: test-red/stubs.json, test-red/tests.txt,
+# "PHASE RESULT test-red: STOP — …" (originale= below). 1.8.1: a STOP whose only cause are conflicts of an existing
+# suite gets ONE second round (secondo_giro): red in one round only = unstable test (AVVISO), red in both = STOP
+# «(confirmed on two rounds)». Closing OK: test-red/stubs.json, test-red/tests.txt,
 # " · tests <fp>" in the Approved basis (plan-check.sh basis --write-tests) and gen (absorbed counterproofs, L2).
 # After implement and fix OK: the acceptance test files compared with test-red/tests.txt; different ->
 # .esito STOP «deviazione: test di accettazione modificati» regardless of the report (stubs do not count), except for a
@@ -966,10 +968,15 @@ chiusura_prep() {
 # when the ONLY cause of the
 # STOP of `valida` is deviations — esito OK, bloccato_su none, every deviation test-data:/dati-test: or difensiva:/
 # defensive:, at least one test-data — printing «motivo\t<motivo>» then one test-data deviation per line; else exit 1.
-# «giudice <jsonl> <out> <input file>…»: the first call of the MAIN session (transcript.py) to Agent/Task with
-# subagent_type maat:spec-plan-reviewer-light whose prompt holds every input verbatim (CR removed) and that has a result
-# that is not an asynchronous launch: its text into <out>, prints «ok»; else «mai» (no call of that type), «incompleto
-# <n>» (the input files missing in the prompt, 1-based) or «asincrono» (no result in the foreground).
+# «giudice <jsonl> <out> <diff> <run dir> <root> <input file>…»: the first call of the MAIN session (transcript.py) to
+# Agent/Task with subagent_type maat:spec-plan-reviewer-light whose prompt holds every input verbatim (CR removed) and
+# that has a result that is not an asynchronous launch: its text into <out>, prints «ok»; else «mai» (no call of that
+# type), «incompleto <n>» (the input files missing in the prompt, 1-based) or «asincrono» (no result in the foreground).
+# 1.8.1 (G2-2, R6-R8): the LAST input (the diff) is also satisfied by the line «diff file: <p> · sha256 <s>» of
+# `plan-check.sh diff-test --file`: <s> the sha256 of <diff> (the stdout of diff-test, recomputed here), <p> resolving
+# to <run dir>/test-red/diff-test-<s[:16]>.diff (relative paths on <root>), that file still with sha256 <s>, at most
+# 2000 lines of at most 2000 characters, and a Read of <p> by the sub-agent of THAT call (transcript.chiamate_figlie)
+# without offset, without limit or with limit ≥ its lines, with a result not in error. Anything else: input missing.
 DEV_PY='
 import importlib.util, json, os, sys
 sys.dont_write_bytecode = True
@@ -998,14 +1005,55 @@ if sys.argv[1] == "ammesse":
 s = importlib.util.spec_from_file_location("transcript_rp", os.path.join(os.environ["MAAT_SCRIPTS_PY"], "transcript.py"))
 tr = importlib.util.module_from_spec(s); s.loader.exec_module(tr)
 rr = tr.righe(sys.argv[2])
-ii = [open(f, encoding="utf-8", errors="replace").read().replace("\r", "") for f in sys.argv[4:]]
+ii = [open(f, encoding="utf-8", errors="replace").read().replace("\r", "") for f in sys.argv[7:]]
 calls = [c for c in tr.chiamate(rr) if c["name"] in tr.AGENT_TOOLS and c["input"].get("subagent_type") == "maat:spec-plan-reviewer-light"]
 if not calls:
     print("mai"); sys.exit(0)
+import hashlib, posixpath, re
+dd = open(sys.argv[4], "rb").read()   # the canonical bytes: the stdout of diff-test, the bytes of --file (R6)
+sha = hashlib.sha256(dd).hexdigest()
+atteso = os.path.join(sys.argv[5], "test-red", "diff-test-%s.diff" % sha[:16])
+def chiave(x):   # R8: one form for a path — \ → /, C:/… = /c/… = /mnt/c/… (drive letter lower case), relative on the root
+    x = str(x).replace("\\", "/")
+    if not re.match(r"^(/|[A-Za-z]:/)", x):
+        x = sys.argv[6].replace("\\", "/").rstrip("/") + "/" + x
+    m = re.match(r"^(?:([A-Za-z]):|/mnt/([a-z])(?=/|$)|/([A-Za-z])(?=/|$))(.*)$", x)
+    if m:
+        x = "/%s/%s" % ((m.group(1) or m.group(2) or m.group(3)).lower(), m.group(4).lstrip("/"))
+    return posixpath.normpath(x)
+def per_file(c, p):   # G2-2 (b): the diff as a file the sub-agent of THIS call Read whole
+    try:
+        txt = dd.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    rl = txt.split("\n")
+    if rl and rl[-1] == "":
+        rl.pop()
+    if len(rl) > 2000 or any(len(l) > 2000 for l in rl):   # R7: the limits of Read
+        return False
+    try:
+        if hashlib.sha256(open(atteso, "rb").read()).hexdigest() != sha:
+            return False
+    except OSError:
+        return False
+    posti = {chiave(atteso), chiave(os.path.realpath(atteso))}
+    for m in re.finditer(r"^diff file: (.+?) \u00b7 sha256 ([0-9a-f]{64})[ \t]*$", p, re.M):
+        if m.group(2) != sha or chiave(m.group(1)) not in posti:
+            continue
+        for f in tr.chiamate_figlie(rr, c["id"]):   # READ-DEL-GIUDICE
+            fi = f["input"]
+            lim = fi.get("limit")
+            if f["name"] == "Read" and isinstance(fi.get("file_path"), str) and chiave(fi["file_path"]) in posti \
+                    and "offset" not in fi and ("limit" not in fi or (type(lim) is int and lim >= len(rl))) \
+                    and any(not err for _n, _t, err, _a in f["results"]):
+                return True
+    return False
 esito = "asincrono"
 for c in calls:
     p = tr.testo(c["input"].get("prompt")).replace("\r", "")
     miss = [str(k + 1) for k, x in enumerate(ii) if x not in p]  # INGRESSI-DEL-GIUDICE
+    if miss and miss[-1] == str(len(ii)) and per_file(c, p):   # R8: only the LAST input, the diff
+        miss = miss[:-1]
     if miss:
         esito = "incompleto " + ",".join(miss)
         continue
@@ -1020,6 +1068,9 @@ print(esito)
 # foreground with the row, its traceability rows, the deviation and the diff RECOMPUTED here with `plan-check.sh diff-test`
 # (the worker's command) in its prompt, and `plan-check.sh deviazione` ACCETTATA on its result. Writes
 # log/<label>.deviazioni-test («<text>\t<verdict>\t<sha256 of the diff>») and the lines of log/deviazioni-accettate.txt.
+pc_root() { # the repository root of plan-check.sh (its repo_root): the base of the relative path of «diff file:»
+  if [ -n "${PLAN_CHECK_ROOT:-}" ]; then printf '%s' "$PLAN_CHECK_ROOT"; else git -C "$(dirname "$SPEC_F")" rev-parse --show-toplevel 2>/dev/null || pwd; fi
+}
 deviazioni_test() { # $1 = file with the test-data deviations (one per line); prints the cause of a STOP, nothing if accepted
   local d tn k=0 dl rc st out vd sha tmp="$dir/log/$label.deviazioni-test.tmp" pfx="$dir/log/$label.dev"
   "$FIC_PY" -c 'import json, sys
@@ -1036,7 +1087,9 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }
     printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')" > "$pfx$k.row"
     printf '%s\n' "$out" | sed -n 's/^trace row: //p' > "$pfx$k.traces"
-    printf '%s' "$d" > "$pfx$k.text"
+    # 1.8.1 (G2-2): the text WITHOUT its family prefix (the regex of tn above): a substring of both forms, so the
+    # prompt may hold it with or without the label; .deviazioni-test and deviazioni-accettate.txt keep $d (R9)
+    printf '%s' "$(printf '%s\n' "$d" | sed 's/^\(test-data\|dati-test\): *//')" > "$pfx$k.text"   # TESTO-SENZA-PREFISSO
     bash "$PC" diff-test "$SPEC_F" "$(printf '%s\n' "$out" | sed -n 's/^test file: //p')" --run-dir "$dir" > "$pfx$k.diff" 2>>"$err" &&
       [ -s "$pfx$k.diff" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
     printf '%s' "$(cat "$pfx$k.diff")" > "$pfx$k.diff-in"   # the diff as the prompt holds it: without the final newline
@@ -1045,7 +1098,8 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     local inputs=("$pfx$k.instr" "$pfx$k.row") l j=0
     while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
     inputs+=("$pfx$k.text" "$pfx$k.diff-in")
-    st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" "${inputs[@]}" 2>>"$err" | tr -d '\r')
+    st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" \
+      "$pfx$k.diff" "$dir" "$(pc_root)" "${inputs[@]}" 2>>"$err" | tr -d '\r')
     case "$st" in
       ok) ;;
       mai) msg run-phase-180.dev_judge_never tn="$tn"; return 0 ;;   # GIUDICE-CHIAMATO
@@ -1062,6 +1116,76 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
   { [ -f "$dir/log/deviazioni-accettate.txt" ] && tr -d '\r' < "$dir/log/deviazioni-accettate.txt" | grep -v "^$label	"
     awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
     mv -f "$dir/log/deviazioni-accettate.txt.tmp" "$dir/log/deviazioni-accettate.txt"
+}
+# 1.8.1 (G2-1): the second round of verify_red (RED2_PY). «ammesso <rossi.json>»: exit 0 when the STOP of rossi has
+# only suite conflicts (len(conflitti) == len(conflitti_suite) > 0: no static conflict, no vitest summary) and every
+# acceptance test is dimostrato or sonda_smentita. «confronta <rossi1.json> <rossi2.json> <U>»: exit 1 when round 2 is
+# not comparable (unreadable, BLOCKED, a conflict without identity, an outcome of a T different from round 1); else
+# prints «P <n>» (the identities red in both rounds) and writes U, those red in one round only, one per line.
+RED2_PY='
+import json, sys
+def load(p):
+    try:
+        d = json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) else None
+def pura(d):
+    c, cs, t = d.get("conflitti"), d.get("conflitti_suite"), d.get("test")
+    return (isinstance(c, list) and isinstance(cs, list) and isinstance(t, dict) and bool(t) and len(c) == len(cs)
+            and all(isinstance(x, dict) and isinstance(x.get("id"), str) for x in cs)
+            and all(isinstance(v, dict) and v.get("esito") in ("dimostrato", "sonda_smentita") for v in t.values()))
+if sys.argv[1] == "ammesso":
+    d = load(sys.argv[2])
+    sys.exit(0 if d is not None and d.get("esito") == "STOP" and pura(d) and d["conflitti"] else 1)
+d1, d2 = load(sys.argv[2]), load(sys.argv[3])
+if d1 is None or d2 is None or d2.get("esito") not in ("OK", "STOP") or not pura(d1) or not pura(d2):
+    sys.exit(1)
+if {k: v.get("esito") for k, v in d1["test"].items()} != {k: v.get("esito") for k, v in d2["test"].items()}:  # ESITI-UGUALI
+    sys.exit(1)
+c1 = [x["id"] for x in d1["conflitti_suite"]]
+c2 = [x["id"] for x in d2["conflitti_suite"]]
+p = set(c1) & set(c2)
+u = [x for x in dict.fromkeys(c1 + c2) if x not in p]
+open(sys.argv[4], "w", encoding="utf-8", newline="\n").write("".join(x + "\n" for x in u))
+print("P %d" % len(p))
+'
+# 1.8.1 (G2-1, R1-R5): after a rossi STOP whose only cause are suite conflicts, ONE second round: the evidence of round 1
+# renamed <ev>.giro1 (kept; gates.sh does not reuse its key), round 1 kept in log/<label>.gates1, .rossi1, .rossi1.json;
+# the same gates.sh -> .gates2, rossi -> .rossi2. P (red in both) empty -> rossi a third time on the evidence of round 2
+# with --instabili U, into .rossi and rossi.json, one AVVISO per unstable test; P not empty -> the STOP of round 2,
+# «(confirmed on two rounds)». The round that decides also writes .gates and .rossi (classifica compares .rossi with
+# rossi.json). Round 2 not usable or not comparable -> the STOP of round 1, restored (fail-closed). Declared limit (R5):
+# a real conflict that is also unstable is reported as unstable. Sets rc and conf of verify_red.
+giro1_resta() { # $1 = why round 2 is not used
+  avviso "AVVISO: $(msg run-phase-181.round2_kept why="$1" label="$label")"
+  cp -f "$dir/log/$label.gates1" "$g"; cp -f "$dir/log/$label.rossi1" "$ro"; cp -f "$dir/log/$label.rossi1.json" "$TR/rossi.json"
+}
+secondo_giro() {
+  local g2="$dir/log/$label.gates2" r2="$dir/log/$label.rossi2" u="$dir/log/$label.instabili" ev2 rc2 cmp id
+  "$FIC_PY" -c "$RED2_PY" ammesso "$TR/rossi.json" 2>>"$err" || return 0   # SECONDO-GIRO-AMMESSO
+  cp -f "$g" "$dir/log/$label.gates1" && cp -f "$ro" "$dir/log/$label.rossi1" && cp -f "$TR/rossi.json" "$dir/log/$label.rossi1.json" || return 0
+  rm -rf "$ev.giro1"
+  mv "$ev" "$ev.giro1" 2>>"$err" || { giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0; }   # EVIDENZA-GIRO1
+  FIC_GATES_ROOT="$FIC_REPO" bash "$GATES" --run-dir "$dir" std ${files[@]+"${files[@]}"} > "$g2" 2>&1; rc2=$?
+  echo "exit=$rc2 livello=std ($(msg run-phase.red_level))" >> "$g2"
+  ev2=$(sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$g2" | tail -1)
+  if [ -z "$ev2" ] || [ "$ev2" = - ] || grep -q '^gates: esito=BLOCKED' "$g2"; then
+    giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0
+  fi
+  bash "$PC" rossi "$SPEC_F" --evidence "$ev2" --run-dir "$dir" > "$r2" 2>&1; rc2=$?
+  [ $rc2 -le 1 ] || { giro1_resta "$(msg run-phase-181.r2_no_evidence)"; return 0; }
+  cmp=$("$FIC_PY" -c "$RED2_PY" confronta "$dir/log/$label.rossi1.json" "$TR/rossi.json" "$u" 2>>"$err" | tr -d '\r')
+  case $cmp in "P "[0-9]*) ;; *) giro1_resta "$(msg run-phase-181.r2_differ)"; return 0 ;; esac
+  cp -f "$g2" "$g"
+  if [ "$cmp" = "P 0" ]; then
+    bash "$PC" rossi "$SPEC_F" --evidence "$ev2" --run-dir "$dir" --instabili "$u" > "$ro" 2>&1; rc=$?
+    while IFS= read -r id; do
+      [ -n "$id" ] && avviso "AVVISO: $(msg run-phase-181.unstable id="$id")"
+    done < "$u"
+  else
+    cp -f "$r2" "$ro"; rc=$rc2; conf=" $(msg run-phase-181.confirmed)"   # CONFERMATO-DUE-GIRI
+  fi
 }
 # --- driver verification for test-red (harness-pt11, see TEST-RED PHASE): prints the final outcome of the phase ---
 verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=)
@@ -1172,11 +1296,13 @@ verify_red() { # $1 = outcome of the subsession (ESITO line, possibly originale=
       lim=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): limite_dimostrato.*/\1/p' | paste -sd, - | sed 's/,/, /g')
       sm=$(tr -d '\r' < "$ro" | sed -n 's/^rosso \([^:]*\): sonda_smentita.*/\1/p' | paste -sd, - | sed 's/,/, /g')
       [ -n "$sm" ] && avviso "AVVISO: $(msg run-phase-180.probe_disproved tests="$sm")"
+      local conf=""
+      [ $rc -eq 1 ] && [ -z "$lim" ] && secondo_giro   # 1.8.1 (G2-1): only suite conflicts -> one second round
       case $rc in
         0) ;;
         1) why=$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=STOP — //p' | tail -1)
            if [ -n "$lim" ]; then why="$(msg run-phase-180.red_limit tests="$lim" label="$label")"  # LIMITE-NELLO-STOP
-           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")"; fi ;;
+           else why="$(msg run-phase.red_not_proven why="${why:-$(msg run-phase.not_proven)}" label="$label")$conf"; fi ;;
         *) why="$(msg run-phase.red_blocked det="$(tr -d '\r' < "$ro" | sed -n 's/^rossi: esito=[A-Z]* — //p' | tail -1)" label="$label")" ;;
       esac
     fi

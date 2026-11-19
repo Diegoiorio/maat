@@ -2519,7 +2519,9 @@ DEV_STOP, DEV_OK = "Deviazione: STOP — ", "Deviazione: ACCETTATA"
 DEV_ISTRUZIONI = ("Judge a test deviation of test-red. Answer with two lines: «Deviation verdict: ACCEPT | STOP — "
                   "<reason>» and «Requirements still covered: <requirement IDs>». ACCEPT only if the change "
                   "touches data, fixtures, internal names or the organization of the tests, never an assertion, a "
-                  "requirement, a file or a test name, and the assertion still proves every requirement of the row.")
+                  "requirement, a file or a test name, and the assertion still proves every requirement of the row. "
+                  "If the prompt has a `diff file:` line, read that file whole with Read before judging; it is the "
+                  "diff of the test file.")
 
 
 def cmd_deviazione(M, ris, tid):
@@ -2835,7 +2837,7 @@ def accept_span(root, T):
     return found[0] if len(found) == 1 else None   # two tests with that name: ambiguous, no exclusion
 
 
-def cmd_rossi(M, root, run, ev):
+def cmd_rossi(M, root, run, ev, inst=""):
     """Verifica del driver sulla base con stub (evidenza di gates.sh in <ev>): ogni test di accettazione rosso
     sulla sua asserzione, nessuna suite esistente in conflitto. Scrive <run>/test-red/rossi.json.
     Uscita 0 OK (tutti dimostrati) - 1 STOP - 3 BLOCKED (evidenza assente o gate BLOCKED)."""
@@ -2977,17 +2979,54 @@ def cmd_rossi(M, root, run, ev):
             out[tid] = ("sonda_smentita", _msg.T("plan-check-180.red_disproved", k=s["decisione"], a=s["affermazione"][:200]), msg, pos)
     # conflicts: an EXISTING suite red on the stubbed base (a case no acceptance test claims),
     # or an existing test asserting the ABSENCE of a value the plan adds (### Stringhe e data-test)
-    def related(f):
-        ids = [t for t in M["order"] if tests[t]["path"] == f] or M["order"]
+    # 1.8.1 (G2-1): the acceptance tests of the file f; none -> \u00abno acceptance test claims it\u00bb, never all the T
+    def related(*fs):
+        ids = [t for t in M["order"] if tests[t]["path"] in fs]
+        if not ids:  # RELATED-NESSUNO
+            return _msg.T("plan-check-181.red_unclaimed")
         return "; ".join("%s: %s" % (t, tests[t]["asserzione"][:100]) for t in ids)
-    confl = []
+    # 1.8.1 (R2): confl keeps every conflict line as before; csuite the conflicts of a suite (JUnit, vitest) with their
+    # identity, the text before \u00ab \u2014 \u00bb, computed only here. Static and vitest-summary conflicts have no identity.
+    confl, csuite = [], []
+    def suite_c(cid, testo):
+        confl.append(testo)
+        csuite.append({"id": cid, "testo": testo})
     def sotto_rad(g, x):
         return (rad[g] + "/" if rad[g] else "") + x
+    # 1.8.1 (R4): \u00abdid not run \u2026 the package failed before this test ran\u00bb (go-junit, for a package that fell) is shown
+    # under the only real red of that package (same classname prefix): one conflict, identity <cn>::<nm>, with
+    # \u00ab(+N tests not run)\u00bb after \u00ab \u2014 \u00bb. More than one real red in the package, or one owned by an acceptance test:
+    # not bindable with certainty, each stays a conflict of its own (as in 1.8.0).
+    def pacchetto(cn):   # go-junit classnames only (<dir>.<file>.go): a Python module path is never a package here
+        p = cn.split(".")
+        return ".".join(p[:-2]) if len(p) >= 2 and p[-1] == "go" else None
+    def non_eseguito(c):
+        return any(x.startswith("did not run") and "the package failed before this test ran" in x for x in c["bad"])
     for g in [x for x in gates if fmt[x] == "junit"]:   # JUnit first, then vitest: the previous order
-        for c in (rep.get(g) or []):
-            if c["bad"] and c["own"] is None:
-                f = sotto_rad(g, c["cn"].replace(".", "/") + ".py") if c["cn"] else c["nm"]
-                confl.append("%s::%s \u2014 %s <-> %s" % (c["cn"] or ("(" + _msg.T("plan-check.red_collection_case") + ")"), c["nm"], nrm("\n".join(c["bad"]))[:200], related(f)))
+        cases = rep.get(g) or []
+        veri = {}
+        for c in cases:
+            if c["bad"] and c["cn"] and not non_eseguito(c) and pacchetto(c["cn"]) is not None:
+                veri.setdefault(pacchetto(c["cn"]), []).append(c)
+        caduto = {p: l[0] for p, l in veri.items() if len(l) == 1 and l[0]["own"] is None}
+        piegati = {}
+        for c in cases:
+            if c["bad"] and c["own"] is None and c["cn"] and non_eseguito(c) and pacchetto(c["cn"]) in caduto:  # PACCHETTO-CADUTO
+                c["piegato"] = True
+                piegati[pacchetto(c["cn"])] = piegati.get(pacchetto(c["cn"]), 0) + 1
+        for c in cases:
+            if c["bad"] and c["own"] is None and not c.get("piegato"):
+                if c["cn"]:
+                    pp = c["cn"].split(".")
+                    fs = [sotto_rad(g, c["cn"].replace(".", "/") + ".py")]
+                    if len(pp) >= 2:   # go-junit: <dir>.<file>.go
+                        fs.append(sotto_rad(g, "/".join(pp[:-2] + [pp[-2] + "." + pp[-1]])))
+                else:
+                    fs = [c["nm"]]
+                n = piegati.get(pacchetto(c["cn"]), 0) if c["cn"] and caduto.get(pacchetto(c["cn"])) is c else 0
+                cid = "%s::%s" % (c["cn"] or ("(" + _msg.T("plan-check.red_collection_case") + ")"), c["nm"])
+                suite_c(cid, "%s \u2014 %s%s <-> %s" % (cid, (_msg.T("plan-check-181.red_not_run_n", n=n) + " ") if n else "",
+                                                       nrm("\n".join(c["bad"]))[:200], related(*fs)))
     for g in [x for x in gates if fmt[x] == "vitest"]:
         fe = rep.get(g)
         if fe:  # the vitest summary and the blocks read must add up: otherwise the parser has lost some reds
@@ -2997,8 +3036,8 @@ def cmd_rossi(M, root, run, ev):
                 confl.append(_msg.T("plan-check.red_vitest_sum", n=nsum[-1], k=nblk))
         for b in (fe[0] if fe else []):
             if b["own"] is None:
-                confl.append("%s%s \u2014 %s <-> %s" % (b["file"], " > " + " > ".join(b["segs"]) if b["segs"] else " (file)",
-                                                       nrm("\n".join(b["body"]))[:200], related(sotto_rad(g, b["file"]))))
+                cid = "%s%s" % (b["file"], " > " + " > ".join(b["segs"]) if b["segs"] else " (file)")
+                suite_c(cid, "%s \u2014 %s <-> %s" % (cid, nrm("\n".join(b["body"]))[:200], related(sotto_rad(g, b["file"]))))
     adds = []
     for tb in tables(M["sec"].get("Stringhe e data-test", [])):
         for n, c in tb["rows"]:
@@ -3019,11 +3058,33 @@ def cmd_rossi(M, root, run, ev):
                     near = [t for t in M["order"] if val in tests[t]["asserzione"]] or M["order"]
                     confl.append(_msg.T("plan-check.red_absence", rel=rel, ln=ln, val=val,
                                         near="; ".join("%s: %s" % (t, tests[t]["asserzione"][:100]) for t in near)))
+    # 1.8.1 (G2-1): --instabili, one identity per line (run-phase.sh, after two rounds): a suite conflict whose identity
+    # is listed is an unstable existing test, not a conflict; static and vitest-summary conflicts are never touched
+    inst_ids = set()
+    if inst:
+        try:
+            with open(inst, encoding="utf-8", errors="replace") as fh:
+                inst_ids = {l.strip("\r\n") for l in fh if l.strip()}
+        except OSError:
+            inst_ids = set()   # unreadable: no unstable test, every conflict stays (fail-closed)
+    instabili = [x for x in csuite if x["id"] in inst_ids]  # INSTABILI-FILTRO
+    if instabili:
+        kept = [x for x in csuite if x["id"] not in inst_ids]
+        drop = [x["testo"] for x in instabili]   # once per unstable conflict (two equal lines: two conflicts)
+        rest = []
+        for c in confl:
+            if c in drop:
+                drop.remove(c)
+            else:
+                rest.append(c)
+        confl, csuite = rest, kept
     for tid in M["order"]:
         es, why, msg, pos = out.get(tid, ("bloccato", _msg.T("plan-check.red_gate_unusable"), "", None))
         print("rosso %s: %s%s \u2014 %s%s" % (tid, es, (" " + pos) if pos else "", why, (" \u2014 " + msg[:200]) if msg else ""))
     for c in confl:
         print("conflitto: " + c)
+    for x in instabili:
+        print("instabile: " + x["testo"])
     bad = [t for t in M["order"] if t in out and out[t][0] not in ("dimostrato", "sonda_smentita")]
     if blocked:
         esito, riass = "BLOCKED", _msg.T("plan-check.red_sum_blocked") + ": " + "; ".join(blocked)
@@ -3040,6 +3101,7 @@ def cmd_rossi(M, root, run, ev):
     # «sonda» (B11): the valid probe of a row, {decisione, affermazione, atteso, riga}: the review prompt shows the claim
     jsave(os.path.join(run, "test-red", "rossi.json"), {
         "esito": esito, "riassunto": riass, "evidence": ev, "conflitti": confl,
+        "conflitti_suite": csuite, "instabili": instabili,
         "test": {t: dict({"esito": v[0], "motivo": v[1], "messaggio": v[2][:4000], "posizione": v[3],
                           "file": tests[t]["path"], "nome": tests[t]["name"]}, **({"sonda": sv[t]} if t in sv else {}),
                          **({"simbolo": simboli[t]} if t in simboli and v[0] == "rosso_simbolo" else {}))
@@ -3089,7 +3151,7 @@ elif cmd == "additivo":
 elif cmd == "deviazione":
     sys.exit(cmd_deviazione(M, sys.argv[3], sys.argv[4]))
 elif cmd == "rossi":
-    sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4]))
+    sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else ""))
 elif cmd == "l2":
     sys.exit(cmd_l2(M, sys.argv[2], sys.argv[3], sys.argv[4]))
 if cmd == "lint2":
@@ -3180,14 +3242,17 @@ cmd_gen() {
 #          of the asserzione column, otherwise the rosso_se of the mutation), import/collection = not
 #          proven, green = STOP, existing suite red or test asserting the absence of a value added by the
 #          plan = conflict. Writes <d>/test-red/rossi.json. Exit 0 OK · 1 STOP · 3 BLOCKED.
+#          1.8.1: --instabili <file> (one identity per line, the «id» of conflitti_suite in rossi.json): a suite
+#          conflict listed there is printed «instabile: …», goes into rossi.json «instabili» and weighs nothing
 #   l2     <spec> [--run-dir <d>]          for finalize.sh: "L2 <id>: OK | NO — <motivo>" of the mutations on new
 #          files, on the current code (stub = exported symbols, every symbol in a test, tests fingerprint FRESH)
 cmd_f2x() {
-  local sub=$1 spec="" run="" ev="" dif=""; shift
+  local sub=$1 spec="" run="" ev="" dif="" inst=""; shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
       --evidence) [ "$sub" = rossi ] && [ $# -ge 2 ] || die_usage; ev="$2"; shift 2 ;;
+      --instabili) [ "$sub" = rossi ] && [ $# -ge 2 ] && [ -f "$2" ] || die_usage; inst="$2"; shift 2 ;;
       --diff) { [ "$sub" = stubs ] || [ "$sub" = additivo ]; } && [ $# -ge 2 ] && [ -f "$2" ] || die_usage; dif="$2"; shift 2 ;;
       -*) die_usage ;;
       *) [ -z "$spec" ] || die_usage; spec="$1"; shift ;;
@@ -3206,7 +3271,8 @@ cmd_f2x() {
     accept|tests) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" "$sub" "$root" ;;
     stubs) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" stubs "$root" "$run" ${dif:+"$dif"} ;;
     additivo) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" additivo "$root" "$dif" ;;
-    rossi) printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" rossi "$root" "$run" "$ev" ;;
+    rossi) [ -z "$inst" ] || inst=$(maat_cygm "$inst" 2>/dev/null || printf '%s' "$inst")
+      printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" rossi "$root" "$run" "$ev" ${inst:+"$inst"} ;;
     l2)
       ts=$(cmd_basis "$spec" | sed -n 's/^Tests status: //p')
       printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" l2 "$root" "$run" "${ts:-ASSENTE}" ;;
@@ -3221,6 +3287,9 @@ cmd_f2x() {
 #          CURRENT tree photographed with review-surface.sh tree (untracked files included: a new test file shows
 #          whole), CR removed. The worker prints it for the judge, run-phase.sh computes it again after the phase: the
 #          same command, the same bytes. Exit 0 · 2 usage · 3 no pre-tree or tree not computable
+#          1.8.1 (G2-2) --file: exactly those bytes into <d>/test-red/diff-test-<first 16 of their sha256>.diff and
+#          ONE line, «diff file: <path> · sha256 <full sha256>» (<path> relative to the repository root; absolute when
+#          the run dir is outside it): a long diff reaches the judge as a file it Reads whole (run-phase.sh checks it)
 cmd_deviazione() {
   [ $# -eq 3 ] && [ -f "$2" ] && { [ "$1" = - ] || [ -f "$1" ]; } || die_usage
   local ris=$1 spec=$2 tn=$3 ann
@@ -3232,10 +3301,11 @@ cmd_deviazione() {
 }
 
 cmd_diff_test() {
-  local spec="" file="" run=""
+  local spec="" file="" run="" afile=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      --file) afile=1; shift ;;
       -*) die_usage ;;
       *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$file" ]; then file="$1"; else die_usage; fi; shift ;;
     esac
@@ -3249,7 +3319,22 @@ cmd_diff_test() {
   rs=${PLAN_CHECK_RS:-$PC_HERE/review-surface.sh}; [ -f "$rs" ] || rs=$MAAT_SCRIPTS/review-surface.sh
   cur=$(cd "$root" && bash "$rs" tree 2>/dev/null | tr -d '\r')
   [ -n "$pre" ] && [ -n "$cur" ] || { echo "$(msg plan-check-180.diff_no_tree run="$run")" >&2; return 3; }
-  (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
+  if [ $afile -eq 0 ]; then
+    (cd "$root" && git -c core.quotePath=false diff --no-color --no-ext-diff "$pre" "$cur" -- "$file") | tr -d '\r'  # DIFF-DALL-ALBERO
+    return
+  fi
+  # --file: the bytes of the call without it (one place that makes them), the name and the line from their sha256
+  local td tmp sha out ab rt rc
+  td="$run/test-red"; tmp="$TMPD/diff-test.out"
+  cmd_diff_test "$spec" "$file" --run-dir "$run" > "$tmp"; rc=$?
+  [ $rc -eq 0 ] || return $rc
+  sha=$(sha256sum < "$tmp" | cut -c1-64)
+  out="$td/diff-test-${sha:0:16}.diff"
+  mkdir -p "$td" && cp "$tmp" "$out.tmp" && mv -f "$out.tmp" "$out" || { rm -f "$out.tmp"; return 3; }
+  ab=$(cd "$td" && pwd)/${out##*/}; rt=$(cd "$root" 2>/dev/null && pwd)
+  if [ -n "$rt" ] && [ "${ab#"$rt"/}" != "$ab" ]; then ab=${ab#"$rt"/}   # DIFF-FILE-RELATIVO
+  else ab=$(maat_cygm "$ab" 2>/dev/null || printf '%s' "$ab"); fi   # outside the repository: absolute
+  printf 'diff file: %s · sha256 %s\n' "$ab" "$sha"
 }
 
 cmd_route() {

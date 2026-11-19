@@ -1028,6 +1028,8 @@ expect 1 "^rosso T1: rosso_senza_asserzione .*senza posizione" "rossi: rosso sul
 mkev "$T/ev-sum" "$JU_RED" FAIL "$FE_RED
       Tests  2 failed (2)" FAIL
 expect 1 "^conflitto: riepilogo di vitest: 2 test falliti, 1 blocchi FAIL" "rossi: riepilogo di vitest diverso dai blocchi letti = STOP" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sum" --run-dir "$T/rr.run"
+bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sum" --run-dir "$T/rr.run" | sed -n 's/^conflitto: //p' > "$T/inst-sum.txt"
+expect 1 "^conflitto: riepilogo di vitest: 2 test falliti" "rossi 1.8.1: --instabili non spegne la discordanza del riepilogo vitest (red_vitest_sum)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-sum" --run-dir "$T/rr.run" --instabili "$T/inst-sum.txt"
 grep -v '^| T[12] | RF1 |' "$T/f2t.md" > "$T/f2t-empty.md"
 mkev "$T/ev-none" "$JU_GREEN" PASS " ✓ tests/fmt.test.ts  (1 test) 3ms
 vitest-fast: esito=PASS luogo=copia" PASS
@@ -1146,7 +1148,10 @@ expect 1 "^Deviazione: STOP — verdetto del giudice non ACCEPT" "deviazione (re
 if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].startswith("ACCEPT")/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: con «comincia con ACCEPT» il modello ripetuto passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-modello/plan-check.sh" deviazione "$T/giud-modello.txt" "$T/f2t.md" T1
 else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
-expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\.$" "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\. " "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
+# 1.8.1 (G2-2, R8): the sentence of the diff file, on the same single line judge instructions:
+expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\.$" "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+refute "^If the prompt|^diff of the test file" "deviazione - (1.8.1): la frase nuova non va a capo (una sola riga di istruzioni)" -- bash "$PC" deviazione - "$T/f2t.md" T1
 expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
 if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
@@ -1160,6 +1165,30 @@ expect 3 "-" "diff-test: senza .pre-tree di un test-red = uscita 3" -- env PLAN_
 if mutpc dtwt 's/ "\$pre" "\$cur" -- "\$file")/ "$pre" -- "$file")/'; then
   refute "^\+def test_nuovo" "controprova: col diff preso dall albero di lavoro il file non tracciato sparisce (rosso)" -- env PLAN_CHECK_ROOT="$DTR" MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-dtwt/plan-check.sh" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
 else echo "FAIL [controprova diff-test dall albero: la mutazione non si applica]"; fail=$((fail+1)); fi
+# 1.8.1 (G2-2, R6): diff-test --file — exactly the bytes of stdout without --file in <d>/test-red/diff-test-<16>.diff,
+# ONE line «diff file: <path> · sha256 <sha>»; the path relative to the repository root (run dir inside it), absolute
+# outside; without --file nothing is written
+printf 'def test_due():\r\n    assert 2 == 3\r\n' > "$DTR/modules/api/tests/test_dt2.py"   # CRs: removed in both outputs
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" > "$T/dt-stdout" 2>&1
+fl=$(env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --file 2>&1); rc=$?
+sh=$(sha256sum < "$T/dt-stdout" | cut -c1-64); dtf="$T/dt.run/test-red/diff-test-${sh:0:16}.diff"
+dta=$(cd "$T/dt.run/test-red" 2>/dev/null && pwd)/diff-test-${sh:0:16}.diff; dta=$(cygpath -m "$dta" 2>/dev/null || printf '%s' "$dta")
+if [ $rc -eq 0 ] && [ "$(printf '%s\n' "$fl" | grep -c .)" = 1 ] && [ "$fl" = "diff file: $dta · sha256 $sh" ]; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: una riga «diff file: <assoluto fuori dal repo> · sha256 <sha dello stdout>»] uscita $rc"; printf '%s\n' "$fl" "atteso: diff file: $dta · sha256 $sh" | sed 's/^/    /'; fail=$((fail+1)); fi
+if [ -s "$dtf" ] && cmp -s "$dtf" "$T/dt-stdout" && grep -q '^+def test_nuovo' "$dtf"; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: i byte del file = lo stdout senza --file]"; fail=$((fail+1)); fi
+mkdir -p "$DTR/wf/dt.run/log"; cp "$T/dt.run/log/03-test-red.pre-tree" "$DTR/wf/dt.run/log/"
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt2.py --run-dir "$DTR/wf/dt.run" > "$T/dt2-stdout" 2>&1
+expect 0 "^diff file: wf/dt\.run/test-red/diff-test-[0-9a-f]{16}\.diff · sha256 [0-9a-f]{64}$" "diff-test --file: run dir nel repository = percorso relativo alla radice" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt2.py --run-dir "$DTR/wf/dt.run" --file
+sh2=$(sha256sum < "$T/dt2-stdout" | cut -c1-64)
+if cmp -s "$DTR/wf/dt.run/test-red/diff-test-${sh2:0:16}.diff" "$T/dt2-stdout" && ! tr -d '\n' < "$T/dt2-stdout" | grep -q "$(printf '\r')" && grep -q '^+def test_due' "$T/dt2-stdout"; then pass=$((pass+1))
+else echo "FAIL [diff-test --file: file con CR nel test = stdout senza CR, stessi byte]"; fail=$((fail+1)); fi
+rm -rf "$T/dt-x.run"; mkdir -p "$T/dt-x.run/log"; cp "$T/dt.run/log/03-test-red.pre-tree" "$T/dt-x.run/log/"
+env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-x.run" > /dev/null 2>&1
+if [ ! -e "$T/dt-x.run/test-red" ]; then pass=$((pass+1)); else echo "FAIL [diff-test senza --file: nessun file scritto]"; fail=$((fail+1)); fi
+expect 3 "-" "diff-test --file: senza .pre-tree = uscita 3, come senza --file" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-vuoto.run" --file
+[ ! -e "$T/dt-vuoto.run/test-red" ] && pass=$((pass+1)) || { echo "FAIL [diff-test --file senza .pre-tree: nessun file scritto]"; fail=$((fail+1)); }
+rm -rf "$DTR/wf" "$DTR/modules/api/tests/test_dt2.py"
 # accept: a production file of File toccati that already exists → «stub <path>» (additive stubs only)
 printf 'def base():\n    return 1\n' > "$R/modules/api/app/services/base.py"
 sed 's|^### File toccati\r\{0,1\}$|&\n- `modules/api/app/services/base.py`|' "$T/f2t.md" > "$T/f2t-stub.md"
@@ -1218,9 +1247,23 @@ rm -f "$R/modules/api/app/services/base.py"
 mkev "$T/ev-confl" "$JU_RED" FAIL "$FE_RED
  FAIL  tests/old.test.ts > vecchio caso
 AssertionError: expected true to be false" FAIL
-expect 1 "^conflitto: tests/old.test.ts > vecchio caso — AssertionError: expected true to be false <-> T1" "rossi: suite esistente rossa sulla base con stub = conflitto, con le due asserzioni" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-confl" --run-dir "$T/rr.run"
+expect 1 "^conflitto: tests/old.test.ts > vecchio caso — AssertionError: expected true to be false <-> \(nessun test di accettazione lo rivendica\)$" "rossi: suite esistente rossa sulla base con stub = conflitto; 1.8.1: file che nessun T rivendica = messaggio, non tutti i T" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-confl" --run-dir "$T/rr.run"
+# 1.8.1 (G2-1, R2): the identity of a vitest conflict in rossi.json conflitti_suite; --instabili with it -> not a conflict
+expect 0 '"id": "tests/old.test.ts > vecchio caso"' "rossi 1.8.1: conflitti_suite porta l identita del conflitto vitest" -- cat "$T/rr.run/test-red/rossi.json"
+printf 'tests/old.test.ts > vecchio caso\r\n' > "$T/inst-vt.txt"
+expect 0 "^instabile: tests/old.test.ts > vecchio caso — " "rossi 1.8.1: --instabili con l identita vitest (CRLF) = instabile, esito OK" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-confl" --run-dir "$T/rr.run" --instabili "$T/inst-vt.txt"
+# related(): a conflict in the file of T2 names T2 only
+mkev "$T/ev-confl2" "$JU_RED" FAIL "$FE_RED
+ FAIL  tests/fmt.test.ts > altro caso
+AssertionError: expected 1 to be 2" FAIL
+expect 1 "^conflitto: tests/fmt.test.ts > altro caso — AssertionError: expected 1 to be 2 <-> T2: [^;]*$" "rossi 1.8.1: conflitto nel file di T2 = solo T2" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-confl2" --run-dir "$T/rr.run"
 printf '%s\n' "it('g', () => { expect(src).not.toContain('Titolo Tred') })" > "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
 expect 1 "^conflitto: modules/app/apps/admin/tests/tred-guard.test.ts:1 asserisce l assenza di Titolo Tred, che il piano aggiunge" "rossi: test esistente che vieta un valore aggiunto dal piano (forma ux-6) = conflitto" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run"
+# 1.8.1 (G2-1): --instabili never touches a static conflict (red_absence), whatever the file lists
+bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run" | sed -n 's/^conflitto: //p' > "$T/inst-st.txt"
+printf 'modules/app/apps/admin/tests/tred-guard.test.ts:1\n' >> "$T/inst-st.txt"
+expect 1 "^conflitto: modules/app/apps/admin/tests/tred-guard.test.ts:1 asserisce l assenza di Titolo Tred" "rossi 1.8.1: --instabili non spegne un conflitto statico (red_absence)" -- bash "$PC" rossi "$T/f2t.md" --evidence "$T/ev-ok" --run-dir "$T/rr.run" --instabili "$T/inst-st.txt"
+expect 0 '"conflitti_suite": \[\]' "rossi 1.8.1: il conflitto statico non e' in conflitti_suite" -- cat "$T/rr.run/test-red/rossi.json"
 rm -f "$R/modules/app/apps/admin/tests/tred-guard.test.ts"
 # 1.8.0 (D5): an absence asserted INSIDE an acceptance test of the plan (T1 test_somma, T2 «fmt formatta») is its
 # assertion, not a conflict; the same line in another test of the same file stays a conflict. Counterproof: without
@@ -2302,6 +2345,49 @@ assert s.count(a) == 1
 open(p, "w", encoding="utf-8").write(s.replace(a, "    return \"altro\"\n" + a))
 EOF
 expect 1 "^conflitto: m.body_test.go::TestX/limit_5 " "controprova D1-bis: relazione ridotta all uguaglianza -> i sottotest di N3 tornano conflitti" -- env NOMI_TEST_PY="$(cygpath -m "$T/nomi-uguale.py" 2>/dev/null || printf '%s' "$T/nomi-uguale.py")" env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$D1/padre.md" --evidence "$D1/ev-n3" --run-dir "$D1/r.run"
+
+# ── 1.8.1 (G2-1): an unstable existing test, the package that fell (N3 of the development round 2) ─────────────────
+# The JUnit of the record reduced: T1 red on its assertion (package m), an existing test of the root package red
+# (EOF on its own server) and three «did not run … the package failed before this test ran» of the same package,
+# written by go-junit when the package falls. They are one conflict, identity <cn>::<nm> of the red one, «(+3 …)» after
+# « — »; --instabili with that identity -> OK, «instabile:», rossi.json instabili. Not bindable with certainty (two
+# real reds in the package, or the only red owned by an acceptance test): every line stays a conflict of its own.
+GO_EOF='<testcase classname="server_test.go" name="TestStartConfig_WithHTTP2WithCustomTlsConfig"><failure message="FAIL: TestStartConfig_WithHTTP2WithCustomTlsConfig — failed subtests: TestStartConfig_WithHTTP2WithCustomTlsConfig/HTTP2_enabled_default">=== RUN   TestStartConfig_WithHTTP2WithCustomTlsConfig/HTTP2_enabled_default
+    server_test.go:676: Received unexpected error: Get &quot;https://[::]:41255/ok&quot;: EOF</failure></testcase>'
+go_dnr() { # $1 classname · $2 name
+  printf '<testcase classname="%s" name="%s"><failure message="did not run: %s">the package failed before this test ran\nFAIL\texample.com/echo\t3.501s\n</failure></testcase>' "$1" "$2" "$2"
+}
+GO_DNR3="$(go_dnr binder_external_test.go ExampleValueBinder_BindErrors)$(go_dnr httperror_external_test.go ExampleDefaultHTTPErrorHandler)$(go_dnr vhost_test.go TestVirtualHostHandler)"
+d1ev "$D1/ev-inst" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF$GO_DNR3"
+d1ev "$D1/ev-inst2" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF$(go_dnr vhost_test.go TestVirtualHostHandler)$(go_dnr binder_external_test.go ExampleValueBinder_BindErrors)"
+d1ev "$D1/ev-due" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF"'<testcase classname="router_test.go" name="TestRouter"><failure message="Failed">router_test.go:9: other</failure></testcase>'"$GO_DNR3"
+d1ev "$D1/ev-altro" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF$(go_dnr m.other_test.go TestZ)"
+GO_IDN='server_test.go::TestStartConfig_WithHTTP2WithCustomTlsConfig'
+expect 1 "^conflitto: $GO_IDN — \(\+3 test non eseguiti\) FAIL: TestStartConfig" "rossi 1.8.1 N3: i «did not run» del pacchetto caduto sotto il test rosso, (+3) dopo « — »" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
+refute "^conflitto: (binder_external_test|httperror_external_test|vhost_test)\.go::" "rossi 1.8.1 N3: i «did not run» legati non sono conflitti a sé" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
+expect 1 "^conflitto: $GO_IDN — .*<-> \(nessun test di accettazione lo rivendica\)$" "rossi 1.8.1 N3: related() di un file che nessun T rivendica = messaggio, non «<-> T1 …»" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
+expect 1 "^rosso T1: dimostrato " "rossi 1.8.1 N3: T1 dimostrato" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
+expect 0 "^1$" "rossi 1.8.1 N3: un solo conflitto in conflitti_suite" -- grep -c '"id": ' "$D1/r.run/test-red/rossi.json"
+expect 0 "^ *\"id\": \"$GO_IDN\",$" "rossi 1.8.1 N3: l identita e' solo <cn>::<nm> (il (+N) mai nell id)" -- cat "$D1/r.run/test-red/rossi.json"
+d1r "$D1/padre.md" --evidence "$D1/ev-inst2" --run-dir "$D1/r2.run" >/dev/null
+expect 1 "^conflitto: $GO_IDN — \(\+2 test non eseguiti\)" "rossi 1.8.1 N3: con 2 «did not run» il suffisso cambia" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst2" --run-dir "$D1/r2.run"
+expect 0 "^ *\"id\": \"$GO_IDN\",$" "rossi 1.8.1 N3: N diverso, stessa identita (conflitto persistente tra due giri)" -- cat "$D1/r2.run/test-red/rossi.json"
+expect 1 "^conflitto: $GO_IDN — FAIL: " "rossi 1.8.1: due rossi veri nel pacchetto = nessun legame (nessun (+N))" -- d1r "$D1/padre.md" --evidence "$D1/ev-due" --run-dir "$D1/r.run"
+expect 1 "^conflitto: vhost_test.go::TestVirtualHostHandler — did not run" "rossi 1.8.1: due rossi veri nel pacchetto = i «did not run» restano conflitti a se'" -- d1r "$D1/padre.md" --evidence "$D1/ev-due" --run-dir "$D1/r.run"
+expect 1 "^conflitto: m.other_test.go::TestZ — did not run" "rossi 1.8.1: «did not run» nel pacchetto di T1 (unico rosso: del piano) = conflitto a se'" -- d1r "$D1/padre.md" --evidence "$D1/ev-altro" --run-dir "$D1/r.run"
+expect 1 "^conflitto: $GO_IDN — FAIL: " "rossi 1.8.1: rosso in un altro pacchetto = nessun legame" -- d1r "$D1/padre.md" --evidence "$D1/ev-altro" --run-dir "$D1/r.run"
+d1ev "$D1/ev-py" "$GO_PADRE$GO_ROSSO$GO_VERDE$GO_EOF$GO_DNR3"'<testcase classname="tests.test_old" name="test_vecchio"><failure message="x">E  assert 1 == 2</failure></testcase>'
+expect 1 "^conflitto: $GO_IDN — \(\+3 test non eseguiti\)" "rossi 1.8.1: un classname Python (tests.test_old) non e' un pacchetto go: il legame resta" -- d1r "$D1/padre.md" --evidence "$D1/ev-py" --run-dir "$D1/r.run"
+printf '%s\n' "$GO_IDN" > "$D1/inst.txt"
+expect 0 "^instabile: $GO_IDN — \(\+3 test non eseguiti\)" "rossi 1.8.1 --instabili: l identita elencata = instabile, exit 0" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst.txt"
+refute "^conflitto:" "rossi 1.8.1 --instabili: nessun conflitto" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst.txt"
+expect 0 "^rossi: esito=OK" "rossi 1.8.1 --instabili: esito OK" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst.txt"
+expect 0 "^ *\"instabili\": \[$" "rossi 1.8.1 --instabili: rossi.json instabili non vuoto" -- cat "$D1/r.run/test-red/rossi.json"
+expect 0 "^ *\"conflitti\": \[\],$" "rossi 1.8.1 --instabili: rossi.json conflitti vuoto" -- cat "$D1/r.run/test-red/rossi.json"
+printf 'server_test.go::TestAltro\n' > "$D1/inst-altro.txt"
+expect 1 "^conflitto: $GO_IDN — " "rossi 1.8.1 --instabili: un altra identita non spegne il conflitto" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/inst-altro.txt"
+expect 2 "-" "rossi 1.8.1 --instabili: file assente = uso" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/nessuno.txt"
+expect 1 "^conflitto: $GO_IDN — \(\+3 tests not run\) .*<-> \(no acceptance test claims it\)$" "rossi 1.8.1 en: (+N tests not run) e (no acceptance test claims it)" -- env MAAT_LINGUA=en env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
 
 # ── usage ────────────────────────────────────────────────────────────────────────────────────────
 expect 2 "uso:" "argomenti sbagliati = uscita 2" -- bash "$PC" boh

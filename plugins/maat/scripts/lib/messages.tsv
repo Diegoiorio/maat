@@ -299,6 +299,17 @@ plan-check-180.probe_ignored	{label}.ripresa not registered in driver.log: ignor
 plan-check-180.probe_driver	the registered resumes cannot be read (driver.py: {e}): no probe is valid	riprese registrate illeggibili (driver.py: {e}): nessuna sonda e' valida
 cycle-report-180.unverified	HUMAN DECISION NOT VERIFIED BY A SCRIPT {fase}: {t}	DECISIONE NON VERIFICATA DA SCRIPT {fase}: {t}
 
+# 1.8.1 C1 (G2-1): rossi --instabili, the package that fell (go-junit «did not run»), related() of an unclaimed file
+plan-check-181.red_unclaimed	(no acceptance test claims it)	(nessun test di accettazione lo rivendica)
+plan-check-181.red_not_run_n	(+{n} tests not run)	(+{n} test non eseguiti)
+
+# 1.8.1 C2 (G2-1): the second round of verify_red (run-phase.sh secondo_giro)
+run-phase-181.unstable	existing test unstable: red in only one round of two, it is not a conflict: {id}	test esistente instabile: rosso in un solo giro su due, non è un conflitto: {id}
+run-phase-181.confirmed	(confirmed on two rounds)	(confermato su due giri)
+run-phase-181.round2_kept	second round of the gates not comparable ({why}): the STOP of the first round stands (log/{label}.gates2, log/{label}.rossi2)	secondo giro dei gate non confrontabile ({why}): resta lo STOP del primo giro (log/{label}.gates2, log/{label}.rossi2)
+run-phase-181.r2_no_evidence	no evidence, or gates or rossi BLOCKED	nessuna evidenza, o gate o rossi BLOCKED
+run-phase-181.r2_differ	the outcomes of the acceptance tests differ, or a conflict without identity	gli esiti dei test di accettazione sono diversi, o un conflitto senza identità
+
 # B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
 # review prompt shows a disproved claim next to its row (driver.py)
 plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})
@@ -369,6 +380,9 @@ driver-180.c_scope_req	Open decision of type scope that names no requirement ID 
 driver-180.c_after_declassed	after the resume that had declassified {k}	dopo la ripresa che aveva declassato {k}
 driver-180.ripresa_decisione	human decision without an executed proof	decisione umana senza prova eseguita
 driver-180.review_unverified	a human decision of the plan that no script verified: judge whether the code still holds it	una decisione umana del piano che nessuno script ha verificato: giudica se il codice la regge ancora
+driver-181.usage_limit	usage limit reached ({msg}): relaunch the driver after that time; the phase starts again from the beginning	limite d'uso raggiunto ({msg}): rilancia il driver dopo quell'ora; la fase riparte da capo
+driver-181.api_error	API error {e} (status {s}): {msg} — relaunch the driver; the phase starts again from the beginning	errore API {e} (stato {s}): {msg} — rilancia il driver; la fase riparte da capo
+driver-181.stderr_empty	(stderr empty)	(stderr vuoto)
 cycle-state-180.ripresa	resume {n}/{max} ({causa})	ripresa {n}/{max} ({causa})
 cycle-state-180.ripresa_stop	{label} stopped: {why}; change the spec to start again ({run}/log/{label}.ripresa)	{label} fermata: {why}; cambia la spec per ripartire ({run}/log/{label}.ripresa)
 cycle-state-180.stop_umano	{label} printed OK on a plan still DRAFT (a final STOP, in {run}/driver.log): approve the plan or change the spec to start again	{label} ha dato OK su un piano ancora DRAFT (uno STOP finale, in {run}/driver.log): approva il piano o cambia la spec per ripartire

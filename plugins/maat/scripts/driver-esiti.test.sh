@@ -10,6 +10,8 @@
 #     phase, its line in driver.log, the RIPRESA (driver) prompt line, limits per cycle, no progress, the second
 #     invocation after the limit, final STOPs, FIC_RIPRESE=0 and ciclo.riprese 0, a .ripresa not registered, the
 #     probes, the test-data deviations, with counterproofs
+#  16 (1.8.1, G2-3) the usage limit or an API error of a sub-session: errore_api, classifica, the STOP of run with its
+#     reason and the driver.log line, «(stderr vuoto)», the relaunch after the limit in review, implement and test-red
 set -uo pipefail
 export MAAT_LINGUA=it   # 1.4.0: the suite asserts the Italian text ("lingua": "it")
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -198,10 +200,31 @@ printf 'test-data: T4 — other fixture names — routes collide\tSTOP — requi
 clp nhd-aperti plan 0 "PHASE RESULT plan: STOP — decisione" "$STP" "$NH" "Open decision: spec — four iterations used"; bg nhd-aperti plan
 clp tr-blocked test-red 0 "PHASE RESULT test-red: STOP — rossi" "$STR" "$AP"
 rossi tr-blocked BLOCKED "no runner" '{}' '[]'
+# 1.8.1 (G2-1, R1): the files of the second round of verify_red. Confirmed on two rounds: round 1 in .rossi1/.gates1,
+# the final .rossi and rossi.json of round 2 (the same «rossi: esito=» line) → UMANO conflitto; .rossi left at round 1
+# with rossi.json of round 2 (what R1 forbids) → the rossi.json is not read, UMANO stop. Unstable test: the final rossi
+# of round 2 with --instabili, esito OK → OK.
+CJ='"conflitti":["tests.test_old::test_vecchio — EOF <-> (no acceptance test claims it)"],"conflitti_suite":[{"id":"tests.test_old::test_vecchio","testo":"tests.test_old::test_vecchio — EOF <-> (no acceptance test claims it)"}],"instabili":[]'
+TJ='"test":{"T1":{"esito":"dimostrato","motivo":"ok","messaggio":"assert 0 == 3","posizione":"t.py:4","file":"t.py","nome":"test_somma"}}'
+for c in tr-2giri tr-2giri-misto; do
+  clp $c test-red 0 "PHASE RESULT test-red: STOP — test di accettazione conflitto (log/01-test-red.rossi) (confermato su due giri)" "$STR" "$AP"
+  mkdir -p "$CL/$c.run/test-red"
+  printf '{"esito":"STOP","riassunto":"conflict round 2","evidence":"x",%s,%s}\n' "$CJ" "$TJ" > "$CL/$c.run/test-red/rossi.json"
+  printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 1\n' > "$CL/$c.run/log/01-test-red.rossi1"
+  printf 'gates: esito=FAIL chiave=k1 evidence=x\n' | tee "$CL/$c.run/log/01-test-red.gates1" > "$CL/$c.run/log/01-test-red.gates"
+done
+printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 2\n' > "$CL/tr-2giri.run/log/01-test-red.rossi"
+cp "$CL/tr-2giri-misto.run/log/01-test-red.rossi1" "$CL/tr-2giri-misto.run/log/01-test-red.rossi"
+clp tr-instab test-red 0 "PHASE RESULT test-red: OK — rossi dimostrati" "$(ok_json test-red OK '[]' nessuno)" "$AP"
+mkdir -p "$CL/tr-instab.run/test-red"
+printf '{"esito":"OK","riassunto":"1/1 ok","evidence":"x","conflitti":[],"conflitti_suite":[],"instabili":[{"id":"tests.test_old::test_vecchio","testo":"tests.test_old::test_vecchio — EOF"}],%s}\n' "$TJ" > "$CL/tr-instab.run/test-red/rossi.json"
+printf 'instabile: tests.test_old::test_vecchio — EOF\nrossi: esito=OK — 1/1 ok\nstubs: ok\n' > "$CL/tr-instab.run/log/01-test-red.rossi"
+printf 'conflitto: tests.test_old::test_vecchio — EOF\nrossi: esito=STOP — conflict round 1\n' > "$CL/tr-instab.run/log/01-test-red.rossi1"
+printf 'gates: esito=FAIL chiave=k1 evidence=x\n' > "$CL/tr-instab.run/log/01-test-red.gates"
 clp plan-ok-draft plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$DR"
 clp plan-ok-nhd plan 0 "PHASE RESULT plan: OK — done" "$OKP" "$NH"
 clp rev-nhd review 0 "PHASE RESULT review: STOP — decisione" "$STV" "$AP"; printf '\n## Review implementazione\n\nReview status: NEEDS HUMAN DECISION\n' >> "$CL/rev-nhd.md"
-CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-raccolta:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan"
+CASI="tec-exit:plan tec-esito:implement tec-nores:implement tec-fase:implement tec-gates:test-red ok:implement ok-json:implement draft:plan nhd-budget:plan nhd-prova:plan nhd-spec:plan nhd-assente:plan nhd-tipo:plan nhd-forma:plan nhd-ancora:plan nhd-recinto:plan nhd-mista:plan plan-aperti:plan plan-stop:plan impl-aperti:implement rev-aperti:review tr-aperti:test-red tr-simbolo:test-red tr-token:test-red tr-vecchio:test-red tr-asserto:test-red tr-raccolta:test-red tr-limite:test-red tr-limfalso:test-red tr-conflitto:test-red tr-dev:test-red tr-okdev:test-red tr-devno:test-red rev-nhd:review tr-devrif:test-red nhd-aperti:plan tr-blocked:test-red plan-ok-draft:plan plan-ok-nhd:plan tr-2giri:test-red tr-2giri-misto:test-red tr-instab:test-red"
 cla() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
 clv() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $2 " " $3 " " $4 }'; }   # <name> → «class rule proof»
 CLO=$(cla "$DRV")
@@ -220,6 +243,8 @@ check "classifica (c, B12): un rosso_raccolta «undefined: MaxDepth» senza il t
 check "classifica UMANO provato in test-red: limite_dimostrato, conflitto con la suite (prima del simbolo mancante), deviazione non test-data" '[ "$(clv tr-limite)" = "UMANO limite test-red/rossi.json" ] && [ "$(clv tr-conflitto)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-dev)" = "UMANO deviazione log/01-test-red.result.json" ]'
 check "classifica OK-DEVIAZIONE: test-red OK con la test-data accettata in .deviazioni-test (e una difensiva); verdetto STOP → UMANO" '[ "$(clv tr-okdev)" = "OK-DEVIAZIONE deviazione-test log/01-test-red.deviazioni-test" ] && [ "$(clv tr-devno)" = "UMANO deviazione-test log/01-test-red.result.json" ]'
 check "classifica: review con Review status NEEDS HUMAN DECISION → UMANO" '[ "$(clv rev-nhd)" = "UMANO review rev-nhd.md" ]'
+check "classifica 1.8.1 (R1): conflitto confermato su due giri, .rossi e rossi.json del 2° giro → UMANO conflitto; caso instabile → OK" '[ "$(clv tr-2giri)" = "UMANO conflitto test-red/rossi.json" ] && [ "$(clv tr-instab)" = "OK ok log/01-test-red.esito" ]'
+check "classifica 1.8.1 (R1): .rossi lasciato al 1° giro con rossi.json del 2° → rossi.json non letto (UMANO stop): il giro che decide scrive .rossi" '[ "$(clv tr-2giri-misto)" = "UMANO stop log/01-test-red.esito" ]'
 cld() { printf '%s\n' "$CLO" | awk -F'\t' -v n="$1" '$1 == n { print $5 }'; }   # <name> → the decision texts
 check "classifica (review B8): deviazione test-data rifiutata con un agente aperto → UMANO (prima di (d)); decisione valida con un agente aperto → UMANO" '[ "$(clv tr-devrif)" = "UMANO deviazione-test log/01-test-red.result.json" ] && [ "$(clv nhd-aperti)" = "UMANO decisione nhd-aperti.md" ]'
 check "classifica (review B8): rossi BLOCKED → TECNICO; riga OK di un piano DRAFT o NEEDS HUMAN DECISION → UMANO (fail-closed)" '[ "$(clv tr-blocked)" = "TECNICO blocked test-red/rossi.json" ] && [ "$(clv plan-ok-draft)" = "UMANO piano plan-ok-draft.md" ] && [ "$(clv plan-ok-nhd)" = "UMANO piano plan-ok-nhd.md" ]'
@@ -679,6 +704,169 @@ printf '%s\tACCEPT | STOP — <reason>\t%064d\n' "$LUNGA" 0 > "$RR/log/01-test-r
 check "next (review B12-B13): un verdetto «ACCEPT | STOP — <reason>» (il modello ripetuto) non accetta → STOP" 'nx | grep -q "^STOP — 01-test-red: result.json STOP"'
 rm -f "$T/drv-intere.py"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
+# --- 16. (1.8.1, G2-3) the usage limit of a sub-session: a STOP with its reason, not a mute exit 1. The fixture is the
+# real event of a 5-hour limit (reduced and anonymised: no session or request ids): a normal result, the synthetic
+# assistant message, then the last `result` with api_error_status 429 and api_error usage_limit_reached. (a) errore_api
+# and classifica on synthetic run dirs; (b) run with a fake run-phase.sh exiting 1 (limit, 529, nothing); (c) the
+# relaunch through the REAL run-phase.sh after a usage-limit STOP in review, in implement and in test-red (files parked
+# by the STOP, back in the tree): the same phase again, no chain STOP, no lock left. Counterproof: no jsonl read.
+LIM_N9=$T/n9-limite.jsonl
+cat > "$LIM_N9" <<'EOF'
+{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn","session_id":"s-n9","duration_ms":118000,"total_cost_usd":0.5,"result":"Reviewer launched in background: waiting for its notification."}
+{"type":"assistant","message":{"id":"m-n9","container":null,"model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","stop_sequence":"","type":"message","content":[{"type":"text","text":"You've hit your 5-hour limit · resets 5:10pm (Europe/Rome)"}],"context_management":null},"parent_tool_use_id":null,"session_id":"s-n9","error":"rate_limit","is_api_error_message":true,"api_error_status":429,"api_error":"usage_limit_reached","api_error_params":{"rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","overageStatus":"rejected","isUsingOverage":false}},"api_error_origin":"first_party"}
+{"duration_api_ms":118778,"stop_reason":"stop_sequence","session_id":"s-n9","total_cost_usd":0.7681564000000001,"permission_denials":[],"terminal_reason":"api_error","is_error":true,"num_turns":1,"subtype":"success","api_error_status":429,"api_error_origin":"first_party","api_error":"usage_limit_reached","result":"You've hit your 5-hour limit · resets 5:10pm (Europe/Rome)","type":"result","duration_ms":605,"result_index":2}
+EOF
+E529='{"type":"result","subtype":"success","is_error":true,"api_error_status":529,"api_error":"overloaded_error","result":"Overloaded","duration_ms":300}'
+LIM_IT="limite d'uso raggiunto (You've hit your 5-hour limit · resets 5:10pm (Europe/Rome)): rilancia il driver dopo quell'ora; la fase riparte da capo"
+LIM_EN="usage limit reached (You've hit your 5-hour limit · resets 5:10pm (Europe/Rome)): relaunch the driver after that time; the phase starts again from the beginning"
+# (a) errore_api and classifica: «<case> <class> <rule> <proof> <cause>» and «<case> api <limite> <e> <s> <msg>»
+LA=$T/lim-a; mkdir -p "$LA"
+lca() { # <case> <exit> <jsonl content|-> : run dir $LA/<case>.run, phase review
+  mkdir -p "$LA/$1.run/log"; printf '%s\n' "$2" > "$LA/$1.run/log/01-review.exit"
+  [ "$3" = - ] || printf '%s\n' "$3" > "$LA/$1.run/log/01-review.jsonl"
+  printf '# S\n' > "$LA/$1.md"
+}
+lca n9 1 "$(cat "$LIM_N9")"; lca e529 1 "$E529"; lca senza 1 -; lca vuoto 1 ""
+lca prima 1 "$(cat "$LIM_N9"; echo '{"type":"result","is_error":false,"result":"ripreso"}')"
+lca rotto 1 "$(echo '{"type":"result",'; cat "$LIM_N9")"
+lca rate 1 '{"type":"result","is_error":true,"api_error":"rate_limit_error","result":"Rate limited"}'
+cat > "$T/lim-a.py" <<'EOF'
+import importlib.util, os, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("drv_lim", sys.argv[1]); d = importlib.util.module_from_spec(s)
+s.loader.exec_module(d)
+for n in sys.argv[3:]:
+    rf = os.path.join(sys.argv[2], n + ".run")
+    a = d.errore_api(rf, "01-review") if hasattr(d, "errore_api") else "(errore_api assente)"
+    r = d.classifica("review", rf, "01-review", os.path.join(sys.argv[2], n + ".md"))
+    sys.stdout.buffer.write(("%s\t%s\t%s\t%s\t%s\n" % (n, r.classe, r.regola, r.prova, r.causa)).encode("utf-8"))
+    sys.stdout.buffer.write(("%s\tapi\t%s\n" % (n, a if not isinstance(a, dict) else "%s %s %s %s" % (
+        a["limite"], a["e"], a["s"], a["msg"]))).encode("utf-8"))
+EOF
+lim_a() { "$FIC_PY" "$T/lim-a.py" "$1" "$LA" n9 e529 senza vuoto prima rotto rate 2>&1 | tr -d '\r'; }
+LAO=$(lim_a "$DRV")
+lav() { printf '%s\n' "$LAO" | awk -F'\t' -v n="$1" -v k="${2:-}" '$1 == n && (k == "api") == ($2 == "api") { $1 = ""; print substr($0, 2) }'; }
+check "16 (1.8.1, G2-3) errore_api: l'ultimo result del jsonl reale (429, usage_limit_reached) → limite, con il testo del result" '[ "$(lav n9 api)" = "api True usage_limit_reached 429 You'"'"'ve hit your 5-hour limit · resets 5:10pm (Europe/Rome)" ]' "$LAO"
+check "  529 overloaded_error → errore API, non limite · rate_limit_error senza stato → limite" '[ "$(lav e529 api)" = "api False overloaded_error 529 Overloaded" ] && [ "$(lav rate api)" = "api True rate_limit_error - Rate limited" ]'
+check "  jsonl assente, vuoto, o con un result senza campi DOPO l'errore → None (conta l'ULTIMO result); una riga illeggibile si salta" '[ "$(lav senza api)" = "api None" ] && [ "$(lav vuoto api)" = "api None" ] && [ "$(lav prima api)" = "api None" ] && [ "$(lav rotto api)" = "api True usage_limit_reached 429 You'"'"'ve hit your 5-hour limit · resets 5:10pm (Europe/Rome)" ]'
+check "  classifica con .exit 1: limite → TECNICO api log/01-review.jsonl con la causa del limite; 529 → la causa errore API; senza errore → TECNICO exit come in 1.8.0" '[ "$(lav n9)" = "TECNICO api log/01-review.jsonl $LIM_IT" ] && [ "$(lav e529)" = "TECNICO api log/01-review.jsonl errore API overloaded_error (stato 529): Overloaded — rilancia il driver; la fase riparte da capo" ] && [ "$(lav senza)" = "TECNICO exit log/01-review.exit la fase è finita con exit 1" ] && [ "$(lav prima)" = "TECNICO exit log/01-review.exit la fase è finita con exit 1" ]' "$LAO"
+# (b) run, fake run-phase.sh: the sub-session exited 1, its jsonl written, the stderr empty unless said
+cat > "$T/rp-lim" <<'EOF'
+#!/usr/bin/env bash
+d=$1 l=$2; mkdir -p "$d/log"; echo "$l" >> "$FAKE_CALLS"; : > "$d/log/$l.stderr"
+case "$LIM_MODE" in
+  limite) cp "$LIM_N9" "$d/log/$l.jsonl" ;;
+  e529) printf '%s\n' "$E529" > "$d/log/$l.jsonl" ;;
+  vuoto) : > "$d/log/$l.jsonl" ;;
+  stderr) : > "$d/log/$l.jsonl"; echo "claude: connessione chiusa" > "$d/log/$l.stderr" ;;
+  limite-stderr) cp "$LIM_N9" "$d/log/$l.jsonl"; echo "claude: uscita 1" > "$d/log/$l.stderr" ;;
+esac
+echo 1 > "$d/log/$l.exit"; exit 1
+EOF
+chmod +x "$T/rp-lim"
+export LIM_N9 E529
+lrun() { # <mode> [variables] → rc, output in $T/run.out
+  rm -rf "$RUN" "$FAKE_CALLS"; spec_approved
+  env "${@:2}" LIM_MODE=$1 FIC_RUN_PHASE="$T/rp-lim" FIC_CONTEXT_PACK=- "$FIC_PY" "${LRUN_DRV:-$DRV}" run "$SP" > "$T/run.out" 2>&1; rc=$?
+}
+limrow() { grep -c "^[0-9T:Z-]* Limite d'uso: 01-implement · usage_limit_reached · 429$" "$RUN/driver.log"; }
+lrun limite
+check "16 run: sotto-sessione uscita 1 sul limite d'uso → «STOP — run-phase exit 1 (sotto-sessione uscita 1): limite d'uso raggiunto (<result>): rilancia …», exit 1" '[ $rc -eq 1 ] && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): $LIM_IT" "$T/run.out"' "$(tail -2 "$T/run.out")"
+check "  driver.log: una riga «Limite d'uso: 01-implement · usage_limit_reached · 429», nessuna «Stop umano:»" '[ "$(limrow)" = 1 ] && ! grep -q "Stop umano: " "$RUN/driver.log"'
+lrun limite MAAT_LINGUA=en
+check "  in inglese: «usage limit reached (<result>): relaunch the driver …», la riga di driver.log con il prefisso di protocollo «Limite d'uso: »" '[ $rc -eq 1 ] && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sub-session exited 1): $LIM_EN" "$T/run.out" && [ "$(limrow)" = 1 ]' "$(tail -2 "$T/run.out")"
+lrun limite-stderr
+check "  limite con uno stderr non vuoto → la causa del limite, poi la coda dello stderr" '[ $rc -eq 1 ] && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): $LIM_IT · claude: uscita 1" "$T/run.out"'
+lrun e529
+check "16 run: errore API 529 → «errore API overloaded_error (stato 529): Overloaded — rilancia …», nessuna riga Limite d'uso" '[ $rc -eq 1 ] && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): errore API overloaded_error (stato 529): Overloaded — rilancia il driver; la fase riparte da capo" "$T/run.out" && ! grep -q "Limite d.uso: " "$RUN/driver.log"' "$(tail -2 "$T/run.out")"
+lrun vuoto
+check "16 run: nessun errore API e stderr vuoto → il motivo di oggi con «(stderr vuoto)», non niente" '[ $rc -eq 1 ] && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): (stderr vuoto)" "$T/run.out" && ! grep -q "Limite d.uso: " "$RUN/driver.log"' "$(tail -2 "$T/run.out")"
+lrun vuoto MAAT_LINGUA=en
+check "  in inglese «(stderr empty)»" 'grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sub-session exited 1): (stderr empty)" "$T/run.out"'
+lrun stderr
+check "  nessun errore API e uno stderr → la sua coda, come in 1.8.0" 'grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): claude: connessione chiusa" "$T/run.out"'
+# counterproof: errore_api that does not read the jsonl → the cause goes back to empty (here «(stderr vuoto)») and
+# classifica back to TECNICO exit
+if tmut nojsonl 's/os.path.join(run_fs, "log", label + ".jsonl"), encoding="utf-8", errors="replace") as fh:  # LEGGE-JSONL$/os.path.join(run_fs, "log", label + ".non-letto"), encoding="utf-8", errors="replace") as fh:/'; then
+  LRUN_DRV="$T/drv-nojsonl.py" lrun limite
+  check "controprova: senza la lettura del jsonl la causa torna vuota («(stderr vuoto)»), nessuna riga Limite d'uso (rosso)" '! grep -qF "$LIM_IT" "$T/run.out" && grep -qxF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): (stderr vuoto)" "$T/run.out" && [ "$(limrow)" = 0 ]'
+  check "controprova: senza la lettura del jsonl classifica torna TECNICO exit (rosso)" '[ "$(LAO=$(lim_a "$T/drv-nojsonl.py"); lav n9)" = "TECNICO exit log/01-review.exit la fase è finita con exit 1" ]'
+else check "controprova lettura del jsonl: la mutazione si applica" false; fi
+rm -f "$T/drv-nojsonl.py"
+# (c) the relaunch through the REAL run-phase.sh and cycle-state.sh: a fake claude hits the usage limit in LIM_FASE (the
+# first LIM_VOLTE launches of that phase), otherwise it does the phase as in section 11 of driver.test.sh
+EFP=$(printf '' | sha256sum | cut -c1-12)
+printf '#!/usr/bin/env bash\necho "gates: esito=PASS chiave=k0 evidence=-"\n' > "$T/gates"; chmod +x "$T/gates"
+cat > "$T/fin-lim" <<EOF
+#!/usr/bin/env bash
+d=\${!#}; printf 'Finalize: IMPLEMENTED — snapshot %s — signed · %s\n' "$EFP" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "\${d%.run}.md"
+echo "finalize: esito=IMPLEMENTED"
+EOF
+chmod +x "$T/fin-lim"
+cat > "$T/claude-lim" <<'EOF'
+#!/usr/bin/env bash
+cat > /dev/null
+echo "$FIC_PHASE" >> "$LIM_CALLS"
+if [ "$FIC_PHASE" = test-red ] && [ -f "$FIC_REPO/src/test_c.py" ]; then echo "test_c.py nell'albero" >> "$LIM_CALLS"; fi
+if [ "$FIC_PHASE" = "$LIM_FASE" ] && [ "$(grep -cx "$FIC_PHASE" "$LIM_CALLS")" -le "${LIM_VOLTE:-1}" ]; then
+  case "$FIC_PHASE" in
+    implement) echo "parziale" >> "$FIC_REPO/src/a.py" ;;
+    test-red) printf 'def test_c():\n    assert 1 == 2\n' > "$FIC_REPO/src/test_c.py" ;;
+  esac
+  cat "$LIM_N9"; exit 1
+fi
+case "$FIC_PHASE" in
+  implement) echo "fatto" >> "$FIC_REPO/src/a.py"
+    echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/a.py"}}]}}'
+    echo '{"type":"result","result":"PHASE RESULT implement: OK — done","structured_output":{"fase":"implement","esito":"OK","motivo":"done","deviazioni":[],"bloccato_su":"none","file":["src/a.py"],"gate_interni":[],"finding":[]}}' ;;
+  review) printf '%s\n' "" "## Implementation review" "Review status: APPROVED" "Feature status: IMPLEMENTED" >> "$E2E_SPEC"
+    echo '{"type":"result","result":"PHASE RESULT review: OK — approved","structured_output":{"fase":"review","esito":"OK","motivo":"approved","deviazioni":[],"bloccato_su":"none","file":[],"gate_interni":[],"finding":[]}}' ;;
+esac
+EOF
+chmod +x "$T/claude-lim"
+export LIM_CALLS=$T/lim-calls
+rlim() { # <phase> [variables]: driver.py run with the real run-phase.sh → rc, output in $T/rlim.out (appended: two runs)
+  env "${@:2}" LIM_FASE=$1 E2E_SPEC="$W/$SP" FIC_LOCK="$T/lock" FIC_REPO="$W" CLAUDE_BIN="$T/claude-lim" FIC_GATES="$T/gates" \
+    FIC_FINALIZE="$T/fin-lim" FIC_LANES=0 FIC_CONTEXT_PACK=- "$FIC_PY" "$DRV" run "$SP" > "$T/rlim.out" 2>&1 </dev/null
+  rc=$?
+}
+labels() { ls "$RUN/log" 2>/dev/null | sed -n 's/\.exit$//p' | tr '\n' ' '; }
+nolock() { [ ! -e "$T/lock" ] && [ ! -e "$RUN/plan.lock" ] && [ -z "$(ls "$RUN/log" 2>/dev/null | grep '\.running$')" ]; }
+lim_stop() { [ $rc -eq 1 ] && grep -qF "driver: Driver result: STOP — run-phase exit 1 (sotto-sessione uscita 1): $LIM_IT" "$T/rlim.out"; }   # then « · <stderr tail>»
+lim_reset() { rm -rf "$RUN" "$T/lock" "$LIM_CALLS"; git checkout -q -- src; git clean -qfd -- src; }
+# review (not a code phase): implement OK, review on the limit → STOP; the relaunch → the review again → DONE
+lim_reset; spec_approved
+rlim review; r1=$rc; lim_stop; s1=$?; l1=$(labels); nl1=$(nolock && echo si)
+check "16 rilancio (review): implement OK, review sul limite d'uso → STOP con la causa del limite, nessun lock rimasto" '[ $s1 -eq 0 ] && [ "$l1" = "01-implement 02-review " ] && [ "$nl1" = si ] && grep -q " Limite d.uso: 02-review · usage_limit_reached · 429$" "$RUN/driver.log"' "$(tail -3 "$T/rlim.out")"
+rlim review
+check "  driver.py rilanciato senza altro → next rifà la review (03-review), DONE, nessuno STOP «catena», nessun lock rimasto" '[ $rc -eq 0 ] && [ "$(labels)" = "01-implement 02-review 03-review " ] && grep -q "^driver: Next: REVIEW" "$T/rlim.out" && grep -q "^driver: Driver result: DONE" "$T/rlim.out" && ! grep -q "catena" "$T/rlim.out" && nolock' "$(tail -4 "$T/rlim.out")"
+# implement (a code phase, a partial write left in the tree): the relaunch → the implement again → review → DONE
+lim_reset; spec_approved
+rlim implement; s1=1; lim_stop && s1=0; l1=$(labels); nl1=$(nolock && echo si)
+check "16 rilancio (implement): implement sul limite d'uso → STOP con la causa del limite, nessun lock rimasto" '[ $s1 -eq 0 ] && [ "$l1" = "01-implement " ] && [ "$nl1" = si ]' "$(tail -3 "$T/rlim.out")"
+rlim implement
+check "  driver.py rilanciato → next rifà l'implement (02-implement), poi review e DONE, nessuno STOP «catena», nessun lock" '[ $rc -eq 0 ] && [ "$(labels)" = "01-implement 02-implement 03-review " ] && grep -q "^driver: Next: IMPLEMENT" "$T/rlim.out" && grep -q "^driver: Driver result: DONE" "$T/rlim.out" && ! grep -q "catena" "$T/rlim.out" && nolock' "$(tail -4 "$T/rlim.out")"
+# test-red: the phase writes its test, hits the limit; run-phase parks the file (staging/, origine=stop); the relaunch
+# → test-red again with the file back in the tree before the sub-session (here it hits the limit again: LIM_VOLTE=2)
+spec_f2r() { # format-2 plan, approved, one new acceptance test not written yet → next says TEST-RED
+  printf '%s\n' "# X" "## Contesto" "Contesto." "## Requisiti funzionali" "1. Fare A." "## Piano di implementazione" \
+    "Plan format: 2" "Plan status: APPROVED" "Test level: std" "Superfici a rischio: nessuna" \
+    "### File toccati" "- \`src/a.py\`" "- \`src/test_c.py\` (nuovo)" \
+    "### Passi" "#### Blocco B1 — a" "scrive: \`src/a.py\`, \`src/test_c.py\`" "dopo: nessuno" "" \
+    "| id | file | modifica | test |" "|---|---|---|---|" "| P1 | \`src/a.py\` | x | T1 |" \
+    "### Tracciabilità requisiti" "| Req | Passi del piano | Verifica |" "|---|---|---|" "| RF1 | P1 | T1 |" \
+    "### Piano di test" "| ID | requisito | file | asserzione | mutazione |" "|---|---|---|---|---|" \
+    "| T1 | RF1 | \`src/test_c.py::test_c\` (nuovo) | rosso se: \`assert 1 == 2\` | — |" \
+    "### Changelog revisione piano" "- giro 1: ok" > "$SP"
+  local cur; cur=$(bash "$PC" basis "$SP" | sed -n 's/^Basis: //p')
+  sed -i "s/^Superfici a rischio: .*/&\nApproved basis: $cur/" "$SP"
+}
+lim_reset; spec_f2r
+rlim test-red LIM_VOLTE=2; s1=1; lim_stop && s1=0; l1=$(labels); nl1=$(nolock && echo si)
+check "16 rilancio (test-red): test-red sul limite d'uso → STOP con la causa del limite, il test scritto parcheggiato (staging/, origine=stop), fuori dall'albero, nessun lock" '[ $s1 -eq 0 ] && [ "$l1" = "01-test-red " ] && [ "$nl1" = si ] && [ -f "$RUN/staging/src/test_c.py" ] && [ "$(cat "$RUN/staging.origine" 2>/dev/null)" = stop ] && [ ! -f src/test_c.py ] && grep -q "Driver result: STOP — .* · AVVISO: 1 file della fase parcheggiati in " "$T/rlim.out"' "$(tail -3 "$T/rlim.out"; cat "$LIM_CALLS" 2>/dev/null)"
+rlim test-red LIM_VOLTE=2
+check "  driver.py rilanciato → next rifà il test-red (02-test-red) con il file parcheggiato di nuovo nell'albero prima della sotto-sessione, nessuno STOP «catena», nessun lock" '[ "$(labels)" = "01-test-red 02-test-red " ] && grep -q "^driver: Next: TEST-RED" "$T/rlim.out" && [ "$(tr "\n" " " < "$LIM_CALLS")" = "test-red test-red test_c.py nell'"'"'albero " ] && grep -q "file parcheggiati da uno STOP di test-red ricopiati" "$RUN/log/02-test-red.stderr" && lim_stop && ! grep -q "catena" "$T/rlim.out" && nolock' "$(tail -4 "$T/rlim.out"; cat "$LIM_CALLS" 2>/dev/null)"
+lim_reset; rm -f "$T/rlim.out" "$T/lim-a.py" "$T/rp-lim" "$T/claude-lim" "$T/fin-lim"; rm -rf "$LA"; spec_approved
 cd /
 echo "driver-esiti.test.sh: $pass passati, $fail falliti"
 [ $fail -eq 0 ]
