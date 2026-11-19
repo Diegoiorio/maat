@@ -932,7 +932,43 @@ def controlli_progetto(mc, cfg, r, locale):
             if not any(x.search("curl -s https://%s/" % s) for s in sonde):
                 out.append(lambda p=p: riga("ATTENZIONE", T("maat-doctor.rule_untested", p=p),
                                             T("maat-doctor.rule_untested_fix")))
+    perche = fine_riga_crlf()
+    if perche:
+        out.append(lambda: riga("ATTENZIONE", T("maat-doctor-182.autocrlf", why=perche), T("maat-doctor-182.autocrlf_fix")))
     return out
+
+
+def fine_riga_crlf():
+    """1.8.2 (D1): why Git can check the project out with CRLF, or "" — the conditions of ciclo-worktree.sh crea
+    (effective core.autocrlf true, core.eol crlf, or on Windows a text attribute without eol= while core.eol is native).
+    Silent when .gitattributes decides for * (eol=, -text or binary: the project has decided). Never MANCA."""
+    def conf(k):
+        try:
+            p = subprocess.run(["git", "-C", ROOT, "config", "--get", k], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        return p.stdout.decode("utf-8", "replace").strip().lower()
+    righe = []
+    try:
+        with open(posixpath.join(ROOT, ".gitattributes"), encoding="utf-8", errors="replace") as f:
+            for l in f:
+                t = l.split()
+                if t and not t[0].startswith("#"):
+                    righe.append((t[0], t[1:]))
+    except OSError:
+        pass
+    if any(pat == "*" and any(a.startswith("eol=") or a in ("-text", "binary") for a in at) for pat, at in righe):
+        return ""
+    a, e = conf("core.autocrlf"), conf("core.eol")
+    if a in ("true", "yes", "on", "1"):
+        return "core.autocrlf=true"
+    if e == "crlf":
+        return "core.eol=crlf"
+    if WIN and e in ("", "native") and any(("text" in at or "text=auto" in at) and not any(x.startswith("eol=") for x in at)
+                                           for _p, at in righe):
+        return T("maat-doctor-182.why_attr")
+    return ""
 
 
 # --------------------------------------------------------------------------- guard hookup

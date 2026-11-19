@@ -61,7 +61,9 @@ printf '#!/bin/sh\nexit 0\n' > "$P/run-test.sh"
 : > "$P/run-test.py"
 : > "$P/a.test.js"
 : > "$P/dati/x"
-(cd "$P" && git init -q && git -c core.autocrlf=false add -A && git -c user.email=t@t -c user.name=t commit -qm init) || { echo "repo sintetico non creato" >&2; exit 2; }
+# 1.8.2 (D1): core.autocrlf false in the project itself, so the system config of Git for Windows (core.autocrlf=true) does
+# not add the line-ending WARNING to every case; section 27 tests it
+(cd "$P" && git init -q && git config core.autocrlf false && git -c core.autocrlf=false add -A && git -c user.email=t@t -c user.name=t commit -qm init) || { echo "repo sintetico non creato" >&2; exit 2; }
 CFG=$P/.claude/maat.json
 
 variante() { # <name> <Python code on c> -> varied maat.json file (outside the project)
@@ -487,6 +489,29 @@ elif ! command -v rsync >/dev/null 2>&1 && ! command -v flock >/dev/null 2>&1; t
 else ATT26='^OK controprove del modulo m: (rsync|flock) assente: (copia|lock) di ripiego'; fi
 doc MAAT_CONFIG="$V26"
 check "  giro vero su questa macchina: $ATT26" '[ "$rc" = 0 ] && ha "$ATT26" && ! ha "^ATTENZIONE controprove"'
+
+# --- 27. (1.8.2, D1) line endings: the checkout can write CRLF -> ATTENZIONE (never MANCA); silent when .gitattributes
+#     decides for * (eol=, -text, binary). GIT_CONFIG_NOSYSTEM: only the project's config counts here.
+caso_eol() { # <name> <.gitattributes text or -> <git config key=value…>: the doctor on a copy of $P, rc and $T/out
+  local d="$T/eol-$1" a=$2 kv; shift 2
+  rm -rf "$d"; cp -r "$P" "$d" || return 2
+  [ "$a" = - ] || printf '%s\n' "$a" > "$d/.gitattributes"
+  for kv in "$@"; do git -C "$d" config "${kv%%=*}" "${kv#*=}" || return 2; done
+  DP=$d doc GIT_CONFIG_NOSYSTEM=1
+}
+EOL_ATT='^ATTENZIONE fine riga: git può estrarre questo progetto in CRLF \('
+caso_eol autocrlf - core.autocrlf=true
+check "1.8.2 core.autocrlf=true senza .gitattributes -> ATTENZIONE col rimedio, exit 0" '[ "$rc" = 0 ] && ha "${EOL_ATT}core\.autocrlf=true\).* — metti \* text=auto eol=lf nel \.gitattributes" && ! ha "^MANCA fine riga"'
+caso_eol text-auto '* text=auto' core.eol=crlf
+check "1.8.2 * text=auto con core.eol=crlf -> ATTENZIONE" '[ "$rc" = 0 ] && ha "${EOL_ATT}core\.eol=crlf\)"'
+caso_eol eol-lf '* text=auto eol=lf' core.autocrlf=true
+check "1.8.2 * text=auto eol=lf -> nessuna riga" '[ "$rc" = 0 ] && ! ha "fine riga"'
+caso_eol meno-text '* -text' core.autocrlf=true
+check "1.8.2 * -text -> nessuna riga" '[ "$rc" = 0 ] && ! ha "fine riga"'
+caso_eol eol-crlf '* eol=crlf' core.autocrlf=true
+check "1.8.2 * eol=crlf (il progetto ha deciso) -> nessuna riga" '[ "$rc" = 0 ] && ! ha "fine riga"'
+caso_eol autocrlf-en - core.autocrlf=true; DP=$T/eol-autocrlf-en doc GIT_CONFIG_NOSYSTEM=1 MAAT_LINGUA=en
+check "1.8.2 en: WARNING in inglese" '[ "$rc" = 0 ] && ha "^WARNING line endings: Git can check out this project with CRLF \(core\.autocrlf=true\)" && ! ha "fine riga"'
 
 # --- en (1.4.0): MAAT_LINGUA=en, the levels printed as OK|WARNING|MISSING (D3), the text from the catalog, no Italian ---
 IT_DOC='ATTENZIONE|MANCA|guardia:|guardia (di|non)|cartella|modulo|negat|sonda|agganciat|versione|richiesto|scrivibile|assente|valido| del | non '

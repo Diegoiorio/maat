@@ -45,6 +45,11 @@ Focus on:
 - Every string, class or attribute the plan changes: searched in `e2e/specs/` and `tests/`? A hit
   in `e2e/specs/` needs an `[e2e-locator: <spec>]` line in `### Test plan` (any level, outside
   the caps, at most 2) — unit tests cannot see a broken locator.
+- <!-- 182-testi-attesi --> Every regex, pattern or expected literal that the spec or the plan gives for
+  text produced by existing code: open the code that produces it (search the literal's stem) and check
+  that the pattern matches every form the code can emit (singular and plural, numbers, units, language).
+  A pattern that misses a form the code emits, or two parts of the spec/plan that give different
+  expected values for the same output, is `major`; quote the code line.
 
 Keep the review concise and pragmatic.
 

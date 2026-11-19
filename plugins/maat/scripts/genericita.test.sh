@@ -27,6 +27,8 @@
 #   9. (1.5.0) the frozen reference tests/comandi-equivalenza/riferimento.txt does not name the guide project: reserved
 #      names and the fake one only (its modules/app/... paths come from examples/nuxt-fastapi.maat.json). Counterproof on
 #      a copy: the fake name => red. Part of the plugin: checked inside and outside the repo.
+#  10. (1.8.2 D2) the rule <!-- 182-testi-attesi --> of the plan reviewers: the same sentence in agents/spec-plan-reviewer-light.md
+#      (an item of the «Focus on» list) and in agents/spec-plan-reviewer.md (a `—` row of the «Review checklist» table, lens L1).
 # The R11 reminder in the main-session skills (pk05) is already checked by guard.test.sh, a plugin suite.
 #   bash plugins/maat/scripts/genericita.test.sh          (Git Bash or WSL)
 set -uo pipefail
@@ -216,6 +218,22 @@ if [ -f "$RIFF" ]; then
 else
   ko "manca $RIFF (riferimento congelato di comandi-equivalenza, parte del plugin)"
 fi
+
+# --- 10. the rule of the plan reviewers on the expected texts (1.8.2 D2) ---
+# The same sentence and the same anchor in the two reviewers: in the light one inside the «Focus on» list (before «Keep the
+# review concise»), in the full one as a `—` row of the «Review checklist» table with lens L1. Whitespace is normalised
+# (a list item wraps over several lines).
+REGOLA182='Every regex, pattern or expected literal that the spec or the plan gives for text produced by existing code: open the code that produces it (search the literal'"'"'s stem) and check that the pattern matches every form the code can emit (singular and plural, numbers, units, language). A pattern that misses a form the code emits, or two parts of the spec/plan that give different expected values for the same output, is `major`; quote the code line.'
+piatto() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; }
+for a in spec-plan-reviewer-light spec-plan-reviewer; do
+  f=$PLUGIN/agents/$a.md
+  [ "$(grep -c '<!-- 182-testi-attesi -->' "$f" 2>/dev/null)" = 1 ] && ok || ko "agents/$a.md: l'ancora <!-- 182-testi-attesi --> non c'e' una volta sola"
+  piatto "$f" | grep -qF -- "$REGOLA182" && ok || ko "agents/$a.md: manca la regola dei testi attesi (1.8.2)"
+done
+awk '/^Focus on:/ { f = 1; next } /^Keep the review concise/ { f = 0 } f && /^- <!-- 182-testi-attesi -->/ { t = 1 } END { exit !t }' \
+  "$PLUGIN/agents/spec-plan-reviewer-light.md" && ok || ko "agents/spec-plan-reviewer-light.md: la regola dei testi attesi non e' una voce della lista «Focus on»"
+grep -qE '^\| — \| <!-- 182-testi-attesi --> .*\| \*\*L1\*\* \|$' "$PLUGIN/agents/spec-plan-reviewer.md" && ok ||
+  ko "agents/spec-plan-reviewer.md: la regola dei testi attesi non e' una riga — della tabella con lente L1"
 
 echo "genericita.test.sh: $pass ok, $fail falliti"
 [ $fail -eq 0 ]
