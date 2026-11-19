@@ -22,7 +22,7 @@
 # group 1: the driver (1424 s)
 1 driver
 
-# group 2: run-phase (1093 s)
+# group 2: run-phase (1093 s; 1684 s on the CI of 1.8.0 main; over 1800 s with 1.8.1: the Windows limits rose, ci.yml)
 2 run-phase
 
 # group 3: the expected outputs of the public corpus (1050 s)
