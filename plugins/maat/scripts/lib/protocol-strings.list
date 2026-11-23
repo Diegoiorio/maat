@@ -174,3 +174,11 @@ scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi d
 # «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
 # same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);
 # scripts/cycle-report.py LIMITE_USO "limite d'uso" (name of a stop cause in metrics.csv, D7).
+
+# --- 1.9.0 (K3): literals read by other code that the anti-leak scanner does not flag (a single token), so they
+# cannot be entries of their own (an entry without lines is refused). Frozen all the same: do not translate.
+# scripts/counterproof.sh: the option --senza-mutazione, the keys "senza_mutazione", "intero", "casi", "casi_completo"
+# of <id>.json (and "intero" of mutations.json), its "esito" values verde, rosso, rosso_import, rosso_raccolta, bloccato,
+# non_eseguita and the case outcomes verde, rosso, saltato (read by run-phase.sh, K6b);
+# scripts/worktree-lib.sh: the marker and name prefix fic-prova (fic-prova-<label>-<time>), the line type prepamb of
+# wt_conf and the values of WT_PROVA_ESITO (nostro, collegamenti, git), read by replay.sh.
