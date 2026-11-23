@@ -331,7 +331,7 @@ maat-config-190.s14	ciclo.correzione_test or ciclo.build_chiusura needs "harness
 maat-config-190.s14_type	{k} is a boolean (true/false): {v}	{k} è un booleano (true/false): {v}
 maat-config-190.opzione_illeggibile	{k} unreadable ({why}): switched off, STOP as in 1.8	{k} illeggibile ({why}): spento, STOP come in 1.8
 maat-doctor-190.default_on	the 1.9 correction of defective tests with proof is on by default; to switch it off: ciclo.correzione_test false	la correzione con prova dei test difettosi della 1.9 è accesa per default; per spegnerla: ciclo.correzione_test false
-maat-doctor-190.prova_senza_preparazione	module {m} declares preparati but no preparazione: a defective acceptance test cannot be corrected with proof (STOP as in 1.8)	il modulo {m} dichiara preparati ma nessuna preparazione: un test di accettazione difettoso non si può correggere con prova (STOP come in 1.8)
+maat-doctor-190.prova_senza_preparazione	module {m}: the preparati ({guida}) are missing from the main tree: to correct a defective acceptance test with proof the proof worktree will have to run the preparazione (if it fails: STOP as in 1.8); run it now: {prep}	modulo {m}: i preparati ({guida}) mancano nel tree principale: per correggere con prova un test di accettazione difettoso il worktree di prova dovrà lanciare la preparazione (se fallisce: STOP come in 1.8); lanciala ora: {prep}
 
 # 1.9.0 K8 (S4): the build required at closing (maat-config.py opzione build_chiusura and gate-richiesti, the doctor)
 maat-config-190.build_illeggibile	{k} unreadable ({why}): switched on, the build is required	{k} illeggibile ({why}): acceso, il build è richiesto

@@ -514,8 +514,8 @@ caso_eol autocrlf-en - core.autocrlf=true; DP=$T/eol-autocrlf-en doc GIT_CONFIG_
 check "1.8.2 en: WARNING in inglese" '[ "$rc" = 0 ] && ha "^WARNING line endings: Git can check out this project with CRLF \(core\.autocrlf=true\)" && ! ha "fine riga"'
 
 # --- 28. (1.9.0, K2) the correction with proof of defective tests is on by default: an INFO line (never MANCA, not counted)
-#     when "harness" admits 1.8 (absent or older than 1.9) and ciclo.correzione_test is not set; preparati without
-#     preparazione (S10 refuses it: reachable only with a reader without S10) -> ATTENZIONE prova_senza_preparazione
+#     when "harness" admits 1.8 (absent or older than 1.9) and ciclo.correzione_test is not set; preparati missing from
+#     the main tree -> ATTENZIONE prova_senza_preparazione
 INFO_K2='^INFO la correzione con prova dei test difettosi della 1\.9 è accesa per default; per spegnerla: ciclo\.correzione_test false$'
 caso_default_on() { DOCX=${1:-} doc; [ "$rc" = 0 ] && ha "$INFO_K2" && ha '^maat-doctor: [0-9]+ OK, 0 ATTENZIONE, 0 MANCA$'; }
 check "1.9.0 senza harness né ciclo.correzione_test -> INFO default_on, exit 0, riepilogo invariato" 'caso_default_on'
@@ -530,14 +530,15 @@ doc MAAT_CONFIG="$V28c"
 check "1.9.0 harness >=1.9 con ciclo.correzione_test true -> nessuna INFO" '! ha "^INFO la correzione"'
 doc MAAT_LINGUA=en
 check "1.9.0 en: INFO default_on in inglese" 'ha "^INFO the 1\.9 correction of defective tests with proof is on by default; to switch it off: ciclo\.correzione_test false$"'
-DS10=$T/senza-s10; mkdir -p "$DS10"; cp -r "$PLUGIN" "$DS10/maat"
-sed -i 's/if m.get("preparati") and not m.get("preparazione"):/if False:/' "$DS10/maat/scripts/maat-config.py"
-V28d=$(variante prep-senza 'c["moduli"][0]["preparati"] = ["guida.txt"]')
-caso_prova_prep() { DOCX=${1:-$DS10/maat/scripts/maat-doctor.sh} doc MAAT_CONFIG="$V28d"; ha '^ATTENZIONE il modulo m dichiara preparati ma nessuna preparazione: un test di accettazione difettoso non si può correggere con prova \(STOP come in 1\.8\)$' && ! ha '^MANCA il modulo m dichiara'; }
-check "1.9.0 preparati senza preparazione (lettore senza S10) -> ATTENZIONE prova_senza_preparazione" 'caso_prova_prep'
-V28e=$(variante prep-con 'c["moduli"][0]["preparati"] = ["guida.txt"]; c["moduli"][0]["preparazione"] = "true"')
-DOCX=$DS10/maat/scripts/maat-doctor.sh doc MAAT_CONFIG="$V28e"
-check "1.9.0 preparati con preparazione -> nessuna riga prova_senza_preparazione" '! ha "dichiara preparati ma nessuna preparazione"'
+# review of K2: the real trigger of prova_senza_preparazione — the module declares preparati and they are missing from
+# the main tree (the proof worktree would have to run the preparazione): ATTENZIONE with the hint, the real reader
+V28d=$(variante prep-assenti 'c["moduli"][0]["preparati"] = ["guida.txt", "gen/**"]; c["moduli"][0]["preparazione"] = "bash run-test.sh"')
+caso_prova_prep() { DOCX=${1:-} doc MAAT_CONFIG="$V28d"; ha '^ATTENZIONE modulo m: i preparati \(guida\.txt\) mancano nel tree principale: per correggere con prova un test di accettazione difettoso il worktree di prova dovrà lanciare la preparazione \(se fallisce: STOP come in 1\.8\); lanciala ora: bash run-test\.sh$' && ! ha '^MANCA modulo m: i preparati'; }
+check "1.9.0 preparati assenti nel tree principale -> ATTENZIONE prova_senza_preparazione col rimedio" 'caso_prova_prep'
+cp -r "$P" "$T/p28"; : > "$T/p28/guida.txt"; DP=$T/p28 doc MAAT_CONFIG="$V28d"
+check "1.9.0 preparati presenti nel tree principale -> nessuna riga prova_senza_preparazione" '! ha "mancano nel tree principale"'
+doc MAAT_CONFIG="$V28d" MAAT_LINGUA=en
+check "1.9.0 en: prova_senza_preparazione in inglese" 'ha "^WARNING module m: the preparati \(guida\.txt\) are missing from the main tree: to correct a defective acceptance test with proof the proof worktree will have to run the preparazione"'
 
 # --- 29. (1.9.0, K8) the build at closing: (a) INFO build_on (a module with comandi.build, ciclo.build_chiusura not set);
 #     (b) ATTENZIONE build_missing (git ls-files has files that compile, no comandi.build; tests and .d.ts do not count);
@@ -619,8 +620,7 @@ m=$(mutante verifica 's/^            if script and not os.path.isfile(assoluto(s
 check "controprova: script di verifica_remota non cercato -> OK, rosso" '[ -n "$m" ] && ! caso_verifica "$m"'
 m=$(mutante default-on 's/    if (cfg.get("ciclo") or {}).get("correzione_test") is None and ammette_18:   # DEFAULT-ON-190/    if False:   #/')
 check "controprova (1.9.0): senza la riga default_on -> rosso" '[ -n "$m" ] && ! caso_default_on "$m"'
-m=$(mutante prova-prep 's/    if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190/    if False:   #/')
-[ -z "$m" ] || sed -i 's/if m.get("preparati") and not m.get("preparazione"):/if False:/' "$(dirname "$m")/maat-config.py"
+m=$(mutante prova-prep 's/^        if not ok:   # PROVA-SENZA-PREP-190$/        if False:   #/')
 check "controprova (1.9.0): senza la riga prova_senza_preparazione -> rosso" '[ -n "$m" ] && ! caso_prova_prep "$m"'
 m=$(mutante build-on 's/    if ha_build and "build_chiusura" not in (cfg.get("ciclo") or {}):   # BUILD-ON-190/    if False:   #/')
 check "controprova (1.9.0, K8): senza la riga build_on -> rosso" '[ -n "$m" ] && ! caso_build_on "$m"'

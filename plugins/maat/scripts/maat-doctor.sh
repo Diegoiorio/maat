@@ -773,11 +773,12 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             "OK", T("maat-doctor.prep_ok", nome=nome, guida=guida)) if ok else riga(
             "ATTENZIONE", T("maat-doctor.prep_missing", nome=nome, guida=guida),
             T("maat-doctor.prep_fix", prep=m.get("preparazione", T("maat-doctor.prep_default")))))
-
-    # 1.9.0 (K2): preparati without preparazione: the proof trees of a corrected test cannot produce them when the main
-    # tree lacks them (STOP d_tree). S10 of maat-config.py already refuses this file: the line serves a reader without S10.
-    if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190
-        out.append(lambda: riga("ATTENZIONE", T("maat-doctor-190.prova_senza_preparazione", m=nome)))
+        # 1.9.0 (K2): the preparati missing from the main tree: the proof worktree of a corrected acceptance test
+        # cannot copy them and has to run the preparazione (if it fails or is missing: STOP d_tree, as in 1.8)
+        if not ok:   # PROVA-SENZA-PREP-190
+            prep = m.get("preparazione") or T("maat-doctor.prep_default")
+            out.append(lambda guida=guida, prep=prep: riga("ATTENZIONE", T("maat-doctor-190.prova_senza_preparazione",
+                                                                         m=nome, guida=guida, prep=prep)))
 
     out.extend(controlli_build(mc, cfg, m, nome, rad))
 

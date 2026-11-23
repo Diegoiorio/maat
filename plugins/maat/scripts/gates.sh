@@ -167,18 +167,22 @@ for f in ${FILES[@]+"${FILES[@]}"}; do
   esac
 done
 righe() { printf '%s' "${1:-}" | grep -v '^$'; }
-# 1.9.0 (K8, S4 point 2): with the build at closing on (the same reader as gate-richiesti, which already printed its
-# AVVISO) and a level other than min, the files of a module's build gate are the touched files under its radice or
-# radice_pacchetti, independent of the routing above, plus those outside every module: so a file of a shared package
-# declared as a module of its own does not leave the frontend's build SKIPPED «nessun file». Off or min: as in 1.8.
-BUILD_CHIUSURA=0
+# 1.9.0 (K8, S4 point 2): with the build at closing on (maat-config.py opzione build_chiusura, the reader that
+# gate-richiesti uses too) and a level other than min, the files of a module's build gate are the touched files under
+# its radice or radice_pacchetti, independent of the routing above, plus those outside every module: so a file of a
+# shared package declared as a module of its own does not leave the frontend's build SKIPPED «nessun file». Without
+# any file every declaring module builds (interface (c)): the build command takes no file, «.» stands for the whole
+# repository. An unreadable switch: on, and its AVVISO line goes on the output (log/<label>.gates). Off or min: 1.8.
+BUILD_CHIUSURA=0 BUILD_AVVISI=""
 if [ "$level" != min ]; then
-  BUILD_CHIUSURA=$(lettore opzione build_chiusura 2>/dev/null | tr -d '\r')
+  BUILD_CHIUSURA=$(lettore opzione build_chiusura 2>"$TMPD/opzione" | tr -d '\r')
+  BUILD_AVVISI=$(tr -d '\r' < "$TMPD/opzione" | grep '^AVVISO: ')
   [ "$BUILD_CHIUSURA" = 0 ] || BUILD_CHIUSURA=1   # unreadable: on (the safe side)
 fi
 sotto_di() { [ -z "$2" ] || [ "$1" = "$2" ] || [ "${1#"$2"/}" != "$1" ]; }   # <file> <folder>
 file_build() { # <module>: one file per line
   local f u x
+  if [ ${#FILES[@]} -eq 0 ]; then echo .; return; fi   # BUILD-SENZA-FILE-190
   for f in ${FILES[@]+"${FILES[@]}"}; do
     u=0; for x in ${UNCOV[@]+"${UNCOV[@]}"}; do [ "$x" = "$f" ] && u=1; done
     if [ $u = 1 ] || sotto_di "$f" "${M_RAD[$1]}" || sotto_di "$f" "${M_PAC[$1]}"; then printf '%s\n' "$f"; fi
@@ -448,6 +452,7 @@ if [ "$after" != "$TREE" ]; then
 fi
 for g in ${GATES[@]+"${GATES[@]}"}; do py riga "$WEV" "$g" "$(cat "$EV/.$g.stato" 2>/dev/null)"; rm -f "$EV/.$g.stato"; done
 [ ${#UNCOV[@]} -eq 0 ] || echo "$(msg gates.uncovered files="${UNCOV[*]}")"
+[ -z "$BUILD_AVVISI" ] || printf '%s\n' "$BUILD_AVVISI"   # BUILD-AVVISO-190
 tot=$(py totale "$WEV" ${GATES[@]+"${GATES[@]}"})
 echo "gates: esito=$tot chiave=$KEY evidence=$WEV"
 case ${tot%% *} in PASS|SKIPPED) exit 0 ;; FAIL) exit 1 ;; *) exit 3 ;; esac

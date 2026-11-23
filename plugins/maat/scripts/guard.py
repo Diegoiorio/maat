@@ -336,6 +336,13 @@ MSG = {
         "en": ("`{what}`: taglia.txt belongs to the driver, phase {fase} does not write it",
                "core rule (the size of the cycle is decided by a script)",
                "taglia.txt belongs to the driver: to ask for more weight write the line Size request: full in the plan")},
+    "file_driver": {
+        "it": ("`{what}`: è un file del driver, la fase {fase} non lo scrive",
+               "regola del nucleo (i file del driver nella cartella del run: driver.log, log/, prompts/, test-red/)",
+               "li scrivono run-phase.sh e plan-check.sh; un test di accettazione da cambiare è una deviazione del PHASE RESULT"),
+        "en": ("`{what}`: a file of the driver, phase {fase} does not write it",
+               "core rule (the driver's files in the run folder: driver.log, log/, prompts/, test-red/)",
+               "run-phase.sh and plan-check.sh write them; an acceptance test to change is a deviation of the PHASE RESULT")},
     "lavoro_fase": {
         "it": ("`{what}`: scrittura fuori da {lav} nella fase {fase}",
                "regola del nucleo (fasi in sola lettura: si scrive solo nella cartella di lavoro)",
@@ -1003,7 +1010,9 @@ def check_write(path, data):
     # plan-check.sh only, never by a phase session.
     pn = os.path.normpath(path).replace("\\", "/").lower() if path else ""
     if phase and re.search(r"\.run/(taglia\.txt|taglia\.sha|driver\.log)$|\.run/(log|prompts|test-red)/", pn):  # TAGLIA-DEL-DRIVER
-        deny("taglia_fase", what=path.replace("\\", "/"), fase=phase)
+        # taglia.txt and taglia.sha keep their text (the remedy is the Size request: line); the other driver files theirs
+        deny("taglia_fase" if re.search(r"\.run/taglia\.(txt|sha)$", pn) else "file_driver",
+             what=path.replace("\\", "/"), fase=phase)
     phase = os.environ.get("FIC_PHASE", "")
     if (phase not in READONLY_PHASES and phase not in SCOPED_PHASES) or not path:
         return

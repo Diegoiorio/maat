@@ -69,7 +69,7 @@ c=\${1//\/mnt\//\/}
 env -u MAAT_CONFIG -u MAAT_LINGUA PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
 EOF
 printf '#!/usr/bin/env bash\necho "${FAKE_NODE:-v18.19.0}"\n' > "$FB/node"
-printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
+printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "DIRNPM $PWD" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
 # fake venv python: --version, pip freeze, pytest (JUnit unless FAKE_NOJUNIT)
 cat > "$FB/venv-python" <<'EOF'
 #!/usr/bin/env bash
@@ -343,6 +343,30 @@ chk "16 file fuori da ogni modulo: build di fe PASS (fail-closed; stesso albero 
 chk "16 solo un file del backend: nessun build" '[ ! -f "$RUN16/evidence/$K16c/build.json" ] && [ "$(calls NPM)" = 0 ]' "$out"
 : > "$GLOG"; g16 min modules/app/apps/admin/utils/goals.ts; K16d=$(key)
 chk "16 min: nessun build" '[ ! -f "$RUN16/evidence/$K16d/build.json" ] && [ "$(calls NPM)" = 0 ]' "$out"
+# review of K8: without any file every declaring module builds (interface (c)), never SKIPPED «nessun file»
+caso_k8_senza_file() { # [gates.sh]
+  GT16=${1:-} g16 std; local k; k=$(key)
+  [ -n "$k" ] && [ "$(jget "$RUN16/evidence/$k/build.json" esito)" = PASS ] && printf '%s\n' "$out" | grep -q '^build: PASS'; }
+chk "16 std senza nessun file: build di ogni modulo che lo dichiara PASS, non SKIPPED" 'caso_k8_senza_file' "$out"
+M16b="$W/gates-k8-mut-vuoto.sh"
+sed '/# BUILD-SENZA-FILE-190$/d' "$GT" > "$M16b"
+if cmp -s "$GT" "$M16b"; then ko "16 controprova: la riga del build senza file non c'e'"
+else chk "16 controprova: senza il caso dei nessun file -> build SKIPPED «nessun file», rosso" '! caso_k8_senza_file "$M16b"' "$out"; fi
+# review of K8: an unreadable switch is said on the output of gates.sh (run-phase writes it in log/<label>.gates)
+caso_k8_avviso() { out=$(FIC_BUILD_CHIUSURA=x bash "${1:-$GT}" --run-dir "$RUN16" std modules/app/packages/ui/Button.vue 2>/dev/null)   # stdout only
+  printf '%s\n' "$out" | grep -q '^AVVISO: FIC_BUILD_CHIUSURA illeggibile ("x"): acceso, il build è richiesto$' && printf '%s\n' "$out" | grep -q '^build: PASS'; }
+chk "16 FIC_BUILD_CHIUSURA=x: l AVVISO nell uscita di gates.sh e il build richiesto" 'caso_k8_avviso' "$out"
+chk "  l ultima riga resta quella dell esito" 'printf "%s\n" "$out" | tail -1 | grep -q "^gates: esito="' "$out"
+M16c="$W/gates-k8-mut-avviso.sh"
+sed '/# BUILD-AVVISO-190$/d' "$GT" > "$M16c"
+if cmp -s "$GT" "$M16c"; then ko "16 controprova: la riga che stampa l AVVISO non c'e'"
+else chk "16 controprova: senza la stampa dell AVVISO -> rosso" '! caso_k8_avviso "$M16c"' "$out"; fi
+# S4 point 5: the module fe has ambiente wsl and copia: its build runs inside WSL on the TREE (radice_pacchetti),
+# never in the copy, and test-fast.sh is not called for it
+: > "$GLOG"; printf ' ' >> "$R/modules/app/packages/ui/Button.vue"
+g16 std modules/app/packages/ui/Button.vue
+chk "16 modulo wsl con copia: build in WSL sul tree (radice_pacchetti), non nella copia, senza test-fast.sh" \
+  '[ "$(calls NPM)" = 1 ] && grep -qx "DIRNPM $R/modules/app" "$GLOG" && [ "$(calls VF)" = 0 ]' "$out"$'\n'"$(cat "$GLOG")"
 M16="$W/gates-k8-mut.sh"
 sed 's/^      if \[ "$tipo" = build \] && \[ "$BUILD_CHIUSURA" = 1 \]; then   # BUILD-INSTRADA-190$/      if false; then/' "$GT" > "$M16"
 if cmp -s "$GT" "$M16"; then ko "16 controprova: la riga dell'instradamento del build non c'e'"

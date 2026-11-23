@@ -687,7 +687,7 @@ VARIABILE_OPZIONE = {"correzione_test": "FIC_CORREZIONE_TEST", "build_chiusura":
 def valore_opzione(nome):
     """1.9.0 (K0.1): the switch ciclo.<nome>, with its variable FIC_<NOME> that wins over the key: (1 | 0, warning)
     with warning "" or the text of the AVVISO line. correzione_test (default on): an unreadable value (the variable not
-    0/1, empty included; maat.json not valid; the key not a boolean) -> 0, switched off (the STOP of 1.8).
+    0/1, empty included; maat.json not valid, a key that is not a boolean included: S14) -> 0, switched off (the STOP of 1.8).
     build_chiusura (K8, interface (c), default on): the opposite side, because on is the safe one here (it requires
     more and accepts nothing by itself): an unreadable value -> 1 with maat-config-190.build_illeggibile, and an EMPTY
     variable counts as unset (the key decides)."""
@@ -717,17 +717,12 @@ def valore_opzione(nome):
     c = cfg.get("ciclo") or {}
     if nome not in c:
         return 1, ""
-    if not isinstance(c[nome], bool):
-        return illeggibile, avviso("ciclo." + nome, why=json.dumps(c[nome], ensure_ascii=False))
     return int(c[nome]), ""
-
-
-OPZIONI_LETTE = ("correzione_test", "build_chiusura")
 
 
 def cmd_opzione(args):
     """1.9.0: «opzione <nome>» prints 1 or 0, exit 0; an unreadable value adds one AVVISO line on stderr."""
-    if len(args) != 1 or args[0] not in OPZIONI_LETTE:
+    if len(args) != 1 or args[0] not in OPZIONI_190:
         raise Uscita(64, T("maat-config-190.usage_opzione"))
     v, avviso = valore_opzione(args[0])
     if avviso:

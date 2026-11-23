@@ -295,6 +295,10 @@ out=$(MAAT_CONFIG=$W/k8-falso.json bash "$FZ" --level std "$RUN" 2>&1); rc=$?
 chk "K8 chiave false: nessun build.json e IMPLEMENTED come 1.8" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && [ ! -f "$(k8ev)/build.json" ]' "$out"
 k8run e modules/app/packages/ui/Button.vue; k8gates; rm -f "$(k8ev)/build.json"; spec APPROVED IMPLEMENTED; fin --level std
 chk "K8 file di un pacchetto condiviso (radice_pacchetti): build.json richiesto" '[ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ] && grep -q "^Verification: PARTIAL (finalize.sh: build: evidenza assente" "$SP"' "$out"$'\n'"$(grep ^Verification "$SP")"
+k8run f; k8gates; spec APPROVED IMPLEMENTED; fin --level std
+chk "K8 touched.txt vuoto: il build di ogni modulo che lo dichiara è eseguito (PASS, non SKIPPED) e richiesto" '[ $rc -eq 0 ] && [ "$("$FIC_PY" -c "import json,sys; print(json.load(open(sys.argv[1], encoding=\"utf-8\"))[\"esito\"])" "$(k8ev)/build.json")" = PASS ]' "$out"
+rm -f "$(k8ev)/build.json"; spec APPROVED IMPLEMENTED; fin --level std
+chk "  senza build.json: NEEDS_VERIFICATION" '[ $rc -eq 1 ] && grep -q "^Verification: PARTIAL (finalize.sh: build: evidenza assente" "$SP"' "$out"
 MK="$W/mut-build.sh"
 sed '/# BUILD-RICHIESTO-190$/s/|| \[ "\$build_req" = 1 \]; }/|| false; }/' "$FZ" > "$MK"
 if cmp -s "$FZ" "$MK"; then ko "K8 controprova: la mutazione dell esclusione del build non si applica"; else

@@ -718,7 +718,7 @@ check "controprova (1.9.0): S14 disattivato -> ciclo.correzione_test con harness
 m=$(mutante vuota 's/    if v is not None:   # VUOTA-ILLEGGIBILE/    if v:   #/')
 [ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
 check "controprova (1.9.0): FIC_CORREZIONE_TEST vuota letta come assente -> 1 senza AVVISO, rosso" '[ -n "$m" ] && ! caso_k2_vuota "$m"'
-m=$(mutante uso 's/if len(args) != 1 or args\[0\] not in OPZIONI_LETTE:/if len(args) != 1:/')
+m=$(mutante uso 's/if len(args) != 1 or args\[0\] not in OPZIONI_190:/if len(args) != 1:/')
 [ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
 check "controprova (1.9.0): opzione che accetta ogni nome -> opzione pippo non esce 64, rosso" '[ -n "$m" ] && ! caso_k2_uso "$m"'
 m=$(mutante k8-pac 's/ or sotto(f, norm(m\["radice_pacchetti"\])):   # BUILD-PACCHETTI-190/:/')
