@@ -570,6 +570,89 @@ def unverified_of(arg):
     return out
 
 
+# 1.9.0 (K4): deviations accepted by script and judge, per family, from the files run-phase.sh writes after the judge
+# (log/<label>.deviazioni-test of test-red, log/<label>.deviazioni-impl of implement/fix: «<text>\t<verdict>\t<sha>»);
+# the same verdict rule as driver.py _accettate. Never a STOP: they are counted apart from the stops.
+FAMIGLIE_DEV = (("test-data", ("test-data: ", "dati-test: ")), ("test-difettoso", ("test-difettoso: ", "defective-test: ")))
+ACCEPT_RX = re.compile(r"ACCEPT\b(?!\s*\|)")
+
+
+def accepted_of(arg):
+    """{"test-data": n, "test-difettoso": m} of the ACCEPT lines (one per label and text); {} without any"""
+    if not os.path.isdir(arg):
+        return {}
+    seen, out = set(), {}
+    for f in sorted(glob.glob(os.path.join(arg, "log", "*.deviazioni-test")) +
+                    glob.glob(os.path.join(arg, "log", "*.deviazioni-impl"))):
+        label = os.path.basename(f).rsplit(".", 1)[0]
+        try:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                rows = fh.read().replace("\r", "").split("\n")
+        except OSError:
+            continue
+        for l in rows:
+            p = l.split("\t")
+            t = " ".join(p[0].split())
+            if len(p) < 2 or not ACCEPT_RX.match(p[1].strip()) or (label, t) in seen:
+                continue
+            fam = next((n for n, pref in FAMIGLIE_DEV if t.startswith(pref)), None)
+            if fam:
+                seen.add((label, t))
+                out[fam] = out.get(fam, 0) + 1
+    return out
+
+
+def _maat_json_of(arg):
+    """the project's maat.json for a run dir: MAAT_CONFIG, else the first .claude/maat.json above it; None if none"""
+    if os.environ.get("MAAT_CONFIG"):
+        return os.environ["MAAT_CONFIG"]
+    d = os.path.abspath(arg)
+    while True:
+        p = os.path.join(d, ".claude", "maat.json")
+        if os.path.isfile(p):
+            return p
+        up = os.path.dirname(d)
+        if up == d:
+            return None
+        d = up
+
+
+def default_on_of(arg):
+    """1.9.0 (K4, K0.1): True when the defective-test family entered the verification in this cycle (a
+    log/<label>.deviazioni-impl, or an implement/fix result.json that declares one) and the project did not choose:
+    no ciclo.correzione_test in its maat.json, and a "harness" that admits 1.8 (absent, or ">=X.Y" with X.Y <= 1.8)"""
+    if not os.path.isdir(arg):
+        return False
+    pref = dict(FAMIGLIE_DEV)["test-difettoso"]
+    entrata = bool(glob.glob(os.path.join(arg, "log", "*.deviazioni-impl")))
+    for f in glob.glob(os.path.join(arg, "log", "*-implement.result.json")) + \
+            glob.glob(os.path.join(arg, "log", "*-fix.result.json")):
+        try:
+            with open(f, encoding="utf-8") as fh:
+                dv = json.load(fh).get("deviazioni") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        entrata = entrata or any(str(x).strip().startswith(pref) for x in dv)
+    if not entrata:
+        return False
+    cfg = {}
+    p = _maat_json_of(arg)
+    if p:
+        try:
+            with open(p, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        except (OSError, ValueError):
+            cfg = {}
+    cfg = cfg if isinstance(cfg, dict) else {}
+    if "correzione_test" in (cfg.get("ciclo") if isinstance(cfg.get("ciclo"), dict) else {}):
+        return False
+    h = cfg.get("harness")
+    if h is None:
+        return True
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(h))
+    return bool(m) and (int(m.group(1)), int(m.group(2))) <= (1, 8)
+
+
 def analyse_cycle(arg, projects):
     phases = [analyse_phase(f) for f in files_of(arg)]
     driver = driver_seconds(arg) if os.path.isdir(arg) else 0.0
@@ -659,6 +742,8 @@ def analyse_cycle(arg, projects):
         "stops_by_cause": by_cause,
         **({"size": size_of(arg)} if size_of(arg) else {}),
         **({"decisioni_non_verificate": unverified_of(arg)} if unverified_of(arg) else {}),
+        **({"deviazioni_accettate": accepted_of(arg)} if accepted_of(arg) else {}),
+        **({"correzione_test_default": True} if default_on_of(arg) else {}),
     }
 
 
@@ -684,6 +769,11 @@ def print_cycle(c):
         print("   Size: %s (%s · escalation: %d)" % (s["taglia"], s["motivo"], s["escalation"]))
     for u in c.get("decisioni_non_verificate") or []:   # 1.8.0 (B10): a STOP the reader must not take as proven
         print("   " + T("cycle-report-180.unverified", fase=u["fase"], t=u["testo"][:200]))
+    da = c.get("deviazioni_accettate")
+    if da:   # 1.9.0 (K4): per family, never among the STOPs
+        print("   " + T("cycle-report-190.accepted", td=da.get("test-data", 0), dt=da.get("test-difettoso", 0)))
+    if c.get("correzione_test_default"):   # 1.9.0 (K4, K0.1): the project took the new default without choosing it
+        print("   " + T("cycle-report-190.default_on"))
     if c["B_s"] is None and c["B_missing_sessions"]:
         # the frozen JSON value (D7) printed in the language of the summary
         print("   " + T("cycle-report.missing_tr", s=", ".join(T("cycle-report.no_sid") if x == NO_SID else x

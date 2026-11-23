@@ -428,6 +428,13 @@ worktree-lib-190.prep_none	module {rad}: preparati missing in the main tree and 
 worktree-lib-190.prep_failed	module {rad}: preparati missing in the main tree and the preparazione failed ({cmd})	modulo {rad}: preparati assenti nel tree principale e preparazione fallita ({cmd})
 worktree-lib-190.prep_guide	module {rad}: the guide file of the preparati is missing in the proof worktree ({guida})	modulo {rad}: manca il file guida dei preparati nel worktree di prova ({guida})
 
+# --- driver-190, cycle-report-190 (1.9.0, K4, written by hand): the class of an implement/fix whose defective-test
+# deviations run-phase.sh accepted (log/<label>.deviazioni-impl); the report per family and the default switched on
+driver-190.c_ok_dev_impl	{n} implement deviations accepted by script and judge	{n} deviazioni d'implementazione accettate da script e giudice
+driver-190.c_dev_impl	implement deviation not accepted: {d}	deviazione d'implementazione non accettata: {d}
+cycle-report-190.accepted	Accepted deviations: test-data {td} · defective test {dt}	Deviazioni accettate: test-data {td} · test difettoso {dt}
+cycle-report-190.default_on	1.9 correction of defective tests with proof: on by default	correzione con prova dei test difettosi 1.9: accesa per default
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

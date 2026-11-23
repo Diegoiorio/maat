@@ -182,3 +182,7 @@ scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi d
 # non_eseguita and the case outcomes verde, rosso, saltato (read by run-phase.sh, K6b);
 # scripts/worktree-lib.sh: the marker and name prefix fic-prova (fic-prova-<label>-<time>), the line type prepamb of
 # wt_conf and the values of WT_PROVA_ESITO (nostro, collegamenti, git), read by replay.sh.
+
+# --- 1.9.0 (K4): the class of a defective-test correction and its register, the report per family
+scripts/driver.py	\.deviazioni-impl|Deviazione accettata: |^"(deviazione-impl|test-difettoso|test-difettoso: )"$	K4: file del run dir scritto da run-phase.sh (log/<label>.deviazioni-impl), regola di classifica, famiglia e prefisso della riga di driver.log letta da run-phase.sh e cycle-report.py: token, uguali in ogni lingua
+scripts/cycle-report.py	\.deviazioni-(test|impl)|^"(deviazioni|ciclo|correzione_test|deviazioni_accettate|correzione_test_default|test-difettoso|test-difettoso: |dati-test: )"$	K4: file del run dir e chiavi di result.json e di maat.json lette, chiavi e nomi di famiglia del JSON del rapporto (D7)
