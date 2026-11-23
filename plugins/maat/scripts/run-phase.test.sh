@@ -1891,6 +1891,11 @@ if mrp_mut "s/^      \"verde${TAB}1${TAB}\"\\*\"|verde${TAB}1${TAB}\"\\*) vic=/ 
   check "controprova S2 vitest: senza la condizione «file completo» il caso «casi_completo false» passa (rosso)" 'se1 c8 | grep -q "^PHASE RESULT implement: OK"' "$(se1 c8)"
 else check "controprova vitest file completo: la mutazione si applica" false; fi
 cp "$RP" "$MRP"
+if mrp_mut 's/ and d.get("esito") in ("verde", "rosso")$//'; then
+  s2x c9 "${VIT[@]}" S2_CP_f1_1=rosso_raccolta -- "$DEVV" "" "" "$MRP"
+  check "controprova S2 vitest: senza la condizione «file intero eseguito» il caso rosso_raccolta passa (rosso)" 'se1 c9 | grep -q "^PHASE RESULT implement: OK"' "$(se1 c9)"
+else check "controprova vitest file intero eseguito: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
 # rilievo 2: plan-check.sh deviazione exits 2 with a traceback and no «Deviazione: STOP — » line (a wrapper in the copy of
 # the plugin $HC; both phases with $MRP); the session leaves a stale .ingressi and correzione.json in the run dir
 mv "$HC/scripts/plan-check.sh" "$HC/scripts/plan-check.real.sh"

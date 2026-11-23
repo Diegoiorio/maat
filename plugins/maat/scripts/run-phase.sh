@@ -1684,7 +1684,9 @@ elif a[0] == "candidati":
 elif a[0] == "caso":
     d = jl(a[1]) or {}
     if "casi_completo" in d:   # counterproof, whole-file mode: complete only if the file itself ran (FILE-INTERO-ESEGUITO:
-        # verde or rosso; rosso_raccolta = an error of the file, afterAll or a hook, bloccato, … never count)
+        # verde or rosso; rosso_raccolta = an error of the file, afterAll or a hook, bloccato, … never count).
+        # Declared limit: a file with an error of the file (afterAll) AND a red case is «rosso», not «rosso_raccolta»
+        # (counterproof.sh): the error of the hook does not stop V there.
         casi, comp = d.get("casi") or [], d.get("casi_completo") is True and d.get("esito") in ("verde", "rosso")
     else:
         casi, comp = (d.get("casi") or {}).get(a[2]) or [], a[2] in (d.get("file_completi") or [])

@@ -127,7 +127,9 @@ cycles.
   one, is the STOP of 1.8. A copy of the test data (`copy.deepcopy`, `structuredClone`) hides a code that changes the
   data it receives, and breaks or hides production state keyed on object identity (a `WeakMap`, a memo on `id()`):
   the judge is told to refuse that, and the review sees it. `<Tn>` must be an acceptance test of the table; a victim in
-  another file (state shared between files) is `d_victim`; at most 3 victim candidates. Writes through Bash to
+  another file (state shared between files) is `d_victim`; at most 3 victim candidates. In vitest a file with an
+  error of the file (`afterAll`, a hook) and a red case is `rosso`, not `rosso_raccolta`: the error of the hook does
+  not stop the victim there (only a file whose cases are all green is `rosso_raccolta`). Writes through Bash to
   `test-red/`, to the spec or to the live jsonl are still not seen by the guard (as in 1.7–1.8): the fingerprints and
   `basis` `FRESH` remain. A phase can write `.claude/maat.json` (for example `ciclo.build_chiusura: false` with
   `"harness": ">=1.9"`) and the closing would leave out the build, the same class as `gate.<level>` in 1.8: it stays
