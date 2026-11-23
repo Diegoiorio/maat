@@ -714,8 +714,9 @@ prep_caso() {
     [ "$caso" = niente ] && export PREP_NIENTE=1
     . "$lib" || { echo "worktree-lib.sh non caricata"; exit 0; }
     forget_mirror() { :; }
-    # the WSL runner of the gates, faked: records the command and runs it here (FIC_GATES_WSL of gates.sh)
-    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >> %q\nbash -c "$1"\n' "$mp.wsl" > "$mp.wslrun"; chmod +x "$mp.wslrun"
+    # the WSL runner of the gates, faked: records the command and runs it here (FIC_GATES_WSL of gates.sh); the /mnt/<d>/
+    # paths of the WSL command become /<d>/ for Git Bash on Windows, as in the fake of gates.test.sh (a no-op on Linux)
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >> %q\nbash -c "${1//\\/mnt\\//\\/}"\n' "$mp.wsl" > "$mp.wslrun"; chmod +x "$mp.wslrun"
     export FIC_GATES_WSL=$mp.wslrun
     if [ "$caso" = senza ]; then   # a module with preparati and no preparazione (maat.json would refuse it: S10)
       _WT_CONF=$(printf 'prep\tm\tgen/guida.txt\t-\tgen/guida.txt\nprepamb\tm\tnativo\tm') _WT_CONF_OK=1
