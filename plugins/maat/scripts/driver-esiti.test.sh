@@ -704,6 +704,88 @@ printf '%s\tACCEPT | STOP — <reason>\t%064d\n' "$LUNGA" 0 > "$RR/log/01-test-r
 check "next (review B12-B13): un verdetto «ACCEPT | STOP — <reason>» (il modello ripetuto) non accetta → STOP" 'nx | grep -q "^STOP — 01-test-red: result.json STOP"'
 rm -f "$T/drv-intere.py"
 rm -rf "$RR" "$SR" "$T/rr-limite" "$T/sr-limite" "$FAKE_CALLS"* "$T"/drv-r2.py "$T"/drv-r23.py "$T"/drv-cl.py "$T"/drv-progresso.py "$T"/drv-chiave.py "$T"/drv-reg.py
+# --- 15b. 1.9.0 (K4, spec 1.9.0 K0.6-K0.7): a defective-test deviation of implement/fix. classifica: an OK line whose
+# non-difensiva deviations are all «test-difettoso: »/«defective-test: » and all ACCEPT in log/<label>.deviazioni-impl ->
+# OK-DEVIAZIONE deviazione-impl; a text different by an inner space -> still OK (compression), by a word -> UMANO; no
+# file, or another deviation beside -> UMANO; a STOP with the family -> UMANO deviazione-impl with the cause of .esito; in
+# test-red the family is not admitted (UMANO deviazione). _json_rule of implement with and without the file. The driver
+# writes «Deviazione accettata: <label> · test-difettoso · <Tn> · sha=<12>» in driver.log on OK-DEVIAZIONE, also with
+# ciclo.riprese 0. Counterproofs: _json_rule without .deviazioni-impl; classifica without the family; run without the line.
+DI1='test-difettoso: T5 — stato-condiviso — la costante DATI resta modificata per T7'
+im_dev() { # <name> <phase> <esito line> <deviations json> [<file .deviazioni-impl content>]
+  local f=$2
+  clp "$1" "$f" 0 "$3" "$(ok_json "$f" "$( [ "${3#*: }" != "${3#*: OK}" ] && echo OK || echo STOP)" "$4" nessuno)" "$AP"
+  [ $# -lt 5 ] || printf '%s' "$5" > "$CL/$1.run/log/01-$f.deviazioni-impl"
+}
+im_dev im-okdev implement "PHASE RESULT implement: OK — corretto" "[\"$DI1\", \"difensiva: a.py:3 — ramo\"]" "$DI1	ACCEPT	$(printf '%064d' 0)
+"
+im_dev im-spazio implement "PHASE RESULT implement: OK — corretto" "[\"test-difettoso: T5 — stato-condiviso —  la costante DATI resta modificata per T7\"]" "$DI1	ACCEPT	0
+"
+im_dev im-parola implement "PHASE RESULT implement: OK — corretto" "[\"test-difettoso: T5 — stato-condiviso — la costante DATI resta cambiata per T7\"]" "$DI1	ACCEPT	0
+"
+im_dev im-nofile implement "PHASE RESULT implement: OK — corretto" "[\"$DI1\"]"
+im_dev im-rifiuto implement "PHASE RESULT implement: OK — corretto" "[\"$DI1\"]" "$DI1	STOP — the copy hides a WeakMap	0
+"
+im_dev im-altra implement "PHASE RESULT implement: OK — corretto" "[\"$DI1\", \"passo 2 adattato\"]" "$DI1	ACCEPT	0
+"
+im_dev fx-okdev fix "PHASE RESULT fix: OK — corretto" "[\"defective-test: T5 — shared-state — DATA stays changed for T7\"]" "defective-test: T5 — shared-state — DATA stays changed for T7	ACCEPT	0
+"
+im_dev im-stop implement "PHASE RESULT implement: STOP — nessuna vittima di T5 nel suo file" "[\"$DI1\"]"
+im_dev tr-difettoso test-red "PHASE RESULT test-red: OK — rossi dimostrati" "[\"$DI1\"]" "$DI1	ACCEPT	0
+"
+CASI_K4="im-okdev:implement im-spazio:implement im-parola:implement im-nofile:implement im-rifiuto:implement im-altra:implement fx-okdev:fix im-stop:implement tr-difettoso:test-red"
+cla4() { "$FIC_PY" "$T/cl.py" "$1" "$CL" $CASI_K4 > "$T/cl.out" 2>&1; tr -d '\r' < "$T/cl.out"; }
+CLO=$(cla4 "$DRV")
+check "1.9.0 classifica: la funzione risponde sui casi della famiglia test-difettoso" '[ "$(printf "%s\n" "$CLO" | grep -c "	")" = "$(echo $CASI_K4 | wc -w)" ] && ! grep -q Traceback "$T/cl.out"' || tail -5 "$T/cl.out"
+check "1.9.0 classifica: implement OK con la test-difettoso ACCEPT in .deviazioni-impl (e una difensiva) → OK-DEVIAZIONE deviazione-impl; fix con defective-test → idem" '[ "$(clv im-okdev)" = "OK-DEVIAZIONE deviazione-impl log/01-implement.deviazioni-impl" ] && [ "$(clv fx-okdev)" = "OK-DEVIAZIONE deviazione-impl log/01-fix.deviazioni-impl" ] && printf "%s\n" "$CLO" | grep -q "^im-okdev	.*	1 deviazioni d.implementazione accettate da script e giudice$"'
+check "1.9.0 classifica: testo diverso di uno spazio interno → OK-DEVIAZIONE; di una parola → UMANO deviazione-impl" '[ "$(clv im-spazio)" = "OK-DEVIAZIONE deviazione-impl log/01-implement.deviazioni-impl" ] && [ "$(clv im-parola)" = "UMANO deviazione-impl log/01-implement.result.json" ] && printf "%s\n" "$CLO" | grep -q "^im-parola	.*	deviazione d.implementazione non accettata: test-difettoso: T5"'
+check "1.9.0 classifica: senza .deviazioni-impl, verdetto STOP, o un'altra deviazione accanto → UMANO deviazione-impl" '[ "$(clv im-nofile)" = "UMANO deviazione-impl log/01-implement.result.json" ] && [ "$(clv im-rifiuto)" = "UMANO deviazione-impl log/01-implement.result.json" ] && [ "$(clv im-altra)" = "UMANO deviazione-impl log/01-implement.result.json" ] && printf "%s\n" "$CLO" | grep -q "^im-altra	.*non accettata: passo 2 adattato$"'
+check "1.9.0 classifica: STOP con la famiglia → UMANO deviazione-impl con la causa dell .esito; in test-red la famiglia non è ammessa (UMANO deviazione)" '[ "$(clv im-stop)" = "UMANO deviazione-impl log/01-implement.result.json" ] && printf "%s\n" "$CLO" | grep -q "^im-stop	.*	PHASE RESULT implement: STOP — nessuna vittima di T5 nel suo file$" && [ "$(clv tr-difettoso)" = "UMANO deviazione log/01-test-red.result.json" ]'
+jr() { "$FIC_PY" -c 'import importlib.util, sys
+sys.dont_write_bytecode = True
+s = importlib.util.spec_from_file_location("d", sys.argv[1]); d = importlib.util.module_from_spec(s); s.loader.exec_module(d)
+print(d._json_rule(sys.argv[2]).split("|")[0])' "$1" "$CL/$2.run/log/01-implement.result.json" | tr -d '\r'; }
+check "1.9.0 _json_rule di implement: con .deviazioni-impl ACCEPT → OK; senza il file → STOP" '[ "$(jr "$DRV" im-okdev)" = OK ] && [ "$(jr "$DRV" im-nofile)" = STOP ]'
+if tmut jrimpl 's/^\( *\)dev_i = .*# JSON-RULE-IMPL$/\1dev_i = dev/'; then
+  check "  controprova: _json_rule senza .deviazioni-impl → la deviazione accettata ferma (STOP, rosso)" '[ "$(jr "$T/drv-jrimpl.py" im-okdev)" = STOP ]'
+else check "  controprova _json_rule implement: la mutazione si applica" false; fi
+if tmut climpl 's/^\( *\)tdi = \[d for d in devs if d.startswith(TEST_DIFETTOSO)\] if fase in FASI_IMPL else \[\]$/\1tdi = []/'; then
+  CLO=$(cla4 "$T/drv-climpl.py")
+  check "  controprova: classifica senza la famiglia → im-okdev non è più OK-DEVIAZIONE (rosso)" '[ "$(clv im-okdev)" != "OK-DEVIAZIONE deviazione-impl log/01-implement.deviazioni-impl" ]'
+else check "  controprova classifica implement: la mutazione si applica" false; fi
+rm -f "$T/drv-jrimpl.py" "$T/drv-climpl.py"
+# run: an implement phase that ends OK with the deviation accepted (fake run-phase.sh: what run-phase writes after the
+# verification), next faked by FIC_CYCLE_STATE; with ciclo.riprese 0 too (the register does not depend on resumes)
+cat > "$T/rp-impl" <<'EOF'
+#!/usr/bin/env bash
+d=$1 l=$2; mkdir -p "$d/log"; : > "$d/log/$l.jsonl"
+printf '{"fase":"implement","esito":"OK","motivo":"m","deviazioni":["%s"],"bloccato_su":"nessuno","file":[],"gate_interni":[],"finding":[]}\n' "$FAKE_DEV" > "$d/log/$l.result.json"
+[ -n "${FAKE_ACC:-}" ] && printf '%s\tACCEPT\t%064d\n' "$FAKE_DEV" 0 > "$d/log/$l.deviazioni-impl"
+printf 'PHASE RESULT implement: OK — test di accettazione T5 corretto\nstate=x\n' > "$d/log/$l.esito"; echo 0 > "$d/log/$l.exit"
+exit 0
+EOF
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "State: impl-fisso" "Next: IMPLEMENT — finto"\n' > "$T/cs-impl"
+chmod +x "$T/rp-impl" "$T/cs-impl"
+irun() { # [variables] → rc, $T/run.out; the run dir from scratch
+  rm -rf "$RR"; spec_r APPROVED
+  env "$@" FAKE_DEV="$DI1" FIC_RUN_PHASE="$T/rp-impl" FIC_CYCLE_STATE="$T/cs-impl" FIC_MAX_FASI=1 FIC_CONTEXT_PACK=- \
+    "$FIC_PY" "${IRUN_DRV:-$DRV}" run "$SR" > "$T/run.out" 2>&1; rc=$?; }
+DLR="^[0-9T:Z-]* Deviazione accettata: 01-implement · test-difettoso · T5 · sha=[0-9a-f]\{12\}$"
+irun FAKE_ACC=1
+sha=$(sha256sum < "$RR/log/01-implement.deviazioni-impl" 2>/dev/null | cut -c1-12)
+check "1.9.0 run: implement OK-DEVIAZIONE → riga «Deviazione accettata: 01-implement · test-difettoso · T5 · sha=<12>» in driver.log (sha del file)" 'grep -q "$DLR" "$RR/driver.log" && grep -q "sha=$sha$" "$RR/driver.log" && [ "$(grep -c "Deviazione accettata: " "$RR/driver.log")" = 1 ]' || tail -5 "$T/run.out"
+irun
+check "1.9.0 run: la stessa fase senza .deviazioni-impl → nessuna riga «Deviazione accettata»" '! grep -q "Deviazione accettata: " "$RR/driver.log" 2>/dev/null'
+mkdir -p "$W/.claude"; [ -f "$W/.claude/maat.json" ] && cp "$W/.claude/maat.json" "$T/mj.bak"
+printf '{"versione_schema": 1, "harness": ">=1.8", "ciclo": {"riprese": 0}, "moduli": [{"nome": "src", "radice": "src"}]}\n' > "$W/.claude/maat.json"
+irun FAKE_ACC=1
+check "1.9.0 run: con ciclo.riprese 0 la riga «Deviazione accettata» c'è lo stesso" 'grep -q "$DLR" "$RR/driver.log"' || tail -5 "$T/run.out"
+if [ -f "$T/mj.bak" ]; then mv "$T/mj.bak" "$W/.claude/maat.json"; else rm -f "$W/.claude/maat.json"; fi
+if tmut dlr 's/^\( *\)ev(r)$/\1pass/'; then
+  IRUN_DRV="$T/drv-dlr.py" irun FAKE_ACC=1
+  check "  controprova: senza la scrittura in driver.log nessuna riga (rosso)" '! grep -q "Deviazione accettata: " "$RR/driver.log" 2>/dev/null'
+else check "  controprova riga Deviazione accettata: la mutazione si applica" false; fi
+rm -rf "$RR" "$T/drv-dlr.py" "$T/rp-impl" "$T/cs-impl"
 # --- 16. (1.8.1, G2-3) the usage limit of a sub-session: a STOP with its reason, not a mute exit 1. The fixture is the
 # real event of a 5-hour limit (reduced and anonymised: no session or request ids): a normal result, the synthetic
 # assistant message, then the last `result` with api_error_status 429 and api_error usage_limit_reached. (a) errore_api

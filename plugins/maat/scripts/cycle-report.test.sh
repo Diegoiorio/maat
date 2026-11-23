@@ -304,6 +304,49 @@ sed 's/^        if NON_VERIFICATA_RIGA in l:$/        if False:/' "$CR" > "$W/cr
 hd=$("$FIC_PY" "$W/cr-nv.py" --projects "$WP/projects" "$WP/hv/spec-hd.run" 2>&1)
 { ! cmp -s "$CR" "$W/cr-nv.py" && ! grep -q "NON VERIFICATA" <<< "$hd"; } && ok ||
   ko "controprova: un lettore che ignora la riga del driver non segnala la decisione (rosso)" "$hd"
+# --- 1.9.0 (K4): the deviations accepted by script and judge, per family (log/<label>.deviazioni-test and .deviazioni-impl,
+# verdict ACCEPT, the echoed template not), never among the STOPs; the line «accesa per default» when the defective-test
+# family entered the verification and maat.json neither sets ciclo.correzione_test nor a "harness" beyond 1.8
+HK="$W/hk/proj/.claude/.ai-workflow/spec-hk.run"; mkdir -p "$HK" && cp -r "$R/log" "$HK/"
+printf 'test-data: T4 — other names — collide\tACCEPT\t0\ndati-test: T6 — x — y\tACCEPT | STOP — <reason>\t0\n' > "$HK/log/01-test-red.deviazioni-test"
+printf 'test-difettoso: T5 — stato-condiviso — DATI resta modificata\tACCEPT — only the copy\t0\n' > "$HK/log/03-implement.deviazioni-impl"
+printf '{"fase":"implement","esito":"OK","deviazioni":["test-difettoso: T5 — stato-condiviso — DATI resta modificata"]}\n' > "$HK/log/03-implement.result.json"
+crk() { (unset MAAT_CONFIG; "$FIC_PY" "${2:-$CR}" --projects "$WP/projects" "$1" 2>&1); }
+hk=$(crk "$HK")
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 1" <<< "$hk" && ok || ko "1.9.0 deviazioni accettate per famiglia (il modello ripetuto non conta)" "$hk"
+grep -q "STOP .*T5\|STOP .*test-difettoso" <<< "$hk" && ko "1.9.0 una deviazione accettata non è fra gli STOP" "$hk" || ok
+grep -qx "   correzione con prova dei test difettosi 1.9: accesa per default" <<< "$hk" && ok ||
+  ko "1.9.0 senza maat.json (harness assente, chiave assente) e la famiglia entrata: riga «accesa per default»" "$hk"
+hj=$( (unset MAAT_CONFIG; "$FIC_PY" "$CR" --json --projects "$WP/projects" "$HK" 2>&1) )
+{ grep -q '"test-difettoso": 1' <<< "$hj" && grep -q '"correzione_test_default": true' <<< "$hj"; } && ok || ko "1.9.0 --json: deviazioni_accettate e correzione_test_default" "$hj"
+MJK="$W/hk/proj/.claude/maat.json"
+for c in '{"harness": ">=1.8"}:si' '{"harness": ">=1.9"}:no' '{"harness": ">=1.8", "ciclo": {"correzione_test": true}}:no' '{"ciclo": {"correzione_test": false}}:no' '{"harness": ">=1.7"}:si'; do
+  printf '%s\n' "${c%:*}" > "$MJK"; hk=$(crk "$HK"); a=no
+  grep -q "accesa per default" <<< "$hk" && a=si
+  [ "$a" = "${c##*:}" ] && ok || ko "1.9.0 riga «accesa per default» con maat.json ${c%:*}: attesa ${c##*:}" "$hk"
+done
+printf '{"harness": ">=1.8"}\n' > "$MJK"
+rm "$HK/log/03-implement.deviazioni-impl"; printf '{"fase":"implement","esito":"OK","deviazioni":[]}\n' > "$HK/log/03-implement.result.json"
+hk=$(crk "$HK")
+grep -q "accesa per default" <<< "$hk" && ko "1.9.0 la famiglia non è entrata nella verifica: nessuna riga «accesa per default»" "$hk" || ok
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 0" <<< "$hk" && ok || ko "1.9.0 solo test-data accettate" "$hk"
+printf 'test-difettoso: T5 — stato-condiviso — DATI resta modificata\tACCEPT\t0\n' > "$HK/log/03-implement.deviazioni-impl"
+sed 's/^            fam = next((n for n, pref in FAMIGLIE_DEV if t.startswith(pref)), None)$/            fam = "test-data" if t.startswith("test-data: ") else None/' "$CR" > "$W/cr-fam.py"
+hk=$(crk "$HK" "$W/cr-fam.py")
+{ ! cmp -s "$CR" "$W/cr-fam.py" && ! grep -q "test difettoso 1" <<< "$hk"; } && ok ||
+  ko "controprova: un lettore che non conosce la famiglia test-difettoso non la conta (rosso)" "$hk"
+# 1.9.0 (K3 bis, review): the «Deviazione accettata:» lines of driver.log count too (deleting the file does not lower
+# the count), once per label, family and test (file and line together: still 1). Counterproof: driver.log not read.
+printf '%s\n' "2026-11-23T10:00:00Z Deviazione accettata: 03-implement · test-difettoso · T5 · sha=0123456789ab" > "$HK/driver.log"
+hk=$(crk "$HK")
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 1" <<< "$hk" && ok || ko "1.9.0 file e riga di driver.log della stessa deviazione: contata una volta" "$hk"
+rm -f "$HK/log/03-implement.deviazioni-impl"
+hk=$(crk "$HK")
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 1" <<< "$hk" && ok || ko "1.9.0 .deviazioni-impl cancellato: la riga di driver.log la conta ancora" "$hk"
+sed 's/^        if DEV_ACCETTATA_RIGA not in l:$/        if True:/' "$CR" > "$W/cr-dl.py"
+hk=$(crk "$HK" "$W/cr-dl.py")
+{ ! cmp -s "$CR" "$W/cr-dl.py" && grep -q "test difettoso 0" <<< "$hk"; } && ok ||
+  ko "controprova: un lettore che ignora driver.log perde la deviazione col file cancellato (rosso)" "$hk"
 mcols() { # $1 csv file → per row: number of fields and last field, "|" between rows
   "$FIC_PY" -c 'import csv, sys
 print("|".join("%d:%s" % (len(r), r[-1]) for r in csv.reader(open(sys.argv[1], encoding="utf-8", newline=""))))' "$1" | tr -d '\r'

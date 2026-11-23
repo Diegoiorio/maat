@@ -443,6 +443,9 @@ counterproof-190.intero_solo	intero must be true/false, and true only with --sen
 counterproof-190.casi_incompleti	the report does not list every case of the file ({n} read): no outcome	il report non elenca ogni caso del file ({n} letti): nessun esito
 counterproof-190.file_rosso	{n} of {tot} cases of the file are red	{n} casi del file su {tot} sono rossi
 counterproof-190.file_verde	every case of the file ran, none red ({tot})	ogni caso del file è stato eseguito, nessuno rosso ({tot})
+counterproof-190.file_fallito	the file itself failed outside its cases (hook, afterAll, unhandled error): {m}	il file stesso è fallito fuori dai suoi casi (hook, afterAll, errore non gestito): {m}
+counterproof-190.file_saltati	{n} of {tot} cases of the file did not run (skipped): not green	{n} casi del file su {tot} non eseguiti (saltati): non verde
+worktree-lib-190.bad_ref	not a commit or tree reference: {r}	non è un riferimento di commit o di albero: {r}
 worktree-lib-190.bad_name	the name does not start with {pfx}-: {c}	il nome non comincia per {pfx}-: {c}
 worktree-lib-190.no_marker	the marker {pfx} is missing ({mk})	manca il marcatore {pfx} ({mk})
 worktree-lib-190.usage_crea	usage: wt_prova_crea <label> <base> (label of letters, digits, . _ -; base not empty)	uso: wt_prova_crea <label> <base> (label di lettere, cifre, . _ -; base non vuota)
@@ -452,6 +455,13 @@ worktree-lib-190.prep_copy	copy of the prepared file {rel} from the main tree fa
 worktree-lib-190.prep_none	module {rad}: preparati missing in the main tree and no preparazione	modulo {rad}: preparati assenti nel tree principale e nessuna preparazione
 worktree-lib-190.prep_failed	module {rad}: preparati missing in the main tree and the preparazione failed ({cmd})	modulo {rad}: preparati assenti nel tree principale e preparazione fallita ({cmd})
 worktree-lib-190.prep_guide	module {rad}: the guide file of the preparati is missing in the proof worktree ({guida})	modulo {rad}: manca il file guida dei preparati nel worktree di prova ({guida})
+
+# --- driver-190, cycle-report-190 (1.9.0, K4, written by hand): the class of an implement/fix whose defective-test
+# deviations run-phase.sh accepted (log/<label>.deviazioni-impl); the report per family and the default switched on
+driver-190.c_ok_dev_impl	{n} implement deviations accepted by script and judge	{n} deviazioni d'implementazione accettate da script e giudice
+driver-190.c_dev_impl	implement deviation not accepted: {d}	deviazione d'implementazione non accettata: {d}
+cycle-report-190.accepted	Accepted deviations: test-data {td} · defective test {dt}	Deviazioni accettate: test-data {td} · test difettoso {dt}
+cycle-report-190.default_on	1.9 correction of defective tests with proof: on by default	correzione con prova dei test difettosi 1.9: accesa per default
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]

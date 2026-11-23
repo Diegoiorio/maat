@@ -249,10 +249,19 @@ wt_ours() {
   [ $found -eq 1 ] || { echo "$(msg replay.not_listed c="$c")" >&2; return 1; }
   return 0
 }
+# a commit or tree reference written unquoted into an eval'd line (base, tree): only these characters, else exit 2
+WT_REF_RX='^[0-9A-Za-z^{}~._/-]+$'
+_wt_ref_ok() { [[ "$1" =~ $WT_REF_RX ]] || { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.bad_ref r="$1")" >&2; return 1; }; }
+_WT_PASSO=""   # the step _wt_crea reached: add (worktree add), marcatore, resto (relative .git, links)
 _wt_crea() { # <wt> <base> <stamp> <prefix>: the commands of replay.sh 1.8 (worktree add, marker, relative .git, links)
   local wt=$1 base=$2 stamp=$3 mk=$4 ex=${WT_ESEGUI:-_wt_esegui} p
+  _WT_PASSO=""
+  _wt_ref_ok "$base" && [[ "$stamp" =~ ^[0-9A-Za-z._-]+$ ]] && [[ "$mk" =~ ^[a-z-]+$ ]] || return 2
+  _WT_PASSO=add
   $ex "git -C $(_wtq "$MAIN") worktree add --detach $(_wtq "$wt") $base" || return 1
+  _WT_PASSO=marcatore
   $ex "printf '$mk\npath=%s\ncreated=%s\n' $(_wtq "$wt") $stamp > \"\$(git -C $(_wtq "$wt") rev-parse --absolute-git-dir)/$mk\"" || return 1
+  _WT_PASSO=resto
   $ex "fic_relgit $(_wtq "$wt")" || return 1
   while IFS= read -r p; do
     [ -n "$p" ] || continue
@@ -262,6 +271,7 @@ _wt_crea() { # <wt> <base> <stamp> <prefix>: the commands of replay.sh 1.8 (work
 }
 _wt_applica() { # <wt> <tree>: the tree as uncommitted changes
   local ex=${WT_ESEGUI:-_wt_esegui}
+  _wt_ref_ok "$2" || return 2
   $ex "git -C $(_wtq "$1") read-tree -u --reset $2 && git -C $(_wtq "$1") read-tree HEAD"
 }
 WT_PROVA_ESITO=""
@@ -340,6 +350,7 @@ wt_prova_crea() {
   local label=${1:-} base=${2:-} pd wt rc
   [ $# -eq 2 ] && [ -n "$base" ] && [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] ||
     { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.usage_crea)" >&2; return 2; }
+  _wt_ref_ok "$base" || return 2
   [ -n "${FIC_PY:-}" ] || . "$MAAT_SCRIPTS/python.sh" >&2 ||
     { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib.no_python)" >&2; return 1; }
   wt_conf > /dev/null || return 1   # maat.json not readable: nothing to link or prepare would be a silent half tree
@@ -348,7 +359,13 @@ wt_prova_crea() {
   wt="$pd/fic-prova-$label-$(date +%Y%m%d-%H%M%S)"
   { [ -e "$wt" ] || [ -L "$wt" ]; } && { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib.link_exists dst="$wt")" >&2; return 1; }
   if ! WT_ESEGUI=_wt_esegui _wt_crea "$wt" "$base" "$(date +%Y%m%d-%H%M%S)" fic-prova >&2; then
-    { [ -e "$wt" ] || _wt_elencato "$wt"; } && wt_prova_rimuovi "$wt" >&2
+    if [ "$_WT_PASSO" = marcatore ]; then
+      # worktree added, marker not written: no link exists yet (they come after the marker), so the removal of
+      # exactly this path cannot follow one; wt_prova_rimuovi would refuse it for the missing marker
+      git -C "$MAIN" worktree remove --force "$wt" >&2 2>&1  # SENZA-MARCATORE
+    elif [ -n "$_WT_PASSO" ]; then
+      { [ -e "$wt" ] || _wt_elencato "$wt"; } && wt_prova_rimuovi "$wt" >&2
+    fi
     return 1
   fi
   _wt_prepara "$wt"; rc=$?
@@ -358,6 +375,7 @@ wt_prova_crea() {
 wt_prova_albero() {
   local wt=${1:-} tr=${2:-} dd
   [ $# -eq 2 ] && [ -n "$wt" ] && [ -n "$tr" ] || { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.usage_albero)" >&2; return 1; }
+  _wt_ref_ok "$tr" || return 1   # never eval'd; 1 (not applied), 2 stays «different dependencies» (interface (a))
   dd=$(deps_diff "$tr")
   [ -z "$dd" ] || { printf '%s\n' "$dd" >&2; return 2; }
   wt_ours "$wt" fic-prova || return 1

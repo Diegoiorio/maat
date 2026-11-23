@@ -54,6 +54,16 @@ JSON: the union of `deviazioni`, `file`, `gate_interni`, the first `bloccato_su`
   foresees — `plan-implementer.md`, «Deviation»): then no STOP, copy them into `deviazioni` verbatim (prefix
   first), close `PHASE RESULT … OK` and add `Deviazioni difensive: <n>` to the summary; `run-phase.sh` records them and
   the next review judges them. Never add or remove the prefix yourself: one without it stops the cycle;
+- the other family, `defective-test: <Tn> — <class> — <why, ≤ 200 chars>` (also `test-difettoso: `): `<Tn>` is the acceptance
+  test that **pollutes** the others of its file (its patch or its data leak), never the failing one; class `shared-state`
+  or `unrestored-patch` (`stato-condiviso`, `patch-non-ripristinata`), pytest or vitest; the fix stays in Tn's body, one
+  transformation of the closed list (`plan-implementer.md`, «Deviation»). One deviation of this family: before closing, the
+  judge in the **foreground** (`maat:spec-plan-reviewer-light`), its prompt only these blocks verbatim, blank lines between:
+  the output of `plan-check.sh deviazione - <spec> <Tn> --famiglia test-difettoso`, the `trasformazione:` line of
+  `plan-check.sh corretto <spec> <Tn> --classe <class> --vecchio <test-red version> --nuovo <file> --run-dir <run-dir>`, the
+  output of `plan-check.sh diff-test <spec> <Tn's file> --run-dir <run-dir> --dal-post`; nothing else in the prompt. ACCEPT →
+  `PHASE RESULT … OK` with the deviation in `deviazioni` (prefix first; `run-phase.sh` proves it again and records the
+  test fingerprint); otherwise, or in doubt → STOP;
 - `Blocked on: migration to apply` (`Bloccato su: migrazione da applicare`) → STOP: the file is written; the user applies it by hand (`psql`,
   `CLAUDE.md`), renames `<run-dir>/log/<label>.result.json` to `<label>.result.json.visto`, and re-invokes;
 - `Result: PARTIAL` or another `Blocked on:` → relaunch once in `completion` on that block (later blocks wait);

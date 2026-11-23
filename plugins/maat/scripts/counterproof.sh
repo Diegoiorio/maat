@@ -39,8 +39,10 @@
 #   {"test_id", "nome", "esito": verde|rosso|saltato, "messaggio"}; test_id as the casi of `plan-check.sh esiti`: pytest
 #   <test.percorso>::<classname without the module prefix>::<name>, vitest the full name) and "casi_completo" (the list
 #   holds as many cases as the report declares: pytest the sum of testsuite@tests, vitest numTotalTests, with no
-#   collection error). Its esito: rosso if a case is red, verde if none is; report missing or unreadable, no case, or
-#   the list not complete -> bloccato (never verde); a file that does not load -> rosso_import / rosso_raccolta.
+#   collection error). Its esito: report missing or unreadable, no case, or the list not complete -> bloccato; rosso if
+#   a case is red; the file itself failed (afterAll, a hook, an unhandled error, file status failed; pytest: an error
+#   outside every testcase) or a case skipped -> rosso_raccolta (rosso_import for an import error); verde only if every
+#   case is verde, the count holds and the file did not fail (spec 1.9.0, interface (a), amendment of 23/11).
 # - "assorbita": true (L2: NEW file, red at the base with a proven stub, green afterwards) -> the mutation is NOT
 #   run: <id>.json with outcome "assorbita" (counterproof ASSORBITA, reason), no runner. It does not enter the counts
 #   (prove=<n>/<tot> counts only those run); the last line adds "assorbite=<n>". Absorbed only -> exit 0 without
@@ -705,7 +707,11 @@ def casi_vitest_file(report, trel):
         return e, m, msg, casi, False
     tot = rep.get("numTotalTests")
     completo = isinstance(tot, int) and tot == len(casi) and len(rep.get("testResults", [])) == 1
-    return esito_file(casi, completo)
+    # the file itself failed (afterAll, a hook, an unhandled error: file status failed, a file message, the run not a
+    # success) while its cases are listed: never green (spec 1.9.0, interface (a), amendment of 23/11)
+    fallito = fr.get("status") == "failed" or bool(fmsg) or rep.get("success") is False \
+        or bool(rep.get("numFailedTestSuites")) or bool(rep.get("numRuntimeErrorTestSuites"))  # FILE-FALLITO
+    return esito_file(casi, completo, (fmsg or "status=%s" % fr.get("status")) if fallito else None, IMPORT_JS)
 
 
 def casi_pytest_file(report, trel, tp, rc):
@@ -744,16 +750,35 @@ def casi_pytest_file(report, trel, tp, rc):
     if coll:
         e, m, msg = suite_red(norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in coll)), IMPORT_PY)
         return e, m, msg, casi, False
-    return esito_file(casi, tot is not None and tot == len(casi) and altri == 0)
+    # the file itself failed: a <failure>/<error> directly under a testsuite (outside every testcase), or suites that
+    # declare more errors than their testcases carry (spec 1.9.0, interface (a), amendment of 23/11)
+    fuori = [x for su in suites for x in list(su) if x.tag in ("failure", "error")]
+    try:
+        dich = sum(int(su.get("errors") or 0) for su in suites)
+    except ValueError:
+        dich = None
+    con_errore = sum(1 for c in root.iter("testcase") if any(x.tag == "error" for x in list(c)))
+    fallito = None
+    if fuori or dich is None or dich > con_errore:  # FILE-FALLITO
+        fallito = norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in fuori)) or "errors=%s" % dich
+    return esito_file(casi, tot is not None and tot == len(casi) and altri == 0, fallito, IMPORT_PY)
 
 
-def esito_file(casi, completo):
-    # whole file: never green without the complete list; red if one case is red; green if none is (skipped ones listed)
+def esito_file(casi, completo, fallito=None, imp=None):
+    # whole file: never green without the complete list (bloccato); rosso if a case is red; the file itself failed
+    # (fallito: its message) or a case skipped -> rosso_raccolta (rosso_import for an import error); green only if
+    # every case is green
     if not casi or not completo:
         return "bloccato", T("counterproof-190.casi_incompleti", n=len(casi)), "", casi, False
     rossi = [x for x in casi if x["esito"] == "rosso"]
     if rossi:
         return "rosso", T("counterproof-190.file_rosso", n=len(rossi), tot=len(casi)), rossi[0]["messaggio"], casi, True
+    if fallito is not None:
+        e = "rosso_import" if imp is not None and imp.search(fallito) else "rosso_raccolta"
+        return e, T("counterproof-190.file_fallito", m=fallito[:300]), fallito[:4000], casi, True
+    saltati = [x for x in casi if x["esito"] != "verde"]
+    if saltati:
+        return "rosso_raccolta", T("counterproof-190.file_saltati", n=len(saltati), tot=len(casi)), "", casi, True
     return "verde", T("counterproof-190.file_verde", tot=len(casi)), "", casi, True
 
 def classify_comando(rc):

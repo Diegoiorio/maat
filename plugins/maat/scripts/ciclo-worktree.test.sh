@@ -749,6 +749,34 @@ r=$(prova_caso "$HERE/worktree-lib.sh" "$T/prova1/proj")
 check "1.9.0 wt_prova_*: crea alla base (una riga), marcatore, collegamenti, preparati copiati, applica l'albero, rimuove senza toccare le dipendenze vere" '[ -z "$r" ]' || printf '  %s\n' "$r"
 r=$(prep_tutti "$HERE/worktree-lib.sh" "$T/prep")
 check "1.9.0 wt_prova_crea, preparati: copiati se presenti (preparazione mai lanciata), altrimenti la preparazione nel worktree (anche WSL); fallita, senza file guida o assente -> 4" '[ -z "$r" ]' || printf '  %s\n' "$r"
+# 1.9.0 (K3 bis, review): the worktree added but its marker not written is removed (no leak: wt_prova_rimuovi would
+# refuse it); a <base>/<tree> outside [0-9A-Za-z^{}~._/-] never reaches eval (exit 2; wt_prova_albero 1, as «not
+# applied»). Counterproof (e) below: without the direct removal the worktree stays.
+marc_caso() { # <lib> <repo>: one line per failed expectation
+  local lib=$1 mp=$2 mpc b
+  mkrepo "$mp" >/dev/null 2>&1 || { echo "repo finto non creato"; return 0; }
+  mpc=$(canon "$mp"); b=$(git -C "$mp" rev-parse HEAD)
+  ( cd "$mp" && WT_TAG=prova MAIN=$mpc PROJECT_ROOT=$mpc
+    . "$lib" || { echo "worktree-lib.sh non caricata"; exit 0; }
+    forget_mirror() { :; }
+    _wt_esegui() { case "$1" in printf*) return 1 ;; *) eval "$1" ;; esac; }   # the marker cannot be written
+    out=$(wt_prova_crea m-1 "$b" 2>/dev/null); r=$?
+    [ $r -eq 1 ] && [ -z "$out" ] || echo "marcatore non scritto: exit $r, stdout «$out»"
+    [ -z "$(ls -d "$(dirname "$mpc")"/fic-prova-m-1-* 2>/dev/null)" ] || echo "worktree senza marcatore rimasto sul disco"
+    git -C "$mp" worktree list --porcelain | grep -q "fic-prova-m-1-" && echo "worktree senza marcatore ancora registrato"
+    unset -f _wt_esegui; _wt_esegui() { eval "$1"; }
+    : > "$mp.pwn"; rm -f "$mp.pwn"
+    wt_prova_crea m-2 "HEAD;touch $mp.pwn" > /dev/null 2>&1; r=$?
+    [ $r -eq 2 ] && [ ! -e "$mp.pwn" ] || echo "base con ; : exit $r, file creato: $([ -e "$mp.pwn" ] && echo sì || echo no)"
+    [ -z "$(ls -d "$(dirname "$mpc")"/fic-prova-m-2-* 2>/dev/null)" ] || echo "creato un worktree con la base rifiutata"
+    WT_ESEGUI=_wt_esegui _wt_applica "$mp" "\$(touch $mp.pwn)" 2>/dev/null; r=$?
+    [ $r -eq 2 ] && [ ! -e "$mp.pwn" ] || echo "_wt_applica con \$( ): exit $r"
+    wt_prova_albero "$(dirname "$mpc")/fic-prova-x" "a b" 2>/dev/null; r=$?
+    [ $r -eq 1 ] || echo "wt_prova_albero con un albero non valido: exit $r, atteso 1"
+    exit 0 ) 2>&1
+}
+r=$(marc_caso "$HERE/worktree-lib.sh" "$T/marc1/proj")
+check "1.9.0 wt_prova_crea: marcatore non scritto → il worktree è rimosso; base o albero non validi mai in eval (2; albero 1)" '[ -z "$r" ]' || printf '  %s\n' "$r"
 MP2="$T/mut-prova/scripts"; mkdir -p "$MP2"; cp -r "$HERE/lib" "$MP2/"
 muta() { # <name> <old line> <new line>: the lib with that line replaced (exactly one occurrence), or an error line
   python3 - "$HERE/worktree-lib.sh" "$MP2/worktree-lib.sh" "$2" "$3" <<'PY'
@@ -783,6 +811,11 @@ check "premessa: mutazione (d) applicata" '[ -z "$m" ]' || echo "  $m"
 r=$(prep_caso "$MP2/worktree-lib.sh" "$T/prep-d/proj" niente)
 check "controprova (d): senza il controllo del file guida -> una preparazione che non scrive niente passa" \
   'printf "%s\n" "$r" | grep -q "niente: exit 0, atteso 4"' || printf '  %s\n' "$r"
+m=$(muta e '      git -C "$MAIN" worktree remove --force "$wt" >&2 2>&1  # SENZA-MARCATORE' '      :')
+check "premessa: mutazione (e) applicata" '[ -z "$m" ]' || echo "  $m"
+r=$(marc_caso "$MP2/worktree-lib.sh" "$T/marc2/proj")
+check "controprova (e): senza la rimozione diretta il worktree senza marcatore resta" \
+  'printf "%s\n" "$r" | grep -q "worktree senza marcatore rimasto sul disco"' || printf '  %s\n' "$r"
 unlink_all
 
 echo "ciclo-worktree.test.sh: $((n - fail))/$n ok"
