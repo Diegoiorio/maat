@@ -53,7 +53,7 @@ c=\${1//\/mnt\//\/}
 PATH="$FB:\$PATH" bash -c "\$c"
 EOF
 printf '#!/usr/bin/env bash\necho v18.19.0\n' > "$FB/node"
-printf '#!/usr/bin/env bash\necho "build ok"\n' > "$FB/npm"
+printf '#!/usr/bin/env bash\n[ "${FAKE_NPM:-}" = fail ] && { echo "build rotto"; exit 1; }\necho "build ok"\n' > "$FB/npm"
 cat > "$FB/venv-python" <<'EOF'
 #!/usr/bin/env bash
 [ "$1" = --version ] && { echo "Python 3.12.1"; exit 0; }
@@ -270,6 +270,43 @@ gates; spec APPROVED IMPLEMENTED; sed -i 's/^Verification: VERIFIED$/Verificatio
 fin --level std --copertura "$W/review.result.json"
 chk "it, stesso run dir: il testo di sempre («non coperto», 4 non coperti, CP-1 senza risultato qui)" '[ $rc -eq 0 ] && printf "%s\n" "$out" | grep -q "Evidence composta — 6 requisiti, 4 non coperti" && row "R6 nessuno" | grep -q "non coperto (nessun ID di test)"' "$out"
 RUN=$RUNX SP=$SPX
+
+# --- 6e. 1.9.0 (K8, S4): the build at closing (default on) is required at std like the other gates; with the key false
+#     the exclusion of 1.8. Each case in a run dir of its own (the shared tree is not changed). ---
+RUNK=$RUN SPK=$SP
+. "$ROOT/scripts/python.sh" || { echo "interprete Python non trovato" >&2; exit 2; }
+k8run() { RUN="$WF/spec-k8$1.run"; SP="$WF/spec-k8$1.md"; rm -rf "$RUN"; mkdir -p "$RUN"; printf '%s\n' "${@:2}" > "$RUN/touched.txt"; }
+k8gates() { mapfile -t tf < "$RUN/touched.txt"; bash "$FIC_GATES" --run-dir "$RUN" std "${tf[@]}" >/dev/null 2>&1; }
+k8ev() { ls -dt "$RUN"/evidence/*/ 2>/dev/null | head -1 | sed 's|/$||'; }
+caso_k8_senza_build() { # [finalize]: std evidence without build.json -> NEEDS_VERIFICATION, no longer IMPLEMENTED
+  k8run a "${F_STD[@]}"; k8gates; [ -f "$(k8ev)/build.json" ] || return 2; rm -f "$(k8ev)/build.json"
+  spec APPROVED IMPLEMENTED; out=$(bash "${1:-$FZ}" --level std "$RUN" 2>&1); rc=$?
+  [ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ] && grep -q "^Verification: PARTIAL (finalize.sh: build: evidenza assente" "$SP"; }
+chk "K8 std, evidenza senza build.json: NEEDS_VERIFICATION (non più IMPLEMENTED)" 'caso_k8_senza_build' "$out"$'\n'"$(grep ^Verification "$SP")"
+k8run b "${F_STD[@]}"; FAKE_NPM=fail k8gates; spec APPROVED IMPLEMENTED; fin --level std
+chk "K8 std, build.json FAIL: FAIL (uscita 3)" '[ $rc -eq 3 ] && grep -q "^Finalize: FAIL — " "$SP" && grep -q "^Verification: PARTIAL (finalize.sh: build: FAIL" "$SP"' "$out"$'\n'"$(grep ^Verification "$SP")"
+k8run c "${F_STD[@]}"; k8gates; spec APPROVED IMPLEMENTED; fin --level std
+chk "K8 std, build.json PASS: IMPLEMENTED" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && [ "$("$FIC_PY" -c "import json,sys; print(json.load(open(sys.argv[1], encoding=\"utf-8\"))[\"esito\"])" "$(k8ev)/build.json")" = PASS ]' "$out"
+"$FIC_PY" -c 'import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8")); c["harness"] = ">=1.9"; c["ciclo"] = {"build_chiusura": False}
+json.dump(c, open(sys.argv[2], "w", encoding="utf-8"))' "$R/.claude/maat.json" "$W/k8-falso.json"
+k8run d "${F_STD[@]}"; MAAT_CONFIG=$W/k8-falso.json k8gates; spec APPROVED IMPLEMENTED
+out=$(MAAT_CONFIG=$W/k8-falso.json bash "$FZ" --level std "$RUN" 2>&1); rc=$?
+chk "K8 chiave false: nessun build.json e IMPLEMENTED come 1.8" '[ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ] && [ ! -f "$(k8ev)/build.json" ]' "$out"
+k8run e modules/app/packages/ui/Button.vue; k8gates; rm -f "$(k8ev)/build.json"; spec APPROVED IMPLEMENTED; fin --level std
+chk "K8 file di un pacchetto condiviso (radice_pacchetti): build.json richiesto" '[ $rc -eq 1 ] && [ "$(fstat)" = NEEDS_VERIFICATION ] && grep -q "^Verification: PARTIAL (finalize.sh: build: evidenza assente" "$SP"' "$out"$'\n'"$(grep ^Verification "$SP")"
+k8run f; k8gates; spec APPROVED IMPLEMENTED; fin --level std
+chk "K8 touched.txt vuoto: il build di ogni modulo che lo dichiara è eseguito (PASS, non SKIPPED) e richiesto" '[ $rc -eq 0 ] && [ "$("$FIC_PY" -c "import json,sys; print(json.load(open(sys.argv[1], encoding=\"utf-8\"))[\"esito\"])" "$(k8ev)/build.json")" = PASS ]' "$out"
+rm -f "$(k8ev)/build.json"; spec APPROVED IMPLEMENTED; fin --level std
+chk "  senza build.json: NEEDS_VERIFICATION" '[ $rc -eq 1 ] && grep -q "^Verification: PARTIAL (finalize.sh: build: evidenza assente" "$SP"' "$out"
+MK="$W/mut-build.sh"
+sed '/# BUILD-RICHIESTO-190$/s/|| \[ "\$build_req" = 1 \]; }/|| false; }/' "$FZ" > "$MK"
+if cmp -s "$FZ" "$MK"; then ko "K8 controprova: la mutazione dell esclusione del build non si applica"; else
+  caso_k8_senza_build "$MK"
+  if [ $rc -eq 0 ] && [ "$(fstat)" = IMPLEMENTED ]; then ok   # expected red: the «senza build.json» test would fail
+  else ko "K8 controprova: con l esclusione del build rimessa il caso senza build.json non diventa IMPLEMENTED" "$out"; fi
+fi
+RUN=$RUNK SP=$SPK
 
 # --- 7. nothing to sign: spec untouched ---
 spec NEEDS_CHANGES PLANNED; cp "$SP" "$W/prima"

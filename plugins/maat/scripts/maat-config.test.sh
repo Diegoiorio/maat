@@ -451,8 +451,8 @@ check "  con MAAT_MODULO=fe2 -> fe2" '[ "$(MAAT_CONFIG=$T/due.json MAAT_MODULO=f
 
 # --- 8c. required gates, selected tests, chiave entries, python (pk04b-1: gates.sh and finalize.sh) -------------------
 gr() { MAAT_CONFIG=${GRC:-$SS} "$FIC_PY" "${MCX:-$MC}" gate-richiesti "$@" 2>&1 | tr '\t' ' ' | paste -sd '|' -; }
-caso_ordine() { [ "$(MCX=$1 gr std)" = "tests-be be test|tests-fe fe test" ]; }
-check "gate-richiesti std (nuxt-fastapi): tests-be, tests-fe, per etichetta" 'caso_ordine "$MC"'
+caso_ordine() { [ "$(FIC_BUILD_CHIUSURA=0 MCX=$1 gr std)" = "tests-be be test|tests-fe fe test" ]; }
+check "gate-richiesti std (nuxt-fastapi, build alla chiusura spento = 1.8): tests-be, tests-fe, per etichetta" 'caso_ordine "$MC"'
 check "gate-richiesti full: + lint e build senza suffisso (un solo modulo li dichiara)" '[ "$(gr full)" = "tests-be be test|tests-fe fe test|lint fe lint|build fe build" ]'
 check "gate-richiesti legacy = std" '[ "$(gr legacy)" = "$(gr std)" ]'
 check "gate-richiesti con due moduli che dichiarano lint e build: lint-<modulo>, build-<modulo>" \
@@ -572,6 +572,104 @@ printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":".","simbolo_
 mc valida "$T/ks13n.json" > "$T/out" 2>&1; check "non valido: moduli[].simbolo_mancante senza harness (S13, fail-closed)" '[ $? = 1 ] && grep -qF "moduli.0.simbolo_mancante" "$T/out"'
 MAAT_CONFIG=$T/s11c.json mc leggi ciclo.riprese > "$T/out" 2>&1; rcl=$?
 check "compatibilita: senza ciclo nessun default scritto nella configurazione risolta (il default 2 e del driver)" '[ $rcl = 3 ]'
+
+# --- 8e. 1.9.0 (K2): the switch ciclo.correzione_test / FIC_CORREZIONE_TEST (maat-config.py opzione) and S14 ------------
+k2cfg() { # <file> <ciclo JSON | -> : a maat.json with "harness": ">=1.9" and that ciclo (- = no ciclo)
+  if [ "$2" = - ]; then printf '%s\n' '{"versione_schema":1,"harness":">=1.9","moduli":[{"nome":"a","radice":"."}]}' > "$1"
+  else printf '{"versione_schema":1,"harness":">=1.9","moduli":[{"nome":"a","radice":"."}],"ciclo":%s}\n' "$2" > "$1"; fi; }
+k2cfg "$T/k2-senza.json" -; k2cfg "$T/k2-vero.json" '{"correzione_test":true}'; k2cfg "$T/k2-falso.json" '{"correzione_test":false}'
+printf '{"versione_schema":1,' > "$T/k2-rotto.json"
+op() { # <reader> <maat.json> <name…> -> «<rc>|<stdout>|<stderr>» (FIC_CORREZIONE_TEST from the caller's environment)
+  local o e rc; o=$(MAAT_CONFIG=$2 "$FIC_PY" "$1" opzione "${@:3}" 2>"$T/op-err"); rc=$?
+  e=$(tr -d '\r' < "$T/op-err" | paste -sd '~' -); printf '%s|%s|%s' "$rc" "$(printf '%s' "$o" | tr -d '\r')" "$e"; }
+AVV_K2='AVVISO: maat-config-190.opzione_illeggibile'
+caso_k2_vuota() { [ "$(FIC_CORREZIONE_TEST= op "$1" "$T/k2-vero.json" correzione_test)" = "0|0|AVVISO: FIC_CORREZIONE_TEST illeggibile (\"\"): spento, STOP come in 1.8" ]; }
+unset FIC_CORREZIONE_TEST FIC_BUILD_CHIUSURA
+check "opzione correzione_test: chiave assente -> 1" '[ "$(op "$MC" "$T/k2-senza.json" correzione_test)" = "0|1|" ]'
+check "opzione correzione_test: chiave true -> 1" '[ "$(op "$MC" "$T/k2-vero.json" correzione_test)" = "0|1|" ]'
+check "opzione correzione_test: chiave false -> 0" '[ "$(op "$MC" "$T/k2-falso.json" correzione_test)" = "0|0|" ]'
+check "opzione correzione_test: progetto senza maat.json -> 1 (chiave assente)" '[ "$(op "$MC" "$T/non-esiste.json" correzione_test)" = "0|1|" ]'
+check "opzione correzione_test: FIC_CORREZIONE_TEST=0 con la chiave true -> 0 (la variabile vince)" '[ "$(FIC_CORREZIONE_TEST=0 op "$MC" "$T/k2-vero.json" correzione_test)" = "0|0|" ]'
+check "opzione correzione_test: FIC_CORREZIONE_TEST=1 con la chiave false -> 1" '[ "$(FIC_CORREZIONE_TEST=1 op "$MC" "$T/k2-falso.json" correzione_test)" = "0|1|" ]'
+check "opzione correzione_test: FIC_CORREZIONE_TEST=x -> 0 e l AVVISO su stderr, exit 0" \
+  '[ "$(FIC_CORREZIONE_TEST=x op "$MC" "$T/k2-vero.json" correzione_test)" = "0|0|AVVISO: FIC_CORREZIONE_TEST illeggibile (\"x\"): spento, STOP come in 1.8" ]'
+check "opzione correzione_test: FIC_CORREZIONE_TEST= vuota -> 0 e l AVVISO (illeggibile, non assente)" 'caso_k2_vuota "$MC"'
+check "opzione correzione_test: maat.json non valido -> 0 e l AVVISO" \
+  '[ "$(op "$MC" "$T/k2-rotto.json" correzione_test)" = "0|0|AVVISO: ciclo.correzione_test illeggibile ($T/k2-rotto.json): spento, STOP come in 1.8" ]'
+check "opzione correzione_test (en): l AVVISO in inglese" \
+  '[ "$(MAAT_LINGUA=en FIC_CORREZIONE_TEST=x op "$MC" "$T/k2-vero.json" correzione_test)" = "0|0|AVVISO: FIC_CORREZIONE_TEST unreadable (\"x\"): switched off, STOP as in 1.8" ]'
+caso_k2_uso() { local r; r=$(op "$1" "$T/k2-vero.json" pippo); [ "${r%%|*}" = 64 ] && printf '%s' "$r" | grep -qF "uso: opzione correzione_test|build_chiusura"; }
+check "opzione pippo -> exit 64 con la riga d uso" 'caso_k2_uso "$MC"'
+check "opzione senza nome -> exit 64 con la riga d uso" 'r=$(op "$MC" "$T/k2-vero.json"); [ "${r%%|*}" = 64 ] && printf "%s" "$r" | grep -qF "uso: opzione correzione_test|build_chiusura"'
+check "opzione con un argomento in piu -> exit 64" 'r=$(op "$MC" "$T/k2-vero.json" correzione_test x); [ "${r%%|*}" = 64 ]'
+caso_s14() { # <reader> <harness> <ciclo key> -> invalid with the S14 message
+  printf '{"versione_schema":1,"harness":"%s","moduli":[{"nome":"a","radice":"."}],"ciclo":{"%s":true}}\n' "$2" "$3" > "$T/ks14.json"
+  "$FIC_PY" "$1" valida "$T/ks14.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ': harness: ciclo.correzione_test o ciclo.build_chiusura richiede "harness": ">=1.9" o più nuovo' "$T/out"; }
+check "non valido: ciclo.correzione_test con harness >=1.8 (S14)" 'caso_s14 "$MC" ">=1.8" correzione_test'
+check "non valido: ciclo.build_chiusura con harness >=1.8 (S14)" 'caso_s14 "$MC" ">=1.8" build_chiusura'
+printf '%s\n' '{"versione_schema":1,"moduli":[{"nome":"a","radice":"."}],"ciclo":{"correzione_test":false}}' > "$T/ks14n.json"
+mc valida "$T/ks14n.json" > "$T/out" 2>&1; check "non valido: ciclo.correzione_test senza harness (S14 e S12, fail-closed)" '[ $? = 1 ] && grep -qF ">=1.9" "$T/out"'
+for f in k2-vero k2-falso; do mc valida "$T/$f.json" > "$T/out" 2>&1; check "$f: ciclo.correzione_test con harness >=1.9 valido" '[ $? = 0 ]'; done
+printf '%s\n' '{"versione_schema":1,"harness":">=1.10","moduli":[{"nome":"a","radice":"."}],"ciclo":{"build_chiusura":false,"correzione_test":true}}' > "$T/ks14x.json"
+mc valida "$T/ks14x.json" > "$T/out" 2>&1; check "valido: le due chiavi con harness >=1.10 (più nuovo)" '[ $? = 0 ]'
+caso_s14t() { printf '%s\n' '{"versione_schema":1,"harness":">=1.9","moduli":[{"nome":"a","radice":"."}],"ciclo":{"correzione_test":"si"}}' > "$T/ks14t.json"
+  "$FIC_PY" "$1" valida "$T/ks14t.json" > "$T/out" 2>&1; [ $? = 1 ] && grep -qF ': ciclo.correzione_test: ciclo.correzione_test è un booleano (true/false): "si"' "$T/out"; }
+check "non valido: ciclo.correzione_test non booleano (S14)" 'caso_s14t "$MC"'
+check "  opzione correzione_test sul file con la chiave non booleana -> 0 e l AVVISO" \
+  '[ "$(op "$MC" "$T/ks14t.json" correzione_test)" = "0|0|AVVISO: ciclo.correzione_test illeggibile ($T/ks14t.json): spento, STOP come in 1.8" ]'
+
+# --- 8f. 1.9.0 (K8, S4): the build at closing — opzione build_chiusura and the build rows of gate-richiesti ----------------
+k2cfg "$T/k8-vero.json" '{"build_chiusura":true}'; k2cfg "$T/k8-falso.json" '{"build_chiusura":false}'
+check "opzione build_chiusura: chiave assente -> 1" '[ "$(op "$MC" "$T/k2-senza.json" build_chiusura)" = "0|1|" ]'
+check "opzione build_chiusura: chiave false -> 0" '[ "$(op "$MC" "$T/k8-falso.json" build_chiusura)" = "0|0|" ]'
+check "opzione build_chiusura: FIC_BUILD_CHIUSURA=0 con la chiave true -> 0" '[ "$(FIC_BUILD_CHIUSURA=0 op "$MC" "$T/k8-vero.json" build_chiusura)" = "0|0|" ]'
+check "opzione build_chiusura: FIC_BUILD_CHIUSURA=1 con la chiave false -> 1" '[ "$(FIC_BUILD_CHIUSURA=1 op "$MC" "$T/k8-falso.json" build_chiusura)" = "0|1|" ]'
+check "opzione build_chiusura: FIC_BUILD_CHIUSURA=x -> 1 e l AVVISO build_illeggibile" \
+  '[ "$(FIC_BUILD_CHIUSURA=x op "$MC" "$T/k8-falso.json" build_chiusura)" = "0|1|AVVISO: FIC_BUILD_CHIUSURA illeggibile (\"x\"): acceso, il build è richiesto" ]'
+caso_k8_vuota() { [ "$(FIC_BUILD_CHIUSURA= op "$1" "$T/k8-falso.json" build_chiusura)" = "0|0|" ]; }
+check "opzione build_chiusura: FIC_BUILD_CHIUSURA= vuota con la chiave false -> 0 (vale assente), niente AVVISO" 'caso_k8_vuota "$MC"'
+check "opzione build_chiusura: maat.json non valido -> 1 e l AVVISO" \
+  '[ "$(op "$MC" "$T/k2-rotto.json" build_chiusura)" = "0|1|AVVISO: ciclo.build_chiusura illeggibile ($T/k2-rotto.json): acceso, il build è richiesto" ]'
+check "opzione build_chiusura (en): l AVVISO in inglese" \
+  '[ "$(MAAT_LINGUA=en FIC_BUILD_CHIUSURA=2 op "$MC" "$T/k8-vero.json" build_chiusura)" = "0|1|AVVISO: FIC_BUILD_CHIUSURA unreadable (\"2\"): switched on, the build is required" ]'
+grb() { gr "$@" | tr '|' '\n' | grep -E '^build' | paste -sd '|' -; }   # only the build rows (stderr included)
+SSA=modules/app/apps/admin/utils/x.ts SSP=modules/app/packages/ui/b.ts SSB=modules/api/app/a.py
+caso_k8_pac() { [ "$(MCX=$1 grb std --file "$SSP")" = "build fe build" ]; }
+check "gate-richiesti std: file toccato sotto la radice del modulo con comandi.build -> riga build" '[ "$(grb std --file "$SSA")" = "build fe build" ]'
+check "gate-richiesti std: solo un file sotto radice_pacchetti (instradato pacchetti) -> riga build" 'caso_k8_pac "$MC"'
+check "gate-richiesti std: modulo con build non toccato -> nessuna riga build" '[ -z "$(grb std --file "$SSB")" ]'
+check "gate-richiesti std: file fuori da ogni modulo -> riga build" '[ "$(grb std --file README.md --file "$SSB")" = "build fe build" ]'
+check "gate-richiesti std senza nessun --file -> build di ogni modulo che lo dichiara" '[ "$(grb std)" = "build fe build" ]'
+check "gate-richiesti min con un file del modulo -> nessuna riga build" '[ -z "$(grb min --file "$SSA")" ]'
+check "gate-richiesti legacy = std, con i file" '[ "$(gr legacy --file "$SSA")" = "$(gr std --file "$SSA")" ] && [ "$(grb legacy --file "$SSA")" = "build fe build" ]'
+check "gate-richiesti full: la regola dei file toccati vale anche in full (modulo non toccato -> nessuna)" '[ -z "$(grb full --file "$SSB")" ]'
+check "gate-richiesti full spento: le righe di oggi (build di ogni modulo che lo dichiara)" \
+  '[ "$(FIC_BUILD_CHIUSURA=0 gr full --file "$SSB")" = "tests-be be test|tests-fe fe test|lint fe lint|build fe build" ]'
+# the same project with the key in maat.json ("harness": ">=1.9")
+"$FIC_PY" -c 'import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8")); c["harness"] = ">=1.9"
+for v, f in ((False, sys.argv[2]), (True, sys.argv[3])):
+    c["ciclo"] = {"build_chiusura": v}; json.dump(c, open(f, "w", encoding="utf-8"))' "$SS" "$T/k8-ss-falso.json" "$T/k8-ss-vero.json"
+check "gate-richiesti std, chiave false -> nessuna riga build (1.8)" '[ -z "$(GRC=$T/k8-ss-falso.json grb std --file "$SSA")" ]'
+check "gate-richiesti std, FIC_BUILD_CHIUSURA=0 con la chiave true -> nessuna" '[ -z "$(FIC_BUILD_CHIUSURA=0 GRC=$T/k8-ss-vero.json grb std --file "$SSA")" ]'
+check "gate-richiesti std, FIC_BUILD_CHIUSURA=x -> riga build e AVVISO build_illeggibile su stderr, exit 0" \
+  'o=$(FIC_BUILD_CHIUSURA=x MAAT_CONFIG=$T/k8-ss-falso.json "$FIC_PY" "$MC" gate-richiesti std --file "$SSA" 2>"$T/k8err"); [ $? = 0 ] && printf "%s\n" "$o" | tr -d "\r" | grep -qx "$(printf "build\tfe\tbuild")" && grep -qF "AVVISO: FIC_BUILD_CHIUSURA illeggibile (\"x\"): acceso" "$T/k8err"'
+check "gate-richiesti std, FIC_BUILD_CHIUSURA= vuota con la chiave false -> nessuna riga, niente AVVISO" \
+  '[ "$(FIC_BUILD_CHIUSURA= GRC=$T/k8-ss-falso.json gr std --file "$SSA")" = "tests-be be test|tests-fe fe test" ]'
+# nested module B under the radice_pacchetti of the frontend A, two modules with comandi.build (labels build-<m>)
+cat > "$T/k8-annidato.json" <<'EOF'
+{"versione_schema": 1,
+ "moduli": [{"nome": "fe", "radice": "app/fe", "radice_pacchetti": "app", "comandi": {"build": "npm run build"}},
+            {"nome": "ui", "radice": "app/ui"},
+            {"nome": "be", "radice": "api", "comandi": {"build": "make"}},
+            {"nome": "doc", "radice": "doc"}]}
+EOF
+check "gate-richiesti std: modulo B annidato nei radice_pacchetti di A, file sotto B -> build di A (non instradato ad A)" \
+  '[ "$(GRC=$T/k8-annidato.json grb std --file app/ui/x.ts)" = "build-fe fe build" ]'
+check "gate-richiesti std: file fuori da ogni modulo -> build di ogni modulo che lo dichiara, etichette build-<m>" \
+  '[ "$(GRC=$T/k8-annidato.json grb std --file package.json)" = "build-be be build|build-fe fe build" ]'
+check "gate-richiesti std: file di un modulo senza build e fuori dai pacchetti -> nessuna; etichetta sul conteggio dei moduli che lo dichiarano" \
+  '[ -z "$(GRC=$T/k8-annidato.json grb std --file doc/a.md)" ] && [ "$(GRC=$T/k8-annidato.json grb std --file api/m.go)" = "build-be be build" ]'
 imp() { # <reader> -> the outputs of the imported functions (MAAT_CONFIG_PY like plan-check.sh), one per line
   MAAT_CONFIG=$SS PROJECT_ROOT=$TD "$FIC_PY" -c '
 import importlib.util, sys
@@ -614,6 +712,21 @@ m=$(mutante s11 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 7):  # H
 check "controprova: S11 disattivato -> piano.taglia con harness >=1.6 passa, rosso" '[ -n "$m" ] && ! caso_s11 "$m"'
 m=$(mutante s12 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-CICLO/if False:/')
 check "controprova: S12 disattivato -> ciclo con harness >=1.7 passa, rosso" '[ -n "$m" ] && ! caso_s12 "$m"'
+m=$(mutante s14 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 9):  # HARNESS-PER-OPZIONI-190/if False:/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
+check "controprova (1.9.0): S14 disattivato -> ciclo.correzione_test con harness >=1.8 passa, rosso" '[ -n "$m" ] && ! caso_s14 "$m" ">=1.8" correzione_test'
+m=$(mutante vuota 's/    if v is not None:   # VUOTA-ILLEGGIBILE/    if v:   #/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
+check "controprova (1.9.0): FIC_CORREZIONE_TEST vuota letta come assente -> 1 senza AVVISO, rosso" '[ -n "$m" ] && ! caso_k2_vuota "$m"'
+m=$(mutante uso 's/if len(args) != 1 or args\[0\] not in OPZIONI_190:/if len(args) != 1:/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
+check "controprova (1.9.0): opzione che accetta ogni nome -> opzione pippo non esce 64, rosso" '[ -n "$m" ] && ! caso_k2_uso "$m"'
+m=$(mutante k8-pac 's/ or sotto(f, norm(m\["radice_pacchetti"\])):   # BUILD-PACCHETTI-190/:/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
+check "controprova (1.9.0, K8): il build filtrato sulla sola radice -> il file di un pacchetto non fa il build, rosso" '[ -n "$m" ] && ! caso_k8_pac "$m"'
+m=$(mutante k8-vuota 's/        if v == "":   # BUILD-VUOTA-ASSENTE/        if False:   #/')
+[ -z "$m" ] || cp -r "$HERE/maat_msg.py" "$HERE/lib" "$(dirname "$m")/"
+check "controprova (1.9.0, K8): FIC_BUILD_CHIUSURA vuota illeggibile -> 1 con AVVISO, rosso" '[ -n "$m" ] && ! caso_k8_vuota "$m"'
 m=$(mutante s12n 's/and r < 0:  # RIPRESE-NON-NEGATIVE/and False:/')
 check "controprova: S12 senza il controllo del segno -> ciclo.riprese -1 passa, rosso" '[ -n "$m" ] && ! caso_s12n "$m"'
 m=$(mutante s13 's/if not m or (int(m.group(1)), int(m.group(2))) < (1, 8):  # HARNESS-PER-MODULI-180/if False:/')

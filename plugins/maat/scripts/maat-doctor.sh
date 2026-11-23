@@ -13,6 +13,7 @@
 # One line per check: «OK|ATTENZIONE|MANCA <cosa> — <come si risolve>», then «maat-doctor: <n> OK, <n> ATTENZIONE,
 # <n> MANCA». Exit: 0 no MANCA · 1 at least one MANCA · 64 wrong usage. The text follows the language (1.4.0): in
 # English the levels are OK|WARNING|MISSING; --piattaforma prints the same three values in every language.
+# 1.9.0: also «INFO <text>» lines (the same token in every language), never MANCA and not counted in the summary.
 #
 # Checks:
 #   versions       bash >= 4, Python >= 3.10 (fic_py_min_ok of python.sh, the threshold of the wrappers), git >= 2.35,
@@ -118,6 +119,7 @@ emetti() { # lines from the Python part: «OK|ATTENZIONE|MANCA …» or meta «#
       "#lavoro"$'\t'*) LAVORO=${l#*$'\t'} ;;
       "#valida"$'\t'*) VALIDA=${l#*$'\t'} ;;
       OK\ *|ATTENZIONE\ *|MANCA\ *) riga "${l%% *}" "${l#* }" ;;
+      INFO\ *) printf '%s\n' "$l" ;;   # 1.9.0: informative, not counted
       "") ;;
       *) printf '%s\n' "$l" ;;
     esac
@@ -505,6 +507,13 @@ def cmd_config():
                  T("maat-doctor.version_fix"))
     else:
         riga("OK", T("maat-doctor.version_no_harness", vp=vp or T("maat-doctor.version_unknown")))
+    # 1.9.0 (K2, K0.1): the correction with proof of defective tests is on by default; a project whose "harness" still
+    # admits 1.8 (absent, or older than 1.9) and that does not set ciclo.correzione_test is told so. INFO: never MANCA,
+    # not counted in the summary.
+    hm = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(h or ""))
+    ammette_18 = not h or not hm or (int(hm.group(1)), int(hm.group(2))) < (1, 9)
+    if (cfg.get("ciclo") or {}).get("correzione_test") is None and ammette_18:   # DEFAULT-ON-190
+        riga("INFO", T("maat-doctor-190.default_on"))
 
     piano = []          # functions that print, called after all probes have been registered
     locale = Sonde([BASH, "-s"])
@@ -764,6 +773,14 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             "OK", T("maat-doctor.prep_ok", nome=nome, guida=guida)) if ok else riga(
             "ATTENZIONE", T("maat-doctor.prep_missing", nome=nome, guida=guida),
             T("maat-doctor.prep_fix", prep=m.get("preparazione", T("maat-doctor.prep_default")))))
+        # 1.9.0 (K2): the preparati missing from the main tree: the proof worktree of a corrected acceptance test
+        # cannot copy them and has to run the preparazione (if it fails or is missing: STOP d_tree, as in 1.8)
+        if not ok:   # PROVA-SENZA-PREP-190
+            prep = m.get("preparazione") or T("maat-doctor.prep_default")
+            out.append(lambda guida=guida, prep=prep: riga("ATTENZIONE", T("maat-doctor-190.prova_senza_preparazione",
+                                                                         m=nome, guida=guida, prep=prep)))
+
+    out.extend(controlli_build(mc, cfg, m, nome, rad))
 
     # --- copia_anche: repo folders that the counterproofs copy
     for d in m.get("copia_anche", []):
@@ -935,6 +952,56 @@ def controlli_progetto(mc, cfg, r, locale):
     perche = fine_riga_crlf()
     if perche:
         out.append(lambda: riga("ATTENZIONE", T("maat-doctor-182.autocrlf", why=perche), T("maat-doctor-182.autocrlf_fix")))
+    return out
+
+
+BUILD_EST = (".vue", ".tsx", ".go", ".rs", ".java", ".kt", ".cs", ".ts")
+BUILD_USCITE = ("dist", ".output", ".nuxt", "build", "target")
+
+
+def controlli_build(mc, cfg, m, nome, rad):
+    """1.9.0 (K8, S4 point 6): (a) INFO build_on: the module declares comandi.build and ciclo.build_chiusura is not set
+    (since 1.9 the build runs at std too and closing requires it); (b) ATTENZIONE build_missing: git ls-files under the
+    radice has files that compile (.vue .tsx .go .rs .java .kt .cs, or a .ts that is not a test nor a declaration) and
+    the module has no comandi.build; (c) ATTENZIONE build_untracked: a module with comandi.build has a typical build
+    output folder in the tree that git does not ignore. Never MANCA."""
+    out = []
+    ha_build = "build" in (m.get("comandi") or {})
+    if ha_build and "build_chiusura" not in (cfg.get("ciclo") or {}):   # BUILD-ON-190
+        out.append(lambda: riga("INFO", T("maat-doctor-190.build_on", m=nome)))
+    if not ha_build:
+        try:
+            p = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--", rad or "."], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=60)
+            elenco = p.stdout.decode("utf-8", "replace").split("\0") if p.returncode == 0 else []
+        except (OSError, subprocess.TimeoutExpired):
+            elenco = []
+        trovate = set()
+        for f in elenco:
+            b = posixpath.basename(f).lower()
+            if b.endswith(".ts") and (b.endswith((".test.ts", ".spec.ts", ".d.ts"))):   # BUILD-TS-ESCLUSI-190
+                continue
+            e = next((x for x in BUILD_EST if b.endswith(x)), None)
+            if e:
+                trovate.add(e)
+        if trovate:
+            ext = ", ".join(x for x in BUILD_EST if x in trovate)
+            out.append(lambda ext=ext: riga("ATTENZIONE", T("maat-doctor-190.build_missing", m=nome, ext=ext)))
+        return out
+    cartelle = []
+    for base in dict.fromkeys((rad, mc.norm(m.get("radice_pacchetti", m["radice"])))):
+        for d in BUILD_USCITE:
+            rel = posixpath.join(base, d) if base else d
+            if os.path.isdir(posixpath.join(ROOT, rel)) and rel not in cartelle:
+                try:
+                    ig = subprocess.run(["git", "-C", ROOT, "check-ignore", "-q", rel + "/"], stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL, timeout=60).returncode == 0
+                except (OSError, subprocess.TimeoutExpired):
+                    ig = False
+                if not ig:   # BUILD-UNTRACKED-190
+                    cartelle.append(rel)
+    if cartelle:
+        out.append(lambda d=", ".join(cartelle): riga("ATTENZIONE", T("maat-doctor-190.build_untracked", m=nome, d=d)))
     return out
 
 

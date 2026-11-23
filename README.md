@@ -239,7 +239,11 @@ that uses the key declares `"harness": ">=1.8"`.
   main folder. Run it from the main folder of the repo. If Git could check it out with CRLF (`core.autocrlf=true`, the
   default of Git for Windows), the worktree alone gets `core.autocrlf false` and `core.eol lf` and its files come out
   with LF; an `eol=` in `.gitattributes` still decides.
-- `--tests=min|std|full`: how many tests to run, from a few to all of them.
+- `--tests=min|std|full`: how many tests to run, from a few to all of them. Since 1.9.0 `std` and `full` (and a plan
+  without `Test level:`) also run the **build** of every module with `comandi.build` whose files the cycle touched
+  (under its `radice` or `radice_pacchetti`; every such module for a file outside every module), and the closing
+  requires it: a cycle no longer ends `IMPLEMENTED` without a build. `min` has no build. To get 1.8 back set
+  `"ciclo": { "build_chiusura": false }` (with `"harness": ">=1.9"`) or `FIC_BUILD_CHIUSURA=0`.
 - `--full`: always the full size (the flow of 1.6), whatever the size of the plan.
 - `--light`: the small size even above the numeric thresholds (files, steps, tests…), never above a critical
   surface, a migration, a destructive or security word. Not together with `--full`.

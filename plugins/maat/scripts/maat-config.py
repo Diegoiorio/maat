@@ -25,6 +25,16 @@ Usage:
   maat-config.py gate-richiesti <min|std|full|legacy> [--file f]…
       the gates of the level, «etichetta<TAB>modulo<TAB>tipo»: tests-<modulo> (modules with comandi.test or with files
       touched under the radice), controlli-<modulo>, lint and build (with -<modulo> if several modules declare them).
+      1.9.0 (K8): with the build at closing on (opzione build_chiusura) and level std, full or legacy, build is in the
+      list even if gate.<level> does not name it, only for the modules with comandi.build that have a file under their
+      radice or radice_pacchetti (every one for a file outside every module, or without --file); an unreadable
+      switch adds an «AVVISO: …» line on stderr (on), exit unchanged.
+  maat-config.py opzione correzione_test|build_chiusura
+      1.9.0: the switch ciclo.correzione_test (default true) with FIC_CORREZIONE_TEST (0|1, wins over the key): prints
+      1 or 0, exit 0; an unreadable value (the variable not 0/1, also empty; maat.json not valid; the key not a
+      boolean) -> 0 and an «AVVISO: …» line on stderr (switched off). build_chiusura (K8, default true) with
+      FIC_BUILD_CHIUSURA: the opposite side, an unreadable value -> 1 with the AVVISO (switched on), and an empty
+      variable counts as unset. Another name, or none: exit 64 with the usage.
   maat-config.py test-di <modulo> [--file f]…     the tests that regola_test selects for the files (relative to the repo)
   maat-config.py python <modulo>                  the {python} interpreter of the module (exit 2: it does not use it)
   maat-config.py chiave <modulo>                  the key entries: «etichetta<TAB>file|comando|assente<TAB>cartella<TAB>valore»
@@ -60,7 +70,9 @@ Messages (1.4.0): from the catalog lib/messages.tsv (T below), English by defaul
 Read by gates.sh in both languages: «python not found» (and its Italian form) and the «NOT RUN (dichiarato): » /
 «NOT RUN (declared): » prefix; frozen: «SALTATA: » of the skipped checks and the «assente» type of `chiave`.
 """
+import contextlib
 import copy
+import io
 import json
 import os
 import posixpath
@@ -308,6 +320,24 @@ def s13(cfg):
             yield "moduli.%d.%s" % (i, k), T("maat-config-180.s13", k=k)
 
 
+OPZIONI_190 = ("correzione_test", "build_chiusura")
+
+
+def s14(cfg):
+    """1.9.0 (K2): ciclo.correzione_test and ciclo.build_chiusura exist from 1.9: a file that uses one of them
+    declares "harness": ">=1.9" or newer; each is a boolean (the schema gives them no type: this check says it)."""
+    c = cfg.get("ciclo") or {}
+    usate = [k for k in OPZIONI_190 if k in c]
+    if not usate:
+        return
+    for k in usate:
+        if not isinstance(c[k], bool):
+            yield "ciclo." + k, T("maat-config-190.s14_type", k="ciclo." + k, v=json.dumps(c[k], ensure_ascii=False))
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 9):  # HARNESS-PER-OPZIONI-190
+        yield "harness", T("maat-config-190.s14")
+
+
 # Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
 # maat-config.s* keys of the catalog).
 SEMANTICA = [
@@ -324,6 +354,7 @@ SEMANTICA = [
     ("S11", "piano.taglia => harness >=1.7 or newer", s11),
     ("S12", "ciclo => harness >=1.8 or newer; ciclo.riprese >= 0", s12),
     ("S13", "moduli[].simbolo_mancante or separatori_test => harness >=1.8 or newer", s13),
+    ("S14", "ciclo.correzione_test or ciclo.build_chiusura => harness >=1.9 or newer; a boolean", s14),
 ]
 
 
@@ -650,6 +681,55 @@ def cmd_leggi(args):
     print(formatta(v))
 
 
+VARIABILE_OPZIONE = {"correzione_test": "FIC_CORREZIONE_TEST", "build_chiusura": "FIC_BUILD_CHIUSURA"}
+
+
+def valore_opzione(nome):
+    """1.9.0 (K0.1): the switch ciclo.<nome>, with its variable FIC_<NOME> that wins over the key: (1 | 0, warning)
+    with warning "" or the text of the AVVISO line. correzione_test (default on): an unreadable value (the variable not
+    0/1, empty included; maat.json not valid, a key that is not a boolean included: S14) -> 0, switched off (the STOP of 1.8).
+    build_chiusura (K8, interface (c), default on): the opposite side, because on is the safe one here (it requires
+    more and accepts nothing by itself): an unreadable value -> 1 with maat-config-190.build_illeggibile, and an EMPTY
+    variable counts as unset (the key decides)."""
+    var = VARIABILE_OPZIONE[nome]
+    illeggibile = 0 if nome == "correzione_test" else 1
+
+    def avviso(k, why):
+        if nome == "correzione_test":
+            return T("maat-config-190.opzione_illeggibile", k=k, why=why)
+        return T("maat-config-190.build_illeggibile", k=k, why=why)
+    v = os.environ.get(var)
+    if nome == "build_chiusura" and v is not None:
+        if v == "":   # BUILD-VUOTA-ASSENTE: FIC_BUILD_CHIUSURA= (empty) is unset, the key decides
+            v = None
+    if v is not None:   # VUOTA-ILLEGGIBILE: FIC_CORREZIONE_TEST= (empty) is set, so unreadable
+        if v in ("0", "1"):
+            return int(v), ""
+        return illeggibile, avviso(var, why=json.dumps(v[:40], ensure_ascii=False))
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):   # the reader's errors belong to maat-config valida, not here
+        try:
+            cfg, _p = carica()
+        except Uscita as u:
+            if u.codice == 4:
+                return 1, ""
+            return illeggibile, avviso("ciclo." + nome, why=percorso_config())
+    c = cfg.get("ciclo") or {}
+    if nome not in c:
+        return 1, ""
+    return int(c[nome]), ""
+
+
+def cmd_opzione(args):
+    """1.9.0: «opzione <nome>» prints 1 or 0, exit 0; an unreadable value adds one AVVISO line on stderr."""
+    if len(args) != 1 or args[0] not in OPZIONI_190:
+        raise Uscita(64, T("maat-config-190.usage_opzione"))
+    v, avviso = valore_opzione(args[0])
+    if avviso:
+        sys.stderr.write("AVVISO: %s\n" % avviso)
+    print(v)
+
+
 def instrada(r, p):
     """(nome, "radice" | "pacchetti") of file p (relative to the repo), None outside every module."""
     p = norm(p)
@@ -687,6 +767,22 @@ def modulo_di_nome(r, nome):
     return m
 
 
+def file_del_build(r, files, m):
+    """1.9.0 (K8): the touched files that make module m (resolved, with comandi.build) build: those under its radice or
+    its radice_pacchetti, independent of instrada (a shared package declared as a module of its own does not take
+    the build away from the frontend that uses it), plus every file outside every module (fail-closed)."""
+    out = []
+    for f in (norm(x) for x in files):
+        if instrada(r, f) is None or sotto(f, norm(m["radice"])) or sotto(f, norm(m["radice_pacchetti"])):   # BUILD-PACCHETTI-190
+            out.append(f)
+    return out
+
+
+def moduli_build(r, files, m):
+    """True if module m builds at closing: no --file at all (every module), or a file of file_del_build."""
+    return not files or bool(file_del_build(r, files, m))
+
+
 def cmd_gate_richiesti(args):
     """The gates of a level: one line «etichetta<TAB>modulo<TAB>tipo» (tipo = test | controlli | lint | build).
     tests-<modulo> for each module with comandi.test or with a touched file under its root (without a test command
@@ -701,7 +797,17 @@ def cmd_gate_richiesti(args):
     o = opzioni(args[1:], ("file",), ())
     cfg, _p = carica()
     r = risolto(cfg)
-    tipi = r["gate"][livello]
+    tipi = list(r["gate"][livello])
+    # 1.9.0 (K8, S4 point 2, interface (c)): with the build at closing on (ciclo.build_chiusura / FIC_BUILD_CHIUSURA)
+    # and level std, full or legacy, the build rows are those of the modules with comandi.build that have a touched
+    # file under their radice or radice_pacchetti (independent of instrada), every such module for a file outside
+    # every module or without any --file; even if gate.<level> does not list build. Off, or min: the rows of 1.8.
+    build_su = False
+    if livello != "min":
+        acceso, avviso = valore_opzione("build_chiusura")
+        if avviso:
+            sys.stderr.write("AVVISO: %s\n" % avviso)
+        build_su = acceso == 1
     toccati = set()
     for f in o["file"]:
         d = instrada(r, f)
@@ -714,7 +820,11 @@ def cmd_gate_richiesti(args):
     if "controlli" in tipi:
         gruppi.append([("controlli-" + m["nome"], m["nome"], "controlli") for m in r["moduli"] if m.get("controlli")])
     for tipo in ("lint", "build"):
-        if tipo in tipi:
+        if tipo == "build" and build_su:
+            con = [m for m in r["moduli"] if "build" in m.get("comandi", {})]
+            sel = [m for m in con if moduli_build(r, o["file"], m)]
+            gruppi.append([("build" if len(con) == 1 else "build-" + m["nome"], m["nome"], "build") for m in sel])
+        elif tipo in tipi:
             con = [m for m in r["moduli"] if tipo in m.get("comandi", {})]
             gruppi.append([(tipo if len(con) == 1 else tipo + "-" + m["nome"], m["nome"], tipo) for m in con])
     for g in gruppi:
@@ -1184,7 +1294,7 @@ def cmd_componi(args):
 
 
 COMANDI = {"valida": cmd_valida, "leggi": cmd_leggi, "modulo-di": cmd_modulo_di, "comando": cmd_comando,
-           "gate-richiesti": cmd_gate_richiesti, "test-di": cmd_test_di, "python": cmd_python,
+           "gate-richiesti": cmd_gate_richiesti, "test-di": cmd_test_di, "python": cmd_python, "opzione": cmd_opzione,
            "chiave": cmd_chiave,
            "copia-modulo": cmd_copia_modulo, "comando-copia": cmd_comando_copia,
            "elenco-moduli": cmd_elenco, "generati": cmd_generati, "sonda-produzione": cmd_sonda, "componi": cmd_componi}

@@ -467,15 +467,47 @@ prun 2 plan "$R3" "$TG/driver.log"                       # fourth review: driver
 prun 2 implement "$R3" "$R3/.claude/.ai-workflow/spec-x.run//DRIVER.LOG"
 prun 0 plan "$R3" "$TG/note.txt"                         # another file of the run dir: allowed as before
 prun 0 review "$R3" "$TG/counterproof/mutations.json"     # the review worker writes it: allowed as before
+# 1.9.0 (K2, K0.8): <run>/test-red/ (tests.txt, rossi.json: the basis of tests_guard) is written by run-phase.sh and
+# plan-check.sh only, never by a phase: an Edit (or a Write) of it is denied in every phase
+erun() { # $1 expected, $2 phase, $3 FIC_REPO, $4 path: as prun, with the Edit tool
+  n=$((n + 1)); local got j
+  j=$("$FIC_PY" -c 'import json,sys; print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":sys.argv[1],"old_string":"a","new_string":"b"},"cwd":"/"}))' "$4")
+  printf '%s' "$j" | FIC_PHASE="$2" FIC_LANE=1 FIC_REPO="$3" "$FIC_PY" "$GUARD" >/dev/null 2>&1; got=$?
+  [ "$got" = "$1" ] || { fail=$((fail + 1)); echo "FAIL (atteso $1, ottenuto $got) [Edit, $2] percorso=$4"; }
+}
+erun 2 implement "$R3" "$TG/test-red/tests.txt"
+# review of K2: the denial of a driver file says so, not the text of taglia.txt («Size request: full» is false there)
+caso_msg_driver() { # <guard> <path> <grep -E of the expected text>: 0 if the denial says it and not the taglia.txt text
+  local j e
+  j=$("$FIC_PY" -c 'import json,sys; print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":sys.argv[1],"old_string":"a","new_string":"b"},"cwd":"/"}))' "$2")
+  e=$(printf '%s' "$j" | FIC_PHASE=implement FIC_LANE=1 FIC_REPO="$R3" "$FIC_PY" "$1" 2>&1 >/dev/null)
+  printf '%s\n' "$e" | grep -qE "$3" && ! printf '%s\n' "$e" | grep -q "taglia.txt\|Size request"; }
+chk_msg() { n=$((n + 1)); caso_msg_driver "$GUARD" "$1" "$2" || { fail=$((fail + 1)); echo "FAIL [messaggio del file del driver] $1"; }; }
+chk_msg "$TG/test-red/tests.txt" "test-red/tests.txt.*è un file del driver, la fase implement non lo scrive"
+chk_msg "$TG/log/03-implement.jsonl" "è un file del driver"
+chk_msg "$TG/driver.log" "è un file del driver"
+n=$((n + 1)); e=$(printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TG/taglia.txt\"},\"cwd\":\"/\"}" | FIC_PHASE=plan FIC_LANE=1 FIC_REPO="$R3" "$FIC_PY" "$GUARD" 2>&1 >/dev/null)
+printf '%s\n' "$e" | grep -q "taglia.txt e' del driver" || { fail=$((fail + 1)); echo "FAIL [taglia.txt: il testo di sempre] $e"; }
+for ph in test-red fix review plan; do prun 2 "$ph" "$R3" "$TG/test-red/rossi.json"; done
+prun 2 implement "$R3" "$R3/.claude/.ai-workflow/spec-x.run//Test-Red/tests.txt"
+prun 0 implement "$R3" "$TG/test-redx/tests.txt"          # another folder of the run dir: allowed as before
 GUARD_SALVA=$GUARD
 if GUARD=$(gmutante taglia 'if phase and re.search(' 'if False and re.search('); then
   prun 0 plan "$R3" "$TG/taglia.txt"                     # counterproof: without the rule the plan phase writes it
   prun 0 plan "$R3" "$TG/log/09-plan.jsonl"              # … and forges a plan log
   prun 0 plan "$R3" "$TG/driver.log"                     # … and rewrites driver.log
+  erun 0 implement "$R3" "$TG/test-red/tests.txt"        # … and (1.9.0) rewrites the basis of tests_guard
 else fail=$((fail + 1)); echo "FAIL: controprova taglia.txt non applicabile"; fi
 if GUARD=$(gmutante taglia-maiuscole '.lower() if path else ""' ' if path else ""'); then
   prun 0 plan "$R3" "$R3/.claude/.ai-workflow/spec-x.run//TAGLIA.TXT"   # counterproof: case-sensitive, the upper case passes
 else fail=$((fail + 1)); echo "FAIL: controprova maiuscole non applicabile"; fi
+if GUARD=$(gmutante test-red '(log|prompts|test-red)/' '(log|prompts)/'); then
+  erun 0 implement "$R3" "$TG/test-red/tests.txt"        # counterproof (1.9.0): without test-red/ the phase rewrites it
+else fail=$((fail + 1)); echo "FAIL: controprova test-red non applicabile"; fi
+if GM=$(gmutante msg-driver 'else "file_driver",' 'else "taglia_fase",'); then
+  n=$((n + 1))   # counterproof: with the taglia.txt text again the case turns red
+  caso_msg_driver "$GM" "$TG/test-red/tests.txt" "è un file del driver" && { fail=$((fail + 1)); echo "FAIL: controprova del testo del file del driver: il mutante passa"; }
+else fail=$((fail + 1)); echo "FAIL: controprova del testo del file del driver non applicabile"; fi
 GUARD=$GUARD_SALVA
 # 10. 1.8.0 (D2): in a sub-session (FIC_PHASE) an Agent/Task in background is denied, also with --universal (the plugin
 #     hook runs it that way); the main session and the foreground agents are unchanged

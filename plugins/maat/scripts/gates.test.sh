@@ -69,7 +69,7 @@ c=\${1//\/mnt\//\/}
 env -u MAAT_CONFIG -u MAAT_LINGUA PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
 EOF
 printf '#!/usr/bin/env bash\necho "${FAKE_NODE:-v18.19.0}"\n' > "$FB/node"
-printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
+printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "DIRNPM $PWD" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
 # fake venv python: --version, pip freeze, pytest (JUnit unless FAKE_NOJUNIT)
 cat > "$FB/venv-python" <<'EOF'
 #!/usr/bin/env bash
@@ -85,6 +85,9 @@ exit 9
 EOF
 chmod +x "$FB"/* "$HP/scripts/test-fast.sh"
 export GLOG="$W/glog" FIC_GATES_ROOT="$R" FIC_GATES_HARNESS="$HP" FIC_GATES_WSL="$FB/wsl" FIC_GATES_VENV_PY="$FB/venv-python"
+# 1.9.0 (K8): the cases up to section 15b are those of 1.8 and run with the build at closing switched off (= 1.8, the
+# rows of gate-richiesti byte for byte); section 16 runs it on
+export FIC_BUILD_CHIUSURA=0
 : > "$GLOG"
 RUN="$W/spec-x.run"; mkdir -p "$RUN"
 out="" rc=0
@@ -312,6 +315,63 @@ else lingua15 mut "$M"
   else ko "15b controprova: senza l'export test-fast.sh vede ancora MAAT_LINGUA (il test non discrimina)" "LINGUA=$LINGV"; fi
 fi
 : > "$GLOG"
+
+# --- 16. 1.9.0 (K8, S4): the build at closing (default on) at std: a touched file of the module's packages runs the
+#     build once (two rounds on the same tree: the second reuses it); a file of a shared package declared as a module of
+#     its own, or a file outside every module, gives the frontend's build PASS, not SKIPPED «nessun file» ---
+unset FIC_BUILD_CHIUSURA
+RUN16="$W/spec-k8.run"; mkdir -p "$RUN16"
+g16() { out=$(bash "${GT16:-$GT}" --run-dir "$RUN16" "$@" 2>&1); rc=$?; }
+: > "$GLOG"
+g16 std modules/app/packages/ui/Button.vue; K16=$(key)
+g16 std modules/app/packages/ui/Button.vue
+chk "16 std, file di radice_pacchetti: due lanci a albero invariato -> build eseguito esattamente 1 volta" '[ "$(calls NPM)" = 1 ] && [ "$(key)" = "$K16" ]' "$out"$'\n'"$(cat "$GLOG")"
+chk "  build.json PASS, esito complessivo PASS" '[ "$(jget "$RUN16/evidence/$K16/build.json" esito)" = PASS ] && [ $rc -eq 0 ]' "$out"
+FIC_BUILD_CHIUSURA=0 g16 std modules/app/packages/ui/Button.vue
+chk "16 FIC_BUILD_CHIUSURA=0: nessun build.json (1.8)" '! printf "%s\n" "$out" | grep -q "^build" && [ "$(calls NPM)" = 1 ]' "$out"
+"$FIC_PY" -c 'import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+c["moduli"].append({"nome": "ui", "radice": "modules/app/packages/ui"})
+json.dump(c, open(sys.argv[2], "w", encoding="utf-8"))' "$R/.claude/maat.json" "$W/k8-ui.json"
+caso_k8_pacchetto() { # [gates.sh]: a file of the shared package ui (a module of its own) -> build of fe PASS, not SKIPPED
+  : > "$GLOG"; MAAT_CONFIG=$W/k8-ui.json GT16=${1:-} g16 std modules/app/packages/ui/Button.vue
+  local k; k=$(key); [ -n "$k" ] && [ "$(jget "$RUN16/evidence/$k/build.json" esito)" = PASS ] && [ "$(calls NPM)" = 1 ]; }
+chk "16 file di un pacchetto condiviso dichiarato come modulo: build di fe PASS, non SKIPPED" 'caso_k8_pacchetto' "$out"
+: > "$GLOG"; g16 std README.md; K16b=$(key)
+chk "16 file fuori da ogni modulo: build di fe PASS (fail-closed; stesso albero e stesso comando: riuso)" '[ "$(jget "$RUN16/evidence/$K16b/build.json" esito)" = PASS ] && printf "%s\n" "$out" | grep -q "^build: PASS"' "$out"
+: > "$GLOG"; g16 std modules/api/app/services/goals.py; K16c=$(key)
+chk "16 solo un file del backend: nessun build" '[ ! -f "$RUN16/evidence/$K16c/build.json" ] && [ "$(calls NPM)" = 0 ]' "$out"
+: > "$GLOG"; g16 min modules/app/apps/admin/utils/goals.ts; K16d=$(key)
+chk "16 min: nessun build" '[ ! -f "$RUN16/evidence/$K16d/build.json" ] && [ "$(calls NPM)" = 0 ]' "$out"
+# review of K8: without any file every declaring module builds (interface (c)), never SKIPPED «nessun file»
+caso_k8_senza_file() { # [gates.sh]
+  GT16=${1:-} g16 std; local k; k=$(key)
+  [ -n "$k" ] && [ "$(jget "$RUN16/evidence/$k/build.json" esito)" = PASS ] && printf '%s\n' "$out" | grep -q '^build: PASS'; }
+chk "16 std senza nessun file: build di ogni modulo che lo dichiara PASS, non SKIPPED" 'caso_k8_senza_file' "$out"
+M16b="$W/gates-k8-mut-vuoto.sh"
+sed '/# BUILD-SENZA-FILE-190$/d' "$GT" > "$M16b"
+if cmp -s "$GT" "$M16b"; then ko "16 controprova: la riga del build senza file non c'e'"
+else chk "16 controprova: senza il caso dei nessun file -> build SKIPPED «nessun file», rosso" '! caso_k8_senza_file "$M16b"' "$out"; fi
+# review of K8: an unreadable switch is said on the output of gates.sh (run-phase writes it in log/<label>.gates)
+caso_k8_avviso() { out=$(FIC_BUILD_CHIUSURA=x bash "${1:-$GT}" --run-dir "$RUN16" std modules/app/packages/ui/Button.vue 2>/dev/null)   # stdout only
+  printf '%s\n' "$out" | grep -q '^AVVISO: FIC_BUILD_CHIUSURA illeggibile ("x"): acceso, il build è richiesto$' && printf '%s\n' "$out" | grep -q '^build: PASS'; }
+chk "16 FIC_BUILD_CHIUSURA=x: l AVVISO nell uscita di gates.sh e il build richiesto" 'caso_k8_avviso' "$out"
+chk "  l ultima riga resta quella dell esito" 'printf "%s\n" "$out" | tail -1 | grep -q "^gates: esito="' "$out"
+M16c="$W/gates-k8-mut-avviso.sh"
+sed '/# BUILD-AVVISO-190$/d' "$GT" > "$M16c"
+if cmp -s "$GT" "$M16c"; then ko "16 controprova: la riga che stampa l AVVISO non c'e'"
+else chk "16 controprova: senza la stampa dell AVVISO -> rosso" '! caso_k8_avviso "$M16c"' "$out"; fi
+# S4 point 5: the module fe has ambiente wsl and copia: its build runs inside WSL on the TREE (radice_pacchetti),
+# never in the copy, and test-fast.sh is not called for it
+: > "$GLOG"; printf ' ' >> "$R/modules/app/packages/ui/Button.vue"
+g16 std modules/app/packages/ui/Button.vue
+chk "16 modulo wsl con copia: build in WSL sul tree (radice_pacchetti), non nella copia, senza test-fast.sh" \
+  '[ "$(calls NPM)" = 1 ] && grep -qx "DIRNPM $R/modules/app" "$GLOG" && [ "$(calls VF)" = 0 ]' "$out"$'\n'"$(cat "$GLOG")"
+M16="$W/gates-k8-mut.sh"
+sed 's/^      if \[ "$tipo" = build \] && \[ "$BUILD_CHIUSURA" = 1 \]; then   # BUILD-INSTRADA-190$/      if false; then/' "$GT" > "$M16"
+if cmp -s "$GT" "$M16"; then ko "16 controprova: la riga dell'instradamento del build non c'e'"
+else chk "16 controprova: build instradato come lint (solo instrada) -> il pacchetto condiviso da SKIPPED, rosso" '! caso_k8_pacchetto "$M16"' "$out"; fi
+: > "$GLOG"; export FIC_BUILD_CHIUSURA=0
 
 # --- counterproof: without untracked files in the key, the «file nuovo» case becomes a wrong reuse ---
 LINE='tree_now() { (cd "$ROOT" && bash "$RS" tree) 2>/dev/null; }'

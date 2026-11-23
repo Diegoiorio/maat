@@ -177,3 +177,8 @@ scripts/plan-check.sh	rossi\.json	1.9.0 K1: nome del file del run dir test-red/r
 # «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
 # same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);
 # scripts/cycle-report.py LIMITE_USO "limite d'uso" (name of a stop cause in metrics.csv, D7).
+
+# --- 1.9.0 (K): the switches of 1.9 (K2: ciclo.correzione_test, maat-config.py opzione, S14; K8: ciclo.build_chiusura)
+scripts/maat-config.py	^"(ciclo\.|correzione_test|build_chiusura|opzione)"$|^"ciclo\.correzione_test or ciclo\.build_chiusura => harness >=1\.9 or newer; a boolean"$	1.9.0 K2: chiavi di maat.json ciclo.correzione_test e ciclo.build_chiusura (S14), il comando opzione e la descrizione di S14 nella tabella SEMANTICA (documentazione): uguali in ogni lingua
+scripts/maat-doctor.sh	^"(ciclo|correzione_test)"$	1.9.0 K2: la chiave ciclo.correzione_test di maat.json letta per la riga default_on
+scripts/guard.py	^"li scrivono run-phase\.sh e plan-check\.sh[^"]*"$	1.9.0 K2 (review): già bilingue, tabella MSG it/en: terza parte della voce file_driver (i file del driver nella cartella del run)
