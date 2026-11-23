@@ -418,6 +418,9 @@ counterproof-190.intero_solo	intero must be true/false, and true only with --sen
 counterproof-190.casi_incompleti	the report does not list every case of the file ({n} read): no outcome	il report non elenca ogni caso del file ({n} letti): nessun esito
 counterproof-190.file_rosso	{n} of {tot} cases of the file are red	{n} casi del file su {tot} sono rossi
 counterproof-190.file_verde	every case of the file ran, none red ({tot})	ogni caso del file è stato eseguito, nessuno rosso ({tot})
+counterproof-190.file_fallito	the file itself failed outside its cases (hook, afterAll, unhandled error): {m}	il file stesso è fallito fuori dai suoi casi (hook, afterAll, errore non gestito): {m}
+counterproof-190.file_saltati	{n} of {tot} cases of the file did not run (skipped): not green	{n} casi del file su {tot} non eseguiti (saltati): non verde
+worktree-lib-190.bad_ref	not a commit or tree reference: {r}	non è un riferimento di commit o di albero: {r}
 worktree-lib-190.bad_name	the name does not start with {pfx}-: {c}	il nome non comincia per {pfx}-: {c}
 worktree-lib-190.no_marker	the marker {pfx} is missing ({mk})	manca il marcatore {pfx} ({mk})
 worktree-lib-190.usage_crea	usage: wt_prova_crea <label> <base> (label of letters, digits, . _ -; base not empty)	uso: wt_prova_crea <label> <base> (label di lettere, cifre, . _ -; base non vuota)

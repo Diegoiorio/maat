@@ -575,13 +575,15 @@ def unverified_of(arg):
 # the same verdict rule as driver.py _accettate. Never a STOP: they are counted apart from the stops.
 FAMIGLIE_DEV = (("test-data", ("test-data: ", "dati-test: ")), ("test-difettoso", ("test-difettoso: ", "defective-test: ")))
 ACCEPT_RX = re.compile(r"ACCEPT\b(?!\s*\|)")
+DEV_ACCETTATA_RIGA = " Deviazione accettata: "   # driver.py (1.9.0, K4): a token, every language
 
 
 def accepted_of(arg):
-    """{"test-data": n, "test-difettoso": m} of the ACCEPT lines (one per label and text); {} without any"""
+    """{"test-data": n, "test-difettoso": m} of the ACCEPT lines (one per label, family and test), with the driver.log
+    register; {} without any"""
     if not os.path.isdir(arg):
         return {}
-    seen, out = set(), {}
+    seen, out, regs = set(), {}, set()
     for f in sorted(glob.glob(os.path.join(arg, "log", "*.deviazioni-test")) +
                     glob.glob(os.path.join(arg, "log", "*.deviazioni-impl"))):
         label = os.path.basename(f).rsplit(".", 1)[0]
@@ -598,7 +600,23 @@ def accepted_of(arg):
             fam = next((n for n, pref in FAMIGLIE_DEV if t.startswith(pref)), None)
             if fam:
                 seen.add((label, t))
-                out[fam] = out.get(fam, 0) + 1
+                tn = t.split(": ", 1)[1].split(" — ", 1)[0].strip()
+                regs.add((label, fam, tn))
+    # K0.6: the lines «Deviazione accettata: <label> · <famiglia> · <Tn> · sha=…» of driver.log, which deleting the
+    # files does not erase: union with the files, one per label, family and test
+    try:
+        with open(os.path.join(arg, "driver.log"), encoding="utf-8", errors="replace") as fh:
+            righe = fh.read().replace("\r", "").split("\n")
+    except OSError:
+        righe = []
+    for l in righe:
+        if DEV_ACCETTATA_RIGA not in l:
+            continue
+        p = [x.strip() for x in l.split(DEV_ACCETTATA_RIGA, 1)[1].split(" · ")]
+        if len(p) >= 3 and p[1] in dict(FAMIGLIE_DEV):
+            regs.add((p[0], p[1], p[2]))
+    for _l, fam, _t in regs:
+        out[fam] = out.get(fam, 0) + 1
     return out
 
 

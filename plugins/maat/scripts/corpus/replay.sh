@@ -306,12 +306,15 @@ trap cleanup EXIT
 # 1. worktree at the base, marker in its git dir; 1b. gates runnable as in the original: relative .git (WSL git),
 # linked dependencies (1.9.0, K3: _wt_crea of worktree-lib.sh, its commands through act), nuxi tsconfig
 [ $DRY -eq 1 ] || CREATED=$WT   # the trap removes it only if it passes the check
-WT_ESEGUI=act _wt_crea "$WT" "$BASE" "$STAMP" fic-replay   # act dies on a failed step
+WT_ESEGUI=act _wt_crea "$WT" "$BASE" "$STAMP" fic-replay ||   # act dies on a failed step; 2: a reference refused
+  die "$(msg replay.step_failed s="_wt_crea $BASE")"
 NUXT=modules/app/apps/admin/.nuxt
 [ -f "$MAIN/$NUXT/tsconfig.json" ] &&
   act "mkdir -p $(q "$WT/$NUXT") && cp $(q "$MAIN/$NUXT/tsconfig.json") $(q "$WT/$NUXT/") && { cp $(q "$MAIN/$NUXT")/*.d.ts $(q "$WT/$NUXT/") 2>/dev/null; true; }"
 # 2. code at the phase state, as uncommitted changes
-[ -n "$STATE" ] && WT_ESEGUI=act _wt_applica "$WT" "$STATE"   # worktree-lib.sh, through act
+if [ -n "$STATE" ]; then   # worktree-lib.sh, through act
+  WT_ESEGUI=act _wt_applica "$WT" "$STATE" || die "$(msg replay.step_failed s="_wt_applica $STATE")"
+fi
 # 2b. dependencies equal for git (checked above): the normalized fingerprint matches that of the main
 # tree, i.e. the worktree's WSL copy will be seeded (fic-mirror.sh). Not with --non-confrontabile.
 [ -z "$NONCONF" ] && act "deps_fp_check $(q "$MAIN") $(q "$WT")"

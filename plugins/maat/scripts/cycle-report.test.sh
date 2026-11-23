@@ -335,6 +335,18 @@ sed 's/^            fam = next((n for n, pref in FAMIGLIE_DEV if t.startswith(pr
 hk=$(crk "$HK" "$W/cr-fam.py")
 { ! cmp -s "$CR" "$W/cr-fam.py" && ! grep -q "test difettoso 1" <<< "$hk"; } && ok ||
   ko "controprova: un lettore che non conosce la famiglia test-difettoso non la conta (rosso)" "$hk"
+# 1.9.0 (K3 bis, review): the «Deviazione accettata:» lines of driver.log count too (deleting the file does not lower
+# the count), once per label, family and test (file and line together: still 1). Counterproof: driver.log not read.
+printf '%s\n' "2026-11-23T10:00:00Z Deviazione accettata: 03-implement · test-difettoso · T5 · sha=0123456789ab" > "$HK/driver.log"
+hk=$(crk "$HK")
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 1" <<< "$hk" && ok || ko "1.9.0 file e riga di driver.log della stessa deviazione: contata una volta" "$hk"
+rm -f "$HK/log/03-implement.deviazioni-impl"
+hk=$(crk "$HK")
+grep -qx "   Deviazioni accettate: test-data 1 · test difettoso 1" <<< "$hk" && ok || ko "1.9.0 .deviazioni-impl cancellato: la riga di driver.log la conta ancora" "$hk"
+sed 's/^        if DEV_ACCETTATA_RIGA not in l:$/        if True:/' "$CR" > "$W/cr-dl.py"
+hk=$(crk "$HK" "$W/cr-dl.py")
+{ ! cmp -s "$CR" "$W/cr-dl.py" && grep -q "test difettoso 0" <<< "$hk"; } && ok ||
+  ko "controprova: un lettore che ignora driver.log perde la deviazione col file cancellato (rosso)" "$hk"
 mcols() { # $1 csv file → per row: number of fields and last field, "|" between rows
   "$FIC_PY" -c 'import csv, sys
 print("|".join("%d:%s" % (len(r), r[-1]) for r in csv.reader(open(sys.argv[1], encoding="utf-8", newline=""))))' "$1" | tr -d '\r'

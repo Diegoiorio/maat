@@ -147,6 +147,8 @@ if imp == "1":
     fr = {"name": name, "status": "failed", "message": "Failed to resolve import \"./nope\" from \"src.ts\". Does the file exist?", "assertionResults": []}
 else:
     fr = {"name": name, "status": "failed" if any(t["status"] == "failed" for t in tests) else "passed", "message": "", "assertionResults": tests}
+if os.environ.get("FAKE_FILE_FAIL") and fr.get("assertionResults"):   # 1.9.0 (K3 bis): afterAll throws, cases passed
+    fr["status"], fr["message"] = "failed", "Error: boom in afterAll hook"
 if os.environ.get("FAKE_NO_REPORT"):
     sys.exit(0)
 with open(out, "w") as fh:
@@ -165,7 +167,10 @@ if grep -q IMPORTROTTO app/core.py; then
 elif grep -q ROSSO app/core.py; then
   printf '<testsuites><testsuite><testcase classname="%s" name="%s"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 1
 fi
-printf '<testsuites><testsuite tests="%s"><testcase classname="%s" name="%s"/></testsuite></testsuites>' "${FAKE_PY_TESTS:-1}" "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 0
+# 1.9.0 (K3 bis): FAKE_PY_SKIP a skipped case, FAKE_PY_SUITE_ERR an error outside every testcase (errors=1)
+tc='/>'; [ -n "${FAKE_PY_SKIP:-}" ] && tc='><skipped message="skip"/></testcase>'
+se=''; er=0; [ -n "${FAKE_PY_SUITE_ERR:-}" ] && { se='<error message="teardown of the module failed">boom</error>'; er=1; }
+printf '<testsuites><testsuite tests="%s" errors="%s"><testcase classname="%s" name="%s"%s%s</testsuite></testsuites>' "${FAKE_PY_TESTS:-1}" "$er" "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" "$tc" "$se" > "$jx"; exit 0
 EOF
 # fake rsync: FAKE_RSYNC_LOG records the arguments (sources, destinations, exclusions), then the real one
 cat > "$BIN/rsync" <<'EOF'
@@ -1110,7 +1115,7 @@ cp_senza "$CPNMU" '        if mut is None and not nomut:
 '
 if [ -f "$CPNMU" ]; then
   rm -f "$OUT/NMV.json"; CPX="$CPNMU" cpr "$NM1"
-  check "  controprova (a): senza il rifiuto il caso «senza l'opzione» torna rosso (niente messaggio senza_mutazione)" '! grep -q "voce senza mutazione: ammessa solo con --senza-mutazione" "$T/out"'
+  check "  controprova (a): senza il rifiuto il caso «senza l'opzione» torna rosso (niente messaggio senza_mutazione: la voce cade su un altro controllo)" '! grep -q "voce senza mutazione: ammessa solo con --senza-mutazione" "$T/out" && [ "$(rc)" = 64 ] && grep -q "mutazione deve essere" "$T/out" && [ ! -e "$OUT/NMV.json" ]'
   rm -f "$CPNMU"
 else echo "FAIL [controprova (a) senza-mutazione: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 cp_senza "$CPNMU" '        if mut is not None and nomut:
@@ -1118,7 +1123,7 @@ cp_senza "$CPNMU" '        if mut is not None and nomut:
 '
 if [ -f "$CPNMU" ]; then
   rm -f "$OUT/NMA.json"; CPX="$CPNMU" FIC_CP_PARALLEL=1 cprs "$OUT/in-nm3.json"
-  check "  controprova (b): senza il rifiuto il caso «lista mista» torna rosso (niente messaggio con_mutazione)" '! grep -q "voce con mutazione: non ammessa con --senza-mutazione" "$T/out"'
+  check "  controprova (b): senza il rifiuto il caso «lista mista» torna rosso (niente messaggio con_mutazione: la voce cade su un altro controllo)" '! grep -q "voce con mutazione: non ammessa con --senza-mutazione" "$T/out" && [ "$(rc)" = 64 ] && grep -q "file deve essere un path" "$T/out" && [ ! -e "$OUT/NMA.json" ]'
   rm -f "$CPNMU"
 else echo "FAIL [controprova (b) senza-mutazione: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 
@@ -1156,6 +1161,32 @@ FAKE_PY_CLASS=tests.test_core.TestUno FIC_CP_PARALLEL=1 cprs "$NF2"
 check "  pytest: classe -> <percorso>::TestUno::<nome>" '[ "$(casi NFP)" = "modules/api/tests/test_core.py::TestUno::test_uno=verde True" ]' || casi NFP
 FAKE_PY_TESTS=2 FIC_CP_PARALLEL=1 cprs "$NF2"
 check "  pytest: il report dichiara 2 casi, ne elenca 1 -> bloccato" '[ "$(rc)" = 2 ] && [ "$(field NFP esito)" = bloccato ]'
+# 1.9.0 (K3 bis, review): never verde. Whole file: the file itself failed with every case passed (vitest afterAll,
+# pytest an error outside every testcase) -> rosso_raccolta; a skipped case -> rosso_raccolta. One named test: skipped,
+# not collected (wrong name), report missing -> not verde, exit 2. Counterproof (d): the file-level check taken out.
+FAKE_FILE_FAIL=1 FIC_CP_PARALLEL=1 cprs "$NF1"
+check "1.9.0 intero: il file fallisce fuori dai casi (afterAll) con ogni caso passato -> rosso_raccolta, mai verde, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NFV esito)" = rosso_raccolta ] && [ "$(casi NFV)" = "somma vale uno=verde | altro resta verde=verde True" ] && field NFV messaggio | grep -q "afterAll"' || casi NFV
+FAKE_PY_SUITE_ERR=1 FIC_CP_PARALLEL=1 cprs "$NF2"
+check "1.9.0 intero: pytest con un errore fuori da ogni testcase -> rosso_raccolta" '[ "$(rc)" = 2 ] && [ "$(field NFP esito)" = rosso_raccolta ]' || casi NFP
+FAKE_PY_SKIP=1 FIC_CP_PARALLEL=1 cprs "$NF2"
+check "1.9.0 intero: un caso saltato -> rosso_raccolta (verde solo se ogni caso è verde)" '[ "$(rc)" = 2 ] && [ "$(field NFP esito)" = rosso_raccolta ] && [ "$(casi NFP)" = "modules/api/tests/test_core.py::test_uno=saltato True" ]' || casi NFP
+FAKE_PY_SKIP=1 FIC_CP_PARALLEL=1 cprs "$OUT/in-nm2.json"
+check "1.9.0 un test nominato saltato -> rosso_raccolta, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMP esito)" = rosso_raccolta ]'
+FAKE_PY_NAME=test_altro FIC_CP_PARALLEL=1 cprs "$OUT/in-nm2.json"
+check "1.9.0 un test nominato non raccolto (nome diverso nel report) -> rosso_raccolta, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMP esito)" = rosso_raccolta ]'
+FIC_CP_PARALLEL=1 cprs "$(mj nm7.json "[$(nm_entry NMX $V/tests/a.test.ts 'nessun caso con questo nome')]")"
+check "1.9.0 un test nominato che non esiste (vitest, tutto saltato) -> rosso_raccolta, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMX esito)" = rosso_raccolta ]'
+FAKE_NO_REPORT=1 FIC_CP_PARALLEL=1 cprs "$NM1"
+check "1.9.0 un test nominato senza report -> bloccato, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMV esito)" = bloccato ]'
+cp_senza "$CPNMU" '    if fallito is not None:
+        e = "rosso_import" if imp is not None and imp.search(fallito) else "rosso_raccolta"
+        return e, T("counterproof-190.file_fallito", m=fallito[:300]), fallito[:4000], casi, True
+'
+if [ -f "$CPNMU" ]; then
+  CPX="$CPNMU" FAKE_FILE_FAIL=1 FIC_CP_PARALLEL=1 cprs "$NF1"
+  check "  controprova (d): senza il controllo del file fallito l'afterAll che lancia diventa verde (rosso)" '[ "$(field NFV esito)" = verde ]'
+  rm -f "$CPNMU"
+else echo "FAIL [controprova (d) intero: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 cp_senza "$CPNMU" '    if not casi or not completo:
         return "bloccato", T("counterproof-190.casi_incompleti", n=len(casi)), "", casi, False
 '
