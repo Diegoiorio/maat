@@ -1187,6 +1187,14 @@ if [ -f "$CPNMU" ]; then
   check "  controprova (d): senza il controllo del file fallito l'afterAll che lancia diventa verde (rosso)" '[ "$(field NFV esito)" = verde ]'
   rm -f "$CPNMU"
 else echo "FAIL [controprova (d) intero: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
+cp_senza "$CPNMU" '    if fuori or dich is None or dich > con_errore:  # FILE-FALLITO
+        fallito = norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in fuori)) or "errors=%s" % dich
+'
+if [ -f "$CPNMU" ]; then
+  CPX="$CPNMU" FAKE_PY_SUITE_ERR=1 FIC_CP_PARALLEL=1 cprs "$NF2"
+  check "  controprova (f): senza il controllo pytest del file fallito l'errore fuori dai testcase diventa verde (rosso)" '[ "$(field NFP esito)" = verde ]'
+  rm -f "$CPNMU"
+else echo "FAIL [controprova (f) intero pytest: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 cp_senza "$CPNMU" '    if not casi or not completo:
         return "bloccato", T("counterproof-190.casi_incompleti", n=len(casi)), "", casi, False
 '
