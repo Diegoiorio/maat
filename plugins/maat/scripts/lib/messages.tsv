@@ -333,6 +333,12 @@ maat-config-190.opzione_illeggibile	{k} unreadable ({why}): switched off, STOP a
 maat-doctor-190.default_on	the 1.9 correction of defective tests with proof is on by default; to switch it off: ciclo.correzione_test false	la correzione con prova dei test difettosi della 1.9 è accesa per default; per spegnerla: ciclo.correzione_test false
 maat-doctor-190.prova_senza_preparazione	module {m} declares preparati but no preparazione: a defective acceptance test cannot be corrected with proof (STOP as in 1.8)	il modulo {m} dichiara preparati ma nessuna preparazione: un test di accettazione difettoso non si può correggere con prova (STOP come in 1.8)
 
+# 1.9.0 K8 (S4): the build required at closing (maat-config.py opzione build_chiusura and gate-richiesti, the doctor)
+maat-config-190.build_illeggibile	{k} unreadable ({why}): switched on, the build is required	{k} illeggibile ({why}): acceso, il build è richiesto
+maat-doctor-190.build_on	module {m} declares comandi.build: since 1.9 the build runs at std too and closing requires it (ciclo.build_chiusura false = 1.8)	il modulo {m} dichiara comandi.build: dalla 1.9 il build gira anche in std e la chiusura lo richiede (ciclo.build_chiusura false = 1.8)
+maat-doctor-190.build_missing	module {m} has files that compile ({ext}) but no comandi.build: the cycle cannot check the build	il modulo {m} ha file che si compilano ({ext}) ma nessun comandi.build: il ciclo non può verificare il build
+maat-doctor-190.build_untracked	module {m}: the build output ({d}) is not ignored by git: a build would change the tree and block the gates	modulo {m}: l'uscita del build ({d}) non è ignorata da git: un build cambierebbe l'albero e bloccherebbe i gate
+
 # B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
 # review prompt shows a disproved claim next to its row (driver.py)
 plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})

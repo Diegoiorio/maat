@@ -779,6 +779,8 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
     if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190
         out.append(lambda: riga("ATTENZIONE", T("maat-doctor-190.prova_senza_preparazione", m=nome)))
 
+    out.extend(controlli_build(mc, cfg, m, nome, rad))
+
     # --- copia_anche: repo folders that the counterproofs copy
     for d in m.get("copia_anche", []):
         ok = os.path.isdir(posixpath.join(ROOT, mc.norm(d)))
@@ -949,6 +951,56 @@ def controlli_progetto(mc, cfg, r, locale):
     perche = fine_riga_crlf()
     if perche:
         out.append(lambda: riga("ATTENZIONE", T("maat-doctor-182.autocrlf", why=perche), T("maat-doctor-182.autocrlf_fix")))
+    return out
+
+
+BUILD_EST = (".vue", ".tsx", ".go", ".rs", ".java", ".kt", ".cs", ".ts")
+BUILD_USCITE = ("dist", ".output", ".nuxt", "build", "target")
+
+
+def controlli_build(mc, cfg, m, nome, rad):
+    """1.9.0 (K8, S4 point 6): (a) INFO build_on: the module declares comandi.build and ciclo.build_chiusura is not set
+    (since 1.9 the build runs at std too and closing requires it); (b) ATTENZIONE build_missing: git ls-files under the
+    radice has files that compile (.vue .tsx .go .rs .java .kt .cs, or a .ts that is not a test nor a declaration) and
+    the module has no comandi.build; (c) ATTENZIONE build_untracked: a module with comandi.build has a typical build
+    output folder in the tree that git does not ignore. Never MANCA."""
+    out = []
+    ha_build = "build" in (m.get("comandi") or {})
+    if ha_build and "build_chiusura" not in (cfg.get("ciclo") or {}):   # BUILD-ON-190
+        out.append(lambda: riga("INFO", T("maat-doctor-190.build_on", m=nome)))
+    if not ha_build:
+        try:
+            p = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--", rad or "."], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=60)
+            elenco = p.stdout.decode("utf-8", "replace").split("\0") if p.returncode == 0 else []
+        except (OSError, subprocess.TimeoutExpired):
+            elenco = []
+        trovate = set()
+        for f in elenco:
+            b = posixpath.basename(f).lower()
+            if b.endswith(".ts") and (b.endswith((".test.ts", ".spec.ts", ".d.ts"))):   # BUILD-TS-ESCLUSI-190
+                continue
+            e = next((x for x in BUILD_EST if b.endswith(x)), None)
+            if e:
+                trovate.add(e)
+        if trovate:
+            ext = ", ".join(x for x in BUILD_EST if x in trovate)
+            out.append(lambda ext=ext: riga("ATTENZIONE", T("maat-doctor-190.build_missing", m=nome, ext=ext)))
+        return out
+    cartelle = []
+    for base in dict.fromkeys((rad, mc.norm(m.get("radice_pacchetti", m["radice"])))):
+        for d in BUILD_USCITE:
+            rel = posixpath.join(base, d) if base else d
+            if os.path.isdir(posixpath.join(ROOT, rel)) and rel not in cartelle:
+                try:
+                    ig = subprocess.run(["git", "-C", ROOT, "check-ignore", "-q", rel + "/"], stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL, timeout=60).returncode == 0
+                except (OSError, subprocess.TimeoutExpired):
+                    ig = False
+                if not ig:   # BUILD-UNTRACKED-190
+                    cartelle.append(rel)
+    if cartelle:
+        out.append(lambda d=", ".join(cartelle): riga("ATTENZIONE", T("maat-doctor-190.build_untracked", m=nome, d=d)))
     return out
 
 

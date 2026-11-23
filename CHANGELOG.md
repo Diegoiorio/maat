@@ -2,6 +2,30 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.9.0 (in preparazione)
+
+- **The build is required at closing** (`ciclo.build_chiusura`, default `true`; `false` = 1.8). At `std`, `full` and
+  `legacy` (a plan without `Test level:`) `maat-config.py gate-richiesti` lists the `build` of every module with
+  `comandi.build` that has a touched file under its `radice` or `radice_pacchetti`, whatever module the file is routed
+  to (a shared package declared as a module of its own still builds the frontend that uses it), and of every such
+  module for a touched file outside every module (fail-closed: a `tsconfig`, a lockfile, also a README); `gates.sh`
+  gives that build the same files, and `finalize.sh` requires it like the other gates (missing → at most
+  `NEEDS_VERIFICATION`, `FAIL` → `FAIL`). Up to 1.8 the build ran only where `gate.<level>` listed it (`full`) and
+  `finalize.sh` never required it, so a `std` cycle closed `IMPLEMENTED` without one. `min` stays without a build
+  (declared limit). The label count is over the modules that declare `comandi.build`, as before.
+- **Switches.** `FIC_BUILD_CHIUSURA` (`0`|`1`) wins over the key; empty counts as unset (the key decides); any other
+  value, or a key that is not a boolean, keeps the build on with an `AVVISO` line (on is the safe side here).
+  `maat-config.py opzione build_chiusura` prints the value. A `maat.json` that sets the key declares `"harness":
+  ">=1.9"` or newer (S14).
+- **Cost.** One build more for each implement/fix that changes the tree; the review reuses the same evidence (no second
+  build); no build in test-red nor on the proof trees of a corrected test. A module on the WSL copy builds on the tree
+  (slower). A build that writes files git does not ignore changes the tree and makes the gates `BLOCKED`, now also at
+  `std`.
+- **`maat-doctor`**: `INFO` when a module declares `comandi.build` and `ciclo.build_chiusura` is not set;
+  `WARNING` when a module has tracked files that compile (`.vue`, `.tsx`, `.go`, `.rs`, `.java`, `.kt`, `.cs`, a `.ts`
+  that is not a test nor a `.d.ts`) but no `comandi.build`, and when a module with `comandi.build` has a build output
+  folder (`dist/`, `.output/`, `.nuxt/`, `build/`, `target/`) in the tree that git does not ignore. Never `MISSING`.
+
 ## 1.8.2 — LF in the cycle worktrees, expected texts checked against the code
 
 A patch: no default and no format Maat reads changes.

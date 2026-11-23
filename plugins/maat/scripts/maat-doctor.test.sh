@@ -539,6 +539,39 @@ V28e=$(variante prep-con 'c["moduli"][0]["preparati"] = ["guida.txt"]; c["moduli
 DOCX=$DS10/maat/scripts/maat-doctor.sh doc MAAT_CONFIG="$V28e"
 check "1.9.0 preparati con preparazione -> nessuna riga prova_senza_preparazione" '! ha "dichiara preparati ma nessuna preparazione"'
 
+# --- 29. (1.9.0, K8) the build at closing: (a) INFO build_on (a module with comandi.build, ciclo.build_chiusura not set);
+#     (b) ATTENZIONE build_missing (git ls-files has files that compile, no comandi.build; tests and .d.ts do not count);
+#     (c) ATTENZIONE build_untracked (an output folder of the build in the tree, not ignored by git). Never MANCA.
+k8p() { # <name> <files to add and track…>: a copy of $P with those files (empty) tracked
+  local d="$T/k8-$1" f; shift
+  rm -rf "$d"; cp -r "$P" "$d" || return 2
+  for f in "$@"; do mkdir -p "$d/$(dirname "$f")"; : > "$d/$f"; done
+  [ $# -eq 0 ] || git -C "$d" add -- "$@" || return 2
+  printf '%s' "$d"; }
+V29=$(variante build 'c["moduli"][0]["comandi"]["build"] = "bash run-test.sh"')
+caso_build_on() { DOCX=${1:-} doc MAAT_CONFIG="$V29"; [ "$rc" = 0 ] && ha '^INFO il modulo m dichiara comandi\.build: dalla 1\.9 il build gira anche in std e la chiusura lo richiede \(ciclo\.build_chiusura false = 1\.8\)$' && ! ha '^MANCA'; }
+check "1.9.0 modulo con comandi.build senza ciclo.build_chiusura -> INFO build_on" 'caso_build_on'
+V29b=$(variante build-falso 'c["moduli"][0]["comandi"]["build"] = "bash run-test.sh"; c["harness"] = ">=1.9"; c["ciclo"] = {"build_chiusura": False}')
+doc MAAT_CONFIG="$V29b"
+check "1.9.0 modulo con comandi.build e chiave false -> nessuna INFO build_on" '! ha "^INFO il modulo m dichiara comandi"'
+D29=$(k8p ts src/x.ts src/x.test.ts)
+caso_build_missing() { DOCX=${1:-} DP=$D29 doc; ha '^ATTENZIONE il modulo m ha file che si compilano \(\.ts\) ma nessun comandi\.build: il ciclo non può verificare il build$' && ! ha '^MANCA il modulo m ha file'; }
+check "1.9.0 un .ts tracciato e nessun comandi.build -> ATTENZIONE build_missing" 'caso_build_missing'
+D29b=$(k8p solo-test src/x.test.ts src/y.spec.ts types/z.d.ts)
+DP=$D29b doc
+check "1.9.0 solo test .ts e .d.ts -> nessuna build_missing" '! ha "file che si compilano"'
+D29c=$(k8p vue src/A.vue src/b.go); DP=$D29c doc
+check "1.9.0 .vue e .go -> build_missing con le estensioni" 'ha "^ATTENZIONE il modulo m ha file che si compilano \(\.vue, \.go\)"'
+D29d=$(k8p non-tracciato); mkdir -p "$D29d/src"; : > "$D29d/src/x.ts"; DP=$D29d doc
+check "1.9.0 un .ts non tracciato (git ls-files) -> nessuna build_missing" '! ha "file che si compilano"'
+D29e=$(k8p uscita); mkdir -p "$D29e/dist"; : > "$D29e/dist/app.js"
+caso_build_untracked() { DOCX=${1:-} DP=$D29e doc MAAT_CONFIG="$V29"; ha '^ATTENZIONE modulo m: l.uscita del build \(dist\) non è ignorata da git: un build cambierebbe l.albero e bloccherebbe i gate$'; }
+check "1.9.0 dist/ nel tree non ignorata -> ATTENZIONE build_untracked" 'caso_build_untracked'
+printf 'dist/\n' > "$D29e/.gitignore"; DP=$D29e doc MAAT_CONFIG="$V29"
+check "1.9.0 dist/ ignorata dal .gitignore -> nessuna build_untracked" '! ha "uscita del build"'
+DP=$D29 doc MAAT_LINGUA=en MAAT_CONFIG="$V29"
+check "1.9.0 en: INFO build_on in inglese" 'ha "^INFO module m declares comandi\.build: since 1\.9 the build runs at std too and closing requires it"'
+
 # --- en (1.4.0): MAAT_LINGUA=en, the levels printed as OK|WARNING|MISSING (D3), the text from the catalog, no Italian ---
 IT_DOC='ATTENZIONE|MANCA|guardia:|guardia (di|non)|cartella|modulo|negat|sonda|agganciat|versione|richiesto|scrivibile|assente|valido| del | non '
 doc MAAT_LINGUA=en
@@ -589,6 +622,12 @@ check "controprova (1.9.0): senza la riga default_on -> rosso" '[ -n "$m" ] && !
 m=$(mutante prova-prep 's/    if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190/    if False:   #/')
 [ -z "$m" ] || sed -i 's/if m.get("preparati") and not m.get("preparazione"):/if False:/' "$(dirname "$m")/maat-config.py"
 check "controprova (1.9.0): senza la riga prova_senza_preparazione -> rosso" '[ -n "$m" ] && ! caso_prova_prep "$m"'
+m=$(mutante build-on 's/    if ha_build and "build_chiusura" not in (cfg.get("ciclo") or {}):   # BUILD-ON-190/    if False:   #/')
+check "controprova (1.9.0, K8): senza la riga build_on -> rosso" '[ -n "$m" ] && ! caso_build_on "$m"'
+m=$(mutante build-missing 's/            e = next((x for x in BUILD_EST if b.endswith(x)), None)/            e = None/')
+check "controprova (1.9.0, K8): senza la ricerca delle estensioni -> niente build_missing, rosso" '[ -n "$m" ] && ! caso_build_missing "$m"'
+m=$(mutante build-untracked 's/                if not ig:   # BUILD-UNTRACKED-190/                if False:   #/')
+check "controprova (1.9.0, K8): senza il controllo di git check-ignore -> niente build_untracked, rosso" '[ -n "$m" ] && ! caso_build_untracked "$m"'
 m=$(mutante suite 's/ok = any(t == nome or t.endswith("\/" + nome) for t in tracciati) or os.path.isfile(assoluto(nome, ROOT))/ok = True/')
 check "controprova: guardia.suite non cercata -> nessuna ATTENZIONE, rosso" '[ -n "$m" ] && ! caso_suite "$m"'
 m=$(mutante catena 's/^        if x in SEPARA:$/        if False:/')
