@@ -935,8 +935,12 @@ cleanup() {
 CP_FINE=""
 trap '[ -n "$CP_FINE" ] || { CP_FINE=1; exit 143; }' TERM INT HUP
 trap cleanup EXIT
+# 1.9.0 (CI): the program goes into a file in $TMPD, never into `-c` (as plan-check.sh need_py): with the 1.9.0 additions
+# it is over 32k characters and Windows rejects the command line («Argument list too long», exit 64 on Git Bash)
+PYF="$TMPD/counterproof.py"
+printf '%s' "$PY" > "$PYF" || exit 3
 
-info=$("$FIC_PY" -c "$PY" prep "$MJ" "$ROOT" "$TMPD" "$OUT" "$NOMUT") || exit 64
+info=$("$FIC_PY" "$PYF" prep "$MJ" "$ROOT" "$TMPD" "$OUT" "$NOMUT") || exit 64
 read -r NU NT NA NN <<< "${info//$'\r'/}"
 echo "counterproof: $(msg counterproof.count nt="$NT" nu="$NU"), luogo=mirror"
 ABS=""; [ "${NA:-0}" -gt 0 ] && { ABS=" assorbite=$NA"; echo "counterproof: $(msg counterproof.absorbed na="$NA")"; }
@@ -1121,7 +1125,7 @@ run_one() {
     why="$(msg counterproof-190.comando_senza_report)"   # 1.9.0 (K3): no report adapter, no outcome to read: not run
   elif [ -n "$py" ] && ! py_ok "$py"; then
     why="$(msg counterproof.py_missing_run py="$py")"
-  elif ! line=$("$FIC_PY" -c "$PY" riga "$d" "$rep" 2>"$w/log"); then
+  elif ! line=$("$FIC_PY" "$PYF" riga "$d" "$rep" 2>"$w/log"); then
     why="$(msg counterproof.cmd_not_expandable err="$(head -1 "$w/log")")"
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
     why="$(msg counterproof.file_missing_mirror f="$f")"
@@ -1139,7 +1143,7 @@ run_one() {
     why="$(msg counterproof.backup_failed f="$f")"
   else
     printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
-    if out=$("$FIC_PY" -c "$PY" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
+    if out=$("$FIC_PY" "$PYF" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
       run_cmd "$d" "$mroot" "$w" "$cache" "$line"
       rc=$?
     else
@@ -1162,7 +1166,7 @@ run_one() {
     fi
   fi
   ms=$(( ($(date +%s%N) - t0) / 1000000 ))
-  line=$("$FIC_PY" -c "$PY" result "$d" "$OUT" "$w/report" "$rc" "$ms" "$w/log" "$CMD" "$why") ||
+  line=$("$FIC_PY" "$PYF" result "$d" "$OUT" "$w/report" "$rc" "$ms" "$w/log" "$CMD" "$why") ||
     { echo "counterproof: $(msg counterproof.result_unwritable out="$OUT")" >&2; return 64; }
   printf '%s\n' "$line" >> "$w/results"
   read -r cp esito _ ids _ <<< "$line"
