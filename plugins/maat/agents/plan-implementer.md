@@ -167,6 +167,18 @@ purely defensive becomes a major finding). **In doubt it is not defensive**: sto
 - **not** defensive: the order of two checks of an endpoint (secret before body) chosen differently from the
   plan — it changes the observable response (which error a caller gets), so it is a STOP.
 
+**A defective acceptance test** (`defective-test: <Tn> — <class> — <why>`): only when a test of the file cannot pass with
+correct code because acceptance test `<Tn>` leaks state it creates itself. `<Tn>` is the test that pollutes (its patch or
+its data reach the others), not the one that fails: **never touch the failing test**. Two classes: `shared-state` (Tn
+changes data defined in the test file → `copy.deepcopy(NAME)` with `import copy`, or `structuredClone(NAME)` / `{ ...NAME }`
+/ `[...NAME]`, at its first use in Tn) and `unrestored-patch` (Tn's `X.attr = v` → `monkeypatch.setattr(X, "attr", v)`; a
+`patch(...).start()` → `with patch(...)` around the rest of Tn or `.stop()` in a `finally`; Tn's `vi.spyOn` → `.mockRestore()`
+or `vi.restoreAllMocks()` in a `finally`). Correct only inside Tn's body, one transformation, nothing else: never the
+assertions on the expected texts, never the state of a production module (no reset, `cache_clear`, `reload`). If the old
+test fails on its expected text the defect is in the code. **In doubt: STOP without the prefix.**
+- good: `defective-test: T5 — shared-state — T5 changes the module constant DATA in place, T7 then reads it`;
+- **not** this: `defective-test: T2 — shared-state — the cache keeps the old value` when the cache is in the code: a STOP.
+
 ## Modes
 
 - `full` — implement the plan step by step, in its order. ⚠️ It may arrive **restricted to a block of
