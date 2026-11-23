@@ -171,11 +171,13 @@ purely defensive becomes a major finding). **In doubt it is not defensive**: sto
 correct code because acceptance test `<Tn>` leaks state it creates itself. `<Tn>` is the test that pollutes (its patch or
 its data reach the others), not the one that fails: **never touch the failing test**. Two classes: `shared-state` (Tn
 changes data defined in the test file → `copy.deepcopy(NAME)` with `import copy`, or `structuredClone(NAME)` / `{ ...NAME }`
-/ `[...NAME]`, at its first use in Tn) and `unrestored-patch` (Tn's `X.attr = v` → `monkeypatch.setattr(X, "attr", v)`; a
-`patch(...).start()` → `with patch(...)` around the rest of Tn or `.stop()` in a `finally`; Tn's `vi.spyOn` → `.mockRestore()`
-or `vi.restoreAllMocks()` in a `finally`). Correct only inside Tn's body, one transformation, nothing else: never the
-assertions on the expected texts, never the state of a production module (no reset, `cache_clear`, `reload`). If the old
-test fails on its expected text the defect is in the code. **In doubt: STOP without the prefix.**
+/ `[...NAME]`, at its first use in Tn) and `unrestored-patch` (Tn's `X.attr = v` → `monkeypatch.setattr(X, "attr", v)`, with
+`monkeypatch` added to Tn's parameters; a `patch(...).start()` → `with patch(...)` around the rest of Tn or `.stop()` in a
+`finally`; Tn's `vi.spyOn` → `.mockRestore()` in a `finally`, or `vi.restoreAllMocks()` there only if no `vi.spyOn` is
+outside Tn). Correct only inside Tn's body, one transformation, nothing else: never the assertions on the expected texts,
+never the state of a production module (no reset, `cache_clear`, `reload`). If the old test fails on its expected text the
+defect is in the code. **In doubt: STOP without the prefix.** The phase then runs `plan-check.sh corretto` and the judge on
+its blocks only (`workers/implement.md`); report the deviation verbatim.
 - good: `defective-test: T5 — shared-state — T5 changes the module constant DATA in place, T7 then reads it`;
 - **not** this: `defective-test: T2 — shared-state — the cache keeps the old value` when the cache is in the code: a STOP.
 
