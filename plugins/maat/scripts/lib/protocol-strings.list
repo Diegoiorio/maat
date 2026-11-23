@@ -182,3 +182,10 @@ scripts/plan-check.sh	rossi\.json	1.9.0 K1: nome del file del run dir test-red/r
 scripts/maat-config.py	^"(ciclo\.|correzione_test|build_chiusura|opzione)"$|^"ciclo\.correzione_test or ciclo\.build_chiusura => harness >=1\.9 or newer; a boolean"$	1.9.0 K2: chiavi di maat.json ciclo.correzione_test e ciclo.build_chiusura (S14), il comando opzione e la descrizione di S14 nella tabella SEMANTICA (documentazione): uguali in ogni lingua
 scripts/maat-doctor.sh	^"(ciclo|correzione_test)"$	1.9.0 K2: la chiave ciclo.correzione_test di maat.json letta per la riga default_on
 scripts/guard.py	^"li scrivono run-phase\.sh e plan-check\.sh[^"]*"$	1.9.0 K2 (review): già bilingue, tabella MSG it/en: terza parte della voce file_driver (i file del driver nella cartella del run)
+# --- 1.9.0 (K3): literals read by other code that the anti-leak scanner does not flag (a single token), so they
+# cannot be entries of their own (an entry without lines is refused). Frozen all the same: do not translate.
+# scripts/counterproof.sh: the option --senza-mutazione, the keys "senza_mutazione", "intero", "casi", "casi_completo"
+# of <id>.json (and "intero" of mutations.json), its "esito" values verde, rosso, rosso_import, rosso_raccolta, bloccato,
+# non_eseguita and the case outcomes verde, rosso, saltato (read by run-phase.sh, K6b);
+# scripts/worktree-lib.sh: the marker and name prefix fic-prova (fic-prova-<label>-<time>), the line type prepamb of
+# wt_conf and the values of WT_PROVA_ESITO (nostro, collegamenti, git), read by replay.sh.

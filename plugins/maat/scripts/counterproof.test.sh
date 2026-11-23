@@ -130,7 +130,7 @@ grep -q IMPORTROTTO src.ts other.ts uncovered.ts 2>/dev/null && imp=1
 grep -q ROSSO src.ts other.ts 2>/dev/null && red=1
 grep -q DIVERSO src.ts 2>/dev/null && div=1
 python3 - "$out" "$pat" "$imp" "$red" "$div" "$PWD/tests/a.test.ts" <<'PYEOF'
-import json, re, sys
+import json, os, re, sys
 out, pat, imp, red, div, name = sys.argv[1:7]
 tests = []
 for anc, title in (("somma", "vale uno"), ("altro", "resta verde")):
@@ -147,8 +147,11 @@ if imp == "1":
     fr = {"name": name, "status": "failed", "message": "Failed to resolve import \"./nope\" from \"src.ts\". Does the file exist?", "assertionResults": []}
 else:
     fr = {"name": name, "status": "failed" if any(t["status"] == "failed" for t in tests) else "passed", "message": "", "assertionResults": tests}
+if os.environ.get("FAKE_NO_REPORT"):
+    sys.exit(0)
 with open(out, "w") as fh:
-    json.dump({"testResults": [fr]}, fh)
+    # 1.9.0 (K3): numTotalTests as the real JSON reporter (FAKE_NUMTOT: a different count); FAKE_NO_REPORT: none
+    json.dump({"numTotalTests": int(os.environ.get("FAKE_NUMTOT") or len(tests)), "testResults": [fr]}, fh)
 sys.exit(1 if fr["status"] == "failed" else 0)
 PYEOF
 EOF
@@ -162,7 +165,7 @@ if grep -q IMPORTROTTO app/core.py; then
 elif grep -q ROSSO app/core.py; then
   printf '<testsuites><testsuite><testcase classname="%s" name="%s"><failure message="AssertionError: assert 2 == 1">tests/test_core.py:3: AssertionError</failure></testcase></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 1
 fi
-printf '<testsuites><testsuite><testcase classname="%s" name="%s"/></testsuite></testsuites>' "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 0
+printf '<testsuites><testsuite tests="%s"><testcase classname="%s" name="%s"/></testsuite></testsuites>' "${FAKE_PY_TESTS:-1}" "${FAKE_PY_CLASS:-tests.test_core}" "${FAKE_PY_NAME:-test_uno}" > "$jx"; exit 0
 EOF
 # fake rsync: FAKE_RSYNC_LOG records the arguments (sources, destinations, exclusions), then the real one
 cat > "$BIN/rsync" <<'EOF'
@@ -1044,6 +1047,123 @@ mkdir -p "$API/.venv/bin" && cp "$BIN/fakepy" "$API/.venv/bin/python" && chmod +
 FIC_PYTEST_PY= cpr "$OUT/in-pyw.json"
 check "  il primo candidato che esiste (.venv/bin/python) esegue il test" '[ "$(rc)" = 0 ] && [ "$(field PW esito)" = rosso_asserzione ] && field PW comando | grep -q "$API/.venv/bin/python -B -m pytest"'
 rm -rf "$API/.venv"
+
+# 1.9.0 (K3): --senza-mutazione (interface (a) of spec 1.9.0). Entries without "mutazione" and without
+# rosso_se.asserzione (file = test.percorso): the named test alone runs in the copy (nothing mutated), its outcome read
+# from the report: green alone -> verde, red (any assertion) -> rosso, "controprova" "-", senza_mutazione true, exit 0;
+# pytest the same; the comando runner (no report) -> bloccato, exit 2; a module without controprova -> non_eseguita,
+# exit 2; without the option an entry without a mutation -> exit 64; with the option an entry with a mutation -> exit
+# 64 (no mixed lists). Counterproofs on altered copies of the script: (a) the refusal without the option taken out ->
+# its case is red (no such refusal); (b) the refusal of a mutation with the option taken out -> the same.
+nm_entry() { # id test test_id: an entry without a mutation (file = test, simbolo = the test launched)
+  python3 -c 'import json,sys
+i,t,tid=sys.argv[1:4]
+print(json.dumps({"id":i,"file":t,"simbolo":tid,"test":{"percorso":t,"nome":tid},"rosso_se":{"test_id":tid}}))' "$@"
+}
+cprs() { rm -f "$FAKE_LOG.all"; limitato "$T/out" env PROJECT_ROOT="${CPR_ROOT:-$R}" bash "${CPX:-$CP}" --senza-mutazione "$1"; }
+NM1=$(mj nm1.json "[$(nm_entry NMV $V/tests/a.test.ts 'somma vale uno')]")
+cpr "$NM1"
+check "1.9.0 voce senza mutazione senza --senza-mutazione -> exit 64, rifiutata" '[ "$(rc)" = 64 ] && grep -q "voce senza mutazione: ammessa solo con --senza-mutazione" "$T/out" && [ ! -e "$OUT/NMV.json" ]'
+WT0=$(wt_hash)
+FIC_CP_PARALLEL=1 cprs "$NM1"
+check "1.9.0 --senza-mutazione: test verde da solo -> verde, controprova -, senza_mutazione, exit 0" '[ "$(rc)" = 0 ] && [ "$(field NMV esito)" = verde ] && [ "$(field NMV controprova)" = - ] && [ "$(field NMV senza_mutazione)" = True ] && [ "$(field NMV runner)" = vitest ] && [ "$(field NMV luogo)" = mirror ]'
+check "  solo il test nominato (-t), nel mirror, niente mutato" 'grep -q -- "-t somma vale uno" "$FAKE_LOG.all" && grep -q "seen=export const x = 1 export const y = 1" "$FAKE_LOG.all" && ! grep "^cwd=" "$FAKE_LOG.all" | grep -v "^cwd=$HOME/fic-mirror/" | grep -q . && [ "$(wt_hash)" = "$WT0" ]'
+cp "$AD/src.ts" "$T/src.ts.bak"; echo 'export const x = 2 // ROSSO' > "$AD/src.ts"
+FIC_CP_PARALLEL=1 cprs "$NM1"
+cp "$T/src.ts.bak" "$AD/src.ts"
+check "1.9.0 --senza-mutazione: test rosso sull'albero -> rosso (qualunque asserzione) dal report, exit 0" '[ "$(rc)" = 0 ] && [ "$(field NMV esito)" = rosso ] && [ "$(field NMV controprova)" = - ] && field NMV messaggio | grep -q "expected 2 to be 1"'
+echo 'export const x = 2 // DIVERSO' > "$AD/src.ts"
+FIC_CP_PARALLEL=1 cprs "$NM1"
+cp "$T/src.ts.bak" "$AD/src.ts"
+check "  rosso su un altro messaggio -> rosso anche lui (non rosso_diverso)" '[ "$(rc)" = 0 ] && [ "$(field NMV esito)" = rosso ]'
+echo 'import { z } from "./nope" // IMPORTROTTO' > "$AD/src.ts"
+FIC_CP_PARALLEL=1 cprs "$NM1"
+cp "$T/src.ts.bak" "$AD/src.ts"
+check "  file che non si carica -> rosso_import, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMV esito)" = rosso_import ]'
+FIC_CP_PARALLEL=1 cprs "$(mj nm2.json "[$(nm_entry NMP modules/api/tests/test_core.py 'tests/test_core.py::test_uno')]")"
+check "1.9.0 --senza-mutazione: pytest verde da solo -> verde (report JUnit)" '[ "$(rc)" = 0 ] && [ "$(field NMP esito)" = verde ] && grep -q "args=-B -m pytest tests/test_core.py::test_uno" "$FAKE_LOG.all"'
+cp "$API/app/core.py" "$T/core.py.bak"; echo 'UNO = 2 # ROSSO' > "$API/app/core.py"
+FIC_CP_PARALLEL=1 cprs "$OUT/in-nm2.json"
+cp "$T/core.py.bak" "$API/app/core.py"
+check "  pytest rosso -> rosso" '[ "$(rc)" = 0 ] && [ "$(field NMP esito)" = rosso ]'
+rm -f "$OUT/NMA.json" "$OUT/NMB.json"
+FIC_CP_PARALLEL=1 cprs "$(mj nm3.json "[$(entry NMA $V/src.ts 'x = 1' 'x = 2 // ROSSO'),$(nm_entry NMB $V/tests/a.test.ts 'somma vale uno')]")"
+check "1.9.0 --senza-mutazione: una voce con mutazione -> exit 64 (niente liste miste), niente eseguito" '[ "$(rc)" = 64 ] && grep -q "voce con mutazione: non ammessa con --senza-mutazione" "$T/out" && [ ! -e "$OUT/NMA.json" ] && [ ! -e "$OUT/NMB.json" ]'
+FIC_CP_PARALLEL=1 cprs "$(mj nm5.json "[$(python3 -c 'import json; print(json.dumps({"id":"NMF","file":"modules/app/apps/admin/src.ts","test":{"percorso":"modules/app/apps/admin/tests/a.test.ts","nome":"somma vale uno"},"rosso_se":{"test_id":"somma vale uno"}}))')]")"
+check "  file diverso da test.percorso -> exit 64" '[ "$(rc)" = 64 ] && [ ! -e "$OUT/NMF.json" ]'
+MAAT_CONFIG=$T/tre.json FIC_CP_PARALLEL=1 cprs "$(mj nm4.json "[$(nm_entry NMC y/svc/t.sh y/svc/t.sh)]")"
+check "1.9.0 --senza-mutazione: runner comando (nessun report) -> bloccato, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMC esito)" = bloccato ] && [ "$(field NMC controprova)" = - ] && field NMC motivo | grep -q "non ha un adattatore con report"'
+MAAT_CONFIG=$T/tre.json FIC_CP_PARALLEL=1 cprs "$(mj nm6.json "[$(nm_entry NMD w/doc/t.sh w/doc/t.sh)]")"
+check "1.9.0 --senza-mutazione: modulo senza controprova -> non_eseguita, exit 2" '[ "$(rc)" = 2 ] && [ "$(field NMD esito)" = non_eseguita ] && [ "$(field NMD controprova)" = - ]'
+# counterproofs: altered copies of the script
+cp_senza() { # <out> <old text>: counterproof.sh without that text (one occurrence), or nothing
+  python3 - "$CP" "$1" "$2" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+assert s.count(sys.argv[3]) == 1, "the text to take out changed: update the counterproof"
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(sys.argv[3], ""))
+PY
+}
+CPNMU="$(dirname "$CP")/.cp-senza-mut.$$.sh"
+cp_senza "$CPNMU" '        if mut is None and not nomut:
+            die(where + ": " + T("counterproof-190.senza_mutazione"))
+'
+if [ -f "$CPNMU" ]; then
+  rm -f "$OUT/NMV.json"; CPX="$CPNMU" cpr "$NM1"
+  check "  controprova (a): senza il rifiuto il caso «senza l'opzione» torna rosso (niente messaggio senza_mutazione)" '! grep -q "voce senza mutazione: ammessa solo con --senza-mutazione" "$T/out"'
+  rm -f "$CPNMU"
+else echo "FAIL [controprova (a) senza-mutazione: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
+cp_senza "$CPNMU" '        if mut is not None and nomut:
+            die(where + ": " + T("counterproof-190.con_mutazione"))
+'
+if [ -f "$CPNMU" ]; then
+  rm -f "$OUT/NMA.json"; CPX="$CPNMU" FIC_CP_PARALLEL=1 cprs "$OUT/in-nm3.json"
+  check "  controprova (b): senza il rifiuto il caso «lista mista» torna rosso (niente messaggio con_mutazione)" '! grep -q "voce con mutazione: non ammessa con --senza-mutazione" "$T/out"'
+  rm -f "$CPNMU"
+else echo "FAIL [controprova (b) senza-mutazione: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
+
+# 1.9.0 (K3): --senza-mutazione with "intero": true, the WHOLE test file without a name filter (K6b: «V green in its file
+# with the new Tn» from the report, not from the gates' log). <id>.json lists every case with its outcome (test_id as
+# the casi of plan-check.sh esiti) and casi_completo; red case -> rosso; report missing or a count that does not match
+# the report -> bloccato, never verde; intero without the option -> 64. Counterproof: the completeness check taken out
+# of a copy -> the count mismatch becomes verde.
+nm_file() { # id test: an entry for the whole file
+  python3 -c 'import json,sys
+i,t=sys.argv[1:3]
+print(json.dumps({"id":i,"file":t,"simbolo":t,"test":{"percorso":t},"intero":True}))' "$@"
+}
+casi() { python3 -c 'import json,sys
+r=json.load(open(sys.argv[1]))
+print(" | ".join("%s=%s" % (c["test_id"], c["esito"]) for c in r.get("casi") or []), r.get("casi_completo"))' "$OUT/$1.json" 2>/dev/null; }
+NF1=$(mj nf1.json "[$(nm_file NFV $V/tests/a.test.ts)]")
+cpr "$NF1"
+check "1.9.0 intero senza --senza-mutazione -> exit 64" '[ "$(rc)" = 64 ] && [ ! -e "$OUT/NFV.json" ]'
+FIC_CP_PARALLEL=1 cprs "$NF1"
+check "1.9.0 intero: file tutto verde -> verde, ogni caso elencato con il suo esito, completo, exit 0" '[ "$(rc)" = 0 ] && [ "$(field NFV esito)" = verde ] && [ "$(field NFV intero)" = True ] && [ "$(casi NFV)" = "somma vale uno=verde | altro resta verde=verde True" ]' || casi NFV
+check "  nessun filtro sul nome (-t vuoto)" 'grep -q -- "a.test.ts -t  --reporter" "$FAKE_LOG.all"'
+echo 'export const x = 2 // ROSSO' > "$AD/src.ts"
+FIC_CP_PARALLEL=1 cprs "$NF1"
+cp "$T/src.ts.bak" "$AD/src.ts"
+check "1.9.0 intero: un caso rosso -> rosso, il caso rosso e quello verde elencati, completo" '[ "$(rc)" = 0 ] && [ "$(field NFV esito)" = rosso ] && [ "$(casi NFV)" = "somma vale uno=rosso | altro resta verde=verde True" ]' || casi NFV
+FAKE_NO_REPORT=1 FIC_CP_PARALLEL=1 cprs "$NF1"
+check "1.9.0 intero: report assente -> bloccato (mai verde), exit 2" '[ "$(rc)" = 2 ] && [ "$(field NFV esito)" = bloccato ] && [ "$(casi NFV)" = " False" ]' || casi NFV
+FAKE_NUMTOT=3 FIC_CP_PARALLEL=1 cprs "$NF1"
+check "1.9.0 intero: il report dichiara 3 casi, ne elenca 2 -> bloccato, casi_completo falso" '[ "$(rc)" = 2 ] && [ "$(field NFV esito)" = bloccato ] && [ "$(field NFV casi_completo)" = False ]' || casi NFV
+NF2=$(mj nf2.json "[$(nm_file NFP modules/api/tests/test_core.py)]")
+FIC_CP_PARALLEL=1 cprs "$NF2"
+check "1.9.0 intero: pytest file verde -> verde, test_id <percorso>::<nome> come esiti, completo" '[ "$(rc)" = 0 ] && [ "$(field NFP esito)" = verde ] && [ "$(casi NFP)" = "modules/api/tests/test_core.py::test_uno=verde True" ] && grep -q "args=-B -m pytest tests/test_core.py -p" "$FAKE_LOG.all"' || casi NFP
+FAKE_PY_CLASS=tests.test_core.TestUno FIC_CP_PARALLEL=1 cprs "$NF2"
+check "  pytest: classe -> <percorso>::TestUno::<nome>" '[ "$(casi NFP)" = "modules/api/tests/test_core.py::TestUno::test_uno=verde True" ]' || casi NFP
+FAKE_PY_TESTS=2 FIC_CP_PARALLEL=1 cprs "$NF2"
+check "  pytest: il report dichiara 2 casi, ne elenca 1 -> bloccato" '[ "$(rc)" = 2 ] && [ "$(field NFP esito)" = bloccato ]'
+cp_senza "$CPNMU" '    if not casi or not completo:
+        return "bloccato", T("counterproof-190.casi_incompleti", n=len(casi)), "", casi, False
+'
+if [ -f "$CPNMU" ]; then
+  CPX="$CPNMU" FAKE_NUMTOT=3 FIC_CP_PARALLEL=1 cprs "$NF1"
+  check "  controprova (c): senza il controllo di completezza il conteggio diverso diventa verde (rosso)" '[ "$(field NFV esito)" = verde ]'
+  rm -f "$CPNMU"
+else echo "FAIL [controprova (c) intero: la copia alterata di counterproof.sh non è stata scritta]"; fail=$((fail+1)); fi
 
 # the deadline of limitato (CI of 1.8.0: a hang of the suite on Linux, rc=124 at 1016 s, nothing in its log): a run
 # that hangs (a script sleeping 6 s, CP_CASO_LIMITE=2) ends by TERM within about 2 s, «TIMEOUT caso: riga <n>» recorded,

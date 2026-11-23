@@ -433,6 +433,32 @@ done
 [ "$(printf '%s\n' "$out" | grep -c '^+ link_dep ')" = "$nd" ] && ok || ko "replay --dry-run: collegamenti attesi $nd" "$out"
 lu=$(printf '%s\n' "$out" | grep -n '^+ unlink_deps ' | cut -d: -f1); lr=$(printf '%s\n' "$out" | grep -n 'worktree remove --force' | cut -d: -f1)
 [ -n "$lu" ] && [ -n "$lr" ] && [ "$lu" -lt "$lr" ] && ok || ko "replay --dry-run: unlink_deps deve precedere worktree remove ($lu/$lr)" "$out"
+# 1.9.0 (K3): the worktree is created by wt_prova_crea and the tree applied by wt_prova_albero of worktree-lib.sh, their
+# commands through the act of replay.sh: the lines of --dry-run are those of 1.8.x, rebuilt here from its strings
+# (worktree add, marker, relative .git, one link_dep per dependency, read-tree), in that order
+stessi_comandi() { # <dry-run output>: nothing if the creation lines are those of 1.8.x, otherwise what differs
+  local o=$1 l1 mq wq bq l2 t st e p r riga ultima=0
+  l1=$(printf '%s\n' "$o" | grep -m1 '^+ git -C [^ ]* worktree add --detach ')
+  read -r _ _ _ mq _ _ _ wq bq <<< "$l1"
+  [ -n "$wq" ] && [ "$bq" = "$HEAD_SHA" ] || { echo "riga worktree add: «$l1»"; return 0; }
+  l2=$(printf '%s\n' "$o" | grep -m1 "^+ printf 'fic-replay")
+  t=${l2% > *}; st=${t##* }
+  e=("+ git -C $mq worktree add --detach $wq $HEAD_SHA"
+     "+ printf 'fic-replay\npath=%s\ncreated=%s\n' $wq $st > \"\$(git -C $wq rev-parse --absolute-git-dir)/fic-replay\""
+     "+ fic_relgit $wq")
+  for p in "$MAINT"/node_modules "$MAINT"/modules/app/node_modules "$MAINT"/modules/app/apps/*/node_modules \
+           "$MAINT"/modules/app/packages/*/node_modules "$MAINT"/modules/api/.venv; do
+    [ -e "$p" ] || continue; r=${p#"$MAINT"/}; e+=("+ link_dep $mq/$r $wq/$r")
+  done
+  e+=("+ git -C $wq read-tree -u --reset $TREE && git -C $wq read-tree HEAD")
+  for riga in "${e[@]}"; do
+    r=$(printf '%s\n' "$o" | grep -nxF -- "$riga" | head -1 | cut -d: -f1)
+    if [ -z "$r" ]; then echo "manca: $riga"; elif [ "$r" -le "$ultima" ]; then echo "fuori ordine: $riga"; else ultima=$r; fi
+  done
+  [ "$(printf '%s\n' "$o" | grep -c '^+ link_dep ')" = "$(( ${#e[@]} - 4 ))" ] || echo "collegamenti in più"
+}
+d=$(stessi_comandi "$out")
+[ -z "$d" ] && ok || ko "1.9.0 replay --dry-run: i comandi di creazione non sono quelli di 1.8.x" "$d"$'\n'"$out"
 out=$(rp --remove "$W/fic-replay-esiste" --dry-run 2>&1)   # refused earlier: no unlink printed
 if printf '%s\n' "$out" | grep -q 'unlink_deps'; then ko "--remove rifiutato ha stampato unlink_deps" "$out"; else ok; fi
 

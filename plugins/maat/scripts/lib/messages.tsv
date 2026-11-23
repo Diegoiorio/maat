@@ -424,6 +424,28 @@ maat-config-180.s12	ciclo.riprese needs "harness": ">=1.8" or newer, so that an 
 maat-config-180.s13	moduli[].{k} needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	moduli[].{k} richiede "harness": ">=1.8" o successiva, così una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
 maat-config-180.s12_negative	ciclo.riprese is {v}: it must be an integer >= 0 (0 = no resumes)	ciclo.riprese vale {v}: deve essere un intero >= 0 (0 = nessuna ripresa)
 
+# --- counterproof-190, worktree-lib-190 (1.9.0, K3, written by hand): counterproof.sh --senza-mutazione (an entry
+# without a mutation runs the named test alone; a runner without a report adapter gives no outcome to read); the proof
+# worktrees of worktree-lib.sh (wt_prova_*), whose marker is not the one of replay.sh
+counterproof-190.senza_mutazione	entry without a mutation: allowed only with --senza-mutazione	voce senza mutazione: ammessa solo con --senza-mutazione
+counterproof-190.con_mutazione	entry with a mutation: not allowed with --senza-mutazione (no mixed lists)	voce con mutazione: non ammessa con --senza-mutazione (niente liste miste)
+counterproof-190.comando_senza_report	the runner has no report adapter (only vitest and pytest): a run without a mutation gives no outcome to read	il runner non ha un adattatore con report (solo vitest e pytest): un lancio senza mutazione non dà un esito da leggere
+counterproof-190.red_any	the named test ran and is red	il test nominato è stato eseguito ed è rosso
+counterproof-190.green_alone	the named test ran and passes	il test nominato è stato eseguito e passa
+counterproof-190.intero_solo	intero must be true/false, and true only with --senza-mutazione	intero deve essere true/false, e true solo con --senza-mutazione
+counterproof-190.casi_incompleti	the report does not list every case of the file ({n} read): no outcome	il report non elenca ogni caso del file ({n} letti): nessun esito
+counterproof-190.file_rosso	{n} of {tot} cases of the file are red	{n} casi del file su {tot} sono rossi
+counterproof-190.file_verde	every case of the file ran, none red ({tot})	ogni caso del file è stato eseguito, nessuno rosso ({tot})
+worktree-lib-190.bad_name	the name does not start with {pfx}-: {c}	il nome non comincia per {pfx}-: {c}
+worktree-lib-190.no_marker	the marker {pfx} is missing ({mk})	manca il marcatore {pfx} ({mk})
+worktree-lib-190.usage_crea	usage: wt_prova_crea <label> <base> (label of letters, digits, . _ -; base not empty)	uso: wt_prova_crea <label> <base> (label di lettere, cifre, . _ -; base non vuota)
+worktree-lib-190.usage_albero	usage: wt_prova_albero <worktree> <tree>	uso: wt_prova_albero <worktree> <albero>
+worktree-lib-190.usage_rimuovi	usage: wt_prova_rimuovi <worktree>	uso: wt_prova_rimuovi <worktree>
+worktree-lib-190.prep_copy	copy of the prepared file {rel} from the main tree failed	copia del file preparato {rel} dal tree principale fallita
+worktree-lib-190.prep_none	module {rad}: preparati missing in the main tree and no preparazione	modulo {rad}: preparati assenti nel tree principale e nessuna preparazione
+worktree-lib-190.prep_failed	module {rad}: preparati missing in the main tree and the preparazione failed ({cmd})	modulo {rad}: preparati assenti nel tree principale e preparazione fallita ({cmd})
+worktree-lib-190.prep_guide	module {rad}: the guide file of the preparati is missing in the proof worktree ({guida})	modulo {rad}: manca il file guida dei preparati nel worktree di prova ({guida})
+
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]
 run-phase.hfp_nc	harness fingerprint not computable	impronta del harness non calcolabile

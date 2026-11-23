@@ -626,5 +626,164 @@ check "controprova 9: not_ignored senza spegnere l'estensione è rosso" '[ $rc -
 cp "$CW" "$MU/scripts/ciclo-worktree.sh"
 unset GIT_CONFIG_NOSYSTEM
 
+# 16. 1.9.0 (K3): the proof worktrees of worktree-lib.sh (interface (a) of spec 1.9.0: wt_prova_crea <label> <base>,
+#     wt_prova_albero <wt> <tree>, wt_prova_rimuovi <wt>), the ones run-phase.sh makes for a defective-test deviation.
+#     In a fake repo: created at the base beside the main tree (fic-prova-<label>-<time>, one line on stdout, marker in
+#     its own git dir), the main tree's dependencies LINKED (no physical copy), the preparati of the module COPIED from
+#     the main tree; a tree applied as uncommitted changes; different dependencies -> 2 with the file on stderr; usage
+#     -> 2; removed: the links first, the main tree's node_modules still there (entries and content), a second removal
+#     and a path never created -> 0; a real worktree without the fic-prova marker refused (nothing removed). Preparati
+#     (module of its own): present in the main tree -> copied, the preparazione never run (a counter proves it); absent
+#     -> the preparazione run in the worktree (not in the main tree), also through the WSL runner for `ambiente: wsl`;
+#     preparazione failing, writing no guide file, or absent -> 4 with the path printed. forget_mirror is a stub here.
+#     Counterproofs (mutated copies of the lib): (a) _wt_rimuovi without the check wt_ours -> the worktree without the
+#     marker is removed; (b) without unlink_deps -> where git follows a junction (SONDA above) the main tree's
+#     node_modules is emptied, elsewhere SALTATO like counterproof 1; (c) without the copy from the main tree -> the
+#     preparazione runs although the preparati are there; (d) without the final check of the guide file -> a
+#     preparazione that writes nothing passes.
+prova_caso() { # <worktree-lib.sh> <fake repo>: one line per failed expectation, nothing if all hold
+  local lib=$1 mp=$2 mpc b tr
+  mkrepo "$mp" >/dev/null 2>&1 || { echo "repo finto non creato"; return 0; }
+  (cd "$mp" && echo cambiato > a.txt && git commit -qam due) >/dev/null 2>&1
+  mpc=$(canon "$mp"); b=$(git -C "$mp" rev-parse HEAD~1); tr=$(git -C "$mp" rev-parse 'HEAD^{tree}')
+  local c0 s0; c0=$(nm_count "$mp") s0=$(nm_sum "$mp")
+  ( cd "$mp" && WT_TAG=prova MAIN=$mpc PROJECT_ROOT=$mpc
+    . "$lib" || { echo "worktree-lib.sh non caricata"; exit 0; }
+    forget_mirror() { echo "forget $1" >> "$mp.fm"; }
+    out=$(wt_prova_crea 03-fix "$b" 2> "$mp.crea"); r=$?
+    [ $r -eq 0 ] || echo "wt_prova_crea: exit $r: $(cat "$mp.crea")"
+    [ "$(printf '%s\n' "$out" | wc -l)" = 1 ] || echo "stdout di wt_prova_crea non è una riga: «$out»"
+    wp=$out
+    case "$wp" in "$(dirname "$mpc")"/fic-prova-03-fix-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+      *) echo "percorso inatteso: $wp" ;; esac
+    [ "$(git -C "$wp" rev-parse HEAD 2>/dev/null)" = "$b" ] || echo "worktree non alla base"
+    mk="$(git -C "$wp" rev-parse --absolute-git-dir 2>/dev/null)/fic-prova"
+    [ "$(head -1 "$mk" 2>/dev/null)" = fic-prova ] && [ "$(canon "$(sed -n 's/^path=//p' "$mk")")" = "$(canon "$wp")" ] &&
+      grep -q '^created=' "$mk" || echo "marcatore fic-prova assente o con un altro percorso"
+    for p in node_modules modules/app/node_modules modules/app/apps/admin/node_modules modules/api/.venv; do
+      [ -L "$wp/$p" ] || echo "$p non collegato"
+    done
+    [ -z "$(find "$wp" -path "*node_modules/*" -print -quit)" ] || echo "copia fisica di node_modules"
+    [ -f "$wp/modules/app/apps/admin/.nuxt/tsconfig.json" ] && [ -f "$wp/modules/app/apps/admin/.nuxt/imports.d.ts" ] &&
+      [ ! -e "$wp/modules/app/apps/admin/.nuxt/altro.mjs" ] || echo "preparati non copiati dal tree principale (o copiato altro)"
+    wt_ours "$wp" fic-prova 2>/dev/null || echo "wt_ours rifiuta il proprio worktree"
+    wt_ours "$wp" fic-replay 2>/dev/null && echo "wt_ours accetta il prefisso di un altro"
+    o=$(wt_prova_albero "$wp" "$tr" 2>/dev/null); r=$?
+    [ $r -eq 0 ] && [ -z "$o" ] || echo "wt_prova_albero: exit $r, stdout «$o»"
+    [ "$(cat "$wp/a.txt" 2>/dev/null)" = cambiato ] || echo "albero non applicato"
+    [ "$(git -C "$wp" diff --name-only HEAD)" = a.txt ] && [ -z "$(git -C "$wp" diff --cached --name-only)" ] ||
+      echo "albero non come modifiche non committate"
+    cp "$mp/modules/app/package-lock.json" "$mp.lock"; echo '{"lock":9}' > "$mp/modules/app/package-lock.json"
+    wt_prova_albero "$wp" "$tr" > /dev/null 2> "$mp.dd"; r=$?
+    cp "$mp.lock" "$mp/modules/app/package-lock.json"
+    [ $r -eq 2 ] && grep -qx "modules/app/package-lock.json" "$mp.dd" || echo "dipendenze diverse: exit $r, stderr $(cat "$mp.dd")"
+    wt_prova_albero "$(dirname "$mpc")/altro" "$tr" 2>/dev/null; [ $? -eq 1 ] || echo "albero su un worktree non nostro: non 1"
+    wt_prova_crea 'a/b' "$b" > /dev/null 2>&1; [ $? -eq 2 ] || echo "label con / accettata"
+    wt_prova_crea 03-fix "" > /dev/null 2>&1; [ $? -eq 2 ] || echo "base vuota accettata"
+    [ -z "$(ls -d "$(dirname "$mpc")"/fic-prova-a* 2>/dev/null)" ] || echo "creato un worktree dal nome sbagliato"
+    git -C "$mp" worktree add -q --detach "$(dirname "$mpc")/fic-prova-senza" "$b" > /dev/null 2>&1
+    wt_prova_rimuovi "$(dirname "$mpc")/fic-prova-senza" 2>/dev/null && echo "rimosso un worktree senza marcatore"
+    [ -f "$(dirname "$mpc")/fic-prova-senza/a.txt" ] || echo "worktree senza marcatore cancellato"
+    git -C "$mp" worktree remove --force "$(dirname "$mpc")/fic-prova-senza" > /dev/null 2>&1
+    wt_prova_rimuovi "$(dirname "$mpc")/fic-prova-mai-creato-1" || echo "rimozione di un percorso mai creato: non 0"
+    o=$(wt_prova_rimuovi "$wp" 2> "$mp.rim"); r=$?
+    [ $r -eq 0 ] && [ -z "$o" ] || echo "wt_prova_rimuovi: exit $r, stdout «$o»: $(cat "$mp.rim")"
+    [ ! -e "$wp" ] || echo "worktree di prova rimasto"
+    grep -qx "forget $wp" "$mp.fm" 2>/dev/null || echo "forget_mirror non chiamata"
+    git -C "$mp" worktree list --porcelain | grep -q "fic-prova-03-fix" && echo "worktree ancora registrato"
+    wt_prova_rimuovi "$wp" 2>/dev/null || echo "seconda rimozione: non 0 (non idempotente)"
+    exit 0 ) 2>&1
+  [ "$(nm_count "$mp")" = "$c0" ] && [ "$(nm_sum "$mp")" = "$s0" ] || echo "node_modules del tree principale toccato"
+  [ -z "$(git -C "$mp" status --porcelain)" ] || echo "tree principale sporco"
+}
+# preparati: a module of its own; its preparazione counts its runs (CONTA) and writes the guide file, or fails
+# (PREP_FALLISCE), or writes nothing (PREP_NIENTE). <lib> <repo> <case> [ambiente]: one line per failed expectation
+prep_caso() {
+  local lib=$1 mp=$2 caso=$3 amb=${4:-nativo} mpc b
+  mkdir -p "$mp/m" && cd "$mp" || { echo "repo non creato"; return 0; }
+  { git init -q . && git config user.email t@t && git config user.name t && git config core.autocrlf false
+    printf 'gen/\n' > .gitignore
+    printf 'echo x >> "$CONTA"; [ -n "${PREP_FALLISCE:-}" ] && exit 1; [ -n "${PREP_NIENTE:-}" ] && exit 0\nmkdir -p gen && echo g > gen/guida.txt && echo d > gen/a.d.ts\n' > m/prep.sh
+    mkdir -p .claude && printf '{"versione_schema": 1, "moduli": [{"nome": "m", "radice": "m", "ambiente": "%s", "preparazione": "bash prep.sh", "preparati": ["gen/guida.txt", "gen/*.d.ts"]}]}\n' "$amb" > .claude/maat.json
+    git add -A && git commit -qm init; } > /dev/null 2>&1 || { echo "repo non creato"; return 0; }
+  [ "$caso" = presenti ] && { mkdir -p m/gen && echo G > m/gen/guida.txt && echo D > m/gen/b.d.ts; }
+  mpc=$(canon "$mp"); b=$(git -C "$mp" rev-parse HEAD); : > "$mp.conta"
+  ( cd "$mp" && WT_TAG=prova MAIN=$mpc PROJECT_ROOT=$mpc CONTA=$mp.conta
+    export CONTA
+    [ "$caso" = fallisce ] && export PREP_FALLISCE=1
+    [ "$caso" = niente ] && export PREP_NIENTE=1
+    . "$lib" || { echo "worktree-lib.sh non caricata"; exit 0; }
+    forget_mirror() { :; }
+    # the WSL runner of the gates, faked: records the command and runs it here (FIC_GATES_WSL of gates.sh)
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >> %q\nbash -c "$1"\n' "$mp.wsl" > "$mp.wslrun"; chmod +x "$mp.wslrun"
+    export FIC_GATES_WSL=$mp.wslrun
+    if [ "$caso" = senza ]; then   # a module with preparati and no preparazione (maat.json would refuse it: S10)
+      _WT_CONF=$(printf 'prep\tm\tgen/guida.txt\t-\tgen/guida.txt\nprepamb\tm\tnativo\tm') _WT_CONF_OK=1
+    fi
+    wp=$(wt_prova_crea p-1 "$b" 2> "$mp.err"); r=$?
+    case "$caso" in
+      presenti)
+        [ $r -eq 0 ] || echo "presenti: exit $r: $(cat "$mp.err")"
+        [ "$(cat "$wp/m/gen/guida.txt" 2>/dev/null)" = G ] && [ "$(cat "$wp/m/gen/b.d.ts" 2>/dev/null)" = D ] || echo "presenti: preparati non copiati"
+        [ ! -s "$mp.conta" ] || echo "presenti: la preparazione è stata lanciata ($(wc -l < "$mp.conta") volte)" ;;
+      assenti)
+        [ $r -eq 0 ] || echo "assenti: exit $r: $(cat "$mp.err")"
+        [ "$(wc -l < "$mp.conta")" = 1 ] || echo "assenti: preparazione lanciata $(wc -l < "$mp.conta") volte, attesa 1"
+        [ -f "$wp/m/gen/guida.txt" ] || echo "assenti: file guida non scritto nel worktree"
+        [ ! -e "$mp/m/gen" ] || echo "assenti: la preparazione ha scritto nel tree principale"
+        if [ "$amb" = wsl ]; then grep -q "cd .*fic-prova-p-1-.*/m && bash prep.sh" "$mp.wsl" 2>/dev/null || echo "wsl: preparazione non passata dal runner WSL"
+        else [ ! -e "$mp.wsl" ] || echo "nativo: preparazione passata dal runner WSL"; fi ;;
+      fallisce|niente|senza)
+        [ $r -eq 4 ] || echo "$caso: exit $r, atteso 4: $(cat "$mp.err")"
+        [ -d "$wp" ] && [ "$(printf '%s\n' "$wp" | wc -l)" = 1 ] || echo "$caso: il worktree non resta o il percorso non è stampato («$wp»)" ;;
+    esac
+    [ -z "$wp" ] || wt_prova_rimuovi "$wp" 2>/dev/null || echo "$caso: rimozione fallita"
+    exit 0 ) 2>&1
+}
+prep_tutti() { # <lib> <prefix>: the five cases and the WSL one
+  local lib=$1 p=$2 c
+  for c in presenti assenti fallisce niente senza; do prep_caso "$lib" "$p-$c/proj" "$c"; done
+  prep_caso "$lib" "$p-wsl/proj" assenti wsl
+}
+r=$(prova_caso "$HERE/worktree-lib.sh" "$T/prova1/proj")
+check "1.9.0 wt_prova_*: crea alla base (una riga), marcatore, collegamenti, preparati copiati, applica l'albero, rimuove senza toccare le dipendenze vere" '[ -z "$r" ]' || printf '  %s\n' "$r"
+r=$(prep_tutti "$HERE/worktree-lib.sh" "$T/prep")
+check "1.9.0 wt_prova_crea, preparati: copiati se presenti (preparazione mai lanciata), altrimenti la preparazione nel worktree (anche WSL); fallita, senza file guida o assente -> 4" '[ -z "$r" ]' || printf '  %s\n' "$r"
+MP2="$T/mut-prova/scripts"; mkdir -p "$MP2"; cp -r "$HERE/lib" "$MP2/"
+muta() { # <name> <old line> <new line>: the lib with that line replaced (exactly one occurrence), or an error line
+  python3 - "$HERE/worktree-lib.sh" "$MP2/worktree-lib.sh" "$2" "$3" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+if s.count(sys.argv[3]) != 1:
+    print("MUTAZIONE NON APPLICABILE: " + sys.argv[3]); sys.exit(0)
+open(sys.argv[2], "w", encoding="utf-8").write(s.replace(sys.argv[3], sys.argv[4]))
+PY
+}
+m=$(muta a '  wt_ours "$wt" "$mk" || { WT_PROVA_ESITO=nostro; return 1; }' '  : MUTANTE')
+check "premessa: mutazione (a) applicata" '[ -z "$m" ] && grep -q "^  : MUTANTE$" "$MP2/worktree-lib.sh"' || echo "  $m"
+r=$(prova_caso "$MP2/worktree-lib.sh" "$T/prova2/proj")
+check "controprova (a): _wt_rimuovi senza wt_ours -> il worktree senza marcatore è rimosso" \
+  'printf "%s\n" "$r" | grep -q "rimosso un worktree senza marcatore"' || printf '  %s\n' "$r"
+m=$(muta b '  unlink_deps "$wt" || { WT_PROVA_ESITO=collegamenti; return 1; }' '  : MUTANTE')
+check "premessa: mutazione (b) applicata" '[ -z "$m" ] && grep -q "^  : MUTANTE$" "$MP2/worktree-lib.sh"' || echo "  $m"
+r=$(prova_caso "$MP2/worktree-lib.sh" "$T/prova3/proj")
+if [ $SEGUE -eq 1 ]; then
+  check "controprova (b): _wt_rimuovi senza unlink_deps -> node_modules del tree principale svuotato" \
+    'printf "%s\n" "$r" | grep -q "node_modules del tree principale toccato"' || printf '  %s\n' "$r"
+else
+  echo "SALTATO [1.9.0 controprova (b)]: git worktree remove non segue il collegamento ($([ $TWIN -eq 1 ] && echo giunzione || echo symlink)): nessun effetto da misurare"
+fi
+m=$(muta c '    if { [ -n "$guida" ] && [ -f "$MAIN/$pre$guida" ]; } || { [ -z "$guida" ] && _wt_prep_ha "$MAIN/$pre" "${gl[@]}"; }; then' '    if false; then')
+check "premessa: mutazione (c) applicata" '[ -z "$m" ]' || echo "  $m"
+r=$(prep_caso "$MP2/worktree-lib.sh" "$T/prep-c/proj" presenti)
+check "controprova (c): senza la copia dal tree principale -> la preparazione gira con i preparati presenti" \
+  'printf "%s\n" "$r" | grep -q "presenti: la preparazione è stata lanciata"' || printf '  %s\n' "$r"
+m=$(muta d '      echo "$tag: $(msg worktree-lib-190.prep_guide rad="$rad" guida="${guida:-${gl[*]}}")" >&2; return 4' '      :')
+check "premessa: mutazione (d) applicata" '[ -z "$m" ]' || echo "  $m"
+r=$(prep_caso "$MP2/worktree-lib.sh" "$T/prep-d/proj" niente)
+check "controprova (d): senza il controllo del file guida -> una preparazione che non scrive niente passa" \
+  'printf "%s\n" "$r" | grep -q "niente: exit 0, atteso 4"' || printf '  %s\n' "$r"
+unlink_all
+
 echo "ciclo-worktree.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]
