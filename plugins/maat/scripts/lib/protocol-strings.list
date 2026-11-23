@@ -170,6 +170,9 @@ scripts/run-phase.sh	Deviazione: STOP — |\.deviazioni-test|deviazioni-accettat
 scripts/driver.py	[Dd]ecisione non verificata da script|DECISIONE NON VERIFICATA \(driver\): |Out of scope\|Fuori ambito\|Constraints\|Vincoli|Scheletro: SOPRA IL TETTO	B10: il token «decisione non verificata da script» (uguale in ogni lingua: lo STOP, la riga di driver.log letta da cycle-report.py, la riga del prompt della review), le intestazioni della spec lette dal controllo di scope e la riga di plan-check.sh skeleton riletta per il tipo cut
 scripts/cycle-report.py	Decisione non verificata da script: 	B10: lettura della riga di driver.log scritta dal driver
 scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi dell'oggetto «sonda» di rossi.json (decisione, affermazione, testo atteso, riga), lette dal driver per il prompt della review
+# --- 1.9.0 (K1): plan-check.sh esiti, corretto, deviazione --famiglia test-difettoso (S2)
+scripts/plan-check.sh	patch-non-ripristinata|stato-condiviso	1.9.0 K1: nomi di classe di test-difettoso (token di --classe, della riga «trasformazione: <classe>/<runner> — <forma>» di corretto e di «Defect class:», letti da run-phase.sh: uguali in ogni lingua)
+scripts/plan-check.sh	rossi\.json	1.9.0 K1: nome del file del run dir test-red/rossi.json da cui corretto legge il nome di Tn (nei motivi di uscita 3 e di d_outside)
 # --- 13. 1.8.1 (G2-3): literals read by other code that the anti-leak scanner does not flag (only the weak word
 # «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
 # same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);

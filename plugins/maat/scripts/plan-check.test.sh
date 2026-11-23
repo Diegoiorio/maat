@@ -2389,6 +2389,447 @@ expect 1 "^conflitto: $GO_IDN — " "rossi 1.8.1 --instabili: un altra identita 
 expect 2 "-" "rossi 1.8.1 --instabili: file assente = uso" -- d1r "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run" --instabili "$D1/nessuno.txt"
 expect 1 "^conflitto: $GO_IDN — \(\+3 tests not run\) .*<-> \(no acceptance test claims it\)$" "rossi 1.8.1 en: (+N tests not run) e (no acceptance test claims it)" -- env MAAT_LINGUA=en env -u MAAT_CONFIG PLAN_CHECK_ROOT="$D1" bash "$PC" rossi "$D1/padre.md" --evidence "$D1/ev-inst" --run-dir "$D1/r.run"
 
+# ── 1.9.0 K1: esiti, deviazione --famiglia test-difettoso, corretto (D1, D2, D8), diff-test --dal-post ─────────────────
+export PLAN_CHECK_ROOT="$R"
+. "$HERE/python.sh"; export FIC_PY   # unset above (1.8.1 block): the interpreter of the K1 helpers
+speck1() {
+cat <<'EOF'
+# Titolo
+## Requisiti funzionali
+- RF7 — il messaggio dei prelievi falliti.
+## Piano di implementazione
+Plan format: 2
+Plan status: APPROVED
+Test level: std
+Superfici a rischio: nessuna
+### File toccati
+- `modules/api/app/services/fmtp.py`
+- `modules/api/tests/test_fmtp.py` (nuovo)
+- `modules/app/apps/admin/tests/fmtp.test.ts` (nuovo)
+### Passi
+| id | file | modifica | test |
+|---|---|---|---|
+| P1 | `modules/api/app/services/fmtp.py` | messaggio dei prelievi | T1, T2 |
+### Tracciabilità requisiti
+| Req | Passi del piano | Verifica |
+|---|---|---|
+| RF7 | P1 | T1, T2 |
+### Piano di test
+| ID | requisito | file | asserzione | mutazione |
+|---|---|---|---|---|
+| T1 | RF7 | `modules/api/tests/test_fmtp.py::test_uno` (nuovo) | rosso se: `1 prelievo fallito` | — |
+| T2 | RF7 | `modules/app/apps/admin/tests/fmtp.test.ts::conta` (nuovo) | rosso se: `1 prelievo fallito` | — |
+EOF
+}
+speck1 > "$T/k1.md"
+jget() { "$FIC_PY" -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); print(eval(sys.argv[2]))' "$1" "$2"; }
+# esiti: riga_errore is only the line of the exception or of the assertion. The JUnit body of pytest prints the source of
+# the test, which holds the expected text: T1 is «dimostrato» as in rossi, its riga_errore (a TypeError) does not hold it
+JU_K1='<testcase classname="tests.test_fmtp" name="test_uno"><failure message="TypeError: &apos;int&apos; object is not iterable">def test_uno():
+&gt;       assert fmt(30) == "1 prelievo fallito"
+E       TypeError: &apos;int&apos; object is not iterable
+tests/test_fmtp.py:3: TypeError</failure></testcase><testcase classname="tests.test_fmtp" name="test_vittima"><failure message="assert 5 == 1">E   assert 5 == 1
+tests/test_fmtp.py:9: AssertionError</failure></testcase><testcase classname="tests.test_fmtp" name="test_salta"><skipped message="no"/></testcase><testcase classname="tests.test_fmtp.TestK" name="test_m"/><testcase classname="tests.test_altro" name="test_x"><failure message="assert 0">E assert 0</failure></testcase>'
+FE_K1=" ❯ tests/fmtp.test.ts (3 tests | 2 failed) 5ms
+   × conta 3ms
+     → expected '2 prelievi' to be '1 prelievo fallito'
+   × gruppo > vittima 1ms
+   ✓ altro 1ms
+ ❯ tests/altro.test.ts (1 test | 1 failed) 2ms
+   × fuori 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/fmtp.test.ts > conta
+AssertionError: expected '2 prelievi' to be '1 prelievo fallito' // Object.is equality
+
+- Expected
++ Received
+
+- 1 prelievo fallito
++ 2 prelievi
+
+ ❯ tests/fmtp.test.ts:4:20
+⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+ FAIL  tests/fmtp.test.ts > gruppo > vittima
+AssertionError: expected 5 to be 1 // Object.is equality
+ ❯ tests/fmtp.test.ts:9:20
+⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+ FAIL  tests/altro.test.ts > fuori
+Error: boom
+ ❯ tests/altro.test.ts:1:1
+⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+ Tests  3 failed | 1 passed (4)"
+mkev "$T/ev-k1" "$JU_K1" FAIL "$FE_K1" FAIL
+rm -rf "$T/k1e.run"
+expect 0 "^esito T1: dimostrato$" "K1 esiti: T1 classificato come rossi (verdict)" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1" --out "$T/k1-es.json" --run-dir "$T/k1e.run"
+expect 0 "^esito T1: dimostrato esito T2: dimostrato $" "K1 esiti: una riga per T, nell'ordine della tabella" -- sh -c 'bash "$1" esiti "$2" --evidence "$3" --out "$4" | grep "^esito " | tr "\n" " "' _ "$PC" "$T/k1.md" "$T/ev-k1" "$T/k1-es.json"
+expect 0 "^TypeError: 'int' object is not iterable$" "K1 esiti: riga_errore JUnit = l'attributo message, mai il traceback col sorgente" -- jget "$T/k1-es.json" 'd["test"]["T1"]["riga_errore"]'
+refute "1 prelievo fallito" "K1 esiti: un'eccezione la cui riga non contiene l'atteso: riga_errore senza il testo atteso" -- jget "$T/k1-es.json" 'd["test"]["T1"]["riga_errore"]'
+expect 0 "^AssertionError: expected '2 prelievi' to be '1 prelievo fallito' // Object.is equality$" "K1 esiti: riga_errore vitest = il messaggio fino alla riga vuota o di stack (niente diff)" -- jget "$T/k1-es.json" 'd["test"]["T2"]["riga_errore"]'
+expect 0 "^esito motivo messaggio posizione file nome riga_errore modules/api/tests/test_fmtp.py:3 test_uno$" "K1 esiti: i campi di rossi.json più riga_errore" -- jget "$T/k1-es.json" '" ".join(list(d["test"]["T1"]) + [d["test"]["T1"]["posizione"], d["test"]["T1"]["nome"]])'
+expect 0 "^\['evidence', 'test', 'casi'\]$" "K1 esiti: chiavi del file --out (interfaccia b)" -- jget "$T/k1-es.json" 'list(d)'
+expect 0 "^modules/api/tests/test_fmtp.py::test_uno rosso \| modules/api/tests/test_fmtp.py::test_vittima rosso assert 5 == 1 \| modules/api/tests/test_fmtp.py::test_salta saltato \| modules/api/tests/test_fmtp.py::TestK::test_m verde$" "K1 esiti casi JUnit: ogni caso del file di T1, nell'ordine del report, test_id file::classname::name, mai un altro file" -- jget "$T/k1-es.json" '" | ".join(c["test_id"] + " " + c["esito"] + ((" " + c["riga_errore"]) if c["test_id"].endswith("vittima") else "") for c in d["casi"]["modules/api/tests/test_fmtp.py"])'
+expect 0 "^conta rosso 1 prelievo fallito \| gruppo vittima rosso expected 5 to be 1 \| altro verde -$" "K1 esiti casi vitest: l'albero del reporter e i blocchi FAIL, test_id il nome completo, mai un altro file" -- jget "$T/k1-es.json" '" | ".join("%s %s %s" % (c["test_id"], c["esito"], ("1 prelievo fallito" if "1 prelievo fallito" in c["riga_errore"] else c["riga_errore"].split(": ", 1)[-1].split(" //")[0]) or "-") for c in d["casi"]["modules/app/apps/admin/tests/fmtp.test.ts"])'
+[ ! -e "$T/k1e.run/test-red/rossi.json" ] && pass=$((pass+1)) || { echo "FAIL [K1 esiti: non scrive mai test-red/rossi.json]"; fail=$((fail+1)); }
+JU_K1E='<testcase classname="tests.test_fmtp" name="test_uno"><failure message="">def test_uno():
+&gt;       assert fmt(30) == "1 prelievo fallito"
+E       TypeError: bad operand
+tests/test_fmtp.py:3: TypeError</failure></testcase>'
+mkev "$T/ev-k1e" "$JU_K1E" FAIL "$FE_K1" FAIL
+bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1e" --out "$T/k1-es-e.json" >/dev/null 2>&1
+expect 0 "^TypeError: bad operand$" "K1 esiti: senza message, le righe «E   …» del testo di pytest" -- jget "$T/k1-es-e.json" 'd["test"]["T1"]["riga_errore"]'
+mkev "$T/ev-k1v" '<testcase classname="tests.test_fmtp" name="test_uno"/>' PASS "$FE_K1" FAIL
+bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1v" --out "$T/k1-es-v.json" >/dev/null 2>&1
+expect 0 "^verde\|\|$" "K1 esiti: un verde ha riga_errore vuota" -- jget "$T/k1-es-v.json" 'd["test"]["T1"]["esito"] + "|" + d["test"]["T1"]["riga_errore"] + "|"'
+mkdir -p "$T/ev-k1b"; cp "$T/ev-k1/tests-be.junit.xml" "$T/ev-k1/tests-be.json" "$T/ev-k1b/"
+cp "$T/k1-es.json" "$T/k1-es-b.json"
+expect 3 "^bloccato: tests-fe" "K1 esiti: evidenza di un gate assente = BLOCKED, uscita 3" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1b" --out "$T/k1-es-b.json"
+[ ! -e "$T/k1-es-b.json" ] && pass=$((pass+1)) || { echo "FAIL [K1 esiti: BLOCKED = nessun file --out, nemmeno quello vecchio]"; fail=$((fail+1)); }
+printf '{"gate":"tests-fe","esito":"BLOCKED","report":"tests-fe.log","motivo":"x"}\n' > "$T/ev-k1b/tests-fe.json"; cp "$T/ev-k1/tests-fe.log" "$T/ev-k1b/"
+expect 3 "-" "K1 esiti: gate tests-* BLOCKED = uscita 3" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1b" --out "$T/k1-es-b.json"
+expect 3 "-" "K1 esiti: evidenza assente = uscita 3" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/nessuna-ev" --out "$T/k1-es-b.json"
+expect 2 "uso: .* esiti" "K1 esiti: senza --out = uso" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1"
+expect 2 "uso: .* esiti" "K1 esiti: opzione sconosciuta = uso" -- bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1" --out "$T/x.json" --boh
+if mutpc k1rerr 's/^    m = nrm(message)$/    m = nrm(message + " " + text)/'; then
+  expect 0 "1 prelievo fallito" "controprova K1: riga_errore col traceback intero contiene l'atteso (rosso)" -- sh -c 'env MAAT_ROOT="$1" bash "$2" esiti "$3" --evidence "$4" --out "$5" >/dev/null; "$6" -c "import json,sys; print(json.load(open(sys.argv[1],encoding=\"utf-8\"))[\"test\"][\"T1\"][\"riga_errore\"])" "$5"' _ "$PLUGIN_DIR" "$T/pcm-k1rerr/plan-check.sh" "$T/k1.md" "$T/ev-k1" "$T/k1-es-m.json" "$FIC_PY"
+else echo "FAIL [controprova K1 riga_errore: la mutazione non si applica]"; fail=$((fail+1)); fi
+expect 1 "^rossi: esito=STOP" "K1: rossi dopo la divisione in leggi_esiti (conflitti di altri file come prima)" -- bash "$PC" rossi "$T/k1.md" --evidence "$T/ev-k1" --run-dir "$T/k1r.run"
+expect 1 "^rosso T1: dimostrato modules/api/tests/test_fmtp.py:3 " "K1: rossi classifica T1 come prima" -- bash "$PC" rossi "$T/k1.md" --evidence "$T/ev-k1" --run-dir "$T/k1r.run"
+# deviazione --famiglia test-difettoso: the inputs plan-check computes for the judge (D7) and the check of its verdict
+kdd() { bash "$PC" deviazione "$@"; }
+expect 0 "^judge instructions: Judge a defective-test deviation of implement\. .*ACCEPT only if the old test leaks state it created itself \(of the declared class\) into the victim test, so that the victim cannot pass in its file for any correct implementation, the correction only restores or isolates that state, and the new test checks the same expected behaviour\. REJECT if the production code may keep state keyed on object identity \(a WeakMap, a memo on id\(\) or on the reference\) that a copy of the test data would break or hide\." "K1 test-difettoso: le istruzioni fisse DEV_ISTRUZIONI_DIFETTO" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso
+expect 0 "^test row: \| T1 \| RF7 \| .modules/api/tests/test_fmtp.py::test_uno. " "K1 test-difettoso: la riga del test" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso
+expect 0 "^trace row: \| RF7 \| P1 \| T1, T2 \|$" "K1 test-difettoso: la riga di tracciabilita'" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso
+expect 0 "^defect: T1 — patch-non-ripristinata$" "K1 test-difettoso: con --classe la riga defect: (mai il perche')" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+refute "^defect:|^test file:" "K1 test-difettoso: senza --classe nessuna riga defect:, e nessuna test file: (non e' un ingresso di D7)" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso
+expect 1 "^controllo: d_class$" "K1 test-difettoso: classe tipo (rimandata) = d_class" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso --classe tipo
+expect 1 "^controllo: d_class$" "K1 test-difettoso: classe asincronia = d_class" -- kdd - "$T/k1.md" T1 --famiglia test-difettoso --classe asincronia
+printf 'Deviation verdict: ACCEPT — ok\nRequirements still covered: RF7\nDefect class: unrestored-patch\n' > "$T/k1-g-ok.txt"
+expect 0 "^Deviazione: ACCETTATA$" "K1 test-difettoso: giudice ACCEPT, RF7, classe uguale (in inglese) = ACCETTATA" -- kdd "$T/k1-g-ok.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+printf 'Deviation verdict: ACCEPT — ok\nRequirements still covered: RF7\nDefect class: stato-condiviso\n' > "$T/k1-g-cl.txt"
+expect 1 "^controllo: d_class$" "K1 test-difettoso: classe del giudice diversa = d_class" -- kdd "$T/k1-g-cl.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+expect 1 "^controllo: d_class$" "K1 test-difettoso: giudizio senza --classe = non verificabile, d_class" -- kdd "$T/k1-g-ok.txt" "$T/k1.md" T1 --famiglia test-difettoso
+printf 'Deviation verdict: ACCEPT — ok\nRequirements still covered: RF7\n' > "$T/k1-g-nocl.txt"
+expect 1 "^controllo: d_class$" "K1 test-difettoso: giudizio senza Defect class: = d_class" -- kdd "$T/k1-g-nocl.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+printf 'Deviation verdict: STOP — no\nRequirements still covered: RF7\nDefect class: patch-non-ripristinata\n' > "$T/k1-g-stop.txt"
+expect 1 "^controllo: judge$" "K1 test-difettoso: verdetto STOP = judge" -- kdd "$T/k1-g-stop.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+printf 'Deviation verdict: ACCEPT — ok\nRequirements still covered: RF1\nDefect class: patch-non-ripristinata\n' > "$T/k1-g-req.txt"
+expect 1 "^controllo: judge$" "K1 test-difettoso: requisito di T1 non coperto = judge" -- kdd "$T/k1-g-req.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+expect 2 "-" "K1 deviazione: la famiglia contraddizione (S1, rimandata) = uso" -- kdd - "$T/k1.md" T1 --famiglia contraddizione
+expect 2 "-" "K1 deviazione: --classe senza --famiglia = uso" -- kdd - "$T/k1.md" T1 --classe stato-condiviso
+if mutpc k1gcl 's/^    if cl is None or not k or CLASSI_DIF.get(k\[-1\].strip().lower()) != cl:  # CLASSE-DEL-GIUDICE$/    if False:/'; then
+  expect 0 "^Deviazione: ACCETTATA$" "controprova K1: senza il controllo della classe del giudice la classe diversa passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1gcl/plan-check.sh" deviazione "$T/k1-g-cl.txt" "$T/k1.md" T1 --famiglia test-difettoso --classe patch-non-ripristinata
+else echo "FAIL [controprova K1 classe del giudice: la mutazione non si applica]"; fail=$((fail+1)); fi
+# corretto: old = the version of test-red, new = the corrected one; the name of Tn from <run>/test-red/rossi.json
+K1D="$T/k1c"; K1R="$T/k1c.run"; mkdir -p "$K1D" "$K1R/test-red"
+printf '{"esito": "OK", "test": {"T1": {"esito": "dimostrato", "nome": "test_uno"}, "T2": {"esito": "dimostrato", "nome": "conta"}}}\n' > "$K1R/test-red/rossi.json"
+sost() { # <src> <dst> <old text> <new text> [<old> <new> …]: str.replace, \n = newline; a text not found = exit 9
+  "$FIC_PY" -c '
+import sys
+s = open(sys.argv[1], encoding="utf-8").read()
+a = sys.argv[3:]
+for i in range(0, len(a), 2):
+    o, n = a[i].replace("\\n", "\n"), a[i + 1].replace("\\n", "\n")
+    if o not in s:
+        sys.exit("sost: not found: " + o)
+    s = s.replace(o, n, 1)
+open(sys.argv[2], "w", encoding="utf-8", newline="\n").write(s)' "$@" || { echo "FAIL [fixture sost: $3]"; fail=$((fail+1)); }
+}
+cat > "$K1D/old.py" <<'EOF'
+import pytest
+from app.services import fmtp
+from app.services.fmtp import fmt, DEFAULT
+from unittest.mock import patch
+
+DATI = {"n": 1, "voci": [1, 2]}
+DA_PROD = fmtp.BASE
+
+
+def crea():
+    return {"n": 1}
+
+
+DA_FUNZ = crea()
+
+
+class Conf:
+    soglia = 1
+
+
+@pytest.fixture(autouse=True)
+def pulisci():
+    yield
+
+
+@pytest.fixture
+def righe():
+    return [1, 2]
+
+
+def test_altro():
+    assert fmt(2) == "2 prelievi falliti"
+
+
+def test_uno():
+    Conf.soglia = 5
+    d = DATI
+    d["n"] = 2
+    assert fmt(d) == "1 prelievo fallito"
+
+
+def test_vittima():
+    assert Conf.soglia == 1
+EOF
+kc() { # <class> <new file> [<old file>]
+  bash "$PC" corretto "$T/k1.md" T1 --classe "$1" --vecchio "${3:-$K1D/old.py}" --nuovo "$2" --run-dir "$K1R"
+}
+MP='def test_uno(monkeypatch):\n    monkeypatch.setattr(Conf, "soglia", 5)'
+sost "$K1D/old.py" "$K1D/mp.py" 'def test_uno():\n    Conf.soglia = 5' "$MP"
+expect 0 "^trasformazione: patch-non-ripristinata/pytest — monkeypatch.setattr$" "K1 D8 verde: X.attr = v → monkeypatch.setattr (fixture aggiunta)" -- kc patch-non-ripristinata "$K1D/mp.py"
+expect 0 "^zone protette: 2$" "K1 corretto: i nodi protetti della versione vecchia (Assert e Compare)" -- kc unrestored-patch "$K1D/mp.py"
+refute "^violazione " "K1 corretto: la trasformazione riconosciuta non ha violazioni" -- kc unrestored-patch "$K1D/mp.py"
+sost "$K1D/old.py" "$K1D/sa-old.py" '    Conf.soglia = 5' '    setattr(Conf, "soglia", 5)'
+expect 0 "^trasformazione: patch-non-ripristinata/pytest — monkeypatch.setattr$" "K1 D8 verde: setattr(X, \"attr\", v) → monkeypatch.setattr" -- kc patch-non-ripristinata "$K1D/mp.py" "$K1D/sa-old.py"
+expect 1 "^violazione d_transform: .*not a form of patch-non-ripristinata|^violazione d_transform: " "K1 D8: la forma di un'altra classe (monkeypatch con classe stato-condiviso) = d_transform" -- kc stato-condiviso "$K1D/mp.py"
+sost "$K1D/old.py" "$K1D/prod-old.py" '    Conf.soglia = 5' '    fmtp.LIMITE = 5'
+sost "$K1D/prod-old.py" "$K1D/prod.py" 'def test_uno():\n    fmtp.LIMITE = 5' 'def test_uno(monkeypatch):\n    monkeypatch.setattr(fmtp, "LIMITE", 5)'
+expect 1 "^violazione d_transform: monkeypatch of a target imported" "K1 D8 rosso: la stessa forma con un bersaglio di produzione (nome importato) = d_transform" -- kc patch-non-ripristinata "$K1D/prod.py" "$K1D/prod-old.py"
+sost "$K1D/mp.py" "$K1D/mp-val.py" '"soglia", 5)' '"soglia", 6)'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: valore diverso fra vecchio e nuovo = d_transform" -- kc patch-non-ripristinata "$K1D/mp-val.py"
+sost "$K1D/mp.py" "$K1D/mp-tgt.py" 'setattr(Conf, "soglia"' 'setattr(Conf, "limite"'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: bersaglio diverso fra vecchio e nuovo = d_transform" -- kc patch-non-ripristinata "$K1D/mp-tgt.py"
+sost "$K1D/old.py" "$K1D/fuori-old.py" 'class Conf:\n    soglia = 1\n' 'class Conf:\n    soglia = 1\n\n\nConf.soglia = 5\n' 'def test_uno():\n    Conf.soglia = 5\n' 'def test_uno():\n'
+sost "$K1D/old.py" "$K1D/fuori.py" 'def test_uno():\n    Conf.soglia = 5\n' 'def test_uno(monkeypatch):\n    monkeypatch.setattr(Conf, "soglia", 5)\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: assegnazione vecchia fuori dal corpo di Tn = d_transform" -- kc patch-non-ripristinata "$K1D/fuori.py" "$K1D/fuori-old.py"
+sost "$K1D/mp.py" "$K1D/mp-piu.py" '    d = DATI\n' '    d = DATI\n    x = 1\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: un'istruzione in piu' accanto alla trasformazione = d_transform" -- kc patch-non-ripristinata "$K1D/mp-piu.py"
+sost "$K1D/old.py" "$K1D/nuova.py" 'def test_uno():\n    Conf.soglia = 5\n' 'def test_uno(monkeypatch):\n    Conf.soglia = 5\n    monkeypatch.setattr(fmtp, "LIMITE", 1)\n'
+expect 1 "^violazione d_transform: new patch" "K1 D8 rosso: una patch nuova che il test vecchio non aveva = d_transform" -- kc patch-non-ripristinata "$K1D/nuova.py"
+sost "$K1D/old.py" "$K1D/reset.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    fmtp.cache.clear()\n'
+expect 1 "^violazione d_transform: reset of an object \(clear\)" "K1 D8 rosso (S2-i, stato di produzione azzerato): cache.clear() alla fine di Tn = d_transform" -- kc stato-condiviso "$K1D/reset.py"
+sost "$K1D/old.py" "$K1D/cc.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    fmtp.calcola.cache_clear()\n'
+expect 1 "^violazione d_transform: reset of an object \(cache_clear\)" "K1 D8 rosso: cache_clear di un oggetto importato = d_transform" -- kc patch-non-ripristinata "$K1D/cc.py"
+sost "$K1D/old.py" "$K1D/rel.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    importlib.reload(fmtp)\n'
+expect 1 "^violazione d_transform: importlib.reload" "K1 D8 rosso: importlib.reload aggiunto = d_transform" -- kc patch-non-ripristinata "$K1D/rel.py"
+sost "$K1D/old.py" "$K1D/scr.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    fmtp.STATO = None\n'
+expect 1 "^violazione d_transform: write to the state of an imported module" "K1 D8 rosso: scrittura nello stato di un modulo di produzione = d_transform" -- kc stato-condiviso "$K1D/scr.py"
+sost "$K1D/old.py" "$K1D/amano.py" 'def test_uno():\n    Conf.soglia = 5\n' 'def test_uno():\n    vecchio = Conf.soglia\n    Conf.soglia = 5\n' '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    Conf.soglia = vecchio\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: forma non riconosciuta (ripristino a mano con una variabile salvata) = d_transform" -- kc patch-non-ripristinata "$K1D/amano.py"
+sost "$K1D/mp.py" "$K1D/due.py" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n' 'import pytest\n' 'import copy\nimport pytest\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: due trasformazioni nella stessa correzione = d_transform" -- kc patch-non-ripristinata "$K1D/due.py"
+expect 1 "^violazione d_outside: import copy|^violazione d_transform: " "K1 D8 rosso: due trasformazioni (classe stato-condiviso) = STOP" -- kc stato-condiviso "$K1D/due.py"
+# patch(...).start() without .stop(): with, or .stop() in a finally
+cat > "$K1D/pa-old.py" <<'EOF'
+from unittest.mock import patch
+from app.services.fmtp import fmt
+
+
+def test_uno():
+    m = patch("app.services.fmtp.adesso").start()
+    m.return_value = 1
+    assert fmt(1) == "1 prelievo fallito"
+
+
+def test_vittima():
+    assert fmt(2) == "2 prelievi falliti"
+EOF
+sost "$K1D/pa-old.py" "$K1D/pa-with.py" '    m = patch("app.services.fmtp.adesso").start()\n    m.return_value = 1\n    assert fmt(1) == "1 prelievo fallito"\n' '    with patch("app.services.fmtp.adesso") as m:\n        m.return_value = 1\n        assert fmt(1) == "1 prelievo fallito"\n'
+expect 0 "^trasformazione: patch-non-ripristinata/pytest — with patch$" "K1 D8 verde: patch(...).start() senza .stop() → with patch(...)" -- kc patch-non-ripristinata "$K1D/pa-with.py" "$K1D/pa-old.py"
+sost "$K1D/pa-old.py" "$K1D/pa-presto.py" '    m = patch("app.services.fmtp.adesso").start()\n    m.return_value = 1\n' '    with patch("app.services.fmtp.adesso") as m:\n        m.return_value = 1\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: un with patch(...) che si chiude prima dell'asserzione = d_transform" -- kc patch-non-ripristinata "$K1D/pa-presto.py" "$K1D/pa-old.py"
+sost "$K1D/pa-old.py" "$K1D/pb-old.py" '    m = patch("app.services.fmtp.adesso").start()\n' '    p = patch("app.services.fmtp.adesso")\n    m = p.start()\n'
+sost "$K1D/pb-old.py" "$K1D/pb-fin.py" '    m.return_value = 1\n    assert fmt(1) == "1 prelievo fallito"\n' '    try:\n        m.return_value = 1\n        assert fmt(1) == "1 prelievo fallito"\n    finally:\n        p.stop()\n'
+expect 0 "^trasformazione: patch-non-ripristinata/pytest — stop in finally$" "K1 D8 verde: .stop() in un finally che racchiude le istruzioni dopo start()" -- kc patch-non-ripristinata "$K1D/pb-fin.py" "$K1D/pb-old.py"
+sost "$K1D/pb-old.py" "$K1D/pb-fin2.py" '    m.return_value = 1\n    assert fmt(1) == "1 prelievo fallito"\n' '    m.return_value = 1\n    try:\n        assert fmt(1) == "1 prelievo fallito"\n    finally:\n        p.stop()\n'
+expect 1 "^violazione d_transform: " "K1 D8 rosso: il try non racchiude tutte le istruzioni dopo start() = d_transform" -- kc patch-non-ripristinata "$K1D/pb-fin2.py" "$K1D/pb-old.py"
+sost "$K1D/pb-old.py" "$K1D/pb-with.py" '    p = patch("app.services.fmtp.adesso")\n    m = p.start()\n    m.return_value = 1\n    assert fmt(1) == "1 prelievo fallito"\n' '    with patch("app.services.fmtp.adesso") as m:\n        m.return_value = 1\n        assert fmt(1) == "1 prelievo fallito"\n'
+expect 0 "^trasformazione: patch-non-ripristinata/pytest — with patch$" "K1 D8 verde: p = patch(...); p.start() → with patch(...)" -- kc patch-non-ripristinata "$K1D/pb-with.py" "$K1D/pb-old.py"
+# stato-condiviso, pytest: copy.deepcopy(NOME) at the first use, NOME defined in the test file in the strict sense
+DC='import copy\nimport pytest\n'
+sost "$K1D/old.py" "$K1D/dc.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 0 "^trasformazione: stato-condiviso/pytest — copy.deepcopy$" "K1 D8 verde: copy.deepcopy(NOME) con import copy, NOME un dict letterale di modulo" -- kc stato-condiviso "$K1D/dc.py"
+expect 0 "^trasformazione: stato-condiviso/pytest — copy.deepcopy$" "K1 D8 verde: la classe in inglese (shared-state), la riga in italiano" -- kc shared-state "$K1D/dc.py"
+sost "$K1D/old.py" "$K1D/fx-old.py" 'def test_uno():\n    Conf.soglia = 5\n    d = DATI\n' 'def test_uno(righe):\n    Conf.soglia = 5\n    d = righe\n'
+sost "$K1D/fx-old.py" "$K1D/fx.py" 'import pytest\n' "$DC" '    d = righe\n' '    d = copy.deepcopy(righe)\n'
+expect 0 "^trasformazione: stato-condiviso/pytest — copy.deepcopy$" "K1 D8 verde: copy.deepcopy del return letterale di una fixture del file" -- kc stato-condiviso "$K1D/fx.py" "$K1D/fx-old.py"
+sost "$K1D/old.py" "$K1D/imp-old.py" '    d = DATI\n' '    d = DEFAULT\n'
+sost "$K1D/imp-old.py" "$K1D/imp.py" 'import pytest\n' "$DC" '    d = DEFAULT\n' '    d = copy.deepcopy(DEFAULT)\n'
+expect 1 "^violazione d_transform: DEFAULT is not defined in the test file \(imported name\)" "K1 D8 rosso: copia di un oggetto importato (pytest) = d_transform" -- kc stato-condiviso "$K1D/imp.py" "$K1D/imp-old.py"
+sost "$K1D/old.py" "$K1D/pr-old.py" '    d = DATI\n' '    d = DA_PROD\n'
+sost "$K1D/pr-old.py" "$K1D/pr.py" 'import pytest\n' "$DC" '    d = DA_PROD\n' '    d = copy.deepcopy(DA_PROD)\n'
+expect 1 "^violazione d_transform: DA_PROD is not defined in the test file \(right-hand side" "K1 D8 rosso: NOME = prod.X poi copiato = d_transform" -- kc stato-condiviso "$K1D/pr.py" "$K1D/pr-old.py"
+sost "$K1D/old.py" "$K1D/cr-old.py" '    d = DATI\n' '    d = DA_FUNZ\n'
+sost "$K1D/cr-old.py" "$K1D/cr.py" 'import pytest\n' "$DC" '    d = DA_FUNZ\n' '    d = copy.deepcopy(DA_FUNZ)\n'
+expect 1 "^violazione d_transform: DA_FUNZ is not defined in the test file \(right-hand side" "K1 D8 rosso: NOME = crea() poi copiato = d_transform" -- kc stato-condiviso "$K1D/cr.py" "$K1D/cr-old.py"
+sost "$K1D/old.py" "$K1D/rip-old.py" 'class Conf:\n' 'DATI = {"n": 3}\n\n\nclass Conf:\n'
+sost "$K1D/rip-old.py" "$K1D/rip.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_transform: DATI is not defined in the test file \(not defined once" "K1 D8 rosso: definizione ripetuta poi copiata = d_transform" -- kc stato-condiviso "$K1D/rip.py" "$K1D/rip-old.py"
+sost "$K1D/old.py" "$K1D/dc-os.py" 'import pytest\n' 'import os\nimport pytest\n' '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_outside: " "K1 D1/D8 rosso: un import diverso da copy = d_outside" -- kc stato-condiviso "$K1D/dc-os.py"
+expect 1 "^violazione d_transform: copy is not the module copy" "K1 D8 rosso: un import diverso da copy, poi copy.deepcopy = d_transform" -- kc stato-condiviso "$K1D/dc-os.py"
+sost "$K1D/old.py" "$K1D/dc-pa.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_outside: modules/api/tests/test_fmtp.py$" "K1 D1: l'import copy e' ammesso solo per stato-condiviso" -- kc patch-non-ripristinata "$K1D/dc-pa.py"
+sost "$K1D/old.py" "$K1D/dc2-old.py" '    d = DATI\n' '    k = len(DATI)\n    d = DATI\n'
+sost "$K1D/dc2-old.py" "$K1D/dc2.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_transform: deepcopy not at the first use of DATI" "K1 D8 rosso: copia non al primo uso = d_transform" -- kc stato-condiviso "$K1D/dc2.py" "$K1D/dc2-old.py"
+sost "$K1D/old.py" "$K1D/za-old.py" '    d = DATI\n    d["n"] = 2\n    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(DATI) == "1 prelievo fallito"\n'
+sost "$K1D/za-old.py" "$K1D/za.py" 'import pytest\n' "$DC" 'fmt(DATI) ==' 'fmt(copy.deepcopy(DATI)) =='
+expect 1 "^violazione d_assert: " "K1 D8: avvolgimento dentro una zona protetta (assert fmt(copy.deepcopy(DATI)) == …) = d_assert" -- kc stato-condiviso "$K1D/za.py" "$K1D/za-old.py"
+refute "^trasformazione: " "K1 D8: con una violazione nessuna riga trasformazione:" -- kc stato-condiviso "$K1D/za.py" "$K1D/za-old.py"
+# D1, D2 and the skip markers (Python)
+sost "$K1D/mp.py" "$K1D/or.py" '== "1 prelievo fallito"' '== "1 prelievo fallito" or True'
+expect 1 "^violazione d_assert: 2 -> 2$" "K1 D2: nodo protetto da == a or = d_assert" -- kc patch-non-ripristinata "$K1D/or.py"
+sost "$K1D/mp.py" "$K1D/in.py" '== "1 prelievo fallito"' 'in ("1 prelievo fallito", "1 prelievi falliti")'
+expect 1 "^violazione d_assert: " "K1 D2: l'abuso in (…, \"1 prelievi falliti\") = d_assert" -- kc patch-non-ripristinata "$K1D/in.py"
+sost "$K1D/mp.py" "$K1D/tolta.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d)\n'
+expect 1 "^violazione d_assert: 2 -> 0$" "K1 D2: asserzione sul testo tolta = d_assert" -- kc patch-non-ripristinata "$K1D/tolta.py"
+sost "$K1D/mp.py" "$K1D/aggiunta.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    assert fmt(d) == "1 prelievo fallito"\n    assert fmt(1) == "1 prelievo fallito"\n'
+expect 1 "^violazione d_assert: 2 -> 4$" "K1 D2: asserzione sul testo aggiunta = d_assert" -- kc patch-non-ripristinata "$K1D/aggiunta.py"
+sost "$K1D/old.py" "$K1D/doc-old.py" '    assert fmt(d) == "1 prelievo fallito"\n' '    """1 prelievo fallito"""\n    assert fmt(d) == ATTESO  # 1 prelievo fallito\n'
+expect 1 "^violazione d_assert: none$" "K1 D2: testo solo in un commento o docstring = nessun nodo protetto, d_assert" -- kc patch-non-ripristinata "$K1D/doc-old.py" "$K1D/doc-old.py"
+sost "$K1D/mp.py" "$K1D/auto.py" '    yield\n' '    yield 1\n'
+expect 1 "^violazione d_outside: modules/api/tests/test_fmtp.py$" "K1 D1: fixture autouse cambiata nello stesso file = d_outside" -- kc patch-non-ripristinata "$K1D/auto.py"
+sost "$K1D/mp.py" "$K1D/imp2.py" 'import pytest\n' 'import pytest, os\n'
+expect 1 "^violazione d_outside: " "K1 D1: import cambiato (non copy) = d_outside" -- kc patch-non-ripristinata "$K1D/imp2.py"
+sost "$K1D/mp.py" "$K1D/altro.py" 'fmt(2) == "2 prelievi falliti"' 'fmt(3) == "2 prelievi falliti"'
+expect 1 "^violazione d_outside: " "K1 D1: un altro T dello stesso file cambiato = d_outside" -- kc patch-non-ripristinata "$K1D/altro.py"
+sost "$K1D/mp.py" "$K1D/vitt.py" '    assert Conf.soglia == 1\n' '    Conf.soglia = 1\n    assert Conf.soglia == 1\n'
+expect 1 "^violazione d_outside: " "K1 D1: la vittima cambiata = d_outside" -- kc patch-non-ripristinata "$K1D/vitt.py"
+sost "$K1D/mp.py" "$K1D/skip.py" 'def test_uno(monkeypatch):' '@pytest.mark.skip\ndef test_uno(monkeypatch):'
+expect 1 "^violazione d_skip: skip$" "K1 D1: pytest.mark.skip aggiunto = d_skip" -- kc patch-non-ripristinata "$K1D/skip.py"
+sost "$K1D/mp.py" "$K1D/xfail.py" '    assert fmt(d)' '    pytest.xfail("x")\n    assert fmt(d)'
+expect 1 "^violazione d_skip: xfail$" "K1 D1: pytest.xfail aggiunto = d_skip" -- kc patch-non-ripristinata "$K1D/xfail.py"
+sost "$K1D/mp.py" "$K1D/nome.py" 'def test_uno(' 'def test_uno_bis('
+expect 1 "^violazione d_assert: test_uno disappeared$" "K1 D2: nome di Tn cambiato = d_assert" -- kc patch-non-ripristinata "$K1D/nome.py"
+printf 'def test_uno(:\n' > "$K1D/rotto.py"
+expect 1 "^violazione d_outside: .*not parsable" "K1 D1: versione nuova non analizzabile = d_outside" -- kc patch-non-ripristinata "$K1D/rotto.py"
+expect 0 "^zone protette: 2$" "K1 corretto: le violazioni prima, poi zone protette: (ultima riga, senza trasformazione:)" -- sh -c 'bash "$1" corretto "$2" T1 --classe patch-non-ripristinata --vecchio "$3" --nuovo "$4" --run-dir "$5" | tail -n 1' _ "$PC" "$T/k1.md" "$K1D/old.py" "$K1D/auto.py" "$K1R"
+# the exit codes of the interface
+expect 2 "uso: .* corretto" "K1 corretto: classe tipo (rimandata) = uso, uscita 2" -- kc tipo "$K1D/mp.py"
+expect 2 "uso: .* corretto" "K1 corretto: senza --run-dir = uso" -- bash "$PC" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/old.py" --nuovo "$K1D/mp.py"
+expect 2 "uso: .* corretto" "K1 corretto: senza --classe = uso" -- bash "$PC" corretto "$T/k1.md" T1 --vecchio "$K1D/old.py" --nuovo "$K1D/mp.py" --run-dir "$K1R"
+expect 3 "-" "K1 corretto: file --nuovo assente = uscita 3" -- kc stato-condiviso "$K1D/nessuno.py"
+expect 3 "-" "K1 corretto: Tn fuori dalla tabella = uscita 3" -- bash "$PC" corretto "$T/k1.md" T9 --classe stato-condiviso --vecchio "$K1D/old.py" --nuovo "$K1D/mp.py" --run-dir "$K1R"
+expect 3 "-" "K1 corretto: rossi.json assente = uscita 3" -- bash "$PC" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/old.py" --nuovo "$K1D/mp.py" --run-dir "$T/nessun.run"
+printf '{"test": {"T1": {"nome": "test_due"}}}\n' > "$T/k1c-nome.json"; mkdir -p "$T/k1cn.run/test-red"; cp "$T/k1c-nome.json" "$T/k1cn.run/test-red/rossi.json"
+expect 1 "^violazione d_outside: .*test_due not found" "K1 corretto: il nome di Tn viene da rossi.json, non dalla tabella" -- bash "$PC" corretto "$T/k1.md" T1 --classe unrestored-patch --vecchio "$K1D/old.py" --nuovo "$K1D/mp.py" --run-dir "$T/k1cn.run"
+# corretto, JS/TS: the body of Tn delimited by its parentheses, bytes identical outside it, lines inside
+cat > "$K1D/old.ts" <<'EOF'
+import { fmt } from '../utils/fmtp'
+import * as prod from '../utils/prod'
+import { BASE } from '../utils/prod'
+const DATI = { n: 1, voci: [1, 2], ok: true }
+const LISTA = [1, 2]
+const DA_PROD = prod.X
+const DA_IMP = BASE
+const obj = { m: () => 1 }
+
+it('altro', () => {
+  expect(fmt(2)).toBe('2 prelievi falliti')
+})
+
+it('conta', () => {
+  const spia = vi.spyOn(obj, 'm')
+  const d = DATI
+  d.n = 2
+  expect(fmt(d)).toBe('1 prelievo fallito')
+})
+
+it('vittima', () => {
+  expect(obj.m()).toBe(1)
+})
+EOF
+kj() { bash "$PC" corretto "$T/k1.md" T2 --classe "$1" --vecchio "${3:-$K1D/old.ts}" --nuovo "$2" --run-dir "$K1R"; }
+FIN='  const spia = vi.spyOn(obj, %s)\n  try {\n    const d = DATI\n    d.n = 2\n    expect(fmt(d)).toBe(%s)\n  } finally {\n    %s\n  }\n})'
+OLDB="  const spia = vi.spyOn(obj, 'm')\n  const d = DATI\n  d.n = 2\n  expect(fmt(d)).toBe('1 prelievo fallito')\n})"
+fin() { printf "$FIN" "'m'" "'1 prelievo fallito'" "$1"; }
+sost "$K1D/old.ts" "$K1D/mr.ts" "$OLDB" "$(fin 'spia.mockRestore()')"
+expect 0 "^trasformazione: patch-non-ripristinata/vitest — mockRestore in finally$" "K1 D8 verde: vi.spyOn + .mockRestore() in try/finally" -- kj patch-non-ripristinata "$K1D/mr.ts"
+sost "$K1D/old.ts" "$K1D/ram.ts" "$OLDB" "$(fin 'vi.restoreAllMocks()')"
+expect 0 "^trasformazione: patch-non-ripristinata/vitest — restoreAllMocks in finally$" "K1 D8 verde: vi.restoreAllMocks() nello stesso posto (nessun altro vi.spyOn nel file)" -- kj unrestored-patch "$K1D/ram.ts"
+sost "$K1D/old.ts" "$K1D/spy2-old.ts" "  expect(fmt(2)).toBe('2 prelievi falliti')" "  vi.spyOn(obj, 'm')\n  expect(fmt(2)).toBe('2 prelievi falliti')"
+sost "$K1D/spy2-old.ts" "$K1D/spy2.ts" "$OLDB" "$(fin 'vi.restoreAllMocks()')"
+expect 1 "^violazione d_transform: restoreAllMocks with a vi.spyOn outside" "K1 D8 rosso: vi.restoreAllMocks() con un altro vi.spyOn fuori dal corpo di Tn = d_transform" -- kj patch-non-ripristinata "$K1D/spy2.ts" "$K1D/spy2-old.ts"
+sost "$K1D/old.ts" "$K1D/fn-old.ts" "  const spia = vi.spyOn(obj, 'm')" "  const spia = vi.fn()\n  obj.m = spia"
+sost "$K1D/fn-old.ts" "$K1D/fn.ts" "  const spia = vi.fn()\n  obj.m = spia\n  const d = DATI\n  d.n = 2\n  expect(fmt(d)).toBe('1 prelievo fallito')\n})" "  const spia = vi.fn()\n  obj.m = spia\n  try {\n    const d = DATI\n    d.n = 2\n    expect(fmt(d)).toBe('1 prelievo fallito')\n  } finally {\n    spia.mockRestore()\n  }\n})"
+expect 1 "^violazione d_transform: mockRestore of spia, not a vi.spyOn" "K1 D8 rosso: un vi.fn assegnato a una proprieta' con mockRestore = d_transform" -- kj patch-non-ripristinata "$K1D/fn.ts" "$K1D/fn-old.ts"
+sost "$K1D/old.ts" "$K1D/so-old.ts" "const obj = { m: () => 1 }\n" "const obj = { m: () => 1 }\nconst spia = vi.spyOn(obj, 'm')\n" "  const spia = vi.spyOn(obj, 'm')\n" ""
+sost "$K1D/so-old.ts" "$K1D/so.ts" "  const d = DATI\n  d.n = 2\n  expect(fmt(d)).toBe('1 prelievo fallito')\n})" "  try {\n    const d = DATI\n    d.n = 2\n    expect(fmt(d)).toBe('1 prelievo fallito')\n  } finally {\n    spia.mockRestore()\n  }\n})"
+expect 1 "^violazione d_transform: " "K1 D8 rosso: spy creato fuori dal corpo di Tn = d_transform" -- kj patch-non-ripristinata "$K1D/so.ts" "$K1D/so-old.ts"
+sost "$K1D/old.ts" "$K1D/sc.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n"
+expect 0 "^trasformazione: stato-condiviso/vitest — structuredClone$" "K1 D8 verde: structuredClone(NOME) con const NOME = { … }" -- kj stato-condiviso "$K1D/sc.ts"
+sost "$K1D/old.ts" "$K1D/sp.ts" "  const d = DATI\n" "  const d = { ...DATI }\n"
+expect 0 "^trasformazione: stato-condiviso/vitest — spread$" "K1 D8 verde: { ...NOME }" -- kj shared-state "$K1D/sp.ts"
+sost "$K1D/old.ts" "$K1D/li-old.ts" "  const d = DATI\n" "  const d = LISTA\n"
+sost "$K1D/li-old.ts" "$K1D/li.ts" "  const d = LISTA\n" "  const d = [...LISTA]\n"
+expect 0 "^trasformazione: stato-condiviso/vitest — spread$" "K1 D8 verde: [...NOME] con const NOME = [ … ]" -- kj stato-condiviso "$K1D/li.ts" "$K1D/li-old.ts"
+sost "$K1D/old.ts" "$K1D/jp-old.ts" "  const d = DATI\n" "  const d = DA_PROD\n"
+sost "$K1D/jp-old.ts" "$K1D/jp.ts" "  const d = DA_PROD\n" "  const d = structuredClone(DA_PROD)\n"
+expect 1 "^violazione d_transform: DA_PROD is not declared in the test file \(right-hand side" "K1 D8 rosso: const NOME = prod.X poi copiato (vitest) = d_transform" -- kj stato-condiviso "$K1D/jp.ts" "$K1D/jp-old.ts"
+sost "$K1D/old.ts" "$K1D/ji-old.ts" "  const d = DATI\n" "  const d = DA_IMP\n"
+sost "$K1D/ji-old.ts" "$K1D/ji.ts" "  const d = DA_IMP\n" "  const d = { ...DA_IMP }\n"
+expect 1 "^violazione d_transform: DA_IMP is not declared in the test file \(right-hand side" "K1 D8 rosso: const NOME = X con X importato da un modulo di produzione, poi copiato = d_transform" -- kj stato-condiviso "$K1D/ji.ts" "$K1D/ji-old.ts"
+sost "$K1D/old.ts" "$K1D/jb-old.ts" "  const d = DATI\n" "  const d = BASE\n"
+sost "$K1D/jb-old.ts" "$K1D/jb.ts" "  const d = BASE\n" "  const d = structuredClone(BASE)\n"
+expect 1 "^violazione d_transform: BASE is not declared in the test file \(imported name\)" "K1 D8 rosso: copia di un oggetto importato (vitest) = d_transform" -- kj stato-condiviso "$K1D/jb.ts" "$K1D/jb-old.ts"
+sost "$K1D/old.ts" "$K1D/jz-old.ts" "  const d = DATI\n  d.n = 2\n  expect(fmt(d)).toBe('1 prelievo fallito')\n" "  expect(fmt(DATI)).toBe('1 prelievo fallito')\n"
+sost "$K1D/jz-old.ts" "$K1D/jz.ts" "fmt(DATI)" "fmt(structuredClone(DATI))"
+expect 1 "^violazione d_assert: " "K1 D8: expect(fmt(structuredClone(DATI))) dentro una riga protetta = d_assert" -- kj stato-condiviso "$K1D/jz.ts" "$K1D/jz-old.ts"
+sost "$K1D/old.ts" "$K1D/jr.ts" "  d.n = 2\n" "  d.n = 2\n  prod.cache.clear()\n"
+expect 1 "^violazione d_transform: reset" "K1 D8 rosso (vitest): un reset aggiunto = d_transform" -- kj stato-condiviso "$K1D/jr.ts"
+sost "$K1D/old.ts" "$K1D/jf.ts" "const LISTA = [1, 2]" "const LISTA = [1, 3]"
+expect 1 "^violazione d_outside: modules/app/apps/admin/tests/fmtp.test.ts$" "K1 D1 (vitest): riga fuori dal corpo di Tn cambiata = d_outside" -- kj stato-condiviso "$K1D/jf.ts"
+sost "$K1D/old.ts" "$K1D/jt.ts" "  const d = DATI\n" "  const d = \`\${DATI}\`\n"
+expect 1 "^violazione d_outside: .*\(template\)" "K1 D1 (vitest): template con \${ nel corpo = d_outside (non delimitabile)" -- kj stato-condiviso "$K1D/jt.ts"
+sost "$K1D/old.ts" "$K1D/jsk.ts" "it('conta'" "it.skip('conta'"
+expect 1 "^violazione d_skip: \.skip$|^violazione d_skip: skip$" "K1 D1 (vitest): it.skip = d_skip" -- kj stato-condiviso "$K1D/jsk.ts"
+sost "$K1D/old.ts" "$K1D/jas.ts" "toBe('1 prelievo fallito')" "toContain('1 prelievo fallito')"
+expect 1 "^violazione d_assert: 1 -> 1$" "K1 D2 (vitest): riga protetta cambiata = d_assert" -- kj stato-condiviso "$K1D/jas.ts"
+sost "$K1D/old.ts" "$K1D/jn.ts" "it('conta'" "it('conta bis'"
+expect 1 "^violazione d_assert: conta \(name\)$" "K1 D2 (vitest): nome di Tn sparito = d_assert" -- kj stato-condiviso "$K1D/jn.ts"
+sost "$K1D/old.ts" "$K1D/jv.ts" "  expect(obj.m()).toBe(1)" "  obj.m = () => 1\n  expect(obj.m()).toBe(1)"
+expect 1 "^violazione d_outside: " "K1 D1 (vitest): la vittima cambiata = d_outside" -- kj stato-condiviso "$K1D/jv.ts"
+# counterproofs of corretto
+if mutpc k1def 's/^            if w:  # DEFINITO-NEL-FILE$/            if False:/; s/^            if w2:  # DEFINITO-NEL-FILE$/            if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza la verifica «definito nel file di test» la copia di un oggetto importato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1def/plan-check.sh" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/imp-old.py" --nuovo "$K1D/imp.py" --run-dir "$K1R"
+  expect 0 "^trasformazione: " "controprova K1: senza la verifica «definito nel file di test» la copia di un oggetto importato passa (vitest, rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1def/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/jb-old.ts" --nuovo "$K1D/jb.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 definito nel file: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1rhs 's/^    return "" if rhs_py(defs\[0\].value, legati) else "right-hand side of the definition"$/    return ""/; s/^    return "" if rhs_js("".join(out), testo) else "right-hand side of the declaration"$/    return ""/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza il controllo del lato destro NOME = prod.X passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1rhs/plan-check.sh" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/pr-old.py" --nuovo "$K1D/pr.py" --run-dir "$K1R"
+  expect 0 "^trasformazione: " "controprova K1: senza il controllo del lato destro const NOME = prod.X passa (vitest, rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1rhs/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/jp-old.ts" --nuovo "$K1D/jp.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 lato destro: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1d2 's/^        elif sorted(po) != sorted(pn):$/        elif False:/'; then
+  refute "^violazione d_assert" "controprova K1: senza D2 il caso == → or non da' piu' d_assert (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1d2/plan-check.sh" corretto "$T/k1.md" T1 --classe patch-non-ripristinata --vecchio "$K1D/old.py" --nuovo "$K1D/or.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 D2: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1mod 's/^        if dd(mo.body) != dd(mn.body):  # MODULO-FUORI-DA-TN$/        if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza l'identita' del modulo fuori da Tn la fixture autouse passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1mod/plan-check.sh" corretto "$T/k1.md" T1 --classe patch-non-ripristinata --vecchio "$K1D/old.py" --nuovo "$K1D/auto.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 modulo: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1d8 's/^            v("d_transform", why)$/            pass/; s/^        if forma is None and not viol:$/        if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza D8 lo stato di produzione azzerato (cache.clear) passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1d8/plan-check.sh" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/old.py" --nuovo "$K1D/reset.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 D8: la mutazione non si applica]"; fail=$((fail+1)); fi
+sost "$K1D/sc.ts" "$K1D/scv.ts" "  expect(obj.m()).toBe(1)" "  obj.m = () => 1\n  expect(obj.m()).toBe(1)"
+expect 1 "^violazione d_outside: " "K1 D1 (vitest): la vittima cambiata accanto a una copia riconosciuta = d_outside" -- kj stato-condiviso "$K1D/scv.ts"
+if mutpc k1byte 's/^        if so\[:bo\[0\]\] != sn\[:bn\[0\]\] or so\[bo\[1\]:\] != sn\[bn\[1\]:\]:  # BYTE-FUORI-DAL-CORPO$/        if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza i byte identici fuori dal corpo la vittima vitest cambiata passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1byte/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/old.ts" --nuovo "$K1D/scv.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 byte fuori dal corpo: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1bers 's/^                if radice_nome(a\[0\]) is None or radice_nome(a\[0\]) in imp:  # BERSAGLIO-DEL-TEST$/                if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza il controllo del bersaglio di produzione il monkeypatch di fmtp passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1bers/plan-check.sh" corretto "$T/k1.md" T1 --classe patch-non-ripristinata --vecchio "$K1D/prod-old.py" --nuovo "$K1D/prod.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 bersaglio: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1spy 's/^                    if "vi.spyOn(" in fuori_n:  # NESSUNA-SPIA-FUORI$/                    if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1: senza il controllo degli spy fuori da Tn restoreAllMocks passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1spy/plan-check.sh" corretto "$T/k1.md" T2 --classe patch-non-ripristinata --vecchio "$K1D/spy2-old.ts" --nuovo "$K1D/spy2.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 spy fuori: la mutazione non si applica]"; fail=$((fail+1)); fi
+# diff-test --dal-post: from the .post-tree of the last test-red (only the change after test-red)
+printf 'def test_nuovo():\n    assert 1 == 2\n' > "$DTR/modules/api/tests/test_dt.py"
+(cd "$DTR" && bash "$HERE/review-surface.sh" tree) > "$T/dt.run/log/03-test-red.post-tree"
+printf 'def test_nuovo():\n    assert 1 == 1\n' > "$DTR/modules/api/tests/test_dt.py"
+expect 0 "^-    assert 1 == 2$" "K1 diff-test --dal-post: solo il cambio dopo test-red" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --dal-post
+refute "^\+def test_nuovo" "K1 diff-test --dal-post: il file intero (dal pre-tree) non compare" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --dal-post
+expect 0 "^\+def test_nuovo" "K1 diff-test: senza --dal-post resta dal pre-tree (1.8.0)" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run"
+expect 0 "^diff file: .*diff-test-[0-9a-f]{16}\.diff · sha256 " "K1 diff-test --dal-post --file: la riga diff file:" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --dal-post --file
+mkdir -p "$T/dt-np.run/log"; cp "$T/dt.run/log/03-test-red.pre-tree" "$T/dt-np.run/log/"
+expect 3 "-" "K1 diff-test --dal-post: senza .post-tree di un test-red = uscita 3" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-np.run" --dal-post
+expect 2 "-" "K1 diff-test: --fase (S1, rimandata) = uso" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt.run" --fase 04-implement
+rm -f "$DTR/modules/api/tests/test_dt.py" "$T/dt.run/log/03-test-red.post-tree"
+
 # ── usage ────────────────────────────────────────────────────────────────────────────────────────
 expect 2 "uso:" "argomenti sbagliati = uscita 2" -- bash "$PC" boh
 

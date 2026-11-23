@@ -725,7 +725,7 @@ cmd_basis() {
 # Parser of the format 2 tables, in Python (stdin = annotate lines). No single quote in here,
 # and ASCII only (non-ASCII characters as \u escapes). need_py writes it to a file in $TMPD (too long for `-c`).
 PY2='
-import importlib.util, json, os, re, sys
+import ast, copy as copymod, importlib.util, json, os, re, sys
 
 sys.dont_write_bytecode = True   # no __pycache__ under MAAT_ROOT
 # the message catalog (1.4.0): maat_msg.py from MAAT_MSG_PY (need_py), the same keys as msg in the bash above
@@ -2637,8 +2637,36 @@ def junit_cases(p):
         kids = list(c)
         out.append({"cn": c.get("classname") or "", "nm": c.get("name") or "",
                     "bad": [(e.get("message") or "") + "\n" + (e.text or "") for e in kids if e.tag in ("failure", "error")],
+                    # 1.9.0 (K1): riga_errore of each failure, in the order of bad (riga_py)
+                    "err": [riga_py(e.get("message") or "", e.text or "") for e in kids if e.tag in ("failure", "error")],
                     "skip": any(e.tag == "skipped" for e in kids), "own": None})
     return out
+
+
+def riga_py(message, text):
+    """1.9.0 (K1): the riga_errore of a JUnit <failure>/<error>: ONLY the line of the exception or of the assertion, never
+    the source of the test nor the traceback (which always prints the expected text): the message attribute; without it
+    the E lines of the textual output of pytest. Spaces compressed into one, at most 4000 characters"""
+    m = nrm(message)
+    if not m:
+        m = nrm(" ".join(x[1:] for x in ANSI.sub("", text or "").split("\n") if re.match(r"^E\s", x)))
+    return m[:4000]
+
+
+STACK_JS = re.compile(r"^\s*(?:at\s|❯\s)")
+
+
+def riga_vt(body):
+    """1.9.0 (K1): the riga_errore of a FAIL block of vitest: its message up to the first stack line (at, ❯), the
+    first blank line or the diff (- Expected); spaces compressed into one, at most 4000 characters"""
+    out = []
+    for x in body:
+        x = ANSI.sub("", x)
+        if STACK_JS.match(x) or (out and not x.strip()) or re.match(r"^\s*- Expected", x):
+            break
+        if x.strip():
+            out.append(x)
+    return nrm(" ".join(out))[:4000]
 
 
 _NOMI = []
@@ -2842,6 +2870,19 @@ def cmd_rossi(M, root, run, ev, inst=""):
     sulla sua asserzione, nessuna suite esistente in conflitto. Scrive <run>/test-red/rossi.json.
     Uscita 0 OK (tutti dimostrati) - 1 STOP - 3 BLOCKED (evidenza assente o gate BLOCKED)."""
     tests = M["tests"]
+    out, _rerr, blocked, gates, fmt, rad, rep = leggi_esiti(M, root, ev)
+    return rossi_resto(M, root, run, ev, inst, tests, out, blocked, gates, fmt, rad, rep)
+
+
+_VT_RAW = {}
+
+
+def leggi_esiti(M, root, ev):
+    """1.9.0 (K1): the outcome of every acceptance test on the evidence <ev> (the classification of rossi, verdict()),
+    shared by rossi and esiti. Returns out {tid: (esito, motivo, messaggio, posizione)}, rerr {tid: riga_errore},
+    blocked, and the gates, report formats, roots and reports read (for the conflicts of rossi)."""
+    tests = M["tests"]
+    rerr = {}
     # one tests-<modulo> gate per module of maat.json; the report is read via the report field of the module
     mods = conf()["moduli"]
     gates = {"tests-" + m["nome"]: jload(os.path.join(ev, "tests-" + m["nome"] + ".json")) for m in mods}
@@ -2863,7 +2904,8 @@ def cmd_rossi(M, root, run, ev, inst=""):
         elif fmt[g] == "vitest":
             try:
                 with open(p, encoding="utf-8", errors="replace") as fh:
-                    rep[g] = vitest_blocks(fh.read())
+                    _VT_RAW[g] = fh.read()   # 1.9.0 (K1): the log, for the cases of esiti (casi_vitest)
+                rep[g] = vitest_blocks(_VT_RAW[g])
             except OSError:
                 rep[g] = False
         else:
@@ -2896,6 +2938,7 @@ def cmd_rossi(M, root, run, ev, inst=""):
         seps = nomi().separatori(trel, mt.get("separatori_test"))
         leaf = nomi().foglia(T["name"], seps)
         anc_bad, anc_pass, has_t = [], False, False
+        errs, anc_err = [], []   # 1.9.0 (K1): riga_errore of the failures, parallel to failed and anc_bad
         if fmt[g] == "junit":
             failed, suite, ran, passed = [], [], False, False
             for c in rep[g]:
@@ -2912,6 +2955,7 @@ def cmd_rossi(M, root, run, ev, inst=""):
                 if k == "antenato":   # ANTENATO-RECLAMATO
                     if c["bad"]:
                         anc_bad += c["bad"]
+                        anc_err += c["err"]
                         c["own"] = c["own"] or tid
                     elif not c["skip"]:
                         anc_pass = True
@@ -2920,11 +2964,13 @@ def cmd_rossi(M, root, run, ev, inst=""):
                     has_t = True
                     if c["bad"]:
                         failed += c["bad"]
+                        errs += c["err"]
                         c["own"] = tid
                     elif not c["skip"]:
                         passed = True
             if not has_t:
-                failed = [x for x in anc_bad if leaf and leaf in x]
+                sel = [(x, e) for x, e in zip(anc_bad, anc_err) if leaf and leaf in x]
+                failed, errs = [x for x, _e in sel], [e for _x, e in sel]
                 passed = anc_pass and not anc_bad
             out[tid] = verdict(T, failed, suite, ran, passed, IMPORT_PY, trel)
         else:
@@ -2934,17 +2980,27 @@ def cmd_rossi(M, root, run, ev, inst=""):
                 k = vt_claim(T, b, trel)
                 if k == "target":
                     failed.append("\n".join(b["body"]))
+                    errs.append(riga_vt(b["body"]))
                     b["own"] = tid
                 elif k == "antenato":
                     anc_bad.append("\n".join(b["body"]))
+                    anc_err.append(riga_vt(b["body"]))
                     b["own"] = b["own"] or tid
                 elif k == "suite":
                     suite.append("\n".join(b["body"]))
                     b["own"] = tid
             if not failed:
-                failed = [x for x in anc_bad if leaf and leaf in x]
+                sel = [(x, e) for x, e in zip(anc_bad, anc_err) if leaf and leaf in x]
+                failed, errs = [x for x, _e in sel], [e for _x, e in sel]
             ran = trel in ran_files or any(b["file"] == trel for b in blocks)
             out[tid] = verdict(T, failed, suite, ran, ran and not failed and not suite, IMPORT_JS, trel)
+        # 1.9.0 (K1): the riga_errore of the first failure; empty when not recognized (the caller stops: not verifiable)
+        rerr[tid] = errs[0] if failed and errs else ""
+    return out, rerr, blocked, gates, fmt, rad, rep
+
+
+def rossi_resto(M, root, run, ev, inst, tests, out, blocked, gates, fmt, rad, rep):
+    """the part of rossi after the outcome of every test (leggi_esiti): missing symbols, probes, conflicts, rossi.json"""
     # 1.8.0 (D3, B11): a VALID probe (sonde(): its key declassified by a resume registered in driver.log, the first probe
     # of that key) decides its row: red with the expected text, at a position -> limite_dimostrato (the human decision,
     # now proven: STOP, exit 1 as every STOP; classifica reads the class from rossi.json); green on the base ->
@@ -3110,6 +3166,820 @@ def cmd_rossi(M, root, run, ev, inst=""):
     return {"OK": 0, "STOP": 1}.get(esito, 3)
 
 
+def casi_junit(T, mt, cases):
+    """1.9.0 (K1): every case of the JUnit report in the file of T, in the order of the report: test_id as gen for a case
+    uguale to an acceptance test of that file (pytest: <path>::<name>, otherwise the name), else <path of T>::<classname
+    without the module prefix>::<name>; a case outside the file (or of the suite, without classname) never enters"""
+    trel = rel_radice(mt, T["path"])
+    mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
+    seps = nomi().separatori(trel, mt.get("separatori_test"))
+    pyid = (mt.get("controprova") or {}).get("runner") == "pytest"
+    out = []
+    for c in cases or []:
+        cn, nm = c["cn"], c["nm"]
+        if cn == mod:
+            rest = ""
+        elif cn.startswith(mod + "."):
+            rest = cn[len(mod) + 1:].replace(".", "::")
+        else:
+            continue
+        full = trel + ("::" + rest if rest else "") + "::" + nm
+        tid = T["path"] + ("::" + rest if rest else "") + "::" + nm
+        for U in _TESTS_FILE.get(T["path"], []):
+            if U["name"] and nomi().relazione(U["name"], full, seps) == "uguale":
+                tid = U["path"] + "::" + U["name"] if pyid else U["name"]
+                break
+        es = "rosso" if c["bad"] else ("saltato" if c["skip"] else "verde")
+        out.append({"test_id": tid, "nome": nm, "esito": es, "riga_errore": c["err"][0] if c["bad"] else ""})
+    return out
+
+
+# 1.9.0 (K1): the tree of the vitest default reporter under a file: «  ✓|×|↓ <describe> > <it> [time]»
+VT_FILE = re.compile(r"^(\s*)(?:✓|❯|×|↓)\s+(?:\|[^|]*\|\s+)?(\S+)\s")
+VT_CASE = re.compile(r"^(\s*)(✓|×|↓)\s+(.*?)(?:\s+[0-9]+(?:\.[0-9]+)?\s*m?s)?\s*$")
+
+
+def casi_vitest(T, raw, blocks):
+    """1.9.0 (K1): the cases of the vitest log in the file of T, in the order of the log: the tree the reporter prints
+    under the file (verde, rosso, saltato) and the FAIL blocks (rosso, with their riga_errore); test_id the full name
+    (the titles joined by a space, as -t), the plan name for a case uguale to an acceptance test of that file"""
+    trel = rel_radice(modulo(T["path"])[0], T["path"])
+    nt = nomi()
+    seen, out = {}, []
+    def add(segs, es, rerr):
+        k = " > ".join(segs)
+        if k in seen:
+            if rerr and not seen[k]["riga_errore"]:
+                seen[k]["riga_errore"] = rerr
+            return
+        tid = " ".join(segs)
+        for U in _TESTS_FILE.get(T["path"], []):
+            if U["name"] and nt.relazione(U["name"], None, nt.SEP_VITEST, segmenti=segs) == "uguale":
+                tid = U["name"]
+                break
+        seen[k] = {"test_id": tid, "nome": k, "esito": es, "riga_errore": rerr}
+        out.append(seen[k])
+    cur, ind = None, 0
+    for l in ANSI.sub("", raw or "").split("\n"):
+        if FAILH.match(l) or SEPL.search(l):
+            cur = None
+            continue
+        f = VT_FILE.match(l + " ")
+        if f and len(f.group(1)) <= 2 and ("/" in f.group(2) or f.group(2).endswith(ACC_JS_EXT)):
+            cur, ind = f.group(2).lstrip("./"), len(f.group(1))
+            continue
+        m = VT_CASE.match(l)
+        if cur == trel and m and len(m.group(1)) > ind and m.group(3):
+            add([x.strip() for x in m.group(3).split(" > ")], {"✓": "verde", "×": "rosso", "↓": "saltato"}[m.group(2)], "")
+        elif m is None and l.strip() and cur is not None and len(l) - len(l.lstrip()) <= ind:
+            cur = None
+    for b in blocks:
+        if b["file"] == trel and b["segs"] is not None:
+            add(b["segs"], "rosso", riga_vt(b["body"]))
+    return out
+
+
+_TESTS_FILE = {}
+
+
+def cmd_esiti(M, root, ev, outp):
+    """1.9.0 (K1, K0.4, interface (b)): the outcome of every acceptance test on the evidence <ev> (verdict(), the
+    classification of rossi) with message, position and riga_errore, and every case of the report in the files of the
+    tests («casi»), as JSON in <outp> (written whole, then renamed); one «esito <Tn>: <esito>» line per test, in the order
+    of the table. Never writes test-red/rossi.json, computes no conflict. Exit 0 file written · 3 BLOCKED (no file)."""
+    out, rerr, blocked, _g, fmt, _r, rep = leggi_esiti(M, root, ev)
+    tests = M["tests"]
+    for tid in M["order"]:
+        if tid in out:
+            print("esito %s: %s" % (tid, out[tid][0]))
+    outp = os.path.abspath(outp)
+    if blocked:
+        for b in blocked:
+            print("bloccato: " + b)
+        try:
+            os.remove(outp)   # BLOCKED: no file --out, not even an old one
+        except OSError:
+            pass
+        return 3
+    d = {"evidence": ev, "test": {}, "casi": {}}
+    for tid in M["order"]:
+        es, why, msg, pos = out.get(tid, ("non_eseguito", _msg.T("plan-check.red_gate_unusable"), "", None))
+        d["test"][tid] = {"esito": es, "motivo": why, "messaggio": msg[:4000], "posizione": pos,
+                          "file": tests[tid]["path"], "nome": tests[tid]["name"],
+                          "riga_errore": "" if es in ("verde", "rosso_raccolta") else rerr.get(tid, "")}
+    _TESTS_FILE.clear()
+    for tid in M["order"]:
+        _TESTS_FILE.setdefault(tests[tid]["path"], []).append(tests[tid])
+    for p, Ts in _TESTS_FILE.items():
+        mt, kt = modulo(p)
+        g = "tests-" + mt["nome"] if mt is not None and kt == "radice" else None
+        if g is None or rep.get(g) is None or rep.get(g) is False:
+            continue
+        if fmt[g] == "junit":
+            d["casi"][p] = casi_junit(Ts[0], mt, rep[g])
+        elif fmt[g] == "vitest":
+            d["casi"][p] = casi_vitest(Ts[0], _VT_RAW.get(g, ""), rep[g][0])
+    jsave(outp, d)
+    return 0
+
+
+# 1.9.0 (K1, S2): the family of implement deviations «test-difettoso: » / «defective-test: », accepted with a proof.
+# The admitted classes (closed list, both languages, canonical = Italian) and the transformations of D8 per runner.
+CLASSI_DIF = {"stato-condiviso": "stato-condiviso", "shared-state": "stato-condiviso",
+              "patch-non-ripristinata": "patch-non-ripristinata", "unrestored-patch": "patch-non-ripristinata"}
+FORME_D8 = {("patch-non-ripristinata", "pytest"): ("monkeypatch.setattr", "with patch", "stop in finally"),
+            ("patch-non-ripristinata", "vitest"): ("mockRestore in finally", "restoreAllMocks in finally"),
+            ("stato-condiviso", "pytest"): ("copy.deepcopy",),
+            ("stato-condiviso", "vitest"): ("structuredClone", "spread")}
+# (D7) the fixed instructions of its judge, printed first by «deviazione --famiglia test-difettoso» and looked for
+# verbatim in the prompt of the judge by run-phase.sh
+DEV_ISTRUZIONI_DIFETTO = ("Judge a defective-test deviation of implement. Answer with three lines: «Deviation "
+                          "verdict: ACCEPT | STOP — <reason>», «Requirements still covered: <requirement "
+                          "IDs>» and «Defect class: <class>». ACCEPT only if the old test leaks state it "
+                          "created itself (of the declared class) into the victim test, so that the victim cannot pass "
+                          "in its file for any correct implementation, the correction only restores or isolates that "
+                          "state, and the new test checks the same expected behaviour. REJECT if the production code "
+                          "may keep state keyed on object identity (a WeakMap, a memo on id() or on the reference) that "
+                          "a copy of the test data would break or hide. If the prompt has a `diff file:` line, read that "
+                          "file whole with Read before judging; it is the diff of the test file from the post-tree of "
+                          "test-red.")
+DEV_CLASSE = re.compile(r"^[ \t>*_`-]*Defect class:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
+
+
+def controllo(code, why):
+    """a failed check of the family: the key (a token read by run-phase.sh) and the STOP line with the reason"""
+    print("controllo: " + code)
+    print(DEV_STOP + why)
+    return 1
+
+
+def testi_attesi(T):
+    return [x for x in (T["texts"] or ([T["mut"]["asserzione"]] if T["mut"] else [])) if x.strip()]
+
+
+def dev_difetto(M, ris, tid, classe):
+    """1.9.0 (K1, D7): «deviazione <result|-> <spec> <Tn> --famiglia test-difettoso [--classe <c>]»: the inputs of the
+    judge that plan-check computes (its fixed instructions, «test row:», every «trace row:», with --classe the line
+    «defect: <Tn> — <c>»: never the why of the deviation). With the result of the judge also its verdict: ACCEPT, every
+    requirement of <Tn>, «Defect class:» the declared class (without --classe not verifiable: STOP). A failed check:
+    «controllo: judge|d_class» then the STOP line, exit 1."""
+    righe = dict(M["plan"])
+    T = M["tests"].get(tid)
+    if T is None:
+        print(DEV_STOP + _msg.T("plan-check-180.dev_no_row", id=tid))
+        return 1
+    print("judge instructions: " + DEV_ISTRUZIONI_DIFETTO)
+    print("test row: " + righe.get(T["n"], ""))
+    ids = list(T["reqs"])
+    for n, r, ver in M["reqs"]:
+        if tid in items(ver):
+            print("trace row: " + righe.get(n, ""))
+            if r not in ids:
+                ids.append(r)
+    cl = CLASSI_DIF.get(classe) if classe else None
+    if classe and cl is None:  # CLASSE-AMMESSA
+        return controllo("d_class", classe[:100])
+    if classe:
+        print("defect: %s — %s" % (tid, classe))
+    if ris == "-":
+        return 0
+    try:
+        with open(ris, encoding="utf-8", errors="replace") as fh:
+            t = fh.read().replace("\r", "")
+    except OSError:
+        return controllo("judge", _msg.T("plan-check-180.dev_no_result"))
+    v = DEV_ACCEPT.findall(t)
+    if not v or not re.match(r"ACCEPT\b(?!\s*\|)", v[-1]):
+        return controllo("judge", _msg.T("plan-check-180.dev_judge", v=(v[-1] if v else "-")[:200]))
+    c = DEV_COPERTI.findall(t)
+    cov = set(re.findall(r"[A-Za-z]+[0-9]+(?:\.[0-9]+)*", c[-1])) if c else set()
+    miss = [r for r in ids if r not in cov]
+    if miss:
+        return controllo("judge", _msg.T("plan-check-180.dev_req", r=", ".join(miss)))
+    k = DEV_CLASSE.findall(t)
+    if cl is None or not k or CLASSI_DIF.get(k[-1].strip().lower()) != cl:  # CLASSE-DEL-GIUDICE
+        return controllo("d_class", (k[-1] if k else "-")[:100])
+    print(DEV_OK)
+    return 0
+
+
+# 1.9.0 (K1, S2 D1, D2, D8): «corretto <spec> <Tn> --classe <c> --vecchio <file> --nuovo <file> --run-dir <d>»
+# (interface (b)). The skip markers the diff may not add (D1, run-phase-190.d_skip): counted in the whole file.
+SALTO = re.compile(r"(?<![A-Za-z0-9_$])(?:skip|skipif|skipIf|skipUnless|skipTest|xfail|xit|xdescribe|xtest)(?![A-Za-z0-9_$])"
+                   r"|\.(?:only|todo)(?![A-Za-z0-9_$])")
+
+
+def nodo_py(albero, nome):
+    """(parent list, index, node) of the Class::method node of the plan name ([params] removed), the last definition
+    winning as in Python; None when missing"""
+    corpo, trovato = albero.body, None
+    for seg in re.sub(r"\[.*\]$", "", nome).split("::"):
+        trovato = None
+        for i, n in enumerate(corpo):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name == seg:
+                trovato = (corpo, i, n)
+        if trovato is None:
+            return None
+        corpo = getattr(trovato[2], "body", [])
+    return trovato
+
+
+def nome_chiamato(f):
+    return f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+
+
+def protetti_py(nodo, attesi):
+    """the protected nodes of Tn: an Assert, a Compare, or a Call whose called name starts with assert, holding an
+    expected text as a string constant of its subtree (docstrings and comments never count), as ast.dump"""
+    out = []
+    for x in ast.walk(nodo):
+        if isinstance(x, (ast.Assert, ast.Compare)) or (isinstance(x, ast.Call) and nome_chiamato(x.func).startswith("assert")):
+            cs = [y.value for y in ast.walk(x) if isinstance(y, ast.Constant) and isinstance(y.value, str)]
+            if any(nrm(a) in nrm(c) for a in attesi for c in cs):
+                out.append(ast.dump(x))
+    return out
+
+
+def dd(x):
+    if x is None:
+        return None
+    return [ast.dump(y) for y in x] if isinstance(x, list) else ast.dump(x)
+
+
+def diff_ast(a, b, out):
+    """the pairs (old, new) where the two trees differ, at the highest node that differs"""
+    if type(a) is not type(b):
+        out.append((a, b))
+        return
+    if isinstance(a, ast.AST):
+        for f in a._fields:
+            va, vb = getattr(a, f, None), getattr(b, f, None)
+            if isinstance(va, list) and isinstance(vb, list):
+                if len(va) != len(vb):
+                    out.append((a, b))
+                    return
+                for x, y in zip(va, vb):
+                    diff_ast(x, y, out)
+            elif isinstance(va, ast.AST) or isinstance(vb, ast.AST):
+                diff_ast(va, vb, out)
+            elif va != vb or type(va) is not type(vb):
+                out.append((a, b))
+                return
+    elif a != b:
+        out.append((a, b))
+
+
+def import_copy(s):
+    return isinstance(s, ast.Import) and len(s.names) == 1 and s.names[0].name == "copy" and s.names[0].asname is None
+
+
+def legati_py(albero):
+    """name -> number of bindings in the whole module (assignment targets, def and class, imports, global), and the
+    names bound by an import"""
+    n, imp = {}, set()
+    def piu(k):
+        n[k] = n.get(k, 0) + 1
+    for x in ast.walk(albero):
+        if isinstance(x, ast.Name) and isinstance(x.ctx, (ast.Store, ast.Del)):
+            piu(x.id)
+        elif isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            piu(x.name)
+        elif isinstance(x, (ast.Import, ast.ImportFrom)):
+            for a in x.names:
+                k = a.asname or a.name.split(".")[0]
+                piu(k)
+                imp.add(k)
+        elif isinstance(x, (ast.Global, ast.Nonlocal)):
+            for k in x.names:
+                piu(k)
+    return n, imp
+
+
+COSTRUTTORI_PY = ("dict", "list", "set", "tuple")
+
+
+def rhs_py(v, legati):
+    """(D8, «definito nel file di test») the right-hand side of the definition: a literal or a display, a constant, or a
+    call of a predefined constructor (not rebound in the module); nothing else in its subtree, so no imported name"""
+    for x in ast.walk(v):
+        if isinstance(x, (ast.Constant, ast.Dict, ast.List, ast.Tuple, ast.Set, ast.Load, ast.UnaryOp, ast.USub,
+                          ast.UAdd, ast.keyword)):
+            continue
+        if isinstance(x, ast.Name) and x.id in COSTRUTTORI_PY and x.id not in legati:
+            continue
+        if isinstance(x, ast.Call) and isinstance(x.func, ast.Name) and x.func.id in COSTRUTTORI_PY and x.func.id not in legati:
+            continue
+        return False
+    return True
+
+
+def definito_py(an, O, nome):
+    """(D8) NOME defined in the test file in the strict sense: a parameter of Tn whose fixture of the file is its only
+    binding and has one return of an admitted right-hand side, or (not a parameter) one assignment at module level,
+    its only binding in the module. "" = defined, otherwise the reason"""
+    legati, imp = legati_py(an)
+    if nome in imp:
+        return "imported name"
+    params = [a.arg for a in O.args.posonlyargs + O.args.args + O.args.kwonlyargs]
+    if nome in params:
+        fx = [s for s in an.body if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)) and s.name == nome]
+        if len(fx) != 1 or legati.get(nome, 0) != 1:
+            return "fixture not defined once in the file"
+        f = fx[0]
+        if not any(nome_chiamato(d.func if isinstance(d, ast.Call) else d) == "fixture" for d in f.decorator_list):
+            return "not a fixture"
+        corpo = f.body[1:] if f.body and isinstance(f.body[0], ast.Expr) and isinstance(f.body[0].value, ast.Constant) else f.body
+        if len(corpo) != 1 or not isinstance(corpo[0], ast.Return) or corpo[0].value is None:
+            return "fixture without one return"
+        return "" if rhs_py(corpo[0].value, legati) else "right-hand side of the fixture"
+    defs = [s for s in an.body if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name)
+            and s.targets[0].id == nome]
+    if len(defs) != 1 or legati.get(nome, 0) != 1:
+        return "not defined once at module level"
+    return "" if rhs_py(defs[0].value, legati) else "right-hand side of the definition"
+
+
+def e_patch(c):
+    """a call of patch, mock.patch, patch.object, patch.dict, patch.multiple (unittest.mock)"""
+    if not isinstance(c, ast.Call):
+        return False
+    f = c.func
+    if isinstance(f, ast.Attribute) and f.attr in ("object", "dict", "multiple"):
+        f = f.value
+    return (isinstance(f, ast.Name) and f.id == "patch") or (isinstance(f, ast.Attribute) and f.attr == "patch")
+
+
+def avvio(s):
+    """[m =] X.start(): (target or None, X)"""
+    t = None
+    if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name):
+        v, t = s.value, s.targets[0]
+    elif isinstance(s, ast.Expr):
+        v = s.value
+    else:
+        return None
+    if isinstance(v, ast.Call) and not v.args and not v.keywords and isinstance(v.func, ast.Attribute) and v.func.attr == "start":
+        return t, v.func.value
+    return None
+
+
+def patcher(s):
+    """p = <patch call>: (p, the call)"""
+    if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name) and e_patch(s.value):
+        return s.targets[0].id, s.value
+    return None
+
+
+def usa_nome(nodi, nome):
+    return any(isinstance(x, ast.Name) and x.id == nome for s in nodi for x in ast.walk(s))
+
+
+def assegna_attr(s):
+    """X.attr = v (one target) or setattr(X, "attr", v): (X, attr, v)"""
+    if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Attribute):
+        return s.targets[0].value, s.targets[0].attr, s.value
+    if isinstance(s, ast.Expr) and isinstance(s.value, ast.Call) and isinstance(s.value.func, ast.Name) and \
+            s.value.func.id == "setattr" and len(s.value.args) == 3 and not s.value.keywords and \
+            isinstance(s.value.args[1], ast.Constant) and isinstance(s.value.args[1].value, str):
+        return s.value.args[0], s.value.args[1].value, s.value.args[2]
+    return None
+
+
+def mp_setattr(s):
+    """monkeypatch.setattr(X, "attr", v): (X, attr, v)"""
+    if isinstance(s, ast.Expr) and isinstance(s.value, ast.Call) and isinstance(s.value.func, ast.Attribute) and \
+            s.value.func.attr == "setattr" and isinstance(s.value.func.value, ast.Name) and \
+            s.value.func.value.id == "monkeypatch" and len(s.value.args) == 3 and not s.value.keywords and \
+            isinstance(s.value.args[1], ast.Constant) and isinstance(s.value.args[1].value, str):
+        return s.value.args[0], s.value.args[1].value, s.value.args[2]
+    return None
+
+
+def radice_nome(x):
+    while isinstance(x, ast.Attribute):
+        x = x.value
+    return x.id if isinstance(x, ast.Name) else None
+
+
+def args_mp(a, b):
+    """the parameters of the new Tn are the old ones plus monkeypatch (or the same, if it was there already)"""
+    if dd(a) == dd(b):
+        return any(x.arg == "monkeypatch" for x in a.args + a.kwonlyargs + a.posonlyargs)
+    if any(x.arg == "monkeypatch" for x in a.args + a.kwonlyargs + a.posonlyargs):
+        return False
+    k = [i for i, x in enumerate(b.args) if x.arg == "monkeypatch" and x.annotation is None]
+    if len(k) != 1:
+        return False
+    c = copymod.deepcopy(b)
+    del c.args[k[0]]
+    return dd(c) == dd(a)
+
+
+def perche_py(O, N, imp):
+    """the reason of a correction that is not a transformation of the list (for the person: tokens in English)"""
+    vecchie = set(dd(x) for x in ast.walk(O) if isinstance(x, ast.AST))
+    for x in ast.walk(N):
+        if not isinstance(x, ast.AST) or ast.dump(x) in vecchie:
+            continue
+        if isinstance(x, ast.Call):
+            nm = nome_chiamato(x.func)
+            if nm == "reload":
+                return "importlib.reload added"
+            if nm in ("clear", "cache_clear") or nm.startswith("reset"):
+                return "reset of an object (%s) added" % nm
+            if e_patch(x) or nm == "setattr":
+                return "new patch or write (%s)" % nm
+        if isinstance(x, (ast.Assign, ast.AugAssign)):
+            ts = x.targets if isinstance(x, ast.Assign) else [x.target]
+            if any(isinstance(t, (ast.Attribute, ast.Subscript)) and radice_nome(t) in imp for t in ts):
+                return "write to the state of an imported module"
+    return "not a transformation of the closed list"
+
+
+def trasf_py(O, N, cl, an):
+    """(D8) the transformation of the list that turns the old node of Tn into the new one: (form, "") or (None, reason)"""
+    _l, imp = legati_py(an)
+    if type(O) is not type(N) or O.name != N.name or dd(O.decorator_list) != dd(N.decorator_list) or \
+            dd(O.returns) != dd(N.returns):
+        return None, "decorators or signature changed"
+    Ob, Nb = O.body, N.body
+    i = 0
+    while i < min(len(Ob), len(Nb)) and dd(Ob[i]) == dd(Nb[i]):
+        i += 1
+    if cl == "patch-non-ripristinata":
+        if len(Ob) == len(Nb) and i < len(Ob) and dd(Ob[i + 1:]) == dd(Nb[i + 1:]) and args_mp(O.args, N.args):
+            a, b = assegna_attr(Ob[i]), mp_setattr(Nb[i])
+            if a and b and dd(a[0]) == dd(b[0]) and a[1] == b[1] and dd(a[2]) == dd(b[2]):  # STESSO-BERSAGLIO
+                if radice_nome(a[0]) is None or radice_nome(a[0]) in imp:  # BERSAGLIO-DEL-TEST
+                    return None, "monkeypatch of a target imported from a module (%s)" % (radice_nome(a[0]) or "-")
+                return "monkeypatch.setattr", ""
+        if dd(O.args) == dd(N.args) and len(Nb) == i + 1 and i < len(Ob):
+            w = Nb[i]
+            av = avvio(Ob[i])
+            pa = patcher(Ob[i])
+            if isinstance(w, (ast.With, ast.AsyncWith)) and len(w.items) == 1:
+                it = w.items[0]
+                if av and e_patch(av[1]) and dd(it.context_expr) == dd(av[1]) and dd(it.optional_vars) == dd(av[0]) \
+                        and Ob[i + 1:] and dd(w.body) == dd(Ob[i + 1:]):  # WITH-FINO-ALLA-FINE
+                    return "with patch", ""
+                av2 = avvio(Ob[i + 1]) if pa and i + 1 < len(Ob) else None
+                if av2 and isinstance(av2[1], ast.Name) and av2[1].id == pa[0] and dd(it.context_expr) == dd(pa[1]) and \
+                        dd(it.optional_vars) == dd(av2[0]) and Ob[i + 2:] and dd(w.body) == dd(Ob[i + 2:]) and \
+                        not usa_nome(Ob[i + 2:], pa[0]):
+                    return "with patch", ""
+                return None, "with that does not hold exactly the statements after start()"
+            if isinstance(w, ast.Try) and not w.handlers and not w.orelse and len(w.finalbody) == 1 and i >= 2 and \
+                    Ob[i:] and dd(w.body) == dd(Ob[i:]):
+                st = avvio(Ob[i - 1])
+                fb = w.finalbody[0]
+                pp = [patcher(s) for s in Ob[:i - 1]]
+                if st and isinstance(st[1], ast.Name) and any(p and p[0] == st[1].id for p in pp) and \
+                        isinstance(fb, ast.Expr) and isinstance(fb.value, ast.Call) and not fb.value.args and \
+                        not fb.value.keywords and isinstance(fb.value.func, ast.Attribute) and \
+                        fb.value.func.attr == "stop" and dd(fb.value.func.value) == dd(st[1]) and \
+                        not any(isinstance(x, ast.Attribute) and x.attr == "stop" and dd(x.value) == dd(st[1])
+                                for x in ast.walk(O)):  # TRY-FINO-ALLA-FINE
+                    return "stop in finally", ""
+                return None, "finally that does not stop the patcher started just before"
+        return None, perche_py(O, N, imp)
+    # stato-condiviso: one Name NOME wrapped in copy.deepcopy(NOME), at its first use in Tn
+    dif = []
+    diff_ast(O, N, dif)
+    if len(dif) == 1:
+        o, n = dif[0]
+        if isinstance(o, ast.Name) and isinstance(o.ctx, ast.Load) and isinstance(n, ast.Call) and len(n.args) == 1 and \
+                not n.keywords and isinstance(n.func, ast.Attribute) and n.func.attr == "deepcopy" and \
+                isinstance(n.func.value, ast.Name) and n.func.value.id == "copy" and dd(n.args[0]) == dd(o):
+            if not any(import_copy(s) for s in an.body) or _l.get("copy", 0) != 1:
+                return None, "copy is not the module copy (import copy)"
+            usi = sorted((x.lineno, x.col_offset) for s in Ob for x in ast.walk(s) if isinstance(x, ast.Name) and x.id == o.id)
+            if not usi or usi[0] != (o.lineno, o.col_offset):  # PRIMO-USO
+                return None, "deepcopy not at the first use of %s" % o.id
+            w = definito_py(an, O, o.id)
+            if w:  # DEFINITO-NEL-FILE
+                return None, "%s is not defined in the test file (%s)" % (o.id, w)
+            return "copy.deepcopy", ""
+    return None, ("more than one change" if len(dif) > 1 else perche_py(O, N, imp))
+
+
+def js_corpo(testo, foglia):
+    """(start, end) offsets of the body of Tn: from the start of the line of it(/test( whose literal title is the leaf
+    to the closing parenthesis opened there, counting () {} [] outside strings and comments. None + reason when not
+    delimitable: no such line (name), several (body), a template with ${, a regex literal, an unclosed count"""
+    linee, pos, cand = testo.split("\n"), 0, []
+    for l in linee:
+        m = TITLE.search(l)
+        if m and ACC_JS_TEST.search(l[:m.start(1)]) and m.group(1)[1:-1] == foglia:
+            cand.append((pos, pos + l.index("(", m.start(0))))
+        pos += len(l) + 1
+    if len(cand) != 1:
+        return None, ("name" if not cand else "body")
+    ini, i = cand[0]
+    prof, n, prev = 0, len(testo), "("
+    while i < n:
+        ch = testo[i]
+        if ch in "\"\x27`":
+            j = i + 1
+            while j < n and testo[j] != ch:
+                if testo[j] == "\\":
+                    j += 1
+                elif ch == "`" and testo.startswith("${", j):
+                    return None, "template"
+                elif ch != "`" and testo[j] == "\n":
+                    return None, "unclosed"
+                j += 1
+            if j >= n:
+                return None, "unclosed"
+            i, prev = j + 1, ch
+            continue
+        if testo.startswith("//", i):
+            k = testo.find("\n", i)
+            i = n if k < 0 else k
+            continue
+        if testo.startswith("/*", i):
+            k = testo.find("*/", i + 2)
+            if k < 0:
+                return None, "unclosed"
+            i = k + 2
+            continue
+        if ch == "/" and prev in "(,=:[!&|?{};+-*%<>~^\n":
+            return None, "regex"
+        if ch in "([{":
+            prof += 1
+        elif ch in ")]}":
+            prof -= 1
+            if prof == 0:
+                return (ini, i + 1), ""
+        if not ch.isspace():
+            prev = ch
+        i += 1
+    return None, "unclosed"
+
+
+def protetti_js(corpo, attesi):
+    """the protected lines of Tn: a line of its body, not a comment, holding an expected text and expect( or assert"""
+    out = []
+    for l in corpo.split("\n"):
+        if COMMENT.match(l) and not l.strip().startswith("*/"):
+            continue
+        if ("expect(" in l or "assert" in l) and any(nrm(a) in nrm(l) for a in attesi):
+            out.append(nrm(l))
+    return out
+
+
+def righe_n(s):
+    return [nrm(l) for l in s.split("\n") if nrm(l)]
+
+
+JS_ID = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])")
+JS_IMPORT = re.compile(r"^\s*import\b")
+
+
+def fuori_stringhe(l):
+    """the spans of the string literals of a line"""
+    return [(m.start(), m.end()) for m in LITERAL.finditer(l)]
+
+
+def ids_js(l):
+    """the identifiers of a line outside its string literals: (start, end, name)"""
+    sp = fuori_stringhe(l)
+    return [(m.start(1), m.end(1), m.group(1)) for m in JS_ID.finditer(l) if not any(a <= m.start(1) < b for a, b in sp)]
+
+
+JS_COSTANTI = ("true", "false", "null", "undefined", "NaN", "Infinity")
+
+
+def rhs_js(r, testo):
+    """(D8, «definito nel file di test») the right-hand side of the declaration: an object or array literal, a constant,
+    new Map(...) / new Set(...) or Array.from of a literal; outside strings no identifier but the keys of an object
+    (name:) and the constants, so no imported name; no template literal"""
+    r = r.strip().rstrip(";").strip()
+    if not r or "`" in r:
+        return False
+    usati = []
+    for p in ("new Map(", "new Set(", "Array.from("):
+        if r.startswith(p) and r.endswith(")"):
+            if p.startswith("new") and any(JS_IMPORT.match(l) and re.search(r"\b" + p[4:-1] + r"\b", l) for l in testo.split("\n")):
+                return False
+            r = r[len(p):-1].strip()
+            if p == "Array.from(" and r[:1] not in ("[", "{"):
+                return False
+            break
+    if not (r[:1] in ("[", "{") or re.match(r"^-?[0-9][0-9_.eE+-]*$", r) or (LITERAL.fullmatch(r) and r[0] != "`")
+            or r in JS_COSTANTI):
+        return False
+    for a, b, nm in ids_js(r):
+        if nm in JS_COSTANTI:
+            continue
+        if r[b:].lstrip().startswith(":") and r[:a].rstrip()[-1:] in ("{", ","):   # a key of an object literal
+            continue
+        usati.append(nm)
+    return not usati
+
+
+def definito_js(testo, nome):
+    """(D8) NOME declared in the test file in the strict sense: one declaration in the whole file, «const|let NOME = …» at
+    module level (column 0), never imported, with an admitted right-hand side. "" = defined, otherwise the reason"""
+    linee = testo.split("\n")
+    if any(JS_IMPORT.match(l) and re.search(r"(?<![\w$])" + re.escape(nome) + r"(?![\w$])", l) for l in linee):
+        return "imported name"
+    dich = re.findall(r"(?<![\w$.])(?:const|let|var|function|class)\s+" + re.escape(nome) + r"(?![\w$])", testo)
+    m = [i for i, l in enumerate(linee) if re.match(r"^(?:export\s+)?(?:const|let)\s+" + re.escape(nome) + r"\s*=", l)]
+    if len(dich) != 1 or len(m) != 1:
+        return "not declared once at module level"
+    resto = "\n".join(linee[m[0]:])
+    resto = resto[resto.index("=") + 1:]
+    prof, out, i = 0, [], 0
+    while i < len(resto):
+        ch = resto[i]
+        if ch in "\"\x27`":
+            k = LITERAL.match(resto, i)
+            if not k:
+                return "right-hand side of the declaration"
+            out.append(k.group(0))
+            i = k.end()
+            continue
+        if ch in "([{":
+            prof += 1
+        elif ch in ")]}":
+            prof -= 1
+        elif prof == 0 and ch in ";\n" and "".join(out).strip():
+            break
+        out.append(ch)
+        i += 1
+    return "" if rhs_js("".join(out), testo) else "right-hand side of the declaration"
+
+
+JS_RIPRISTINO = re.compile(r"^([A-Za-z_$][\w$]*)\.mockRestore\(\);?$")
+JS_TUTTI = re.compile(r"^vi\.restoreAllMocks\(\);?$")
+JS_AVVOLGI = (("structuredClone", "structuredClone(%s)"), ("spread", "{ ...%s }"), ("spread", "{...%s}"),
+              ("spread", "[...%s]"), ("spread", "[ ...%s ]"))
+
+
+def perche_js(ol, nl):
+    nuove = [l for l in nl if l not in ol]
+    for l in nuove:
+        if re.search(r"\b(?:reset\w*|clear\w*|mockClear|mockReset|resetModules|restoreAllMocks|mockRestore)\(", l):
+            return "reset or restore not in the closed list"
+        if "vi.spyOn(" in l or "vi.mock(" in l or "vi.fn(" in l:
+            return "new mock or spy"
+    return "not a transformation of the closed list"
+
+
+def trasf_js(cl, ob, nb, testo_n, fuori_n):
+    """(D8, vitest) the transformation of the list between the old and the new body of Tn (lines compared with the spaces
+    compressed, blank lines ignored): (form, "") or (None, reason)"""
+    ol, nl = righe_n(ob), righe_n(nb)
+    if len(ol) < 2 or len(nl) < 2 or ol[0] != nl[0] or ol[-1] != nl[-1]:
+        return None, "first or last line of the body changed"
+    if cl == "patch-non-ripristinata":
+        if len(nl) == len(ol) + 4 and nl[-4] == "} finally {" and nl[-2] == "}":
+            k = 0
+            while k < len(ol) - 1 and ol[k] == nl[k]:
+                k += 1
+            r = nl[-3]
+            if nl[k] == "try {" and nl[k + 1:-4] == ol[k:-1] and k < len(ol) - 1:   # TRY-FINO-ALLA-FINE
+                spie = [j for j in range(1, k) if "vi.spyOn(" in ol[j]]
+                m = JS_RIPRISTINO.match(r)
+                if m:
+                    if any(re.match(r"^(?:const|let|var)\s+" + re.escape(m.group(1)) + r"\s*=\s*vi\.spyOn\(", ol[j]) for j in spie):  # SPIA-NEL-CORPO
+                        return "mockRestore in finally", ""
+                    return None, "mockRestore of %s, not a vi.spyOn created in the test before the try" % m.group(1)
+                if JS_TUTTI.match(r):
+                    if not spie:
+                        return None, "restoreAllMocks without a vi.spyOn created in the test before the try"
+                    if "vi.spyOn(" in fuori_n:  # NESSUNA-SPIA-FUORI
+                        return None, "restoreAllMocks with a vi.spyOn outside the test"
+                    return "restoreAllMocks in finally", ""
+                return None, "finally with something other than the restore"
+        return None, perche_js(ol, nl)
+    dif = [j for j in range(len(ol)) if len(ol) == len(nl) and ol[j] != nl[j]]
+    if len(ol) != len(nl) or len(dif) != 1:
+        return None, ("more than one change" if len(dif) > 1 else perche_js(ol, nl))
+    j = dif[0]
+    for a, b, nm in ids_js(ol[j]):
+        for forma, w in JS_AVVOLGI:
+            if nrm(ol[j][:a] + (w % nm) + ol[j][b:]) != nl[j]:
+                continue
+            if any(x[2] == nm for l in ol[1:j] for x in ids_js(l)) or any(x[2] == nm and x[0] < a for x in ids_js(ol[j])):  # PRIMO-USO
+                return None, "copy not at the first use of %s" % nm
+            w2 = definito_js(testo_n, nm)
+            if w2:  # DEFINITO-NEL-FILE
+                return None, "%s is not declared in the test file (%s)" % (nm, w2)
+            return forma, ""
+    return None, perche_js(ol, nl)
+
+
+def cmd_corretto(M, tid, cl_in, vp, np_, run):
+    """1.9.0 (K1, interface (b)): the comparison of the old (test-red) and the new version of the file of Tn. Stdout, in
+    this order: zero or more «violazione <key>: <detail>» (d_outside, d_skip, d_assert, d_transform), one «zone protette:
+    <n>» (the protected nodes or lines of the old version), and only without violations one «trasformazione: <class>/
+    <runner> — <form>». Exit 0 no violation and a transformation · 1 a violation · 3 unreadable."""
+    T = M["tests"].get(tid)
+    if T is None:
+        print(_msg.T("plan-check-180.dev_no_row", id=tid))
+        return 3
+    cl = CLASSI_DIF[cl_in]
+    rs = jload(os.path.join(run, "test-red", "rossi.json"))
+    if not isinstance(rs, dict) or not isinstance(rs.get("test"), dict) or not isinstance(rs["test"].get(tid), dict):
+        print("rossi.json: " + tid)
+        return 3
+    nome = rs["test"][tid].get("nome")
+    try:
+        with open(vp, "rb") as fh:
+            so = fh.read().replace(b"\r", b"").decode("utf-8")
+        with open(np_, "rb") as fh:
+            sn = fh.read().replace(b"\r", b"").decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        print("file: " + vp + " " + np_)
+        return 3
+    viol = []
+    def v(k, det):
+        viol.append("violazione %s: %s" % (k, det))
+    def fine(nz, forma=None, runner=""):
+        if forma is None and not viol:
+            v("d_transform", "-")
+        for x in sorted(viol, key=lambda y: ["d_outside", "d_skip", "d_assert", "d_transform"].index(y.split(":")[0][11:])):
+            print(x)
+        print("zone protette: %d" % nz)
+        if viol:
+            return 1
+        print("trasformazione: %s/%s — %s" % (cl, runner, forma))
+        return 0
+    attesi = testi_attesi(T)
+    ko, kn = SALTO.findall(so), SALTO.findall(sn)
+    if len(kn) > len(ko):  # SALTI
+        v("d_skip", ", ".join(sorted(set(kn))))
+    if not nome:
+        v("d_outside", "%s: no name of %s in rossi.json" % (T["path"], tid))
+        return fine(0)
+    if T["path"].endswith(".py"):
+        try:
+            ao, an = ast.parse(so), ast.parse(sn)
+        except (SyntaxError, ValueError) as e:
+            v("d_outside", "%s: not parsable (%s)" % (T["path"], str(e)[:100]))
+            return fine(0)
+        xo, xn = nodo_py(ao, nome), nodo_py(an, nome)
+        if xo is None:
+            v("d_outside", "%s: %s not found in the old version" % (T["path"], nome))
+            return fine(0)
+        po = protetti_py(xo[2], attesi)
+        if xn is None:
+            v("d_assert", "%s disappeared" % nome)
+            return fine(len(po))
+        # D1: the module without the node of Tn (imports, fixtures also autouse, module code, the other tests) is the
+        # version of test-red, save the «import copy» that D8 admits for stato-condiviso
+        mo, mn = copymod.deepcopy(ao), copymod.deepcopy(an)
+        yo, yn = nodo_py(mo, nome), nodo_py(mn, nome)
+        yo[0][yo[1]] = ast.Pass()
+        yn[0][yn[1]] = ast.Pass()
+        copia = False
+        if dd(mo.body) != dd(mn.body):  # MODULO-FUORI-DA-TN
+            k = [i for i, s in enumerate(mn.body) if import_copy(s)]
+            if cl == "stato-condiviso" and len(k) == 1 and not any(import_copy(s) for s in mo.body) and \
+                    dd(mn.body[:k[0]] + mn.body[k[0] + 1:]) == dd(mo.body):
+                copia = True
+            else:
+                v("d_outside", T["path"])
+        pn = protetti_py(xn[2], attesi)
+        if not po:  # NODI-PROTETTI
+            v("d_assert", "none")
+        elif sorted(po) != sorted(pn):
+            v("d_assert", "%d -> %d" % (len(po), len(pn)))
+        forma, why = trasf_py(xo[2], xn[2], cl, an)  # D8
+        if forma is not None and forma not in FORME_D8[(cl, "pytest")]:
+            forma, why = None, "%s is not a form of %s" % (forma, cl)
+        if forma is not None and copia and forma != "copy.deepcopy":
+            v("d_outside", "import copy")
+        if forma is None:
+            v("d_transform", why)
+        return fine(len(po), forma, "pytest")
+    if T["path"].endswith(ACC_JS_EXT):
+        leaf = nomi().foglia(nome, nomi().SEP_VITEST)
+        bo, wo = js_corpo(so, leaf)
+        if bo is None:
+            v("d_outside", "%s: body of %s (%s)" % (T["path"], nome, wo))
+            return fine(0)
+        po = protetti_js(so[bo[0]:bo[1]], attesi)
+        bn, wn = js_corpo(sn, leaf)
+        if bn is None:
+            v("d_assert" if wn == "name" else "d_outside", "%s (%s)" % (nome, wn))
+            return fine(len(po))
+        if so[:bo[0]] != sn[:bn[0]] or so[bo[1]:] != sn[bn[1]:]:  # BYTE-FUORI-DAL-CORPO
+            v("d_outside", T["path"])
+        pn = protetti_js(sn[bn[0]:bn[1]], attesi)
+        if not po:  # RIGHE-PROTETTE
+            v("d_assert", "none")
+        elif sorted(po) != sorted(pn):
+            v("d_assert", "%d -> %d" % (len(po), len(pn)))
+        forma, why = trasf_js(cl, so[bo[0]:bo[1]], sn[bn[0]:bn[1]], sn, sn[:bn[0]] + sn[bn[1]:])  # D8
+        if forma is None:
+            v("d_transform", why)
+        return fine(len(po), forma, "vitest")
+    v("d_transform", "language of %s" % T["path"])
+    return fine(0)
+
+
 def cmd_wbasis(spec, nr, fp):
     """scrive (o sostituisce) \u00b7 tests <fp> in coda alla riga Approved basis (riga nr), fine riga conservata"""
     with open(spec, encoding="utf-8", newline="") as fh:
@@ -3137,7 +4007,7 @@ M = build(load(), sys.argv[2])
 if not M["is2"] and cmd in ("lint2", "gen", "skeleton"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(0)
-if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo", "deviazione"):
+if not M["is2"] and cmd in ("accept", "tests", "stubs", "rossi", "l2", "additivo", "deviazione", "esiti", "corretto"):
     print(_msg.T("plan-check.not_applicable", cmd=cmd))
     sys.exit(2)
 if cmd == "accept":
@@ -3148,8 +4018,14 @@ elif cmd == "stubs":
     sys.exit(cmd_stubs(M, sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else ""))
 elif cmd == "additivo":
     sys.exit(cmd_additivo(M, sys.argv[3]))
+elif cmd == "deviazione" and len(sys.argv) > 5:   # 1.9.0 (K1): root ris tid test-difettoso classe|-
+    sys.exit(dev_difetto(M, sys.argv[3], sys.argv[4], "" if sys.argv[6] == "-" else sys.argv[6]))
 elif cmd == "deviazione":
     sys.exit(cmd_deviazione(M, sys.argv[3], sys.argv[4]))
+elif cmd == "esiti":
+    sys.exit(cmd_esiti(M, sys.argv[2], sys.argv[3], sys.argv[4]))
+elif cmd == "corretto":   # 1.9.0 (K1): root tid classe vecchio nuovo run
+    sys.exit(cmd_corretto(M, sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]))
 elif cmd == "rossi":
     sys.exit(cmd_rossi(M, sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else ""))
 elif cmd == "l2":
@@ -3290,22 +4166,90 @@ cmd_f2x() {
 #          1.8.1 (G2-2) --file: exactly those bytes into <d>/test-red/diff-test-<first 16 of their sha256>.diff and
 #          ONE line, «diff file: <path> · sha256 <full sha256>» (<path> relative to the repository root; absolute when
 #          the run dir is outside it): a long diff reaches the judge as a file it Reads whole (run-phase.sh checks it)
+#   1.9.0 (K1) deviazione <result|-> <spec> <Tn> --famiglia test-difettoso [--classe <class>]   the inputs of the judge of
+#          a defective-test deviation of implement that plan-check computes: its fixed instructions, «test row:», every
+#          «trace row:» and, with --classe, «defect: <Tn> — <class>» (never the why). With the result of the judge also the
+#          verdict: ACCEPT, every requirement of <Tn>, «Defect class:» the declared class (without --classe: STOP). A failed
+#          check: «controllo: judge|d_class» then the STOP line, exit 1
+#   1.9.0 (K1) diff-test … --dal-post   the diff from the .post-tree of the last test-red (not the .pre-tree)
+#   1.9.0 (K1) esiti <spec> --evidence <ev> --out <file> [--run-dir <d>]   (interface (b) of spec K0) every T: the outcome
+#          of verdict() (as rossi) with message, position and riga_errore, and «casi» (every case of the report in the
+#          files of the T), JSON in <file>; «esito <Tn>: <esito>» lines; never rossi.json. Exit 0 · 2 usage · 3 BLOCKED
+#   1.9.0 (K1) corretto <spec> <Tn> --classe <class> --vecchio <file> --nuovo <file> --run-dir <d>   (interface (b)) S2
+#          D1, D2, D8 between the version of test-red and the current one: «violazione <key>: <detail>» lines,
+#          «zone protette: <n>», «trasformazione: <class>/<runner> — <form>». Exit 0 · 1 violation · 2 usage · 3 unreadable
+CLASSI_190="stato-condiviso shared-state patch-non-ripristinata unrestored-patch"   # the four tokens of corretto --classe
 cmd_deviazione() {
+  local fam="" cl="" a=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --famiglia) [ $# -ge 2 ] && [ "$2" = test-difettoso ] || die_usage; fam=$2; shift 2 ;;
+      --classe) [ $# -ge 2 ] && [ -n "$2" ] || die_usage; cl=$2; shift 2 ;;
+      *) a+=("$1"); shift ;;
+    esac
+  done
+  set -- ${a[@]+"${a[@]}"}
   [ $# -eq 3 ] && [ -f "$2" ] && { [ "$1" = - ] || [ -f "$1" ]; } || die_usage
+  [ -n "$fam" ] || [ -z "$cl" ] || die_usage
   local ris=$1 spec=$2 tn=$3 ann
   ann=$(annotate "$spec")
   has_plan_section "$ann" || { echo "Deviazione: STOP — $(msg plan-check.no_plan)"; return 1; }
   need_py || return 2
   [ "$ris" = - ] || ris=$(maat_cygm "$ris" 2>/dev/null || printf '%s' "$ris")
+  if [ -n "$fam" ]; then
+    printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" deviazione "$(repo_root "$spec")" "$ris" "$tn" "$fam" "${cl:--}"
+    return
+  fi
   printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" deviazione "$(repo_root "$spec")" "$ris" "$tn"
+}
+cmd_esiti() {
+  local spec="" ev="" out="" run="" u
+  u="$(msg plan-check-190.esiti_usage script="$0")"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --evidence) [ $# -ge 2 ] && [ -n "$2" ] || { echo "$u" >&2; return 2; }; ev="$2"; shift 2 ;;
+      --out) [ $# -ge 2 ] && [ -n "$2" ] || { echo "$u" >&2; return 2; }; out="$2"; shift 2 ;;
+      --run-dir) [ $# -ge 2 ] && [ -n "$2" ] || { echo "$u" >&2; return 2; }; run="$2"; shift 2 ;;
+      -*) echo "$u" >&2; return 2 ;;
+      *) [ -z "$spec" ] || { echo "$u" >&2; return 2; }; spec="$1"; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] && [ -n "$ev" ] && [ -n "$out" ] || { echo "$u" >&2; return 2; }
+  local ann; ann=$(annotate "$spec")
+  has_plan_section "$ann" || { echo "VIOLAZIONE: $(msg plan-check.no_plan)"; return 2; }
+  need_py || return 2
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" esiti "$(repo_root "$spec")" "$ev" \
+    "$(maat_cygm "$out" 2>/dev/null || printf '%s' "$out")"
+}
+cmd_corretto() {
+  local spec="" tn="" vo="" nu="" cl="" run="" u
+  u="$(msg plan-check-190.corretto_usage script="$0")"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --vecchio|--nuovo|--classe|--run-dir) [ $# -ge 2 ] && [ -n "$2" ] || { echo "$u" >&2; return 2; }
+        case $1 in --vecchio) vo=$2 ;; --nuovo) nu=$2 ;; --classe) cl=$2 ;; --run-dir) run=$2 ;; esac; shift 2 ;;
+      -*) echo "$u" >&2; return 2 ;;
+      *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$tn" ]; then tn="$1"; else echo "$u" >&2; return 2; fi; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -n "$tn" ] && [ -n "$vo" ] && [ -n "$nu" ] && [ -n "$cl" ] && [ -n "$run" ] || { echo "$u" >&2; return 2; }
+  case " $CLASSI_190 " in *" $cl "*) ;; *) echo "$u" >&2; return 2 ;; esac   # CLASSE-CORRETTO: the class run-phase checked
+  [ -f "$spec" ] && [ -f "$vo" ] && [ -f "$nu" ] || { echo "corretto: $spec $vo $nu" >&2; return 3; }
+  local ann; ann=$(annotate "$spec")
+  has_plan_section "$ann" || { echo "corretto: $(msg plan-check.no_plan)" >&2; return 3; }
+  need_py || return 3
+  printf '%s\n' "$ann" | "$FIC_PY" "$TMPD/plan_check_f2.py" corretto "$(repo_root "$spec")" "$tn" "$cl" \
+    "$(maat_cygm "$vo" 2>/dev/null || printf '%s' "$vo")" "$(maat_cygm "$nu" 2>/dev/null || printf '%s' "$nu")" \
+    "$(maat_cygm "$run" 2>/dev/null || printf '%s' "$run")"
 }
 
 cmd_diff_test() {
-  local spec="" file="" run="" afile=0
+  local spec="" file="" run="" afile=0 base=pre bopt=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
       --file) afile=1; shift ;;
+      --dal-post) base=post; bopt=(--dal-post); shift ;;   # 1.9.0 (K1)
       -*) die_usage ;;
       *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$file" ]; then file="$1"; else die_usage; fi; shift ;;
     esac
@@ -3314,7 +4258,8 @@ cmd_diff_test() {
   [ -n "$run" ] || run="${spec%.md}.run"
   local root pre pf cur rs
   root=$(repo_root "$spec")
-  pf=$(ls "$run/log" 2>/dev/null | grep -- '-test-red\.pre-tree$' | sort -n | tail -1)
+  # DIFF-BASE: the .pre-tree of the last test-red (1.8.0) or, 1.9.0 (K1) --dal-post, its .post-tree
+  pf=$(ls "$run/log" 2>/dev/null | grep -- "-test-red\.$base-tree\$" | sort -n | tail -1)
   pre=$([ -n "$pf" ] && tr -d '\r\n' < "$run/log/$pf")
   rs=${PLAN_CHECK_RS:-$PC_HERE/review-surface.sh}; [ -f "$rs" ] || rs=$MAAT_SCRIPTS/review-surface.sh
   cur=$(cd "$root" && bash "$rs" tree 2>/dev/null | tr -d '\r')
@@ -3326,7 +4271,7 @@ cmd_diff_test() {
   # --file: the bytes of the call without it (one place that makes them), the name and the line from their sha256
   local td tmp sha out ab rt rc
   td="$run/test-red"; tmp="$TMPD/diff-test.out"
-  cmd_diff_test "$spec" "$file" --run-dir "$run" > "$tmp"; rc=$?
+  cmd_diff_test "$spec" "$file" --run-dir "$run" ${bopt[@]+"${bopt[@]}"} > "$tmp"; rc=$?
   [ $rc -eq 0 ] || return $rc
   sha=$(sha256sum < "$tmp" | cut -c1-64)
   out="$td/diff-test-${sha:0:16}.diff"
@@ -3543,6 +4488,8 @@ case "$sub" in
   accept|tests|stubs|rossi|l2|additivo) cmd_f2x "$sub" "$@" ;;
   deviazione) cmd_deviazione "$@" ;;
   diff-test) cmd_diff_test "$@" ;;
+  esiti) cmd_esiti "$@" ;;
+  corretto) cmd_corretto "$@" ;;
   *) die_usage ;;
 esac
 exit $?
