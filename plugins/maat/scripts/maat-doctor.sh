@@ -13,6 +13,7 @@
 # One line per check: «OK|ATTENZIONE|MANCA <cosa> — <come si risolve>», then «maat-doctor: <n> OK, <n> ATTENZIONE,
 # <n> MANCA». Exit: 0 no MANCA · 1 at least one MANCA · 64 wrong usage. The text follows the language (1.4.0): in
 # English the levels are OK|WARNING|MISSING; --piattaforma prints the same three values in every language.
+# 1.9.0: also «INFO <text>» lines (the same token in every language), never MANCA and not counted in the summary.
 #
 # Checks:
 #   versions       bash >= 4, Python >= 3.10 (fic_py_min_ok of python.sh, the threshold of the wrappers), git >= 2.35,
@@ -118,6 +119,7 @@ emetti() { # lines from the Python part: «OK|ATTENZIONE|MANCA …» or meta «#
       "#lavoro"$'\t'*) LAVORO=${l#*$'\t'} ;;
       "#valida"$'\t'*) VALIDA=${l#*$'\t'} ;;
       OK\ *|ATTENZIONE\ *|MANCA\ *) riga "${l%% *}" "${l#* }" ;;
+      INFO\ *) printf '%s\n' "$l" ;;   # 1.9.0: informative, not counted
       "") ;;
       *) printf '%s\n' "$l" ;;
     esac
@@ -505,6 +507,13 @@ def cmd_config():
                  T("maat-doctor.version_fix"))
     else:
         riga("OK", T("maat-doctor.version_no_harness", vp=vp or T("maat-doctor.version_unknown")))
+    # 1.9.0 (K2, K0.1): the correction with proof of defective tests is on by default; a project whose "harness" still
+    # admits 1.8 (absent, or older than 1.9) and that does not set ciclo.correzione_test is told so. INFO: never MANCA,
+    # not counted in the summary.
+    hm = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(h or ""))
+    ammette_18 = not h or not hm or (int(hm.group(1)), int(hm.group(2))) < (1, 9)
+    if (cfg.get("ciclo") or {}).get("correzione_test") is None and ammette_18:   # DEFAULT-ON-190
+        riga("INFO", T("maat-doctor-190.default_on"))
 
     piano = []          # functions that print, called after all probes have been registered
     locale = Sonde([BASH, "-s"])
@@ -764,6 +773,11 @@ def controlli_modulo(mc, cfg, r, m, wsl, locale, inwsl, n_copie):
             "OK", T("maat-doctor.prep_ok", nome=nome, guida=guida)) if ok else riga(
             "ATTENZIONE", T("maat-doctor.prep_missing", nome=nome, guida=guida),
             T("maat-doctor.prep_fix", prep=m.get("preparazione", T("maat-doctor.prep_default")))))
+
+    # 1.9.0 (K2): preparati without preparazione: the proof trees of a corrected test cannot produce them when the main
+    # tree lacks them (STOP d_tree). S10 of maat-config.py already refuses this file: the line serves a reader without S10.
+    if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190
+        out.append(lambda: riga("ATTENZIONE", T("maat-doctor-190.prova_senza_preparazione", m=nome)))
 
     # --- copia_anche: repo folders that the counterproofs copy
     for d in m.get("copia_anche", []):

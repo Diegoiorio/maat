@@ -513,6 +513,32 @@ check "1.8.2 * eol=crlf (il progetto ha deciso) -> nessuna riga" '[ "$rc" = 0 ] 
 caso_eol autocrlf-en - core.autocrlf=true; DP=$T/eol-autocrlf-en doc GIT_CONFIG_NOSYSTEM=1 MAAT_LINGUA=en
 check "1.8.2 en: WARNING in inglese" '[ "$rc" = 0 ] && ha "^WARNING line endings: Git can check out this project with CRLF \(core\.autocrlf=true\)" && ! ha "fine riga"'
 
+# --- 28. (1.9.0, K2) the correction with proof of defective tests is on by default: an INFO line (never MANCA, not counted)
+#     when "harness" admits 1.8 (absent or older than 1.9) and ciclo.correzione_test is not set; preparati without
+#     preparazione (S10 refuses it: reachable only with a reader without S10) -> ATTENZIONE prova_senza_preparazione
+INFO_K2='^INFO la correzione con prova dei test difettosi della 1\.9 è accesa per default; per spegnerla: ciclo\.correzione_test false$'
+caso_default_on() { DOCX=${1:-} doc; [ "$rc" = 0 ] && ha "$INFO_K2" && ha '^maat-doctor: [0-9]+ OK, 0 ATTENZIONE, 0 MANCA$'; }
+check "1.9.0 senza harness né ciclo.correzione_test -> INFO default_on, exit 0, riepilogo invariato" 'caso_default_on'
+V28=$(variante harness18 'c["harness"] = ">=1.8"; c["ciclo"] = {"riprese": 1}')
+doc MAAT_CONFIG="$V28"
+check "1.9.0 harness >=1.8 senza la chiave -> INFO default_on" 'ha "$INFO_K2"'
+V28b=$(variante harness19 'c["harness"] = ">=1.9"; c["ciclo"] = {"correzione_test": False}')
+doc MAAT_CONFIG="$V28b"
+check "1.9.0 harness >=1.9 con ciclo.correzione_test -> nessuna INFO" '! ha "^INFO la correzione"'
+V28c=$(variante harness19t 'c["harness"] = ">=1.9"; c["ciclo"] = {"correzione_test": True}')
+doc MAAT_CONFIG="$V28c"
+check "1.9.0 harness >=1.9 con ciclo.correzione_test true -> nessuna INFO" '! ha "^INFO la correzione"'
+doc MAAT_LINGUA=en
+check "1.9.0 en: INFO default_on in inglese" 'ha "^INFO the 1\.9 correction of defective tests with proof is on by default; to switch it off: ciclo\.correzione_test false$"'
+DS10=$T/senza-s10; mkdir -p "$DS10"; cp -r "$PLUGIN" "$DS10/maat"
+sed -i 's/if m.get("preparati") and not m.get("preparazione"):/if False:/' "$DS10/maat/scripts/maat-config.py"
+V28d=$(variante prep-senza 'c["moduli"][0]["preparati"] = ["guida.txt"]')
+caso_prova_prep() { DOCX=${1:-$DS10/maat/scripts/maat-doctor.sh} doc MAAT_CONFIG="$V28d"; ha '^ATTENZIONE il modulo m dichiara preparati ma nessuna preparazione: un test di accettazione difettoso non si può correggere con prova \(STOP come in 1\.8\)$' && ! ha '^MANCA il modulo m dichiara'; }
+check "1.9.0 preparati senza preparazione (lettore senza S10) -> ATTENZIONE prova_senza_preparazione" 'caso_prova_prep'
+V28e=$(variante prep-con 'c["moduli"][0]["preparati"] = ["guida.txt"]; c["moduli"][0]["preparazione"] = "true"')
+DOCX=$DS10/maat/scripts/maat-doctor.sh doc MAAT_CONFIG="$V28e"
+check "1.9.0 preparati con preparazione -> nessuna riga prova_senza_preparazione" '! ha "dichiara preparati ma nessuna preparazione"'
+
 # --- en (1.4.0): MAAT_LINGUA=en, the levels printed as OK|WARNING|MISSING (D3), the text from the catalog, no Italian ---
 IT_DOC='ATTENZIONE|MANCA|guardia:|guardia (di|non)|cartella|modulo|negat|sonda|agganciat|versione|richiesto|scrivibile|assente|valido| del | non '
 doc MAAT_LINGUA=en
@@ -558,6 +584,11 @@ m=$(mutante schema-db 's/^            if i is not None and not locale\[i\]:$/   
 check "controprova: comando del progetto non cercato nel PATH -> schema_db_comando OK, rosso" '[ -n "$m" ] && ! caso_schema_db "$m"'
 m=$(mutante verifica 's/^            if script and not os.path.isfile(assoluto(script, base)):$/            if False:/')
 check "controprova: script di verifica_remota non cercato -> OK, rosso" '[ -n "$m" ] && ! caso_verifica "$m"'
+m=$(mutante default-on 's/    if (cfg.get("ciclo") or {}).get("correzione_test") is None and ammette_18:   # DEFAULT-ON-190/    if False:   #/')
+check "controprova (1.9.0): senza la riga default_on -> rosso" '[ -n "$m" ] && ! caso_default_on "$m"'
+m=$(mutante prova-prep 's/    if m.get("preparati") and not m.get("preparazione"):   # PROVA-SENZA-PREP-190/    if False:   #/')
+[ -z "$m" ] || sed -i 's/if m.get("preparati") and not m.get("preparazione"):/if False:/' "$(dirname "$m")/maat-config.py"
+check "controprova (1.9.0): senza la riga prova_senza_preparazione -> rosso" '[ -n "$m" ] && ! caso_prova_prep "$m"'
 m=$(mutante suite 's/ok = any(t == nome or t.endswith("\/" + nome) for t in tracciati) or os.path.isfile(assoluto(nome, ROOT))/ok = True/')
 check "controprova: guardia.suite non cercata -> nessuna ATTENZIONE, rosso" '[ -n "$m" ] && ! caso_suite "$m"'
 m=$(mutante catena 's/^        if x in SEPARA:$/        if False:/')

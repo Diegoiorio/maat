@@ -25,6 +25,10 @@ Usage:
   maat-config.py gate-richiesti <min|std|full|legacy> [--file f]…
       the gates of the level, «etichetta<TAB>modulo<TAB>tipo»: tests-<modulo> (modules with comandi.test or with files
       touched under the radice), controlli-<modulo>, lint and build (with -<modulo> if several modules declare them).
+  maat-config.py opzione correzione_test
+      1.9.0: the switch ciclo.correzione_test (default true) with FIC_CORREZIONE_TEST (0|1, wins over the key): prints
+      1 or 0, exit 0; an unreadable value (the variable not 0/1, also empty; maat.json not valid; the key not a
+      boolean) -> 0 and an «AVVISO: …» line on stderr (switched off). Another name, or none: exit 64 with the usage.
   maat-config.py test-di <modulo> [--file f]…     the tests that regola_test selects for the files (relative to the repo)
   maat-config.py python <modulo>                  the {python} interpreter of the module (exit 2: it does not use it)
   maat-config.py chiave <modulo>                  the key entries: «etichetta<TAB>file|comando|assente<TAB>cartella<TAB>valore»
@@ -60,7 +64,9 @@ Messages (1.4.0): from the catalog lib/messages.tsv (T below), English by defaul
 Read by gates.sh in both languages: «python not found» (and its Italian form) and the «NOT RUN (dichiarato): » /
 «NOT RUN (declared): » prefix; frozen: «SALTATA: » of the skipped checks and the «assente» type of `chiave`.
 """
+import contextlib
 import copy
+import io
 import json
 import os
 import posixpath
@@ -308,6 +314,24 @@ def s13(cfg):
             yield "moduli.%d.%s" % (i, k), T("maat-config-180.s13", k=k)
 
 
+OPZIONI_190 = ("correzione_test", "build_chiusura")
+
+
+def s14(cfg):
+    """1.9.0 (K2): ciclo.correzione_test and ciclo.build_chiusura exist from 1.9: a file that uses one of them
+    declares "harness": ">=1.9" or newer; each is a boolean (the schema gives them no type: this check says it)."""
+    c = cfg.get("ciclo") or {}
+    usate = [k for k in OPZIONI_190 if k in c]
+    if not usate:
+        return
+    for k in usate:
+        if not isinstance(c[k], bool):
+            yield "ciclo." + k, T("maat-config-190.s14_type", k="ciclo." + k, v=json.dumps(c[k], ensure_ascii=False))
+    m = re.match(r"^>=([0-9]+)\.([0-9]+)$", str(cfg.get("harness") or ""))
+    if not m or (int(m.group(1)), int(m.group(2))) < (1, 9):  # HARNESS-PER-OPZIONI-190
+        yield "harness", T("maat-config-190.s14")
+
+
 # Semantic checks: declared here and in the schema `description` (documentation only: the messages are the
 # maat-config.s* keys of the catalog).
 SEMANTICA = [
@@ -324,6 +348,7 @@ SEMANTICA = [
     ("S11", "piano.taglia => harness >=1.7 or newer", s11),
     ("S12", "ciclo => harness >=1.8 or newer; ciclo.riprese >= 0", s12),
     ("S13", "moduli[].simbolo_mancante or separatori_test => harness >=1.8 or newer", s13),
+    ("S14", "ciclo.correzione_test or ciclo.build_chiusura => harness >=1.9 or newer; a boolean", s14),
 ]
 
 
@@ -648,6 +673,48 @@ def cmd_leggi(args):
                 return
             raise Uscita(3, T("maat-config.key_missing", k=args[0]))
     print(formatta(v))
+
+
+VARIABILE_OPZIONE = {"correzione_test": "FIC_CORREZIONE_TEST", "build_chiusura": "FIC_BUILD_CHIUSURA"}
+
+
+def valore_opzione(nome):
+    """1.9.0 (K0.1): the switch ciclo.<nome>, with its variable FIC_<NOME> that wins over the key: (1 | 0, warning)
+    with warning "" or the text of the AVVISO line. correzione_test (default on): an unreadable value (the variable not
+    0/1, empty included; maat.json not valid; the key not a boolean) -> 0, switched off (the STOP of 1.8)."""
+    var = VARIABILE_OPZIONE[nome]
+    v = os.environ.get(var)
+    if v is not None:   # VUOTA-ILLEGGIBILE: FIC_CORREZIONE_TEST= (empty) is set, so unreadable
+        if v in ("0", "1"):
+            return int(v), ""
+        return 0, T("maat-config-190.opzione_illeggibile", k=var, why=json.dumps(v[:40], ensure_ascii=False))
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):   # the reader's errors belong to maat-config valida, not here
+        try:
+            cfg, _p = carica()
+        except Uscita as u:
+            if u.codice == 4:
+                return 1, ""
+            return 0, T("maat-config-190.opzione_illeggibile", k="ciclo." + nome, why=percorso_config())
+    c = cfg.get("ciclo") or {}
+    if nome not in c:
+        return 1, ""
+    if not isinstance(c[nome], bool):
+        return 0, T("maat-config-190.opzione_illeggibile", k="ciclo." + nome, why=json.dumps(c[nome], ensure_ascii=False))
+    return int(c[nome]), ""
+
+
+OPZIONI_LETTE = ("correzione_test",)
+
+
+def cmd_opzione(args):
+    """1.9.0: «opzione <nome>» prints 1 or 0, exit 0; an unreadable value adds one AVVISO line on stderr."""
+    if len(args) != 1 or args[0] not in OPZIONI_LETTE:
+        raise Uscita(64, T("maat-config-190.usage_opzione"))
+    v, avviso = valore_opzione(args[0])
+    if avviso:
+        sys.stderr.write("AVVISO: %s\n" % avviso)
+    print(v)
 
 
 def instrada(r, p):
@@ -1184,7 +1251,7 @@ def cmd_componi(args):
 
 
 COMANDI = {"valida": cmd_valida, "leggi": cmd_leggi, "modulo-di": cmd_modulo_di, "comando": cmd_comando,
-           "gate-richiesti": cmd_gate_richiesti, "test-di": cmd_test_di, "python": cmd_python,
+           "gate-richiesti": cmd_gate_richiesti, "test-di": cmd_test_di, "python": cmd_python, "opzione": cmd_opzione,
            "chiave": cmd_chiave,
            "copia-modulo": cmd_copia_modulo, "comando-copia": cmd_comando_copia,
            "elenco-moduli": cmd_elenco, "generati": cmd_generati, "sonda-produzione": cmd_sonda, "componi": cmd_componi}

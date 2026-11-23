@@ -325,6 +325,14 @@ maat-doctor-182.autocrlf	line endings: Git can check out this project with CRLF 
 maat-doctor-182.autocrlf_fix	put * text=auto eol=lf in .gitattributes (a decision of the project), or git config core.autocrlf false and git config core.eol lf	metti * text=auto eol=lf nel .gitattributes (decisione del progetto), o git config core.autocrlf false e git config core.eol lf
 maat-doctor-182.why_attr	.gitattributes with text and no eol=, core.eol native on Windows	.gitattributes con text senza eol=, core.eol native su Windows
 
+# 1.9.0 K2: the switch of the correction with proof of defective tests (maat-config.py opzione, S14) and the doctor's lines
+maat-config-190.usage_opzione	usage: opzione correzione_test|build_chiusura	uso: opzione correzione_test|build_chiusura
+maat-config-190.s14	ciclo.correzione_test or ciclo.build_chiusura needs "harness": ">=1.9" or newer	ciclo.correzione_test o ciclo.build_chiusura richiede "harness": ">=1.9" o più nuovo
+maat-config-190.s14_type	{k} is a boolean (true/false): {v}	{k} è un booleano (true/false): {v}
+maat-config-190.opzione_illeggibile	{k} unreadable ({why}): switched off, STOP as in 1.8	{k} illeggibile ({why}): spento, STOP come in 1.8
+maat-doctor-190.default_on	the 1.9 correction of defective tests with proof is on by default; to switch it off: ciclo.correzione_test false	la correzione con prova dei test difettosi della 1.9 è accesa per default; per spegnerla: ciclo.correzione_test false
+maat-doctor-190.prova_senza_preparazione	module {m} declares preparati but no preparazione: a defective acceptance test cannot be corrected with proof (STOP as in 1.8)	il modulo {m} dichiara preparati ma nessuna preparazione: un test di accettazione difettoso non si può correggere con prova (STOP come in 1.8)
+
 # B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
 # review prompt shows a disproved claim next to its row (driver.py)
 plan-check-180.red_limit	red with the expected text of the probe: the limit is proven (decision {k}: {a})	rosso col testo atteso della sonda: limite dimostrato (decisione {k}: {a})

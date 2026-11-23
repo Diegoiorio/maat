@@ -999,8 +999,10 @@ def check_write(path, data):
     # also the expected sha (taglia.sha) and the phase logs and prompts (log/, prompts/: the proof of the full plan
     # branch is read from the log). Case-insensitive, on the normalised path. A Bash append to the live log is the class
     # of writes the guard does not see (docstring): the JSON parse and the three reviewer calls make it costlier only.
+    # 1.9.0 (K0.8): also test-red/ (tests.txt, rossi.json: the basis of tests_guard), written by run-phase.sh and
+    # plan-check.sh only, never by a phase session.
     pn = os.path.normpath(path).replace("\\", "/").lower() if path else ""
-    if phase and re.search(r"\.run/(taglia\.txt|taglia\.sha|driver\.log)$|\.run/(log|prompts)/", pn):  # TAGLIA-DEL-DRIVER
+    if phase and re.search(r"\.run/(taglia\.txt|taglia\.sha|driver\.log)$|\.run/(log|prompts|test-red)/", pn):  # TAGLIA-DEL-DRIVER
         deny("taglia_fase", what=path.replace("\\", "/"), fase=phase)
     phase = os.environ.get("FIC_PHASE", "")
     if (phase not in READONLY_PHASES and phase not in SCOPED_PHASES) or not path:
