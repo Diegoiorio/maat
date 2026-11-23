@@ -3202,8 +3202,10 @@ VT_CASE = re.compile(r"^(\s*)(✓|×|↓)\s+(.*?)(?:\s+[0-9]+(?:\.[0-9]+)?\s*m?s
 def casi_vitest(T, raw, blocks):
     """1.9.0 (K1): the cases of the vitest log in the file of T, in the order of the log: the tree the reporter prints
     under the file (verde, rosso, saltato) and the FAIL blocks (rosso, with their riga_errore); test_id the full name
-    (the titles joined by a space, as -t), the plan name for a case uguale to an acceptance test of that file"""
+    (the titles joined by a space, as -t), the plan name for a case uguale to an acceptance test of that file. Returns
+    (cases, n): n the number of tests the reporter declares for the file («(3 tests | 1 failed)»), None when absent"""
     trel = rel_radice(modulo(T["path"])[0], T["path"])
+    n_file = None
     nt = nomi()
     seen, out = {}, []
     def add(segs, es, rerr):
@@ -3227,6 +3229,9 @@ def casi_vitest(T, raw, blocks):
         f = VT_FILE.match(l + " ")
         if f and len(f.group(1)) <= 2 and ("/" in f.group(2) or f.group(2).endswith(ACC_JS_EXT)):
             cur, ind = f.group(2).lstrip("./"), len(f.group(1))
+            k = re.search(r"\(([0-9]+) tests?\b", l)
+            if cur == trel and k:
+                n_file = int(k.group(1))
             continue
         m = VT_CASE.match(l)
         if cur == trel and m and len(m.group(1)) > ind and m.group(3):
@@ -3236,7 +3241,7 @@ def casi_vitest(T, raw, blocks):
     for b in blocks:
         if b["file"] == trel and b["segs"] is not None:
             add(b["segs"], "rosso", riga_vt(b["body"]))
-    return out
+    return out, n_file
 
 
 _TESTS_FILE = {}
@@ -3246,7 +3251,10 @@ def cmd_esiti(M, root, ev, outp):
     """1.9.0 (K1, K0.4, interface (b)): the outcome of every acceptance test on the evidence <ev> (verdict(), the
     classification of rossi) with message, position and riga_errore, and every case of the report in the files of the
     tests («casi»), as JSON in <outp> (written whole, then renamed); one «esito <Tn>: <esito>» line per test, in the order
-    of the table. Never writes test-red/rossi.json, computes no conflict. Exit 0 file written · 3 BLOCKED (no file)."""
+    of the table. «file_completi»: the files whose every case is in «casi» (JUnit: the report lists every case, unless a
+    T of the file is not collected or not loaded; vitest: as many cases listed as the tests the reporter declares for the
+    file: an all-green file shows no case and is not complete). A case absent from «casi» is never green (K6b).
+    Never writes test-red/rossi.json, computes no conflict. Exit 0 file written · 3 BLOCKED (no file)."""
     out, rerr, blocked, _g, fmt, _r, rep = leggi_esiti(M, root, ev)
     tests = M["tests"]
     for tid in M["order"]:
@@ -3261,7 +3269,7 @@ def cmd_esiti(M, root, ev, outp):
         except OSError:
             pass
         return 3
-    d = {"evidence": ev, "test": {}, "casi": {}}
+    d = {"evidence": ev, "test": {}, "casi": {}, "file_completi": []}
     for tid in M["order"]:
         es, why, msg, pos = out.get(tid, ("non_eseguito", _msg.T("plan-check.red_gate_unusable"), "", None))
         d["test"][tid] = {"esito": es, "motivo": why, "messaggio": msg[:4000], "posizione": pos,
@@ -3275,10 +3283,18 @@ def cmd_esiti(M, root, ev, outp):
         g = "tests-" + mt["nome"] if mt is not None and kt == "radice" else None
         if g is None or rep.get(g) is None or rep.get(g) is False:
             continue
+        caricati = not any(d["test"][t]["esito"] in ("rosso_raccolta", "rosso_import", "non_eseguito")
+                           for t in M["order"] if tests[t]["path"] == p)
         if fmt[g] == "junit":
             d["casi"][p] = casi_junit(Ts[0], mt, rep[g])
+            completo = caricati
         elif fmt[g] == "vitest":
-            d["casi"][p] = casi_vitest(Ts[0], _VT_RAW.get(g, ""), rep[g][0])
+            d["casi"][p], nf = casi_vitest(Ts[0], _VT_RAW.get(g, ""), rep[g][0])
+            completo = caricati and nf is not None and nf == len(d["casi"][p])  # FILE-COMPLETO
+        else:
+            continue
+        if completo:
+            d["file_completi"].append(p)
     jsave(outp, d)
     return 0
 
@@ -3473,10 +3489,71 @@ def rhs_py(v, legati):
     return True
 
 
-def definito_py(an, O, nome):
+MUTA_PY = ("update", "append", "extend", "insert", "pop", "popitem", "clear", "remove", "setdefault", "add", "discard",
+           "sort", "reverse", "__setitem__", "__delitem__", "__iadd__", "__ior__", "difference_update", "intersection_update",
+           "symmetric_difference_update")
+
+
+def radice_dati(x):
+    """the root name of an Attribute / Subscript chain (NOME["a"].b -> NOME)"""
+    while isinstance(x, (ast.Attribute, ast.Subscript)):
+        x = x.value
+    return x.id if isinstance(x, ast.Name) else None
+
+
+def mutato_py(an, N, nome):
+    """(D8, «definito nel file di test») NOME changed outside the new node N of Tn (module code, a hook, a fixture, the
+    other tests): an assignment or del of NOME[...] / NOME.x, an augmented assignment, a mutating method
+    (NOME.update(, .append(, …), setattr/delattr(NOME, …). "" = never, otherwise the form"""
+    dentro = set(id(x) for x in ast.walk(N))
+    for x in ast.walk(an):
+        if id(x) in dentro:
+            continue
+        ts = x.targets if isinstance(x, (ast.Assign, ast.Delete)) else [x.target] if isinstance(x, (ast.AugAssign, ast.AnnAssign)) else []
+        if any(isinstance(t, (ast.Attribute, ast.Subscript)) and radice_dati(t) == nome for t in ts):
+            return "written outside the test"
+        if isinstance(x, ast.AugAssign) and isinstance(x.target, ast.Name) and x.target.id == nome:
+            return "written outside the test"
+        if isinstance(x, ast.Call):
+            f = x.func
+            if isinstance(f, ast.Attribute) and f.attr in MUTA_PY and radice_dati(f.value) == nome:
+                return "%s.%s() outside the test" % (nome, f.attr)
+            if isinstance(f, ast.Name) and f.id in ("setattr", "delattr") and x.args and radice_dati(x.args[0]) == nome:
+                return "%s(%s) outside the test" % (f.id, nome)
+    return ""
+
+
+def alias_importati(an, imp):
+    """the names bound, anywhere in the module, to a value that uses an imported name (m = prod, m = prod.sub,
+    with prod.ctx() as m, for m in prod.xs), to a fixed point, plus the imported names"""
+    al = set(imp)
+    leg = []
+    for x in ast.walk(an):
+        if isinstance(x, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and x.value is not None:
+            ts = x.targets if isinstance(x, ast.Assign) else [x.target]
+            leg.append((ts, x.value))
+        elif isinstance(x, ast.withitem) and x.optional_vars is not None:
+            leg.append(([x.optional_vars], x.context_expr))
+        elif isinstance(x, (ast.For, ast.AsyncFor, ast.comprehension)):
+            leg.append(([x.target], x.iter))
+    ch = True
+    while ch:
+        ch = False
+        for ts, v in leg:
+            if any(isinstance(y, ast.Name) and y.id in al for y in ast.walk(v)):
+                for t in ts:
+                    for y in ast.walk(t):
+                        if isinstance(y, ast.Name) and y.id not in al:
+                            al.add(y.id)
+                            ch = True
+    return al
+
+
+def definito_py(an, O, nome, N=None):
     """(D8) NOME defined in the test file in the strict sense: a parameter of Tn whose fixture of the file is its only
     binding and has one return of an admitted right-hand side, or (not a parameter) one assignment at module level,
-    its only binding in the module. "" = defined, otherwise the reason"""
+    its only binding in the module, never changed outside the new node N of Tn (mutato_py). "" = defined, otherwise
+    the reason"""
     legati, imp = legati_py(an)
     if nome in imp:
         return "imported name"
@@ -3496,6 +3573,9 @@ def definito_py(an, O, nome):
             and s.targets[0].id == nome]
     if len(defs) != 1 or legati.get(nome, 0) != 1:
         return "not defined once at module level"
+    w = mutato_py(an, N if N is not None else O, nome)
+    if w:  # MUTATO-FUORI
+        return w
     return "" if rhs_py(defs[0].value, legati) else "right-hand side of the definition"
 
 
@@ -3610,7 +3690,7 @@ def trasf_py(O, N, cl, an):
         if len(Ob) == len(Nb) and i < len(Ob) and dd(Ob[i + 1:]) == dd(Nb[i + 1:]) and args_mp(O.args, N.args):
             a, b = assegna_attr(Ob[i]), mp_setattr(Nb[i])
             if a and b and dd(a[0]) == dd(b[0]) and a[1] == b[1] and dd(a[2]) == dd(b[2]):  # STESSO-BERSAGLIO
-                if radice_nome(a[0]) is None or radice_nome(a[0]) in imp:  # BERSAGLIO-DEL-TEST
+                if radice_nome(a[0]) is None or radice_nome(a[0]) in alias_importati(an, imp):  # BERSAGLIO-DEL-TEST
                     return None, "monkeypatch of a target imported from a module (%s)" % (radice_nome(a[0]) or "-")
                 return "monkeypatch.setattr", ""
         if dd(O.args) == dd(N.args) and len(Nb) == i + 1 and i < len(Ob):
@@ -3655,7 +3735,7 @@ def trasf_py(O, N, cl, an):
             usi = sorted((x.lineno, x.col_offset) for s in Ob for x in ast.walk(s) if isinstance(x, ast.Name) and x.id == o.id)
             if not usi or usi[0] != (o.lineno, o.col_offset):  # PRIMO-USO
                 return None, "deepcopy not at the first use of %s" % o.id
-            w = definito_py(an, O, o.id)
+            w = definito_py(an, O, o.id, N)
             if w:  # DEFINITO-NEL-FILE
                 return None, "%s is not defined in the test file (%s)" % (o.id, w)
             return "copy.deepcopy", ""
@@ -3702,8 +3782,10 @@ def js_corpo(testo, foglia):
                 return None, "unclosed"
             i = k + 2
             continue
-        if ch == "/" and prev in "(,=:[!&|?{};+-*%<>~^\n":
-            return None, "regex"
+        if ch == "/":   # a regex literal (not a division) after an operator, a brace or a keyword: not verifiable
+            pw = re.search(r"([A-Za-z_$][\w$]*)\s*$", testo[max(0, i - 40):i])
+            if prev in "(,=:[!&|?{};+-*%<>~^}" or (pw and pw.group(1) in JS_KW_REGEX and prev == pw.group(1)[-1]):
+                return None, "regex"
         if ch in "([{":
             prof += 1
         elif ch in ")]}":
@@ -3714,6 +3796,10 @@ def js_corpo(testo, foglia):
             prev = ch
         i += 1
     return None, "unclosed"
+
+
+JS_KW_REGEX = ("return", "typeof", "case", "in", "of", "void", "delete", "instanceof", "new", "throw", "yield", "await",
+               "do", "else")
 
 
 def protetti_js(corpo, attesi):
@@ -3727,8 +3813,10 @@ def protetti_js(corpo, attesi):
     return out
 
 
-def righe_n(s):
-    return [nrm(l) for l in s.split("\n") if nrm(l)]
+def righe_r(s):
+    """the lines of a body for D8 and D1 inside it: only the leading and trailing spaces stripped, blank lines ignored,
+    never squeezed inside the line (a space changed inside a string is a change)"""
+    return [l.strip() for l in s.split("\n") if l.strip()]
 
 
 JS_ID = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])")
@@ -3777,16 +3865,47 @@ def rhs_js(r, testo):
     return not usati
 
 
-def definito_js(testo, nome):
-    """(D8) NOME declared in the test file in the strict sense: one declaration in the whole file, «const|let NOME = …» at
-    module level (column 0), never imported, with an admitted right-hand side. "" = defined, otherwise the reason"""
+JS_MUTA = ("push", "pop", "shift", "unshift", "splice", "sort", "reverse", "fill", "copyWithin", "set", "add", "delete",
+           "clear", "$patch", "$reset")
+
+
+def mutato_js(fuori, nome):
+    """(D8, «definito nel file di test») NOME changed in the text outside the body of Tn (strings blanked): an assignment
+    (=, op=) of NOME or of NOME.x / NOME[...], ++ / --, delete, a mutating method (NOME.push(, .set(, .$patch(, …),
+    Object.assign / defineProperty of NOME, NOME inside a destructuring assignment. The declaration itself excluded."""
+    t = LITERAL.sub("\"\"", fuori)
+    N = r"(?<![\w$.])" + re.escape(nome) + r"(?![\w$])"
+    acc = r"(?:\s*(?:\.\s*[\w$]+|\[[^\]]*\]))*"
+    for m in re.finditer(N + acc + r"\s*(?:\*\*|<<|>>>?|\|\||&&|\?\?|[-+*/%&|^])?=(?!=)", t):
+        if not re.search(r"(?:const|let|var)\s+$", t[:m.start()]):
+            return "assigned outside the test"
+    if re.search(r"(?:\+\+|--)\s*" + N + "|" + N + acc + r"\s*(?:\+\+|--)|\bdelete\s+" + N, t):
+        return "changed outside the test"
+    k = re.search(N + acc + r"\s*\.\s*(" + "|".join(re.escape(x) for x in JS_MUTA) + r")\s*\(", t)
+    if k:
+        return "%s.%s() outside the test" % (nome, k.group(1))
+    if re.search(r"\bObject\s*\.\s*(?:assign|defineProperty|defineProperties|setPrototypeOf)\s*\(\s*" + N, t):
+        return "Object.assign of %s outside the test" % nome
+    if re.search(r"[\[{][^\]};=]*" + N + r"[^\]};=]*[\]}]\s*=(?!=)", t):
+        return "destructuring assignment outside the test"
+    return ""
+
+
+def definito_js(testo, nome, fuori=""):
+    """(D8) NOME declared in the test file in the strict sense: one declaration in the whole file, «const NOME = …» at
+    module level (column 0; let is refused: the stricter choice, a let can be rebound by a hook), never imported, never
+    changed outside the body of Tn (mutato_js on <fuori>), with an admitted right-hand side. "" = defined, otherwise the
+    reason"""
     linee = testo.split("\n")
     if any(JS_IMPORT.match(l) and re.search(r"(?<![\w$])" + re.escape(nome) + r"(?![\w$])", l) for l in linee):
         return "imported name"
     dich = re.findall(r"(?<![\w$.])(?:const|let|var|function|class)\s+" + re.escape(nome) + r"(?![\w$])", testo)
-    m = [i for i, l in enumerate(linee) if re.match(r"^(?:export\s+)?(?:const|let)\s+" + re.escape(nome) + r"\s*=", l)]
+    m = [i for i, l in enumerate(linee) if re.match(r"^(?:export\s+)?const\s+" + re.escape(nome) + r"\s*=", l)]  # SOLO-CONST
     if len(dich) != 1 or len(m) != 1:
-        return "not declared once at module level"
+        return "not declared once at module level with const"
+    w = mutato_js(fuori, nome)
+    if w:  # MUTATO-FUORI
+        return w
     resto = "\n".join(linee[m[0]:])
     resto = resto[resto.index("=") + 1:]
     prof, out, i = 0, [], 0
@@ -3811,6 +3930,23 @@ def definito_js(testo, nome):
 
 
 JS_RIPRISTINO = re.compile(r"^([A-Za-z_$][\w$]*)\.mockRestore\(\);?$")
+JS_SPIA = re.compile(r"(?<![\w$.])(?:vi\s*\.\s*)?spyOn\s*\(|(?<![\w$])vi\s*\.\s*spyOn\s*\(")   # vi.spyOn(, vi . spyOn (, spyOn(
+
+
+def vitest_major(path):
+    """the major version of the vitest installed for the module of path (node_modules/vitest/package.json from the root
+    of the module up to the repository root); None when not found"""
+    root = os.path.abspath(_CONF.get("root") or ".")
+    mt, _k = modulo(path)
+    d = os.path.abspath(os.path.join(root, radice(mt) if mt is not None else ""))
+    while True:
+        js = jload(os.path.join(d, "node_modules", "vitest", "package.json"))
+        if isinstance(js, dict):
+            k = re.match(r"^\D*([0-9]+)", str(js.get("version") or ""))
+            return int(k.group(1)) if k else None
+        if d == root or os.path.dirname(d) == d or not d.startswith(root):
+            return None
+        d = os.path.dirname(d)
 JS_TUTTI = re.compile(r"^vi\.restoreAllMocks\(\);?$")
 JS_AVVOLGI = (("structuredClone", "structuredClone(%s)"), ("spread", "{ ...%s }"), ("spread", "{...%s}"),
               ("spread", "[...%s]"), ("spread", "[ ...%s ]"))
@@ -3821,15 +3957,16 @@ def perche_js(ol, nl):
     for l in nuove:
         if re.search(r"\b(?:reset\w*|clear\w*|mockClear|mockReset|resetModules|restoreAllMocks|mockRestore)\(", l):
             return "reset or restore not in the closed list"
-        if "vi.spyOn(" in l or "vi.mock(" in l or "vi.fn(" in l:
+        if JS_SPIA.search(l) or "vi.mock(" in l or "vi.fn(" in l:
             return "new mock or spy"
     return "not a transformation of the closed list"
 
 
-def trasf_js(cl, ob, nb, testo_n, fuori_n):
-    """(D8, vitest) the transformation of the list between the old and the new body of Tn (lines compared with the spaces
-    compressed, blank lines ignored): (form, "") or (None, reason)"""
-    ol, nl = righe_n(ob), righe_n(nb)
+def trasf_js(cl, ob, nb, testo_n, fuori_n, major=None):
+    """(D8, vitest) the transformation of the list between the old and the new body of Tn (lines compared raw, only
+    stripped at the ends, blank lines ignored: righe_r): (form, "") or (None, reason). restoreAllMocks assumes the
+    semantics of vitest >= 3 (it restores only the vi.spyOn spies): refused when the installed vitest is older"""
+    ol, nl = righe_r(ob), righe_r(nb)
     if len(ol) < 2 or len(nl) < 2 or ol[0] != nl[0] or ol[-1] != nl[-1]:
         return None, "first or last line of the body changed"
     if cl == "patch-non-ripristinata":
@@ -3839,17 +3976,19 @@ def trasf_js(cl, ob, nb, testo_n, fuori_n):
                 k += 1
             r = nl[-3]
             if nl[k] == "try {" and nl[k + 1:-4] == ol[k:-1] and k < len(ol) - 1:   # TRY-FINO-ALLA-FINE
-                spie = [j for j in range(1, k) if "vi.spyOn(" in ol[j]]
+                spie = [j for j in range(1, k) if JS_SPIA.search(ol[j])]
                 m = JS_RIPRISTINO.match(r)
                 if m:
-                    if any(re.match(r"^(?:const|let|var)\s+" + re.escape(m.group(1)) + r"\s*=\s*vi\.spyOn\(", ol[j]) for j in spie):  # SPIA-NEL-CORPO
+                    if any(re.match(r"^(?:const|let|var)\s+" + re.escape(m.group(1)) + r"\s*=\s*(?:vi\s*\.\s*)?spyOn\s*\(", ol[j]) for j in spie):  # SPIA-NEL-CORPO
                         return "mockRestore in finally", ""
                     return None, "mockRestore of %s, not a vi.spyOn created in the test before the try" % m.group(1)
                 if JS_TUTTI.match(r):
                     if not spie:
                         return None, "restoreAllMocks without a vi.spyOn created in the test before the try"
-                    if "vi.spyOn(" in fuori_n:  # NESSUNA-SPIA-FUORI
+                    if JS_SPIA.search(fuori_n):  # NESSUNA-SPIA-FUORI
                         return None, "restoreAllMocks with a vi.spyOn outside the test"
+                    if major is not None and major < 3:  # VITEST-3
+                        return None, "restoreAllMocks with vitest %d (< 3: it also resets the vi.fn mocks)" % major
                     return "restoreAllMocks in finally", ""
                 return None, "finally with something other than the restore"
         return None, perche_js(ol, nl)
@@ -3859,11 +3998,11 @@ def trasf_js(cl, ob, nb, testo_n, fuori_n):
     j = dif[0]
     for a, b, nm in ids_js(ol[j]):
         for forma, w in JS_AVVOLGI:
-            if nrm(ol[j][:a] + (w % nm) + ol[j][b:]) != nl[j]:
+            if ol[j][:a] + (w % nm) + ol[j][b:] != nl[j]:
                 continue
             if any(x[2] == nm for l in ol[1:j] for x in ids_js(l)) or any(x[2] == nm and x[0] < a for x in ids_js(ol[j])):  # PRIMO-USO
                 return None, "copy not at the first use of %s" % nm
-            w2 = definito_js(testo_n, nm)
+            w2 = definito_js(testo_n, nm, fuori_n)
             if w2:  # DEFINITO-NEL-FILE
                 return None, "%s is not declared in the test file (%s)" % (nm, w2)
             return forma, ""
@@ -3972,7 +4111,7 @@ def cmd_corretto(M, tid, cl_in, vp, np_, run):
             v("d_assert", "none")
         elif sorted(po) != sorted(pn):
             v("d_assert", "%d -> %d" % (len(po), len(pn)))
-        forma, why = trasf_js(cl, so[bo[0]:bo[1]], sn[bn[0]:bn[1]], sn, sn[:bn[0]] + sn[bn[1]:])  # D8
+        forma, why = trasf_js(cl, so[bo[0]:bo[1]], sn[bn[0]:bn[1]], sn, sn[:bn[0]] + sn[bn[1]:], vitest_major(T["path"]))  # D8
         if forma is None:
             v("d_transform", why)
         return fine(len(po), forma, "vitest")

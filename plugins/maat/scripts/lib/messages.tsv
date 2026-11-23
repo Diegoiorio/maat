@@ -312,7 +312,7 @@ run-phase-181.r2_differ	the outcomes of the acceptance tests differ, or a confli
 
 # 1.9.0 K1: plan-check.sh esiti and corretto (S2, interface (b) of the spec)
 plan-check-190.esiti_usage	usage: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]	uso: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]
-plan-check-190.corretto_usage	usage: {script} corretto <spec> <Tn> --classe shared-state|unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>	uso: {script} corretto <spec> <Tn> --classe stato-condiviso|shared-state|patch-non-ripristinata|unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>
+plan-check-190.corretto_usage	usage: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>	uso: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>
 
 # 1.8.2 D1 (S3): line endings of the cycle's worktree (ciclo-worktree.sh crea and rimuovi) and the doctor's warning
 worktree-cycle-182.eol_ext_on	extensions.worktreeConfig turned on in the main repository (only this worktree gets its own line-ending settings; rimuovi turns it off)	extensions.worktreeConfig accesa nel repository principale (solo questo worktree riceve le sue impostazioni del fine riga; rimuovi la spegne)

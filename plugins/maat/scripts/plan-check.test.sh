@@ -2466,7 +2466,15 @@ expect 0 "^TypeError: 'int' object is not iterable$" "K1 esiti: riga_errore JUni
 refute "1 prelievo fallito" "K1 esiti: un'eccezione la cui riga non contiene l'atteso: riga_errore senza il testo atteso" -- jget "$T/k1-es.json" 'd["test"]["T1"]["riga_errore"]'
 expect 0 "^AssertionError: expected '2 prelievi' to be '1 prelievo fallito' // Object.is equality$" "K1 esiti: riga_errore vitest = il messaggio fino alla riga vuota o di stack (niente diff)" -- jget "$T/k1-es.json" 'd["test"]["T2"]["riga_errore"]'
 expect 0 "^esito motivo messaggio posizione file nome riga_errore modules/api/tests/test_fmtp.py:3 test_uno$" "K1 esiti: i campi di rossi.json più riga_errore" -- jget "$T/k1-es.json" '" ".join(list(d["test"]["T1"]) + [d["test"]["T1"]["posizione"], d["test"]["T1"]["nome"]])'
-expect 0 "^\['evidence', 'test', 'casi'\]$" "K1 esiti: chiavi del file --out (interfaccia b)" -- jget "$T/k1-es.json" 'list(d)'
+expect 0 "^\['evidence', 'test', 'casi', 'file_completi'\]$" "K1 esiti: chiavi del file --out (interfaccia b, più file_completi)" -- jget "$T/k1-es.json" 'list(d)'
+expect 0 "^modules/api/tests/test_fmtp.py modules/app/apps/admin/tests/fmtp.test.ts$" "K1 review (K6b): file_completi, JUnit e vitest con l'albero di tutti i casi dichiarati (3 tests)" -- jget "$T/k1-es.json" '" ".join(d["file_completi"])'
+mkev "$T/ev-k1g" "$JU_K1" FAIL " ✓ tests/fmtp.test.ts (3 tests) 5ms
+ Tests  3 passed (3)" PASS
+bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1g" --out "$T/k1-es-g.json" >/dev/null 2>&1
+expect 0 "^verde \[\] \['modules/api/tests/test_fmtp.py'\]$" "K1 review (K6b): un file vitest tutto verde non elenca i casi e non e' completo (assenza non e' verde)" -- jget "$T/k1-es-g.json" '"%s %s %s" % (d["test"]["T2"]["esito"], d["casi"]["modules/app/apps/admin/tests/fmtp.test.ts"], d["file_completi"])'
+mkev "$T/ev-k1i" '<testcase classname="tests.test_fmtp" name="test_uno"><failure message="ImportError: cannot import name fmt">ImportError</failure></testcase>' FAIL "$FE_K1" FAIL
+bash "$PC" esiti "$T/k1.md" --evidence "$T/ev-k1i" --out "$T/k1-es-i.json" >/dev/null 2>&1
+expect 0 "^rosso_import \['modules/app/apps/admin/tests/fmtp.test.ts'\]$" "K1 review (K6b): un file JUnit con un T non caricato non e' completo" -- jget "$T/k1-es-i.json" '"%s %s" % (d["test"]["T1"]["esito"], d["file_completi"])'
 expect 0 "^modules/api/tests/test_fmtp.py::test_uno rosso \| modules/api/tests/test_fmtp.py::test_vittima rosso assert 5 == 1 \| modules/api/tests/test_fmtp.py::test_salta saltato \| modules/api/tests/test_fmtp.py::TestK::test_m verde$" "K1 esiti casi JUnit: ogni caso del file di T1, nell'ordine del report, test_id file::classname::name, mai un altro file" -- jget "$T/k1-es.json" '" | ".join(c["test_id"] + " " + c["esito"] + ((" " + c["riga_errore"]) if c["test_id"].endswith("vittima") else "") for c in d["casi"]["modules/api/tests/test_fmtp.py"])'
 expect 0 "^conta rosso 1 prelievo fallito \| gruppo vittima rosso expected 5 to be 1 \| altro verde -$" "K1 esiti casi vitest: l'albero del reporter e i blocchi FAIL, test_id il nome completo, mai un altro file" -- jget "$T/k1-es.json" '" | ".join("%s %s %s" % (c["test_id"], c["esito"], ("1 prelievo fallito" if "1 prelievo fallito" in c["riga_errore"] else c["riga_errore"].split(": ", 1)[-1].split(" //")[0]) or "-") for c in d["casi"]["modules/app/apps/admin/tests/fmtp.test.ts"])'
 [ ! -e "$T/k1e.run/test-red/rossi.json" ] && pass=$((pass+1)) || { echo "FAIL [K1 esiti: non scrive mai test-red/rossi.json]"; fail=$((fail+1)); }
@@ -2788,6 +2796,58 @@ sost "$K1D/old.ts" "$K1D/jn.ts" "it('conta'" "it('conta bis'"
 expect 1 "^violazione d_assert: conta \(name\)$" "K1 D2 (vitest): nome di Tn sparito = d_assert" -- kj stato-condiviso "$K1D/jn.ts"
 sost "$K1D/old.ts" "$K1D/jv.ts" "  expect(obj.m()).toBe(1)" "  obj.m = () => 1\n  expect(obj.m()).toBe(1)"
 expect 1 "^violazione d_outside: " "K1 D1 (vitest): la vittima cambiata = d_outside" -- kj stato-condiviso "$K1D/jv.ts"
+# K1 review: (1) D8 and D1 inside the body compare the lines raw (a space changed inside a string is a change)
+sost "$K1D/old.ts" "$K1D/ws-old.ts" "  d.n = 2\n" "  d.n = 2\n  const s = 'a  b'\n"
+sost "$K1D/ws-old.ts" "$K1D/ws-sc.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n" "'a  b'" "'a b'"
+expect 1 "^violazione d_transform: more than one change" "K1 review 1: 'a  b' → 'a b' su un'altra riga accanto a structuredClone = d_transform" -- kj stato-condiviso "$K1D/ws-sc.ts" "$K1D/ws-old.ts"
+sost "$K1D/old.ts" "$K1D/ws1-old.ts" "  const d = DATI\n" "  const d = DATI, s = 'a  b'\n"
+sost "$K1D/ws1-old.ts" "$K1D/ws1.ts" "  const d = DATI, s = 'a  b'\n" "  const d = structuredClone(DATI), s = 'a b'\n"
+expect 1 "^violazione d_transform: " "K1 review 1: 'a  b' → 'a b' sulla stessa riga di structuredClone = d_transform" -- kj stato-condiviso "$K1D/ws1.ts" "$K1D/ws1-old.ts"
+sost "$K1D/ws-old.ts" "$K1D/ws-mr.ts" "  const d = DATI\n  d.n = 2\n  const s = 'a  b'\n  expect(fmt(d)).toBe('1 prelievo fallito')\n})" "  try {\n    const d = DATI\n    d.n = 2\n    const s = 'a b'\n    expect(fmt(d)).toBe('1 prelievo fallito')\n  } finally {\n    spia.mockRestore()\n  }\n})"
+expect 1 "^violazione d_transform: " "K1 review 1: 'a  b' → 'a b' dentro il try accanto a mockRestore = d_transform" -- kj patch-non-ripristinata "$K1D/ws-mr.ts" "$K1D/ws-old.ts"
+# (2) only const, (6) never changed outside Tn: JS
+sost "$K1D/old.ts" "$K1D/let-old.ts" "const DATI = " "let DATI = "
+sost "$K1D/let-old.ts" "$K1D/let.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n"
+expect 1 "^violazione d_transform: DATI is not declared in the test file \(not declared once at module level with const\)" "K1 review 2: let NOME (solo const ammesso) = d_transform" -- kj stato-condiviso "$K1D/let.ts" "$K1D/let-old.ts"
+sost "$K1D/let-old.ts" "$K1D/letb-old.ts" "it('altro'" "beforeEach(() => { DATI = prodCache })\n\nit('altro'"
+sost "$K1D/letb-old.ts" "$K1D/letb.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n"
+expect 1 "^violazione d_transform: DATI is not declared" "K1 review 2: let NOME riassegnato in un hook (beforeEach) = d_transform" -- kj stato-condiviso "$K1D/letb.ts" "$K1D/letb-old.ts"
+for mu in "DATI.n = 9|assigned outside the test" "DATI.voci.push(3)|DATI.push\\(\\) outside|DATI.voci.push" "Object.assign(DATI, prod.X)|Object.assign of DATI" "DATI.n++|changed outside the test"; do
+  st=${mu%%|*}; pat=${mu#*|}; pat=${pat%%|*}
+  sost "$K1D/old.ts" "$K1D/mu-old.ts" "it('altro'" "beforeEach(() => { $st })\n\nit('altro'"
+  sost "$K1D/mu-old.ts" "$K1D/mu.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n"
+  expect 1 "^violazione d_transform: DATI is not declared in the test file \(" "K1 review 6 (vitest): NOME cambiato in un hook fuori da Tn ($st) = d_transform" -- kj stato-condiviso "$K1D/mu.ts" "$K1D/mu-old.ts"
+done
+# (6) Python: NOME changed in a fixture or in module code outside Tn
+sost "$K1D/old.py" "$K1D/hk-old.py" 'def test_altro():' '@pytest.fixture(autouse=True)\ndef prepara():\n    DATI["n"] = 9\n\n\ndef test_altro():'
+sost "$K1D/hk-old.py" "$K1D/hk.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_transform: DATI is not defined in the test file \(written outside the test\)" "K1 review 6 (pytest): NOME scritto in una fixture fuori da Tn = d_transform" -- kc stato-condiviso "$K1D/hk.py" "$K1D/hk-old.py"
+sost "$K1D/old.py" "$K1D/up-old.py" 'DA_PROD = fmtp.BASE\n' 'DA_PROD = fmtp.BASE\nDATI.update(n=9)\n'
+sost "$K1D/up-old.py" "$K1D/up.py" 'import pytest\n' "$DC" '    d = DATI\n' '    d = copy.deepcopy(DATI)\n'
+expect 1 "^violazione d_transform: DATI is not defined in the test file \(DATI.update\(\) outside the test\)" "K1 review 6 (pytest): NOME.update() nel codice di modulo = d_transform" -- kc stato-condiviso "$K1D/up.py" "$K1D/up-old.py"
+# (5) monkeypatch of an alias of an imported module (module level or inside Tn)
+sost "$K1D/old.py" "$K1D/al-old.py" 'DA_PROD = fmtp.BASE\n' 'DA_PROD = fmtp.BASE\nmm = fmtp\n' '    Conf.soglia = 5\n' '    mm.LIMITE = 5\n'
+sost "$K1D/al-old.py" "$K1D/al.py" 'def test_uno():\n    mm.LIMITE = 5' 'def test_uno(monkeypatch):\n    monkeypatch.setattr(mm, "LIMITE", 5)'
+expect 1 "^violazione d_transform: monkeypatch of a target imported from a module \(mm\)" "K1 review 5: monkeypatch di un alias di modulo (mm = fmtp) = d_transform" -- kc patch-non-ripristinata "$K1D/al.py" "$K1D/al-old.py"
+sost "$K1D/old.py" "$K1D/al2-old.py" '    Conf.soglia = 5\n' '    m2 = fmtp.sub\n    m2.X = 5\n'
+sost "$K1D/al2-old.py" "$K1D/al2.py" 'def test_uno():\n    m2 = fmtp.sub\n    m2.X = 5' 'def test_uno(monkeypatch):\n    m2 = fmtp.sub\n    monkeypatch.setattr(m2, "X", 5)'
+expect 1 "^violazione d_transform: monkeypatch of a target imported from a module \(m2\)" "K1 review 5: monkeypatch di un alias legato dentro Tn (m2 = fmtp.sub) = d_transform" -- kc patch-non-ripristinata "$K1D/al2.py" "$K1D/al2-old.py"
+# (3) vi.spyOn outside Tn with spaces or destructured; restoreAllMocks only with vitest >= 3
+for sp in "vi . spyOn (obj, 'm')" "spyOn(obj, 'm')"; do
+  sost "$K1D/old.ts" "$K1D/sps-old.ts" "  expect(fmt(2)).toBe('2 prelievi falliti')" "  $sp\n  expect(fmt(2)).toBe('2 prelievi falliti')"
+  sost "$K1D/sps-old.ts" "$K1D/sps.ts" "$OLDB" "$(fin 'vi.restoreAllMocks()')"
+  expect 1 "^violazione d_transform: restoreAllMocks with a vi.spyOn outside" "K1 review 3: restoreAllMocks con «$sp» fuori dal corpo di Tn = d_transform" -- kj patch-non-ripristinata "$K1D/sps.ts" "$K1D/sps-old.ts"
+done
+VTP="$R/modules/app/apps/admin/node_modules/vitest"; mkdir -p "$VTP"
+printf '{"name": "vitest", "version": "2.1.9"}\n' > "$VTP/package.json"
+expect 1 "^violazione d_transform: restoreAllMocks with vitest 2" "K1 review 3: restoreAllMocks con vitest 2 installato = d_transform" -- kj patch-non-ripristinata "$K1D/ram.ts"
+printf '{"name": "vitest", "version": "3.0.5"}\n' > "$VTP/package.json"
+expect 0 "^trasformazione: patch-non-ripristinata/vitest — restoreAllMocks in finally$" "K1 review 3: restoreAllMocks con vitest 3 installato = ok" -- kj patch-non-ripristinata "$K1D/ram.ts"
+rm -rf "$R/modules/app/apps/admin/node_modules"
+# (4) a / after return (or another keyword, or a closing brace) starts a regex literal: not verifiable
+sost "$K1D/old.ts" "$K1D/rx-old.ts" "  d.n = 2\n" "  d.n = 2\n  const ok = (() => { return /\\)/.test('x') })()\n"
+sost "$K1D/rx-old.ts" "$K1D/rx.ts" "  const d = DATI\n" "  const d = structuredClone(DATI)\n"
+expect 1 "^violazione d_outside: .*\(regex\)$" "K1 review 4: una regex dopo return nel corpo di Tn = d_outside (non verificabile)" -- kj stato-condiviso "$K1D/rx.ts" "$K1D/rx-old.ts"
 # counterproofs of corretto
 if mutpc k1def 's/^            if w:  # DEFINITO-NEL-FILE$/            if False:/; s/^            if w2:  # DEFINITO-NEL-FILE$/            if False:/'; then
   expect 0 "^trasformazione: " "controprova K1: senza la verifica «definito nel file di test» la copia di un oggetto importato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1def/plan-check.sh" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/imp-old.py" --nuovo "$K1D/imp.py" --run-dir "$K1R"
@@ -2811,12 +2871,35 @@ expect 1 "^violazione d_outside: " "K1 D1 (vitest): la vittima cambiata accanto 
 if mutpc k1byte 's/^        if so\[:bo\[0\]\] != sn\[:bn\[0\]\] or so\[bo\[1\]:\] != sn\[bn\[1\]:\]:  # BYTE-FUORI-DAL-CORPO$/        if False:/'; then
   expect 0 "^trasformazione: " "controprova K1: senza i byte identici fuori dal corpo la vittima vitest cambiata passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1byte/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/old.ts" --nuovo "$K1D/scv.ts" --run-dir "$K1R"
 else echo "FAIL [controprova K1 byte fuori dal corpo: la mutazione non si applica]"; fail=$((fail+1)); fi
-if mutpc k1bers 's/^                if radice_nome(a\[0\]) is None or radice_nome(a\[0\]) in imp:  # BERSAGLIO-DEL-TEST$/                if False:/'; then
+if mutpc k1bers 's/^                if radice_nome(a\[0\]) is None or radice_nome(a\[0\]) in alias_importati(an, imp):  # BERSAGLIO-DEL-TEST$/                if False:/'; then
   expect 0 "^trasformazione: " "controprova K1: senza il controllo del bersaglio di produzione il monkeypatch di fmtp passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1bers/plan-check.sh" corretto "$T/k1.md" T1 --classe patch-non-ripristinata --vecchio "$K1D/prod-old.py" --nuovo "$K1D/prod.py" --run-dir "$K1R"
 else echo "FAIL [controprova K1 bersaglio: la mutazione non si applica]"; fail=$((fail+1)); fi
-if mutpc k1spy 's/^                    if "vi.spyOn(" in fuori_n:  # NESSUNA-SPIA-FUORI$/                    if False:/'; then
+if mutpc k1spy 's/^                    if JS_SPIA.search(fuori_n):  # NESSUNA-SPIA-FUORI$/                    if False:/'; then
   expect 0 "^trasformazione: " "controprova K1: senza il controllo degli spy fuori da Tn restoreAllMocks passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1spy/plan-check.sh" corretto "$T/k1.md" T2 --classe patch-non-ripristinata --vecchio "$K1D/spy2-old.ts" --nuovo "$K1D/spy2.ts" --run-dir "$K1R"
 else echo "FAIL [controprova K1 spy fuori: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1raw 's/^    return \[l.strip() for l in s.split("\\n") if l.strip()\]$/    return [nrm(l) for l in s.split("\\n") if nrm(l)]/; s/^            if ol\[j\]\[:a\] + (w % nm) + ol\[j\]\[b:\] != nl\[j\]:$/            if nrm(ol[j][:a] + (w % nm) + ol[j][b:]) != nrm(nl[j]):/'; then
+  expect 0 "^trasformazione: " "controprova K1 review 1: con le righe compresse 'a  b' → 'a b' accanto a structuredClone passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1raw/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/ws1-old.ts" --nuovo "$K1D/ws1.ts" --run-dir "$K1R"
+  expect 0 "^trasformazione: " "controprova K1 review 1: con le righe compresse 'a  b' → 'a b' accanto a mockRestore passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1raw/plan-check.sh" corretto "$T/k1.md" T2 --classe patch-non-ripristinata --vecchio "$K1D/ws-old.ts" --nuovo "$K1D/ws-mr.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review righe grezze: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1const 's/(?:export\\s+)?const\\s+" + re.escape(nome) + r"\\s\*=", l)\]  # SOLO-CONST$/(?:export\\s+)?(?:const|let)\\s+" + re.escape(nome) + r"\\s*=", l)]/'; then
+  expect 0 "^trasformazione: " "controprova K1 review 2: ammettendo let il caso let NOME passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1const/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/let-old.ts" --nuovo "$K1D/let.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review solo const: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1muta 's/^    if w:  # MUTATO-FUORI$/    if False:/'; then
+  expect 0 "^trasformazione: " "controprova K1 review 6: senza il controllo delle scritture fuori da Tn il hook DATI.n = 9 passa (vitest, rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1muta/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/mu-old.ts" --nuovo "$K1D/mu.ts" --run-dir "$K1R"
+  expect 0 "^trasformazione: " "controprova K1 review 6: senza il controllo delle scritture fuori da Tn la fixture che scrive DATI passa (pytest, rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1muta/plan-check.sh" corretto "$T/k1.md" T1 --classe stato-condiviso --vecchio "$K1D/hk-old.py" --nuovo "$K1D/hk.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review scritture fuori: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1alias 's/ in alias_importati(an, imp):  # BERSAGLIO-DEL-TEST$/ in imp:/'; then
+  expect 0 "^trasformazione: " "controprova K1 review 5: senza gli alias il monkeypatch di mm = fmtp passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1alias/plan-check.sh" corretto "$T/k1.md" T1 --classe patch-non-ripristinata --vecchio "$K1D/al-old.py" --nuovo "$K1D/al.py" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review alias: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1spys 's/^                    if JS_SPIA.search(fuori_n):  # NESSUNA-SPIA-FUORI$/                    if "vi.spyOn(" in fuori_n:/'; then
+  expect 0 "^trasformazione: " "controprova K1 review 3: con il confronto letterale «spyOn(» destrutturato fuori da Tn passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1spys/plan-check.sh" corretto "$T/k1.md" T2 --classe patch-non-ripristinata --vecchio "$K1D/sps-old.ts" --nuovo "$K1D/sps.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review spyOn: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1kw 's/ or (pw and pw.group(1) in JS_KW_REGEX and prev == pw.group(1)\[-1\]):$/:/'; then
+  refute "\(regex\)$" "controprova K1 review 4: senza le parole chiave la regex dopo return non e' piu' riconosciuta (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-k1kw/plan-check.sh" corretto "$T/k1.md" T2 --classe stato-condiviso --vecchio "$K1D/rx-old.ts" --nuovo "$K1D/rx.ts" --run-dir "$K1R"
+else echo "FAIL [controprova K1 review regex: la mutazione non si applica]"; fail=$((fail+1)); fi
+if mutpc k1fc 's/^            completo = caricati and nf is not None and nf == len(d\["casi"\]\[p\])  # FILE-COMPLETO$/            completo = caricati/'; then
+  refute "^verde \[\] \['modules/api/tests/test_fmtp.py'\]$" "controprova K1 review (K6b): senza il conteggio il file vitest tutto verde risulta completo (rosso)" -- sh -c 'env MAAT_ROOT="$1" bash "$2" esiti "$3" --evidence "$4" --out "$5" >/dev/null; "$6" -c "import json,sys; d=json.load(open(sys.argv[1],encoding=\"utf-8\")); print(\"%s %s %s\" % (d[\"test\"][\"T2\"][\"esito\"], d[\"casi\"][\"modules/app/apps/admin/tests/fmtp.test.ts\"], d[\"file_completi\"]))" "$5"' _ "$PLUGIN_DIR" "$T/pcm-k1fc/plan-check.sh" "$T/k1.md" "$T/ev-k1g" "$T/k1-es-gm.json" "$FIC_PY"
+else echo "FAIL [controprova K1 review file completi: la mutazione non si applica]"; fail=$((fail+1)); fi
 # diff-test --dal-post: from the .post-tree of the last test-red (only the change after test-red)
 printf 'def test_nuovo():\n    assert 1 == 2\n' > "$DTR/modules/api/tests/test_dt.py"
 (cd "$DTR" && bash "$HERE/review-surface.sh" tree) > "$T/dt.run/log/03-test-red.post-tree"
