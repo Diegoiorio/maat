@@ -1583,6 +1583,7 @@ difetto() { # $1 = outcome after valida; prints it, or the outcome decided by th
     why=$(s2_prove "$devf.elenco" "$ev")
   fi
   if [ -n "$why" ]; then
+    : > "$dir/log/$label.dev-impl.stop"   # the guard after it must not replace the cause (VERIFICA-DECIDE)
     printf 'PHASE RESULT %s: STOP — %s\noriginale=%s\n' "$phase" "$why" "$orig"; return 0
   fi
   printf '%s\n' "$orig"
@@ -1615,9 +1616,343 @@ gia_corretto() { # $1 = Tn
       awk -F'\t' -v t="$1" '{ d = $2; sub(/^(test-difettoso|defective-test): (corsia [0-9]+: |lane [0-9]+: )?/, "", d) }
         $2 ~ /^(test-difettoso|defective-test): / && index(d, t " ") == 1 { print $1 }'; } | head -1
 }
-# K6b fills it: the script proofs D1-D8 and the judge of each deviation; prints the cause of a STOP, nothing if accepted
+# 1.9.0 (K6b, S2 D1-D8): the helper of the proofs (S2_PY, the run dir files as input, prints one answer):
+#   forma <deviation>                → «<Tn>\t<class>» (prefix, «corsia k: » / «lane k: » removed); exit 1 not in its form or
+#                                      <why> over 200 characters
+#   info <rossi.json> <Tn>           → «<file>\t<name>» of rossi.json (test-red), exit 1 missing
+#   runner <file>                    → the controprova runner of its module in maat.json (pytest, vitest, …; «-» none)
+#   attesi <test row>                → the expected texts of the row, one per line (the backticks of its assertion cell,
+#                                      otherwise the «rosso se:» of its mutation), as plan-check testi_attesi
+#   esito <esiti.json> <Tn>          → «<esito>\t<riga_errore>» of esiti; exit 1 unreadable
+#   candidati <es1> <es2> <file> <id> → the cases of <file> red in BOTH rounds, other than <id>, in the order of the
+#                                      first report: «<test_id>» per line (at most 4: the 4th only to say there are more)
+#   caso <json> <file> <test_id>     → «<esito>\t<complete 0|1>\t<riga_errore>» of the case: an esiti.json (casi,
+#                                      file_completi) or an <id>.json of counterproof in whole-file mode (casi,
+#                                      casi_completo); a case absent → «absent» (never green)
+#   cp <id.json>                     → the esito of a counterproof result, «-» unreadable
+#   piano <spec>                     → the paths of «### File toccati» (backticks), one per line
+S2_PY='
+import json, os, re, sys
+sys.dont_write_bytecode = True
+a = sys.argv[1:]
+def jl(p):
+    try:
+        return json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+if a[0] == "forma":
+    d = " ".join(a[1].split())
+    m = re.match(r"^(?:test-difettoso|defective-test): (?:(?:corsia|lane) [0-9]+: )?([A-Za-z0-9._-]+) — (\S+) — (.+)$", d)
+    if not m or len(m.group(3)) > 200:   # FORMA-PERCHE
+        sys.exit(1)
+    print("%s\t%s" % (m.group(1), m.group(2)))
+elif a[0] == "info":
+    t = ((jl(a[1]) or {}).get("test") or {}).get(a[2])
+    if not isinstance(t, dict) or not t.get("file") or not t.get("nome"):
+        sys.exit(1)
+    print("%s\t%s" % (t["file"], t["nome"]))
+elif a[0] == "runner":
+    import importlib.util
+    s = importlib.util.spec_from_file_location("maat_config", os.environ["MAAT_CONFIG_PY"])
+    mc = importlib.util.module_from_spec(s); s.loader.exec_module(mc)
+    try:
+        cfg, _p = mc.carica()
+        r = mc.risolto(cfg)
+    except mc.Uscita:
+        print("-"); sys.exit(0)
+    k = mc.instrada(r, a[1])
+    m = next((x for x in r["moduli"] if k and x["nome"] == k[0] and k[1] == "radice"), None)
+    print(((m or {}).get("controprova") or {}).get("runner") or "-")
+elif a[0] == "attesi":
+    c = [x.strip() for x in a[1].strip().strip("|").split("|")]
+    t = re.findall(r"`([^`]+)`", c[3]) if len(c) > 3 else []
+    if not t and len(c) > 4:
+        t = re.findall(r"rosso se:\s*`([^`]+)`|red if:\s*`([^`]+)`", c[4])
+        t = [x or y for x, y in t]
+    print("\n".join(" ".join(x.split()) for x in t if x.strip()))
+elif a[0] == "esito":
+    t = ((jl(a[1]) or {}).get("test") or {}).get(a[2])
+    if not isinstance(t, dict):
+        sys.exit(1)
+    print("%s\t%s" % (t.get("esito"), " ".join(str(t.get("riga_errore") or "").split())))
+elif a[0] == "candidati":
+    c1 = ((jl(a[1]) or {}).get("casi") or {}).get(a[3]) or []
+    c2 = {c.get("test_id"): c.get("esito") for c in (((jl(a[2]) or {}).get("casi") or {}).get(a[3]) or [])}
+    out = [c["test_id"] for c in c1 if c.get("esito") == "rosso" and c.get("test_id") != a[4] and c2.get(c.get("test_id")) == "rosso"]
+    print("\n".join(out[:4]))
+elif a[0] == "caso":
+    d = jl(a[1]) or {}
+    if "casi_completo" in d:   # counterproof, whole-file mode
+        casi, comp = d.get("casi") or [], bool(d.get("casi_completo"))
+    else:
+        casi, comp = (d.get("casi") or {}).get(a[2]) or [], a[2] in (d.get("file_completi") or [])
+    c = next((x for x in casi if x.get("test_id") == a[3]), None)
+    if c is None:
+        print("absent\t%d\t" % comp)
+    else:
+        print("%s\t%d\t%s" % (c.get("esito"), comp, " ".join(str(c.get("riga_errore") or c.get("messaggio") or "").split())[:300]))
+elif a[0] == "cp":
+    print((jl(a[1]) or {}).get("esito") or "-")
+elif a[0] == "piano":
+    zona = False
+    for l in open(a[1], encoding="utf-8", errors="replace"):
+        l = l.rstrip("\r\n")
+        if re.match(r"^###[ \t]+(File toccati|Touched files)\b", l):
+            zona = True; continue
+        if zona and re.match(r"^#{1,3}[ \t]", l):
+            zona = False
+        if zona:
+            for p in re.findall(r"`([^`]+)`", l):
+                print(re.sub(r"::.*$", "", p))
+'
+s2py() { MAAT_CONFIG_PY="$MAAT_SCRIPTS/maat-config.py" PROJECT_ROOT=$FIC_REPO "$FIC_PY" -c "$S2_PY" "$@" 2>>"$err" | tr -d '\r'; }
+# the proof worktrees of this phase, one per line in log/<label>.prova-wt (the subshells add to it): removed at the end,
+# on a STOP and on a signal (trap in s2_prove)
+s2_pulisci() { local w
+  [ -f "$dir/log/$label.prova-wt" ] || return 0
+  while IFS= read -r w; do [ -n "$w" ] && MAIN=$FIC_REPO WT_TAG=run-phase wt_prova_rimuovi "$w" >>"$err" 2>&1; done < "$dir/log/$label.prova-wt"
+  rm -f "$dir/log/$label.prova-wt"; }
+s2_albero() { # $1 = suffix of the worktree, $2 = tree to apply, $3 = file of Tn, $4 = its content → prints the worktree
+  local w rc
+  w=$(MAIN=$FIC_REPO WT_TAG=run-phase wt_prova_crea "$label-$1" "$(git -C "$FIC_REPO" rev-parse HEAD 2>>"$err")" 2>>"$err"); rc=$?
+  [ -n "$w" ] && printf '%s\n' "$w" >> "$dir/log/$label.prova-wt"
+  [ $rc -eq 0 ] && [ -n "$w" ] || return 1
+  MAIN=$FIC_REPO WT_TAG=run-phase wt_prova_albero "$w" "$2" >>"$err" 2>&1 || return 1
+  mkdir -p "$(dirname "$w/$3")" && cp "$4" "$w/$3" || return 1
+  printf '%s\n' "$w"
+}
+s2_gate() { # $1 = suffix (.prova-a, .prova-a2, .prova-b, .verde2), $2 = root, $3 = file of Tn → esiti in log/<label>$1.esiti.json
+  local r="$dir/log/$label$1" e
+  rm -rf "$r"; mkdir -p "$r"
+  FIC_BUILD_CHIUSURA=0 FIC_GATES_ROOT="$2" bash "$GATES" --run-dir "$r" std "$3" > "$r.gates" 2>&1  # NO-BUILD-PROVA
+  e=$(sed -n 's/^gates: esito=.* evidence=\(.\{2,\}\)$/\1/p' "$r.gates" | tail -1)
+  { [ -n "$e" ] && [ "$e" != - ] && ! grep -q '^gates: esito=BLOCKED' "$r.gates"; } || return 1
+  bash "$PC" esiti "$SPEC_F" --evidence "$e" --out "$r.esiti.json" --run-dir "$dir" > "$r.esiti" 2>>"$err"
+}
+s2_cp() { # $1 = name, $2 = PROJECT_ROOT, $3 = file, $4 = test_id ("" = the whole file), $5 = runner → prints the <id>.json
+  local c="$dir/log/$label.$1" nm
+  rm -rf "$c"; mkdir -p "$c"
+  if [ -n "$4" ]; then
+    nm=$4; [ "$5" = pytest ] && nm=${4#"$3::"}
+    "$FIC_PY" -c 'import json, sys; json.dump([{"id": sys.argv[1], "file": sys.argv[2], "simbolo": sys.argv[3], "test": {"percorso": sys.argv[2], "nome": sys.argv[3]}, "rosso_se": {"test_id": sys.argv[4]}}], open(sys.argv[5], "w", encoding="utf-8"))' \
+      "$1" "$3" "$nm" "$4" "$c/mutations.json" 2>>"$err"
+  else
+    "$FIC_PY" -c 'import json, sys; json.dump([{"id": sys.argv[1], "file": sys.argv[2], "intero": True, "test": {"percorso": sys.argv[2]}}], open(sys.argv[3], "w", encoding="utf-8"))' \
+      "$1" "$3" "$c/mutations.json" 2>>"$err"
+  fi
+  PROJECT_ROOT=$2 bash "$CP_SH" --senza-mutazione "$c/mutations.json" > "$c.out" 2>&1
+  case $? in 0|2) printf '%s\n' "$c/$1.json" ;; *) return 1 ;; esac   # 3 environment, 5 copy not restored, 64 usage
+}
+s2_una() { # $1 = Tn, $2 = class, $3 = deviation, $4 = evidence of the phase, $5 = file of the judge inputs (one path per line)
+  local tn=$1 cl=$2 d=$3 ev=$4 inl=$5 path nome rn oldf pt cur out rc k tr why w x e1 e2 r1 a1 a2 tnid v vs vcp p1 p2
+  local pd="$dir/log/$label.dif-$tn" attesi
+  IFS=$'\t' read -r path nome < <(s2py info "$TR/rossi.json" "$tn") || true
+  [ -n "${path:-}" ] && [ -n "${nome:-}" ] || { msg run-phase-190.d_proof c="$cl" tn="$tn" why="rossi.json"; return; }
+  rn=$(s2py runner "$path")
+  case "$cl:$rn:$path" in   # CLASSE-LINGUAGGIO: pytest for .py, vitest for JS/TS
+    *:pytest:*.py|*:vitest:*.js|*:vitest:*.jsx|*:vitest:*.mjs|*:vitest:*.cjs|*:vitest:*.ts|*:vitest:*.tsx|*:vitest:*.mts|*:vitest:*.cts) ;;
+    *) msg run-phase-190.d_class c="$cl ($rn, $path)"; return ;;
+  esac
+  # the judge inputs plan-check computes: fixed instructions, test row, trace rows, defect line
+  out=$(bash "$PC" deviazione - "$SPEC_F" "$tn" --famiglia test-difettoso --classe "$cl" 2>>"$err" | tr -d '\r'); rc=$?
+  if [ $rc -ne 0 ]; then
+    printf '%s\n' "$out" | grep -qx 'controllo: d_class' && { msg run-phase-190.d_class c="$cl"; return; }
+    printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return
+  fi
+  attesi=$(s2py attesi "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')")
+  # D1: the acceptance files changed are files of the declared T only; no other file beyond the plan; never a shared one
+  local tf pf ch fuori
+  tf=$(cat "$dir/log/$label.dif-files" 2>/dev/null)
+  pf=$(s2py piano "$SPEC_F")
+  fuori=$(printf '%s\n' "$(cat "$dir/log/$label.dif-changed")" | grep -v '^$' | while IFS= read -r x; do
+      case "${x##*/}" in conftest.py|setup*|vitest.setup*|*fixture*) echo "$x"; continue ;; esac
+      case "/$x/" in */fixtures/*|*/__fixtures__/*) echo "$x"; continue ;; esac
+      if printf '%s\n' "$(cat "$dir/log/$label.dif-acc")" | grep -qxF -- "$x"; then
+        printf '%s\n' "$tf" | grep -qxF -- "$x" || echo "$x"
+      else printf '%s\n' "$pf" | grep -qxF -- "$x" || echo "$x"; fi
+    done | head -5 | paste -sd, -)
+  [ -z "$fuori" ] || { msg run-phase-190.d_files files="$fuori"; return; }   # FILE-DELLA-FASE
+  # D1, D2, D8: plan-check.sh corretto between the version of test-red (its .post-tree) and the current file
+  pt=$(ls "$dir"/log/*-test-red.post-tree 2>/dev/null | LC_ALL=C sort | tail -1); pt=$([ -n "$pt" ] && tr -d '\r\n' < "$pt")
+  oldf="$pd.old"
+  [ -n "$pt" ] && git -C "$FIC_REPO" cat-file blob "$pt:$path" > "$oldf" 2>>"$err" && [ -f "$FIC_REPO/$path" ] ||
+    { msg run-phase-190.d_transform tn="$tn" why="test-red post-tree"; return; }
+  bash "$PC" corretto "$SPEC_F" "$tn" --classe "$cl" --vecchio "$oldf" --nuovo "$FIC_REPO/$path" --run-dir "$dir" > "$pd.corretto" 2>&1; rc=$?
+  case $rc in
+    0) tr=$(tr -d '\r' < "$pd.corretto" | grep '^trasformazione: ' | head -1) ;;
+    1) k=$(tr -d '\r' < "$pd.corretto" | sed -n 's/^violazione \([a-z_]*\): \(.*\)$/\1\t\2/p' | head -1)
+       x=${k#*	}; k=${k%%	*}
+       case $k in   # VIOLAZIONE-DI-CORRETTO: the key of the first violation
+         d_outside) msg run-phase-190.d_outside f="$path" tn="$tn" ;;
+         d_skip) msg run-phase-190.d_skip m="$x" ;;
+         d_assert) msg run-phase-190.d_assert tn="$tn" t="$x" ;;
+         *) msg run-phase-190.d_transform tn="$tn" why="$x" ;;
+       esac; return ;;
+    *) msg run-phase-190.d_transform tn="$tn" why="plan-check.sh corretto exit $rc"; return ;;
+  esac
+  [ -n "$tr" ] || { msg run-phase-190.d_transform tn="$tn" why="-"; return; }
+  # D3: tree A = the current tree with the file of Tn at the version of test-red; two rounds of gates on its file
+  cur=$(tree_now) && [ -n "$cur" ] || { msg run-phase-190.d_tree why="tree"; return; }
+  w=$(s2_albero a "$cur" "$path" "$oldf") || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_wt n=A)"; return; }
+  s2_gate .prova-a "$w" "$path" && s2_gate .prova-a2 "$w" "$path" || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_gates n=A)"; return; }
+  a1=$(s2py esito "$dir/log/$label.prova-a.esiti.json" "$tn"); a2=$(s2py esito "$dir/log/$label.prova-a2.esiti.json" "$tn")
+  e1=${a1%%	*} e2=${a2%%	*}
+  if [ "$e1" != verde ] || [ "$e2" != verde ]; then   # D3-A: the old Tn green in its file in both rounds
+    for x in "$a1" "$a2"; do
+      case ${x%%	*} in rosso_import|rosso_raccolta|rosso_simbolo) msg run-phase-190.d_old_load tn="$tn"; return ;; esac
+    done
+    for x in "$a1" "$a2"; do
+      r1=${x#*	}
+      case ${x%%	*} in verde) continue ;; esac
+      if [ -n "$r1" ] && printf '%s\n' "$r1" | grep -qF -f <(printf '%s\n' "$attesi" | grep -v '^$'); then
+        msg run-phase-190.d_on_text tn="$tn"; return   # D3-TESTO: the code is at fault
+      fi
+    done
+    msg run-phase-190.d_proof c="$cl" tn="$tn" why="A: $e1, $e2"; return
+  fi
+  # D5: the new Tn green in its file on the gates of the phase (K0.4) and on a second round in the tree of the phase
+  bash "$PC" esiti "$SPEC_F" --evidence "$ev" --out "$dir/log/$label.fase.esiti.json" --run-dir "$dir" > "$dir/log/$label.fase.esiti" 2>>"$err"
+  s2_gate .verde2 "$FIC_REPO" "$path" || { msg run-phase-190.not_green tn="$tn" e="$(msg run-phase-190.why_gates n=verde2)"; return; }
+  p1=$(s2py esito "$dir/log/$label.fase.esiti.json" "$tn"); p2=$(s2py esito "$dir/log/$label.verde2.esiti.json" "$tn")
+  [ "${p1%%	*}" = verde ] && [ "${p2%%	*}" = verde ] || { msg run-phase-190.not_green tn="$tn" e="${p1%%	*}, ${p2%%	*}"; return; }   # VERDE-DUE-GIRI
+  # D3 (b): the victim V, a case of the file of Tn red in both rounds on A, at most 3 candidates
+  tnid=$nome; [ "$rn" = pytest ] && tnid="$path::$nome"
+  mapfile -t vs < <(s2py candidati "$dir/log/$label.prova-a.esiti.json" "$dir/log/$label.prova-a2.esiti.json" "$path" "$tnid" | grep -v '^$')
+  local vic="" vwhy="" vnew1 vnew2 valone j=0 n4=""
+  [ ${#vs[@]} -gt 3 ] && n4=" ($(msg run-phase-190.why_more))"
+  for v in "${vs[@]:0:3}"; do
+    j=$((j + 1))
+    vcp=$(s2_cp "v$j" "$w" "$path" "$v" "$rn") || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_cp v="$v")"; return; }
+    valone=$(s2py cp "$vcp")
+    [ "$valone" = verde ] || { vwhy="$v: $valone"; continue; }   # V-DA-SOLO: red alone too = a defect of the code
+    if [ "$rn" = vitest ]; then   # the text log does not list an all-green file: two runs of the whole file
+      x=$(s2_cp "f1-$j" "$FIC_REPO" "$path" "" "$rn") && vnew1=$(s2py caso "$x" "$path" "$v") || vnew1="absent	0	"
+      x=$(s2_cp "f2-$j" "$FIC_REPO" "$path" "" "$rn") && vnew2=$(s2py caso "$x" "$path" "$v") || vnew2="absent	0	"
+    else
+      vnew1=$(s2py caso "$dir/log/$label.fase.esiti.json" "$path" "$v"); vnew2=$(s2py caso "$dir/log/$label.verde2.esiti.json" "$path" "$v")
+    fi
+    case "$vnew1|$vnew2" in   # V-NEL-FILE-NUOVO: present, verde, its file complete, in both rounds (absence is never green)
+      "verde	1	"*"|verde	1	"*) vic=$v; break ;;
+    esac
+    vwhy="$v: ${vnew1%%	*}, ${vnew2%%	*}"
+  done
+  [ -n "$vic" ] || { msg run-phase-190.d_victim tn="$tn" why="${vwhy:-$(msg run-phase-190.why_none)}$n4"; return; }
+  # D3 (b) 3: the new Tn green alone (the tree of the phase, mirror copy) — and in its file, above (D5)
+  x=$(s2_cp tn "$FIC_REPO" "$path" "$tnid" "$rn") || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_cp v="$tn")"; return; }
+  [ "$(s2py cp "$x")" = verde ] || { msg run-phase-190.not_green tn="$tn" e="$(s2py cp "$x")"; return; }   # TN-DA-SOLO
+  # D4: tree B = the post-tree of the last test-red with the file of Tn in the new version: Tn red on its assertion
+  w=$(s2_albero b "$pt" "$path" "$FIC_REPO/$path") || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_wt n=B)"; return; }
+  s2_gate .prova-b "$w" "$path" || { msg run-phase-190.d_tree why="$(msg run-phase-190.why_gates n=B)"; return; }
+  x=$(s2py esito "$dir/log/$label.prova-b.esiti.json" "$tn")
+  [ "${x%%	*}" = dimostrato ] || { msg run-phase-190.d_stub tn="$tn" e="${x%%	*}"; return; }   # ROSSO-SULLO-STUB
+  # D7: the inputs of the judge, recomputed here as the phase had them (one file each; the diff last, with its canonical
+  # bytes): the blocks of plan-check deviazione, the trasformazione: line of corretto, the diff from the post-tree
+  local q="$pd.in" i=0
+  w_in() { i=$((i + 1)); printf '%s' "$1" > "$q$i"; echo "$q$i" >> "$inl"; }
+  : > "$inl"
+  w_in "$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')"
+  w_in "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')"
+  while IFS= read -r x; do w_in "$x"; done < <(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+  w_in "$(printf '%s\n' "$out" | grep '^defect: ' | head -1)"
+  # (D7, amendment of 23/11) the victim and the outcomes of D3 are computed here AFTER the phase: script proofs, never
+  # inputs of the judge (the phase could not paste them); they go into correzioni.json for the review
+  w_in "$tr"
+  bash "$PC" diff-test "$SPEC_F" "$path" --run-dir "$dir" --dal-post > "$pd.diff" 2>>"$err" && [ -s "$pd.diff" ] ||
+    { msg run-phase-190.d_transform tn="$tn" why="diff-test --dal-post"; return; }
+  printf '%s' "$(cat "$pd.diff")" > "$pd.diff-in"; echo "$pd.diff-in" >> "$inl"
+  # what correzioni.json records for this T (written on acceptance)
+  "$FIC_PY" -c 'import hashlib, json, sys
+h = lambda p: hashlib.sha256(open(p, "rb").read().replace(b"\r", b"")).hexdigest()
+jl = lambda p: json.load(open(p, encoding="utf-8"))
+t = lambda p, k: (jl(p).get("test") or {}).get(k) or {}
+a = sys.argv
+json.dump({"test": a[1], "file": a[2], "classe": a[3], "sha256_vecchio": h(a[4]), "sha256_nuovo": h(a[5]),
+           "A": [{k: t(p, a[1]).get(k) for k in ("esito", "messaggio", "posizione")} for p in (a[6], a[7])],
+           "B": {k: t(a[8], a[1]).get(k) for k in ("esito", "messaggio", "posizione")},
+           "vittima": {"test_id": a[9], "nel_file_con_tn_vecchio": "rosso", "nel_file_con_tn_nuovo": "verde",
+                       "da_sola": "verde", "tn_nuovo_da_solo_e_nel_file": "verde"},
+           "trasformazione": a[10]}, open(a[11], "w", encoding="utf-8"), ensure_ascii=False, indent=1)' \
+    "$tn" "$path" "$cl" "$oldf" "$FIC_REPO/$path" "$dir/log/$label.prova-a.esiti.json" "$dir/log/$label.prova-a2.esiti.json" \
+    "$dir/log/$label.prova-b.esiti.json" "$vic" "$tr" "$pd.correzione.json" 2>>"$err"
+}
 s2_prove() { # $1 = file of the deviations of the family (one per line), $2 = evidence of the gates of the phase
-  msg run-phase-190.d_proof c="-" tn="-" why="K6b"
+  local f=$1 ev=$2 d tn cl x why g=0 tmp="$dir/log/$label.deviazioni-impl.tmp" args=() visti=" " vd sha st
+  local inl l2 t0
+  trap 's2_pulisci' EXIT
+  trap 's2_pulisci; exit 143' TERM INT
+  declare -F wt_prova_crea >/dev/null || { MAIN=$FIC_REPO WT_TAG=run-phase . "$MAAT_SCRIPTS/worktree-lib.sh" >>"$err" 2>&1 ||
+    { msg run-phase-190.d_tree why="worktree-lib.sh"; return; }; }
+  # the files of the phase (pre-tree -> now) and the acceptance files changed after test-red (the ch of tests_guard)
+  t0=$(tr -d '\r\n' < "$dir/log/$label.pre-tree" 2>/dev/null)
+  x=$(tree_now)
+  local rdp; rdp=$(cd "$dir" 2>/dev/null && pwd); rdp=${rdp#"$(cd "$FIC_REPO" && pwd)"/}   # the run dir: the harness's own files
+  [ -n "$t0" ] && [ -n "$x" ] && (cd "$FIC_REPO" && git -c core.quotePath=false diff --name-only --no-renames "$t0" "$x") 2>>"$err" | tr -d '\r' |
+    { [ -n "$rdp" ] && [ "${rdp#/}" = "$rdp" ] && grep -vF -- "$rdp/" || cat; } > "$dir/log/$label.dif-changed" ||
+    { msg run-phase-190.d_tree why="pre-tree"; return; }
+  diff <(tr -d '\r' < "$TR/tests.txt") <(bash "$PC" tests "$SPEC_F" 2>/dev/null | tr -d '\r') | sed -n 's/^[<>] [0-9A-Za-z]*  //p' | LC_ALL=C sort -u > "$dir/log/$label.dif-acc"
+  : > "$dir/log/$label.dif-files"; : > "$tmp"
+  local devs=(); mapfile -t devs < <(grep -v '^$' "$f")   # read once: the proofs below must not consume it
+  for d in ${devs[@]+"${devs[@]}"}; do   # FORMA, CLASSE, UNA-VOLTA: before any proof
+    x=$(s2py forma "$d") || { msg run-phase-190.form fam=test-difettoso d="$d"; return; }
+    tn=${x%%	*}; cl=${x#*	}
+    case " stato-condiviso shared-state patch-non-ripristinata unrestored-patch " in *" $cl "*) ;; *) msg run-phase-190.d_class c="$cl"; return ;; esac
+    case "$visti" in *" $tn "*) msg run-phase-190.d_once tn="$tn" label="$label"; return ;; esac
+    visti="$visti$tn "
+    x=$(gia_corretto "$tn"); [ -z "$x" ] || { msg run-phase-190.d_once tn="$tn" label="$x"; return; }   # D6
+    IFS=$'\t' read -r x _ < <(s2py info "$TR/rossi.json" "$tn") && echo "$x" >> "$dir/log/$label.dif-files"
+  done
+  for d in "${devs[@]}"; do
+    x=$(s2py forma "$d"); tn=${x%%	*}; cl=${x#*	}; g=$((g + 1))
+    inl="$dir/log/$label.dif-$tn.ingressi"
+    why=$(s2_una "$tn" "$cl" "$d" "$ev" "$inl")
+    [ -z "$why" ] || { s2_pulisci; printf '%s\n' "$why"; return; }
+    args+=("$(grep -c . "$inl")" "$dir/log/$label.dif-$tn.diff")
+    while IFS= read -r l2; do args+=("$l2"); done < "$inl"
+  done
+  s2_pulisci
+  # D7: the judge, every call of the phase (giudice --tutti), then plan-check deviazione on the result of each
+  st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice --tutti "$log" \
+       "$dir/log/$label.dif" "$dir" "$(pc_root)" "$g" "${args[@]}" 2>>"$err" | tr -d '\r')
+  g=0
+  for d in "${devs[@]}"; do
+    x=$(s2py forma "$d"); tn=${x%%	*}; cl=${x#*	}; g=$((g + 1))
+    case $st in
+      ok) ;;
+      extra) msg run-phase-190.judge_extra; return ;;
+      incompleto*) msg run-phase-190.judge fam=test-difettoso tn="$tn" st="$st" which="${st#incompleto }"; return ;;
+      *) msg run-phase-190.judge fam=test-difettoso tn="$tn" st="$st" which="-"; return ;;
+    esac
+    x=$(bash "$PC" deviazione "$dir/log/$label.dif$g.result" "$SPEC_F" "$tn" --famiglia test-difettoso --classe "$cl" 2>>"$err" | tr -d '\r')
+    if ! printf '%s\n' "$x" | grep -qx 'Deviazione: ACCETTATA'; then   # GIUDICE-ACCETTA
+      printf '%s\n' "$x" | grep -qx 'controllo: d_class' && { msg run-phase-190.d_class c="$cl"; return; }
+      printf '%s\n' "$x" | sed -n 's/^Deviazione: STOP — //p' | head -1; return
+    fi
+    vd=$(tr -d '\r' < "$dir/log/$label.dif$g.result" | sed -n 's/^[ \t>*_`-]*Deviation verdict:[ \t*_`]*//p' | tail -1 | sed 's/[ \t*_`]*$//')
+    sha=$(cat "$dir/log/$label.dif-$tn.corretto" "$dir/log/$label.dif-$tn.diff" "$dir/log/$label".prova-a.esiti.json \
+          "$dir/log/$label".prova-a2.esiti.json "$dir/log/$label".prova-b.esiti.json "$dir/log/$label".verde2.esiti.json 2>/dev/null | sha256sum | cut -c1-64)
+    printf '%s\t%s\t%s\n' "$d" "$vd" "$sha" >> "$tmp"
+  done
+  # K6b point 5: the fingerprint re-recorded by the script (the commands of test-red); then tests_guard sees it equal
+  mkdir -p "$TR"
+  { [ -f "$TR/tests.red.txt" ] || cp "$TR/tests.txt" "$TR/tests.red.txt"; } &&
+    bash "$PC" tests "$SPEC_F" 2>>"$err" | tr -d '\r' > "$TR/tests.txt.nuovo" && mv -f "$TR/tests.txt.nuovo" "$TR/tests.txt" &&
+    bash "$PC" basis "$SPEC_F" --write-tests >> "$err" 2>&1 && bash "$PC" gen "$SPEC_F" --run-dir "$dir" >> "$err" 2>&1 ||
+    { msg run-phase-190.not_recorded; return; }   # RIREGISTRA
+  "$FIC_PY" -c 'import json, sys
+c = {}
+try:
+    c = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, ValueError):
+    pass
+for p in sys.argv[2:]:
+    d = json.load(open(p, encoding="utf-8"))
+    c[d["test"]] = d
+open(sys.argv[1] + ".tmp", "w", encoding="utf-8").write(json.dumps(c, ensure_ascii=False, indent=1) + "\n")' \
+    "$TR/correzioni.json" "$dir/log/$label".dif-*.correzione.json 2>>"$err" && mv -f "$TR/correzioni.json.tmp" "$TR/correzioni.json"
+  registro_impl "$tmp"
+  while IFS=$'\t' read -r d vd sha; do
+    x=$(s2py forma "$d"); avviso "AVVISO: $(msg run-phase-190.ok_corrected tn="${x%%	*}" d="$d")"
+  done < "$dir/log/$label.deviazioni-impl"
 }
 
 # --- lanes (harness-pt13): see LANES at the top ---
@@ -2007,7 +2342,9 @@ if sys.argv[1] == "estrai":
     dev = [one(x) for x in json.load(open(sys.argv[2], encoding="utf-8")).get("deviazioni") or [] if str(x).strip()]
     # 1.9.0 (K6a): next to defective-test deviations (accepted: this runs only on an OK outcome) the defensive ones
     if dev and all(x.startswith(("difensiva: ", "defensive: ", "test-difettoso: ", "defective-test: ")) for x in dev):
-        print("\n".join(x for x in dev if x.startswith(("difensiva: ", "defensive: "))))
+        dif = [x for x in dev if x.startswith(("difensiva: ", "defensive: "))]
+        if dif:
+            print("\n".join(dif))
     sys.exit(0)
 spec, label, elenco = sys.argv[2:5]
 corretto = len(sys.argv) > 5 and sys.argv[5] == "corretto"   # 1.9.0 (K6a): the note of an accepted defective test
@@ -2096,7 +2433,8 @@ originale=$orig}"
   if [ -n "$esito" ]; then   # harness-pt11: red-test verification (test-red), acceptance tests unchanged (implement/fix)
     case "$phase" in
       test-red) esito=$(verify_red "$esito"); esito=$(parcheggia "$esito") ;;
-      implement|fix) esito=$(difetto "$esito"); esito=$(tests_guard "$esito") ;;   # 1.9.0 (K6a): S2 before the guard
+      implement|fix) rm -f "$dir/log/$label.dev-impl.stop"; esito=$(difetto "$esito")   # 1.9.0 (K6a): S2 before the guard
+        [ -f "$dir/log/$label.dev-impl.stop" ] || esito=$(tests_guard "$esito") ;;   # a STOP of the verification keeps its cause
     esac
   fi
   # INTERNAL READER (1.5.1): the state of the spec is read BEFORE the defensive deviations are recorded, to decide the
