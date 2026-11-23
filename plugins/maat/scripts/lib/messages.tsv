@@ -314,6 +314,13 @@ run-phase-181.r2_differ	the outcomes of the acceptance tests differ, or a confli
 plan-check-190.esiti_usage	usage: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]	uso: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]
 plan-check-190.corretto_usage	usage: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>	uso: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>
 
+# 1.9.0 K6a: run-phase.sh, the common parts of S2 (admission, gates before, judge of every call, register)
+run-phase-190.off	{fam} deviation switched off ({k}): STOP as in 1.8	deviazione {fam} spenta ({k}): STOP come in 1.8
+run-phase-190.gates	gates of the phase without evidence or BLOCKED (log/{label}.gates)	gate della fase senza evidenza o BLOCKED (log/{label}.gates)
+run-phase-190.d_proof	no script proof of the class {c} for {tn} ({why})	nessuna prova da script della classe {c} per {tn} ({why})
+run-phase-190.accepted_prompt	deviations accepted by script and judge (test-data, defective test: label, text, verdict): list them in the review section «Accepted test deviations» and judge whether each still leaves the requirement covered	deviazioni accettate da script e giudice (test-data, test difettoso: etichetta, testo, verdetto): elencale nella sezione di review «Deviazioni di test accettate» e giudica se ognuna lascia coperto il requisito
+run-phase-190.note_corrected	- note (corrected test, {label}): {text}	- nota (test corretto, {label}): {text}
+
 # 1.8.2 D1 (S3): line endings of the cycle's worktree (ciclo-worktree.sh crea and rimuovi) and the doctor's warning
 worktree-cycle-182.eol_ext_on	extensions.worktreeConfig turned on in the main repository (only this worktree gets its own line-ending settings; rimuovi turns it off)	extensions.worktreeConfig accesa nel repository principale (solo questo worktree riceve le sue impostazioni del fine riga; rimuovi la spegne)
 worktree-cycle-182.eol_set	line endings of the worktree: core.autocrlf false and core.eol lf in its config.worktree (the main tree and the other worktrees unchanged)	fine riga del worktree: core.autocrlf false e core.eol lf nel suo config.worktree (tree principale e altri worktree invariati)

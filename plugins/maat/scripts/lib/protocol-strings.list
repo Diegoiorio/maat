@@ -173,6 +173,8 @@ scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi d
 # --- 1.9.0 (K1): plan-check.sh esiti, corretto, deviazione --famiglia test-difettoso (S2)
 scripts/plan-check.sh	patch-non-ripristinata|stato-condiviso	1.9.0 K1: nomi di classe di test-difettoso (token di --classe, della riga «trasformazione: <classe>/<runner> — <forma>» di corretto e di «Defect class:», letti da run-phase.sh: uguali in ogni lingua)
 scripts/plan-check.sh	rossi\.json	1.9.0 K1: nome del file del run dir test-red/rossi.json da cui corretto legge il nome di Tn (nei motivi di uscita 3 e di d_outside)
+# --- 1.9.0 (K6a): run-phase.sh, the common parts of S2
+scripts/run-phase.sh	--tutti|test-difettoso|ciclo\.correzione_test|\.deviazioni-impl|Deviazione accettata: 	1.9.0 K6a: l'opzione --tutti del giudice (DEV_PY), il prefisso della famiglia, la chiave di maat.json, il file del run dir log/<label>.deviazioni-impl (letto da classifica) e la riga di driver.log scritta dal driver (K4): token uguali in ogni lingua
 # --- 13. 1.8.1 (G2-3): literals read by other code that the anti-leak scanner does not flag (only the weak word
 # «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
 # same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);

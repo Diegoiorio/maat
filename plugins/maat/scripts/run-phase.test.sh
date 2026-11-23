@@ -1423,5 +1423,120 @@ else
   check "controprova (WSLENV): senza wslenv_add il wsl finto vede la lingua vuota (il caso w1 sarebbe rosso)" 'grep -qx "MAAT_LINGUA=" "$T/w5-plan.wsl-0"'
 fi
 
+# 13. 1.9.0 K6a: the common parts of S2 (defective acceptance test) and K8 point 4 (no build in test-red).
+#     PLAN_CHECK_ROOT and MAAT_CONFIG of section 8b, the fixtures of section 10 (mkspec, WRITE_RED, gates-red).
+export PLAN_CHECK_ROOT="$FIC_REPO" MAAT_CONFIG="$T/cfg-nativo.json"
+FIC_PY=$(. "$HERE/python.sh" && printf '%s' "$FIC_PY"); export FIC_PY
+cat > "$T/gates-env" <<'EOF'
+#!/usr/bin/env bash
+# the variable as the call of gates.sh sees it, one line per call, then the fake of section 10 (or FAKE_GATES_NEXT)
+echo "FIC_BUILD_CHIUSURA=${FIC_BUILD_CHIUSURA-assente}" >> "$FAKE_OUT.gates-env"
+exec "${FAKE_GATES_NEXT:-$FAKE_GATES_RED}" "$@"
+EOF
+chmod +x "$T/gates-env"
+export FAKE_GATES_RED="$T/gates-red"
+k6r() { FAKE_OUT="$T/$1" FIC_GATES="$T/gates-env" FAKE_EVDIR="$T/ev-$1" bash "${2:-$RP}" "$TRUN" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null; }
+mkspec; FAKE_CMD="$WRITE_RED" k6r a1-test-red
+check "K6a/K8.4: verify_red chiama gates.sh con FIC_BUILD_CHIUSURA=0 (prefisso della riga)" '[ "$(cat "$T/a1-test-red.gates-env")" = "FIC_BUILD_CHIUSURA=0" ] && sed -n 1p "$TRUN/log/a1-test-red.esito" | grep -q ": OK"'
+mkspec; FAKE_GATES_NEXT="$T/gates-giri" FAKE_GIRI="rosso verde" FAKE_RESULT="$(devres '[]')" FAKE_CMD="$WRITE_RED" k6r a2-test-red
+check "K6a/K8.4: anche il secondo giro di verify_red (secondo_giro) ha FIC_BUILD_CHIUSURA=0" '[ "$(grep -c . "$T/a2-test-red.gates-env")" = 2 ] && ! grep -qv "^FIC_BUILD_CHIUSURA=0$" "$T/a2-test-red.gates-env"'
+FAKE_CMD='printf "def somma(a, b):\n    return a + b\n" > "$FIC_REPO/modules/api/app/calc.py"' FAKE_OUT="$T/a3-implement" FIC_GATES="$T/gates-env" FAKE_EVDIR="$T/ev-a3" bash "$RP" "$TRUN" a3-implement "$T/prompt.md" 2>/dev/null </dev/null
+check "K6a/K8.4: i gate dopo un implement OK vedono l'ambiente (mai esportata da run-phase)" '[ "$(cat "$T/a3-implement.gates-env")" = "FIC_BUILD_CHIUSURA=assente" ]'
+if mrp_mut 's/^\( *\)FIC_BUILD_CHIUSURA=0 \(FIC_GATES_ROOT="\$FIC_REPO" bash "\$GATES" --run-dir "\$dir" std .* > "\$g" 2>&1; rc=\$?\)  # NO-BUILD-RED$/\1\2/'; then
+  mkspec; FAKE_CMD="$WRITE_RED" k6r a4-test-red "$MRP"
+  check "controprova K8.4: senza il prefisso verify_red non lo passa (rosso)" '[ "$(cat "$T/a4-test-red.gates-env")" = "FIC_BUILD_CHIUSURA=assente" ]'
+else check "controprova K8.4: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+# admission (K0.3): implement with a «test-difettoso: » deviation, through the real valida
+DEVD="test-difettoso: T1 — stato-condiviso — il dict di modulo resta modificato"
+impres() { # <deviations JSON list> [bloccato_su]: the result event of implement with the PHASE RESULT line and its JSON
+  printf '{"type":"result","result":"lavoro\\nPHASE RESULT implement: OK — fatto","structured_output":{"fase":"implement","esito":"OK","motivo":"fatto","deviazioni":%s,"bloccato_su":"%s","file":[],"gate_interni":[],"finding":[]}}' "$1" "${2:-nessuno}"; }
+IMPL_W='printf "def somma(a, b):\n    return a + b\n" > "$FIC_REPO/modules/api/app/calc.py"'
+k6i() { # <label> <deviations JSON> [gates] [run-phase] — implement after a fresh test-red OK
+  mkspec; FAKE_CMD="$WRITE_RED" k6r "${1}r-test-red" "${4:-}" >/dev/null   # the same run-phase.sh (harness fingerprint of the run dir)
+  FAKE_OUT="$T/$1" FIC_GATES="${3:-$T/gates-env}" FAKE_EVDIR="$T/ev-$1" FAKE_CMD="$IMPL_W" FAKE_RESULT="$(impres "$2")" \
+    bash "${4:-$RP}" "$TRUN" "$1-implement" "$T/prompt.md" 2>"$T/$1.err" </dev/null
+}
+ie1() { sed -n 1p "$TRUN/log/$1-implement.esito"; }
+FIC_CORREZIONE_TEST=0 k6i a5 "[\"$DEVD\"]"
+check "K6a: famiglia spenta (FIC_CORREZIONE_TEST=0) → lo STOP JSON di valida della 1.8, nessun gate, nessuna verifica" 'ie1 a5 | grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (1): $DEVD (la prosa diceva OK" && grep -qx "originale=PHASE RESULT implement: OK — fatto" "$TRUN/log/a5-implement.esito" && [ ! -f "$T/a5.gates-env" ] && [ ! -f "$TRUN/log/a5-implement.dev-impl" ] && grep -q "AVVISO: deviazione test-difettoso spenta (ciclo.correzione_test): STOP come in 1.8" "$TRUN/log/a5-implement.stderr"'
+k6i a6 "[\"$DEVD\", \"T1 usa altre basi\"]"
+check "K6a: accanto una deviazione non della famiglia → lo STOP JSON della 1.8, nessun gate" 'ie1 a6 | grep -q "^PHASE RESULT implement: STOP — JSON: deviazioni dichiarate (2)" && [ ! -f "$T/a6.gates-env" ] && [ ! -f "$TRUN/log/a6-implement.dev-impl" ]'
+cat > "$T/gates-blocked" <<'EOF'
+#!/usr/bin/env bash
+echo x >> "$FAKE_OUT.gates-calls"; echo "gates: esito=BLOCKED chiave=k9 evidence=-"; exit 3
+EOF
+chmod +x "$T/gates-blocked"
+FAKE_GATES_NEXT="$T/gates-blocked" k6i a7 "[\"$DEVD\", \"difensiva: calc.py:1 — default\"]"
+check "K6a: famiglia accesa (default), difensiva accanto → gate della fase PRIMA della decisione; BLOCKED → STOP run-phase-190.gates" 'ie1 a7 | grep -q "^PHASE RESULT implement: STOP — gate della fase senza evidenza o BLOCKED (log/a7-implement.gates)$" && [ -s "$T/a7.gates-calls" ] && grep -qx "originale=PHASE RESULT implement: OK — fatto" "$TRUN/log/a7-implement.esito" && grep -qx "$DEVD" "$TRUN/log/a7-implement.dev-impl.elenco"'
+check "  la difensiva non e registrata su uno STOP" '! grep -q "^a7-implement	" "$TRUN/log/deviazioni-difensive.txt" 2>/dev/null'
+k6i a8 "[\"$DEVD\"]"
+check "K6a: con i gate (evidenza) si entra nelle prove; mai OK senza di esse" 'ie1 a8 | grep -q "^PHASE RESULT implement: STOP — " && [ "$(cat "$T/a8.gates-env")" = "FIC_BUILD_CHIUSURA=assente" ]'
+if mrp_mut 's/^\( *\)"\$FIC_PY" -c "\$DEV_PY" ammesse-impl .*|| *$/\1false ||/'; then
+  FAKE_GATES_NEXT="$T/gates-blocked" k6i a9 "[\"$DEVD\"]" "" "$MRP"
+  check "controprova K6a: senza l ammissione la deviazione resta lo STOP JSON e i gate non girano prima (il caso a7 sarebbe rosso)" '! ie1 a9 | grep -q "gate della fase senza evidenza" && [ ! -s "$T/a9.gates-calls" ]'
+else check "controprova K6a ammissione: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+(cd "$FIC_REPO" && git checkout -q -- . 2>/dev/null); rm -f "$FIC_REPO/modules/api/app/calc.py" "$FIC_REPO/modules/api/tests/test_calc.py"
+# two lanes: the family prefix stays at the start of the merged deviation (dev_corsia)
+(cd "$FIC_REPO" && git checkout -q -- .)
+FAKE_DEV_1='"test-difettoso: T1 — stato-condiviso — x"' FAKE_DEV_2='"defective-test: T2 — shared-state — y"' FAKE_TOUCH_1=a.py FAKE_TOUCH_2=b.py FAKE_FILE_1=a.py FAKE_FILE_2=b.py lrun 14-implement
+check "K6a: corsie, «test-difettoso: »/«defective-test: » in testa alla deviazione unita (corsia k: dopo il prefisso)" 'grep -q "\"test-difettoso: corsia 1: T1 — stato-condiviso — x\"" "$L4/14-implement.result.json" && grep -q "\"defective-test: corsia 2: T2 — shared-state — y\"" "$L4/14-implement.result.json"'
+rm -rf "$FIC_LOCK"; (cd "$FIC_REPO" && git checkout -q -- .)
+# giudice --tutti (K0.5): DEV_PY of run-phase.sh on hand-written transcripts. One deviation, inputs i1 i2 and the diff.
+sed -n "/^DEV_PY='$/,/^'$/p" "$RP" | sed '1d;$d' > "$T/dev_py.py"
+GT="$T/gt"; mkdir -p "$GT/run/test-red"
+printf 'ISTRUZIONI FISSE' > "$GT/i1"; printf 'test row: | T1 |' > "$GT/i2"; printf -- '--- a\n+++ b\n' > "$GT/d"; printf -- '--- a\n+++ b' > "$GT/din"
+cat > "$GT/mk.py" <<'EOF'
+import json, sys
+# argv: out, then calls «prompt@@verdict@@mode» (mode: ok, nores, async, err); verdict «-» = no verdict line
+ev = lambda t, b: json.dumps({"type": t, "parent_tool_use_id": None, "message": {"content": [b]}})
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    for k, c in enumerate(sys.argv[2:]):
+        p, v, m = c.split("@@")
+        p = p.replace("\\n", "\n")
+        inp = {"subagent_type": "maat:spec-plan-reviewer-light", "prompt": p}
+        if m == "async":
+            inp["run_in_background"] = True
+        fh.write(ev("assistant", {"type": "tool_use", "id": "g%d" % k, "name": "Agent", "input": inp}) + "\n")
+        if m == "nores":
+            continue
+        r = {"type": "tool_result", "tool_use_id": "g%d" % k, "content": ("Deviation verdict: " + v) if v != "-" else "nothing"}
+        if m == "async":
+            r["content"] = "Async agent launched successfully.\nagentId: a1 (internal ID)"
+        if m == "err":
+            r["is_error"] = True
+        fh.write(ev("user", r) + "\n")
+    fh.write(json.dumps({"type": "result", "result": "x"}) + "\n")
+EOF
+PIENO='ISTRUZIONI FISSE\n\ntest row: | T1 |\n\n--- a\n+++ b'
+gt() { # <case> <calls…> → the outcome of giudice --tutti
+  "$FIC_PY" "$GT/mk.py" "$GT/$1.jsonl" "${@:2}" && rm -f "$GT/$1.r1.result" &&
+  MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice --tutti "$GT/$1.jsonl" "$GT/$1.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" 2>&1 | tr -d '\r'; }
+check "giudice --tutti: solo ingressi e righe vuote, ACCEPT → ok, risultato scritto" '[ "$(gt ok "$PIENO@@ACCEPT — fine@@ok")" = ok ] && grep -q "ACCEPT — fine" "$GT/ok.r1.result"'
+check "giudice --tutti: nessuna chiamata → mai" '[ "$("$FIC_PY" -c "import json;open(\"$GT/vuoto.jsonl\",\"w\").write(json.dumps({\"type\":\"result\",\"result\":\"x\"})+\"\\n\")"; MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice --tutti "$GT/vuoto.jsonl" "$GT/v.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = mai ]'
+check "giudice --tutti: due chiamate complete, la seconda STOP → rifiutato" '[ "$(gt due "$PIENO@@ACCEPT — ok@@ok" "$PIENO@@STOP — no@@ok")" = rifiutato ]'
+check "giudice --tutti: una incompleta (senza il diff) con STOP prima di una completa ACCEPT → rifiutato" '[ "$(gt inc "ISTRUZIONI FISSE\n\ntest row: | T1 |@@STOP — no@@ok" "$PIENO@@ACCEPT — ok@@ok")" = rifiutato ]'
+check "giudice --tutti: una incompleta senza risultato accanto a una completa ACCEPT → rifiutato" '[ "$(gt incnr "ISTRUZIONI FISSE@@-@@nores" "$PIENO@@ACCEPT — ok@@ok")" = rifiutato ]'
+check "giudice --tutti: solo una incompleta → incompleto con gli ingressi mancanti" '[ "$(gt solo "ISTRUZIONI FISSE\n\n--- a\n+++ b@@ACCEPT — ok@@ok")" = "incompleto 2" ]'
+check "giudice --tutti: prompt con un carattere in più degli ingressi → extra" '[ "$(gt extra "${PIENO}x@@ACCEPT — ok@@ok")" = extra ]'
+check "giudice --tutti: chiamata completa in background (solo la ricevuta) → rifiutato" '[ "$(gt asin "$PIENO@@ACCEPT — ok@@async")" = rifiutato ]'
+check "giudice --tutti: chiamata completa col risultato in errore → rifiutato" '[ "$(gt err "$PIENO@@ACCEPT — ok@@err")" = rifiutato ]'
+check "giudice --tutti: il modello «ACCEPT | STOP» non e un ACCEPT → rifiutato" '[ "$(gt mod "$PIENO@@ACCEPT | STOP — <reason>@@ok")" = rifiutato ]'
+printf 'test row: | T2 |' > "$GT/j2"
+check "giudice --tutti: due deviazioni, una senza una chiamata completa sua → mai" '"$FIC_PY" "$GT/mk.py" "$GT/dd.jsonl" "$PIENO@@ACCEPT — ok@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice --tutti "$GT/dd.jsonl" "$GT/dd.r" "$GT/run" "$GT" 2 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" 3 "$GT/d" "$GT/i1" "$GT/j2" "$GT/din" | tr -d "\r")" = mai ]'
+check "giudice (1.8.0, senza --tutti): invariato, la prima completa col risultato → ok" '"$FIC_PY" "$GT/mk.py" "$GT/v18.jsonl" "$PIENO@@STOP — prima@@ok" "$PIENO@@ACCEPT — dopo@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice "$GT/v18.jsonl" "$GT/v18.out" "$GT/d" "$GT/run" "$GT" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ] && grep -q "STOP — prima" "$GT/v18.out"'
+sed 's/^    if incompl:   # TUTTE-LE-CHIAMATE.*$/    if False:/' "$T/dev_py.py" > "$T/dev_py_m1.py"
+check "controprova K0.5 (b): senza il controllo di tutte le chiamate l incompleta STOP prima della completa passa (rosso)" '! cmp -s "$T/dev_py.py" "$T/dev_py_m1.py" && "$FIC_PY" "$GT/mk.py" "$GT/m1.jsonl" "ISTRUZIONI FISSE@@STOP — no@@ok" "$PIENO@@ACCEPT — ok@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py_m1.py" giudice --tutti "$GT/m1.jsonl" "$GT/m1.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ]'
+sed 's/^        if not v or not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\]):   # OGNI-CHIAMATA-ACCEPT$/        if not v:/' "$T/dev_py.py" > "$T/dev_py_m2.py"
+check "controprova K0.5 (b): senza ACCEPT su ogni chiamata la seconda STOP passa (rosso)" '! cmp -s "$T/dev_py.py" "$T/dev_py_m2.py" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py_m2.py" giudice --tutti "$GT/due.jsonl" "$GT/m2.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ]'
+sed 's/^                compl.append((c, g, re.sub(r"\\s", "", q) != ""))   # EXTRA-NEL-PROMPT$/                compl.append((c, g, False))/' "$T/dev_py.py" > "$T/dev_py_m3.py"
+check "controprova K0.5 (c): senza il controllo dei caratteri in più il prompt persuasivo passa (rosso)" '! cmp -s "$T/dev_py.py" "$T/dev_py_m3.py" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py_m3.py" giudice --tutti "$GT/extra.jsonl" "$GT/m3.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ]'
+# review prompt (K0.6): the line of the accepted deviations has the text of the two families
+mkdir -p "$T/w6/spec-r.run/log"; cp "$SPL" "$T/w6/spec-r.md"; printf '05-implement\ttest-difettoso: T1 — stato-condiviso — x\tACCEPT — ok\n' > "$T/w6/spec-r.run/log/deviazioni-accettate.txt"
+FIC_REVIEW_PARALLEL=0 FAKE_OUT="$T/r6-review" bash "$RP" "$T/w6/spec-r.run" 06-review "$T/prompt.md" 2>/dev/null </dev/null
+check "K0.6: la review riceve le deviazioni accettate col testo delle due famiglie (run-phase-190.accepted_prompt)" 'grep -q "^DEVIAZIONI DI TEST ACCETTATE (driver, run-phase.sh): .* — deviazioni accettate da script e giudice (test-data, test difettoso: " "$T/r6-review.stdin.1" && grep -qF "test-difettoso: T1 — stato-condiviso — x" "$T/r6-review.stdin.1"'
+rm -rf "$FIC_LOCK"
+
 echo "run-phase.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]
