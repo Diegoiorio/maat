@@ -1525,6 +1525,7 @@ check "giudice --tutti: chiamata completa col risultato in errore → rifiutato"
 check "giudice --tutti: il modello «ACCEPT | STOP» non e un ACCEPT → rifiutato" '[ "$(gt mod "$PIENO@@ACCEPT | STOP — <reason>@@ok")" = rifiutato ]'
 printf 'test row: | T2 |' > "$GT/j2"
 check "giudice --tutti: due deviazioni, una senza una chiamata completa sua → mai" '"$FIC_PY" "$GT/mk.py" "$GT/dd.jsonl" "$PIENO@@ACCEPT — ok@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice --tutti "$GT/dd.jsonl" "$GT/dd.r" "$GT/run" "$GT" 2 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" 3 "$GT/d" "$GT/i1" "$GT/j2" "$GT/din" | tr -d "\r")" = mai ]'
+check "giudice --tutti (limite dichiarato, corsie): il log unito della fase non ha le chiamate delle corsie → mai (STOP)" '"$FIC_PY" -c "import json;open(\"$GT/corsie.jsonl\",\"w\").write(json.dumps({\"type\":\"system\",\"subtype\":\"fic_corsie\"})+\"\\n\"+json.dumps({\"type\":\"result\",\"subtype\":\"fic_corsie\",\"result\":\"x\"})+\"\\n\")" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice --tutti "$GT/corsie.jsonl" "$GT/c.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = mai ]'
 check "giudice (1.8.0, senza --tutti): invariato, la prima completa col risultato → ok" '"$FIC_PY" "$GT/mk.py" "$GT/v18.jsonl" "$PIENO@@STOP — prima@@ok" "$PIENO@@ACCEPT — dopo@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py.py" giudice "$GT/v18.jsonl" "$GT/v18.out" "$GT/d" "$GT/run" "$GT" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ] && grep -q "STOP — prima" "$GT/v18.out"'
 sed 's/^    if incompl:   # TUTTE-LE-CHIAMATE.*$/    if False:/' "$T/dev_py.py" > "$T/dev_py_m1.py"
 check "controprova K0.5 (b): senza il controllo di tutte le chiamate l incompleta STOP prima della completa passa (rosso)" '! cmp -s "$T/dev_py.py" "$T/dev_py_m1.py" && "$FIC_PY" "$GT/mk.py" "$GT/m1.jsonl" "ISTRUZIONI FISSE@@STOP — no@@ok" "$PIENO@@ACCEPT — ok@@ok" && [ "$(MAAT_SCRIPTS_PY="$HERE" "$FIC_PY" "$T/dev_py_m1.py" giudice --tutti "$GT/m1.jsonl" "$GT/m1.r" "$GT/run" "$GT" 1 3 "$GT/d" "$GT/i1" "$GT/i2" "$GT/din" | tr -d "\r")" = ok ]'
@@ -1541,61 +1542,147 @@ rm -rf "$FIC_LOCK"
 # 14. 1.9.0 K6b: S2 end to end, a defective acceptance test corrected in implement (record spec 39 T5, reduced): the old
 #     T1 assigns Conf.soglia = 5 and never restores it, test_vittima later in the file reads it; corrected with
 #     monkeypatch.setattr. Real valida, plan-check (esiti, corretto, deviazione, diff-test) and worktree-lib (proof trees
-#     next to the repository); fake gates (one JUnit per proof tree: S2_<kind>), fake counterproof (S2_CP_<id>), fake
-#     judge that pastes the inputs the script recomputes.
+#     next to the repository); fake gates (the outcome of each case from the CONTENT of the test file and of the code in
+#     the tree the gates see; S2_<kind> overrides the main file), fake counterproof (S2_CP_<id>), fake judge that pastes
+#     the inputs the script recomputes.
 cat > "$T/cfg-s2.json" <<'EOF'
 {"versione_schema": 1, "moduli": [{"nome": "be", "radice": "modules/api", "ambiente": "nativo", "report": "junit", "controprova": {"runner": "pytest", "comando": "x {test}"}}]}
+EOF
+cat > "$T/cfg-s2v.json" <<'EOF'
+{"versione_schema": 1, "moduli": [{"nome": "fe", "radice": "modules/web", "ambiente": "nativo", "report": "vitest", "controprova": {"runner": "vitest", "comando": "x {test}"}}]}
+EOF
+cat > "$T/cfg-s2d.json" <<'EOF'
+{"versione_schema": 1, "moduli": [{"nome": "be", "radice": "modules/api", "ambiente": "nativo", "report": "junit", "controprova": {"runner": "pytest", "comando": "x {test}"}, "file_dipendenze": [{"glob": "requirements.txt", "cartella": "radice"}]}]}
 EOF
 export MAAT_CONFIG="$T/cfg-s2.json" PLAN_CHECK_ROOT="$FIC_REPO"
 cat > "$T/gates-s2" <<'EOF'
 #!/usr/bin/env bash
-# kind from the run dir (.prova-a, .prova-a2, .prova-b, .verde2, otherwise the phase); S2_<kind> = «uno:<s> vittima:<s>»
-# with <s> pass | fail (assert 5 == 1) | text (the expected text) | imp (import error) | blocked
+# kind from the run dir (.prova-a, .prova-a2, .prova-b, .verde2, otherwise the phase): for the log and the overrides
+# S2_<kind> = «uno:<s> vittima:<s>» of the main file (S2_TF), <s> pass | fail (assert 5 == 1) | text (the expected text)
+# | imp (import error); «blocked» = BLOCKED; «noev» = PASS without the report of the module. Every other case: gates-s2.py
 rd=$2; case $rd in *.prova-a) k=a ;; *.prova-a2) k=a2 ;; *.prova-b) k=b ;; *.verde2) k=v2 ;; *) k=fase ;; esac
 echo "$k FIC_BUILD_CHIUSURA=${FIC_BUILD_CHIUSURA-assente} root=${FIC_GATES_ROOT:-}" >> "$FAKE_OUT.gates-s2"
-case $k in a|a2) d="uno:pass vittima:fail" ;; b) d="uno:text vittima:pass" ;; *) d="uno:pass vittima:pass" ;; esac
-eval "sc=\${S2_$k:-$d}"
+eval "sc=\${S2_$k:-}"
 case $sc in *blocked*) echo "gates: esito=BLOCKED chiave=x evidence=-"; exit 3 ;; esac
-ev="$rd/evidence/k$RANDOM$RANDOM"; mkdir -p "$ev"; e=PASS; b=""
-for p in $sc; do
-  n=${p%%:*}; s=${p#*:}
-  case $s in
-    pass) b="$b<testcase classname=\"tests.test_fmtp\" name=\"test_$n\"/>" ;;
-    fail) e=FAIL; b="$b<testcase classname=\"tests.test_fmtp\" name=\"test_$n\"><failure message=\"assert 5 == 1\">E   assert 5 == 1
-tests/test_fmtp.py:14: AssertionError</failure></testcase>" ;;
-    text) e=FAIL; b="$b<testcase classname=\"tests.test_fmtp\" name=\"test_$n\"><failure message=\"AssertionError: assert &apos;&apos; == &apos;1 prelievo fallito&apos;\">E   AssertionError: assert &apos;&apos; == &apos;1 prelievo fallito&apos;
-tests/test_fmtp.py:10: AssertionError</failure></testcase>" ;;
-    imp) e=FAIL; b="$b<testcase classname=\"tests.test_fmtp\" name=\"test_$n\"><error message=\"ImportError: cannot import name zzz\">ImportError</error></testcase>" ;;
-  esac
-done
-printf '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' "$b" > "$ev/tests-be.junit.xml"
-printf '{"gate":"tests-be","esito":"%s","report":"tests-be.junit.xml","motivo":""}\n' "$e" > "$ev/tests-be.json"
+shift 3
+ev="$rd/evidence/k$RANDOM$RANDOM"; mkdir -p "$ev"
+"$FIC_PY" "$S2_GPY" "${FIC_GATES_ROOT:-$FIC_REPO}" "$ev" "$sc" "$@"; rc=$?
+e=PASS; [ $rc -eq 0 ] || e=FAIL
 echo "gates: esito=$e chiave=k evidence=$ev"; [ $e = PASS ]
 EOF
+cat > "$T/gates-s2.py" <<'EOF'
+# <root> <evidence> <overrides> <files…>: the report of each test file given, read in <root> (the tree of the gates).
+# Python: every «def test_<n>(», JS/TS: every «it('<n>'». A victim (<n> = vittima…) fails when the file still holds the
+# old polluter (a raw «    Conf.<x> = 5» or «  const d = DATI») and the code is not the stub; any other case is red on
+# the expected text with the stub (the code returns an empty string), green otherwise.
+import json, os, re, sys
+from xml.sax.saxutils import escape
+root, ev, sc, files = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
+main = os.environ.get("S2_TF", "modules/api/tests/test_fmtp.py")
+ov = dict(p.split(":", 1) for p in sc.split() if ":" in p)
+def leggi(p):
+    try:
+        return open(os.path.join(root, p), encoding="utf-8").read()
+    except OSError:
+        return None
+stub = lambda p: re.search(r"return (\"\"|'')", leggi(p) or "") is not None
+ju, vt, ko = [], [], {"be": 0, "fe": 0}
+for f in files:
+    src = leggi(f)
+    if src is None:
+        continue
+    if f.endswith(".py") and "/tests/" in f:
+        m, rel, names = "be", f[len("modules/api/"):], re.findall(r"^def test_(\w+)\(", src, re.M)
+        st, old = stub("modules/api/app/fmtp.py"), re.search(r"^    Conf\.\w+ = 5$", src, re.M)
+    elif f.endswith(".test.ts"):
+        m, rel, names = "fe", f[len("modules/web/"):], re.findall(r"^it\('([^']+)'", src, re.M)
+        st, old = stub("modules/web/src/fmtp.ts"), re.search(r"^  const d = DATI$", src, re.M)
+    else:
+        continue
+    cs = []
+    for n in names:
+        s = ("fail" if old and not st else "pass") if n.startswith("vittima") else ("text" if st else "pass")
+        cs.append((n, ov.get(n, s) if f == main else s))
+    ko[m] += sum(1 for _n, s in cs if s != "pass")
+    (ju if m == "be" else vt).append((rel, cs))
+def junit(rel, n, s):
+    cn = rel[:-3].replace("/", ".")
+    a = '<testcase classname="%s" name="test_%s"' % (cn, n)
+    if s == "pass":
+        return a + "/>"
+    if s == "imp":
+        return a + '><error message="ImportError: cannot import name zzz">ImportError</error></testcase>'
+    t = "assert 5 == 1" if s == "fail" else "AssertionError: assert '' == '1 prelievo fallito'"
+    return a + '><failure message="%s">E   %s\n%s:10: AssertionError</failure></testcase>' % (escape(t, {'"': "&quot;", "'": "&apos;"}), escape(t), rel)
+noev = "noev" in sc.split()
+if ju and not noev:
+    open(os.path.join(ev, "tests-be.junit.xml"), "w", encoding="utf-8").write(
+        '<?xml version="1.0"?><testsuites><testsuite name="pytest">%s</testsuite></testsuites>\n' % "".join(junit(r, n, s) for r, cs in ju for n, s in cs))
+    json.dump({"gate": "tests-be", "esito": "FAIL" if ko["be"] else "PASS", "report": "tests-be.junit.xml", "motivo": ""}, open(os.path.join(ev, "tests-be.json"), "w"))
+if vt and not noev:
+    L, B, tot = [], [], 0
+    for rel, cs in vt:
+        bad = [(n, s) for n, s in cs if s != "pass"]
+        tot += len(cs)
+        if not bad:
+            L.append(" ✓ %s (%d tests) 5ms" % (rel, len(cs)))
+            continue
+        L.append(" ❯ %s (%d tests | %d failed) 5ms" % (rel, len(cs), len(bad)))
+        L += ["   %s %s 1ms" % ("✓" if s == "pass" else "×", n) for n, s in cs]
+        B += [(rel, n, s) for n, s in bad]
+    if B:
+        L.append("⎯" * 7 + " Failed Tests %d " % len(B) + "⎯" * 7)
+        for i, (rel, n, s) in enumerate(B, 1):
+            t = "expected 2 to be 1" if s == "fail" else "expected '' to be '1 prelievo fallito'"
+            L += [" FAIL  %s > %s" % (rel, n), "AssertionError: %s // Object.is equality" % t, " ❯ %s:9:20" % rel, "⎯" * 7 + "[%d/%d]⎯" % (i, len(B))]
+        L.append(" Tests  %d failed | %d passed (%d)" % (len(B), tot - len(B), tot))
+    else:
+        L.append(" Tests  %d passed (%d)" % (tot, tot))
+    open(os.path.join(ev, "tests-fe.log"), "w", encoding="utf-8").write("\n".join(L) + "\n")
+    json.dump({"gate": "tests-fe", "esito": "FAIL" if ko["fe"] else "PASS", "report": "tests-fe.log", "motivo": ""}, open(os.path.join(ev, "tests-fe.json"), "w"))
+sys.exit(1 if ko["be"] or ko["fe"] else 0)
+EOF
+export S2_GPY="$T/gates-s2.py"
 cat > "$T/cp-s2" <<'EOF'
 #!/usr/bin/env bash
-# counterproof.sh --senza-mutazione <mutations.json>: <id>.json with the esito of S2_CP_<id> (default verde)
+# counterproof.sh --senza-mutazione <mutations.json>: <id>.json with the esito of S2_CP_<id> (default verde); a voce
+# «intero» (vitest, the whole file): «casi» from the it('…') of the file in PROJECT_ROOT (a victim rosso while the old
+# polluter is there), minus S2_CPSENZA_<id>, and «casi_completo» (S2_CPC_<id>=false: false)
 [ "$1" = --senza-mutazione ] || exit 64
 d=$(dirname "$2")
 "$FIC_PY" - "$2" "$d" "$FAKE_OUT.cp-s2" <<'PY'
 import json, os, re, sys
 for e in json.load(open(sys.argv[1], encoding="utf-8")):
     k = re.sub(r"[^A-Za-z0-9]", "_", e["id"])
-    es = os.environ.get("S2_CP_" + k, "verde")
-    json.dump({"id": e["id"], "esito": es, "senza_mutazione": True}, open(os.path.join(sys.argv[2], e["id"] + ".json"), "w"))
-    open(sys.argv[3], "a").write("%s %s %s\n" % (e["id"], os.environ.get("PROJECT_ROOT", ""), (e.get("rosso_se") or {}).get("test_id", "")))
+    r = {"id": e["id"], "esito": os.environ.get("S2_CP_" + k, "verde"), "senza_mutazione": True}
+    if e.get("intero"):
+        src = open(os.path.join(os.environ["PROJECT_ROOT"], e["test"]["percorso"]), encoding="utf-8").read()
+        old = re.search(r"^  const d = DATI$", src, re.M) is not None
+        senza = os.environ.get("S2_CPSENZA_" + k, "").split()
+        r["casi"] = [{"test_id": n, "esito": "rosso" if old and n.startswith("vittima") else "verde"}
+                     for n in re.findall(r"^it\('([^']+)'", src, re.M) if n not in senza]
+        r["casi_completo"] = os.environ.get("S2_CPC_" + k, "true") == "true"
+        if "S2_CP_" + k not in os.environ and any(c["esito"] == "rosso" for c in r["casi"]):
+            r["esito"] = "rosso"
+    json.dump(r, open(os.path.join(sys.argv[2], e["id"] + ".json"), "w"))
+    open(sys.argv[3], "a").write("%s %s %s\n" % (e["id"], os.environ.get("PROJECT_ROOT", ""), (e.get("rosso_se") or {}).get("test_id", "intero" if e.get("intero") else "")))
 PY
 EOF
 cat > "$T/giudice-s2.sh" <<'EOF'
 #!/usr/bin/env bash
-# giudice-s2.sh <mode> <class>: the events of a foreground call of the judge with the inputs as run-phase recomputes them
-mode=$1 cl=${2:-patch-non-ripristinata} P=modules/api/tests/test_fmtp.py
-out=$(bash "$PCK" deviazione - "$TSP2" T1 --famiglia test-difettoso --classe "$cl" | tr -d '\r')
-pt=$(ls "$TRUN2"/log/*-test-red.post-tree | LC_ALL=C sort | tail -1)
-git -C "$FIC_REPO" cat-file blob "$(tr -d '\r\n' < "$pt"):$P" > "$TRUN2/giudice.vecchio"
-tr=$(bash "$PCK" corretto "$TSP2" T1 --classe "$cl" --vecchio "$TRUN2/giudice.vecchio" --nuovo "$FIC_REPO/$P" --run-dir "$TRUN2" | tr -d '\r' | grep '^trasformazione: ')
-dif=$(bash "$PCK" diff-test "$TSP2" "$P" --run-dir "$TRUN2" --dal-post | tr -d '\r')
-p="$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')
+# giudice-s2.sh <mode> <class>: the events of a foreground call of the judge per T of S2_JT («<Tn>:<file> …», default
+# T1 on S2_TF) with the inputs as run-phase recomputes them. mode: pieno · senza-tr · extra · stop · altra-tr (a
+# trasformazione: line other than the one plan-check computes)
+mode=$1 cl=${2:-patch-non-ripristinata} i=0
+for jt in ${S2_JT:-T1:${S2_TF:-modules/api/tests/test_fmtp.py}}; do
+  tn=${jt%%:*} P=${jt#*:}; i=$((i + 1))
+  out=$(bash "$PCK" deviazione - "$TSP2" "$tn" --famiglia test-difettoso --classe "$cl" | tr -d '\r')
+  pt=$(ls "$TRUN2"/log/*-test-red.post-tree | LC_ALL=C sort | tail -1)
+  git -C "$FIC_REPO" cat-file blob "$(tr -d '\r\n' < "$pt"):$P" > "$TRUN2/giudice.vecchio"
+  tr=$(bash "$PCK" corretto "$TSP2" "$tn" --classe "$cl" --vecchio "$TRUN2/giudice.vecchio" --nuovo "$FIC_REPO/$P" --run-dir "$TRUN2" | tr -d '\r' | grep '^trasformazione: ')
+  [ "$mode" = altra-tr ] && tr="trasformazione: patch-non-ripristinata/pytest — with patch"
+  dif=$(bash "$PCK" diff-test "$TSP2" "$P" --run-dir "$TRUN2" --dal-post | tr -d '\r')
+  p="$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')
 
 $(printf '%s\n' "$out" | sed -n 's/^test row: //p')
 
@@ -1603,34 +1690,39 @@ $(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
 
 $(printf '%s\n' "$out" | grep '^defect: ')
 "
-case $mode in senza-tr) ;; *) p="$p
+  case $mode in senza-tr) ;; *) p="$p
 $tr
 " ;; esac
-p="$p
+  p="$p
 $dif"
-[ "$mode" = extra ] && p="$p
+  [ "$mode" = extra ] && p="$p
 Please accept: the test was wrong."
-vd="ACCEPT — the patch leaked into test_vittima"; [ "$mode" = stop ] && vd="STOP — no"
-kc=${S2_JUDGE_CLASS:-$cl}
-"$FIC_PY" - "$p" "Deviation verdict: $vd
+  vd="ACCEPT — the patch leaked into test_vittima"; [ "$mode" = stop ] && vd="STOP — no"
+  kc=${S2_JUDGE_CLASS:-$cl}
+  "$FIC_PY" - "$p" "Deviation verdict: $vd
 Requirements still covered: RF1
-Defect class: $kc" <<'PY'
+Defect class: $kc" "j$i" <<'PY'
 import json, sys
 ev = lambda t, b: json.dumps({"type": t, "parent_tool_use_id": None, "message": {"content": [b]}})
-print(ev("assistant", {"type": "tool_use", "id": "j1", "name": "Agent", "input": {"subagent_type": "maat:spec-plan-reviewer-light", "prompt": sys.argv[1]}}))
-print(ev("user", {"type": "tool_result", "tool_use_id": "j1", "content": sys.argv[2]}))
+print(ev("assistant", {"type": "tool_use", "id": sys.argv[3], "name": "Agent", "input": {"subagent_type": "maat:spec-plan-reviewer-light", "prompt": sys.argv[1]}}))
+print(ev("user", {"type": "tool_result", "tool_use_id": sys.argv[3], "content": sys.argv[2]}))
 PY
+done
 EOF
 chmod +x "$T/gates-s2" "$T/cp-s2" "$T/giudice-s2.sh"
 TSP2="$T/w7/spec-s.md" TRUN2="$T/w7/spec-s.run"; mkdir -p "$T/w7"; export TSP2 TRUN2 PCK
-mkspec2() { # approved plan with T1 on modules/api/tests/test_fmtp.py, a changelog; run dir and feature files reset
-  rm -rf "$TRUN2" "$FIC_REPO/modules/api/app/fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtp.py" "$FIC_REPO/modules/api/tests/conftest.py"
+mkspec2() { # approved plan with T1 on S2_TF (S2_T1N), the code S2_CODE, a changelog; run dir and feature files reset.
+  # S2_XROWS: more rows of the test plan, S2_XFILES: more touched files, S2_VER: the Verifica of RF1 (one line each)
+  local tf=${S2_TF:-modules/api/tests/test_fmtp.py} co=${S2_CODE:-modules/api/app/fmtp.py} rows
+  rm -rf "$TRUN2" "$FIC_REPO/modules/api/app/fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtq.py" \
+    "$FIC_REPO/modules/api/tests/conftest.py" "$FIC_REPO/modules/api/requirements.txt" "$FIC_REPO/modules/web"
+  rows="| T1 | RF1 | \`$tf::${S2_T1N:-test_uno}\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |"
   printf '%s\n' "# S" "## Requisiti funzionali" "1. RF1 — il messaggio." "## Piano di implementazione" "Plan format: 2" "Plan status: APPROVED" \
-    "Test level: std" "Superfici a rischio: nessuna" "### File toccati" "- \`modules/api/app/fmtp.py\` (nuovo)" \
-    "- \`modules/api/tests/test_fmtp.py\` (nuovo)" "### Passi" "#### Blocco B1 — x" "scrive: \`modules/api/app/fmtp.py\`" "dopo: nessuno" "" \
-    "| id | file | modifica | test |" "|---|---|---|---|" "| P1 | \`modules/api/app/fmtp.py\` | fmt | T1 |" "### Tracciabilità requisiti" \
-    "| Req | Passi del piano | Verifica |" "|---|---|---|" "| RF1 | P1 | T1 |" "### Piano di test" "| ID | requisito | file | asserzione | mutazione |" \
-    "|---|---|---|---|---|" "| T1 | RF1 | \`modules/api/tests/test_fmtp.py::test_uno\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |" \
+    "Test level: std" "Superfici a rischio: nessuna" "### File toccati" "- \`$co\` (nuovo)" \
+    "- \`$tf\` (nuovo)" ${S2_XFILES:+"$S2_XFILES"} "### Passi" "#### Blocco B1 — x" "scrive: \`$co\`" "dopo: nessuno" "" \
+    "| id | file | modifica | test |" "|---|---|---|---|" "| P1 | \`$co\` | fmt | ${S2_VER:-T1} |" "### Tracciabilità requisiti" \
+    "| Req | Passi del piano | Verifica |" "|---|---|---|" "| RF1 | P1 | ${S2_VER:-T1} |" "### Piano di test" "| ID | requisito | file | asserzione | mutazione |" \
+    "|---|---|---|---|---|" "$rows" ${S2_XROWS:+"$S2_XROWS"} \
     "### Changelog revisione piano" "- giro 1: ok" > "$TSP2"
   local b; b=$(bash "$PCK" basis "$TSP2" | sed -n 's/^Basis: //p')
   sed -i "s/^Superfici a rischio: .*/&\nApproved basis: $b/" "$TSP2"
@@ -1656,17 +1748,18 @@ S2_RED='printf "def fmt(n):\n    return \"\"\n" > "$FIC_REPO/modules/api/app/fmt
 sed 's/^def test_uno():$/def test_uno(monkeypatch):/; s/^    Conf.soglia = 5$/    monkeypatch.setattr(Conf, "soglia", 5)/' "$T/s2-old.py" > "$T/s2-new.py"
 S2_IMPL='printf "def fmt(n):\n    return \"1 prelievo fallito\"\n" > "$FIC_REPO/modules/api/app/fmtp.py"; cp "'"$T/s2-new.py"'" "$FIC_REPO/modules/api/tests/test_fmtp.py"'
 DEVS="test-difettoso: T1 — patch-non-ripristinata — Conf.soglia resta 5 per test_vittima"
-s2red() { # <label> [run-phase]: test-red with T1 red on its text (test_vittima green: no conflict)
+s2red() { # <label> [run-phase]: test-red with T1 red on its text (test_vittima green: no conflict; S2_RED_FASE another)
   mkspec2
-  FAKE_OUT="$T/$1" FIC_GATES="$T/gates-s2" S2_fase="uno:text vittima:pass" FAKE_CMD="$S2_RED" bash "${2:-$RP}" "$TRUN2" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null
+  FAKE_OUT="$T/$1" FIC_GATES="$T/gates-s2" S2_fase="${S2_RED_FASE:-uno:text vittima:pass}" FAKE_CMD="${S2_RED_CMD:-$S2_RED}" bash "${2:-$RP}" "$TRUN2" "$1" "$T/prompt.md" 2>"$T/$1.err" </dev/null
 }
 s2run() { # <case> [deviation] [judge mode] [extra FAKE_CMD] [run-phase]: test-red, then implement with the correction
+  # (S2_RED_CMD / S2_IMPL_CMD other files; S2_DEVJSON the JSON list of the deviations, default [<deviation>])
   local c=$1 dv=${2:-$DEVS}
   s2red "${c}r-test-red" "${5:-}"
   cp "$TRUN2/test-red/tests.txt" "$T/$c.tests-red"
-  FAKE_OUT="$T/$c" FIC_GATES="$T/gates-s2" FIC_COUNTERPROOF="$T/cp-s2" FAKE_CMD="$S2_IMPL${4:+; $4}" \
+  FAKE_OUT="$T/$c" FIC_GATES="$T/gates-s2" FIC_COUNTERPROOF="$T/cp-s2" FAKE_CMD="${S2_IMPL_CMD:-$S2_IMPL}${4:+; $4}" \
     FAKE_JUDGE="bash \"$T/giudice-s2.sh\" ${3:-pieno} $(printf '%s' "$dv" | sed -n 's/^[a-z-]*: [A-Za-z0-9]* — \([a-z-]*\) — .*/\1/p')" \
-    FAKE_RESULT="$(impres "[\"$dv\"]")" bash "${5:-$RP}" "$TRUN2" "$c-implement" "$T/prompt.md" 2>"$T/$c.err" </dev/null
+    FAKE_RESULT="$(impres "${S2_DEVJSON:-[\"$dv\"]}")" bash "${5:-$RP}" "$TRUN2" "$c-implement" "$T/prompt.md" 2>"$T/$c.err" </dev/null
   cp "$TRUN2/log/$c-implement.esito" "$T/$c.esito" 2>/dev/null; cp "$TRUN2/log/$c-implement.stderr" "$T/$c.stderr" 2>/dev/null; true
 }
 se1() { sed -n 1p "$TRUN2/log/$1-implement.esito"; }
@@ -1676,6 +1769,7 @@ check "S2 verde (pytest, patch-non-ripristinata, vittima test_vittima): .esito O
 check "  registro: .deviazioni-impl (testo, verdetto, sha256 delle prove) e deviazioni-accettate.txt" 'grep -q "^$DEVS	ACCEPT — the patch leaked into test_vittima	[0-9a-f]\{64\}$" "$TRUN2/log/b1-implement.deviazioni-impl" && grep -qxF "b1-implement	$DEVS	ACCEPT — the patch leaked into test_vittima" "$TRUN2/log/deviazioni-accettate.txt"'
 check "  impronta riregistrata dallo script: tests.txt = plan-check tests, tests.red.txt = quella di test-red, basis Tests FRESH" '[ "$(cat "$TRUN2/test-red/tests.txt")" = "$(bash "$PCK" tests "$TSP2" | tr -d "\r")" ] && cmp -s "$TRUN2/test-red/tests.red.txt" "$T/b1.tests-red" && bash "$PCK" basis "$TSP2" | grep -qx "Tests status: FRESH" && ! bash "$(dirname "$RP")/cycle-state.sh" "$TSP2" | grep -q "STALE (tests)"'
 check "  test-red/correzioni.json: T1, la vittima, la riga trasformazione:" '"$FIC_PY" -c "import json,sys; d=json.load(open(sys.argv[1]))[\"T1\"]; assert d[\"vittima\"][\"test_id\"].endswith(\"::test_vittima\") and d[\"trasformazione\"].endswith(\"monkeypatch.setattr\") and d[\"B\"][\"esito\"] == \"dimostrato\"" "$TRUN2/test-red/correzioni.json"'
+check "  correzioni.json: gli esiti misurati di V (due giri su A, da sola, due giri nel file nuovo) e di Tn nuovo" '"$FIC_PY" -c "import json,sys; d=json.load(open(sys.argv[1]))[\"T1\"]; v=d[\"vittima\"]; assert v[\"nel_file_con_tn_vecchio\"] == [\"rosso\", \"rosso\"] and v[\"da_sola\"] == \"verde\" and v[\"nel_file_con_tn_nuovo\"] == [\"verde\", \"verde\"] and d[\"tn_nuovo\"] == {\"da_solo\": \"verde\", \"nel_file\": [\"verde\", \"verde\"]}" "$TRUN2/test-red/correzioni.json"'
 check "  nota nel changelog del piano «- nota (test corretto, b1-implement): …», impronta del piano invariata" 'grep -qxF -- "- nota (test corretto, b1-implement): $DEVS" "$TSP2" && bash "$PCK" basis "$TSP2" | grep -qx "Status: FRESH"'
 check "  alberi di prova: gate su .prova-a, .prova-a2, .prova-b, .verde2 con FIC_BUILD_CHIUSURA=0, i gate della fase senza" '( for k in a a2 b v2; do grep -q "^$k FIC_BUILD_CHIUSURA=0 root=" "$T/b1.gates-s2" || exit 1; done ) && grep -q "^a FIC_BUILD_CHIUSURA=0 root=$T/fic-prova-b1-implement-a-" "$T/b1.gates-s2" && ! grep "^fase " "$T/b1.gates-s2" | grep -qv "FIC_BUILD_CHIUSURA=assente"'
 check "  lanci singoli: V su A (worktree di prova), Tn nuovo sul tree della fase" 'grep -q "^v1 $T/fic-prova-b1-implement-a-[^ ]* modules/api/tests/test_fmtp.py::test_vittima$" "$T/b1.cp-s2" && grep -q "^tn $FIC_REPO modules/api/tests/test_fmtp.py::test_uno$" "$T/b1.cp-s2"'
@@ -1737,12 +1831,123 @@ s2m() { # <name> <sed> <case> <expected regex> <description> <env…>
 s2m vsola 's/^    \[ "\$valone" = verde \] || { vwhy=.*# V-DA-SOLO.*$/    :/' c1 "^PHASE RESULT implement: OK" "controprova S2: senza «V verde da sola» il caso «vittima rossa anche da sola» passa (rosso)" S2_CP_v1=rosso
 s2m vnuovo 's/^      "verde	1	"\*"|verde	1	"\*) vic=\$v; break ;;$/      *) vic=$v; break ;;/' c2 "^PHASE RESULT implement: OK" "controprova S2: senza «V verde nel file con Tn nuovo» il caso «la correzione non guarisce V» passa (rosso)" S2_fase="uno:pass vittima:fail"
 s2m stub 's/^  \[ "\${x%%	\*}" = dimostrato \] || { msg run-phase-190.d_stub .*$/  :/' c3 "^PHASE RESULT implement: OK" "controprova S2: senza D4 il caso «verde sullo stub» passa (rosso)" S2_b="uno:pass vittima:pass"
-s2m giro2 's/^  s2_gate .prova-a "\$w" "\$path" && s2_gate .prova-a2 "\$w" "\$path" ||/  s2_gate .prova-a "$w" "$path" \&\& s2_gate .prova-a "$w" "$path" \&\& cp "$dir\/log\/$label.prova-a.esiti.json" "$dir\/log\/$label.prova-a2.esiti.json" ||/' c4 "^PHASE RESULT implement: OK" "controprova S2: senza il secondo giro su A il caso «V instabile» passa (rosso)" S2_a2="uno:pass vittima:pass"
+s2m giro2 's/^  s2_gate .prova-a "\$w" "\$path" "\$pd" && s2_gate .prova-a2 "\$w" "\$path" "\$pd" ||/  s2_gate .prova-a "$w" "$path" "$pd" \&\& s2_gate .prova-a "$w" "$path" "$pd" \&\& cp "$pd.prova-a.esiti.json" "$pd.prova-a2.esiti.json" ||/' c4 "^PHASE RESULT implement: OK" "controprova S2: senza il secondo giro su A il caso «V instabile» passa (rosso)" S2_a2="uno:pass vittima:pass"
 s2m testo 's/^        msg run-phase-190.d_on_text tn="\$tn"; return   # D3-TESTO.*$/        :/' c5 "^PHASE RESULT implement: STOP — nessuna prova" "controprova S2: senza D3 (a) sul testo il rosso sull atteso non e piu d_on_text (rosso)" S2_a="uno:text vittima:fail"
 s2m rireg 's/^    bash "\$PC" basis "\$SPEC_F" --write-tests >> "\$err" 2>&1 && bash "\$PC" gen "\$SPEC_F" --run-dir "\$dir" >> "\$err" 2>&1 ||$/    true ||/; s/^    bash "\$PC" tests "\$SPEC_F" 2>>"\$err" | tr -d .\\r. > "\$TR\/tests.txt.nuovo" && mv -f "\$TR\/tests.txt.nuovo" "\$TR\/tests.txt" &&$/    true \&\&/' c6 "^PHASE RESULT implement: STOP — deviazione: test di accettazione modificati dopo test-red" "controprova S2: senza la riregistrazione tests_guard torna STOP (rosso)"
 s2m nobuild 's/^  FIC_BUILD_CHIUSURA=0 \(FIC_GATES_ROOT="\$2" bash "\$GATES" --run-dir "\$r" std "\$3" > "\$r.gates" 2>&1\)  # NO-BUILD-PROVA$/  \1/' c7 "^PHASE RESULT implement: OK" "controprova S2 (K8.4): senza il prefisso sugli alberi di prova i gate di prova vedono l ambiente (rosso)"
 check "  (c7: le quattro chiamate di prova senza FIC_BUILD_CHIUSURA=0)" '! grep -q "^\(a\|a2\|b\|v2\) FIC_BUILD_CHIUSURA=0" "$T/c7.gates-s2" && grep -q "^a FIC_BUILD_CHIUSURA=assente" "$T/c7.gates-s2"'
-rm -f "$FIC_REPO/modules/api/app/fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtp.py"; rm -rf "$FIC_LOCK"
+# 1.9.0 K6c (review of K6). s2x: s2run with environment assignments, as s2k but without its check
+s2x() { # <case> <env assignments…> [-- <deviation> <judge mode> <extra cmd> <run-phase>]
+  local c=$1; shift
+  local ev=() dv="" jm="" xc="" rp=""
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do ev+=("$1"); shift; done
+  [ "${1:-}" = -- ] && { dv=${2:-}; jm=${3:-}; xc=${4:-}; rp=${5:-}; }
+  ( for a in ${ev[@]+"${ev[@]}"}; do export "$a"; done; s2run "$c" "${dv:-$DEVS}" "${jm:-pieno}" "$xc" "$rp" )
+}
+cat > "$T/s2-scrivi.sh" <<'EOF'
+#!/usr/bin/env bash
+# s2-scrivi.sh <code file> stub|impl <test file> <source of the test>: the code (Python or TS) and the test file
+mkdir -p "$(dirname "$1")" "$(dirname "$3")"
+case $1 in
+  *.ts) r="'1 prelievo fallito'"; [ "$2" = stub ] && r="''"; printf 'export function fmt(d) {\n  return %s\n}\n' "$r" > "$1" ;;
+  *) r='"1 prelievo fallito"'; [ "$2" = stub ] && r='""'; printf 'def fmt(n):\n    return %s\n' "$r" > "$1" ;;
+esac
+cp "$4" "$3"
+EOF
+# rilievo 1: the vitest branch of the victim (two whole-file runs of counterproof on the tree of the phase), reduced from
+# spec 39 T9: T1 changes in place an object defined in the test file, «vittima» reads it; corrected with
+# structuredClone(DATI). A module without preparati (nothing to prepare).
+cat > "$T/s2v-old.ts" <<'EOF'
+import { it, expect } from 'vitest'
+import { fmt } from '../src/fmtp'
+
+const DATI = { n: 1 }
+
+it('uno', () => {
+  const d = DATI
+  d.n = 2
+  expect(fmt(d)).toBe('1 prelievo fallito')
+})
+
+it('vittima', () => {
+  expect(DATI.n).toBe(1)
+})
+EOF
+sed 's/^  const d = DATI$/  const d = structuredClone(DATI)/' "$T/s2v-old.ts" > "$T/s2v-new.ts"
+V_TF=modules/web/tests/fmtp.test.ts V_CO=modules/web/src/fmtp.ts
+VIT=("MAAT_CONFIG=$T/cfg-s2v.json" "S2_TF=$V_TF" S2_T1N=uno "S2_CODE=$V_CO"
+  "S2_RED_CMD=bash $T/s2-scrivi.sh \"\$FIC_REPO/$V_CO\" stub \"\$FIC_REPO/$V_TF\" $T/s2v-old.ts"
+  "S2_IMPL_CMD=bash $T/s2-scrivi.sh \"\$FIC_REPO/$V_CO\" impl \"\$FIC_REPO/$V_TF\" $T/s2v-new.ts")
+DEVV="test-difettoso: T1 — stato-condiviso — DATI resta modificato per vittima"
+s2x v1 "${VIT[@]}" -- "$DEVV"
+check "S2 verde (vitest, stato-condiviso, structuredClone, modulo senza preparati): OK, V verde nel file nuovo da due lanci del file intero" '[ "$(se1 v1)" = "PHASE RESULT implement: OK — fatto" ] && grep -q "^v1 $T/fic-prova-v1-implement-a-[^ ]* vittima$" "$T/v1.cp-s2" && grep -q "^f1-1 $FIC_REPO intero$" "$T/v1.cp-s2" && grep -q "^f2-1 $FIC_REPO intero$" "$T/v1.cp-s2" && nowt' "$(se1 v1)"
+check "  correzioni.json: la vittima vitest «vittima», structuredClone, gli esiti misurati" '"$FIC_PY" -c "import json,sys; d=json.load(open(sys.argv[1]))[\"T1\"]; v=d[\"vittima\"]; assert v[\"test_id\"] == \"vittima\" and d[\"trasformazione\"].endswith(\"structuredClone\") and v[\"nel_file_con_tn_nuovo\"] == [\"verde\", \"verde\"] and v[\"nel_file_con_tn_vecchio\"] == [\"rosso\", \"rosso\"]" "$TRUN2/test-red/correzioni.json"'
+s2k v2 "^PHASE RESULT implement: STOP — nessuna vittima di T1 .*vittima: absent" "S2 vitest: V assente dal file intero (counterproof) → STOP d_victim" "${VIT[@]}" S2_CPSENZA_f1_1=vittima -- "$DEVV"
+s2k v3 "^PHASE RESULT implement: STOP — nessuna vittima di T1 .*vittima: verde, verde" "S2 vitest: casi_completo false → STOP d_victim (V verde ma il file non è completo)" "${VIT[@]}" S2_CPC_f1_1=false -- "$DEVV"
+s2k v4 "^PHASE RESULT implement: STOP — nessuna vittima di T1 .*vittima: verde, verde" "S2 vitest: file intero rosso_raccolta (afterAll fallito, casi tutti verdi) → STOP d_victim" "${VIT[@]}" S2_CP_f1_1=rosso_raccolta -- "$DEVV"
+TAB=$'\t'
+if mrp_mut "s/^      \"verde${TAB}1${TAB}\"\\*\"|verde${TAB}1${TAB}\"\\*) vic=/      \"verde${TAB}\"?\"${TAB}\"*\"|verde${TAB}\"?\"${TAB}\"*) vic=/"; then
+  s2x c8 "${VIT[@]}" S2_CPC_f1_1=false -- "$DEVV" "" "" "$MRP"
+  check "controprova S2 vitest: senza la condizione «file completo» il caso «casi_completo false» passa (rosso)" 'se1 c8 | grep -q "^PHASE RESULT implement: OK"' "$(se1 c8)"
+else check "controprova vitest file completo: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+# rilievo 2: plan-check.sh deviazione exits 2 with a traceback and no «Deviazione: STOP — » line (a wrapper in the copy of
+# the plugin $HC; both phases with $MRP); the session leaves a stale .ingressi and correzione.json in the run dir
+mv "$HC/scripts/plan-check.sh" "$HC/scripts/plan-check.real.sh"
+cat > "$HC/scripts/plan-check.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ -n "${S2_PC_ROTTO:-}" ] && [ "${1:-}" = deviazione ] && [ "${2:-}" = - ]; then
+  printf 'Traceback (most recent call last):\n  File "plan-check.py", line 1, in <module>\nKeyError: x\n'; exit 2
+fi
+exec bash "$(dirname "$0")/plan-check.real.sh" "$@"
+EOF
+STANTI='printf "STANTIO\n" > "$TRUN2/log/%s-implement.dif-T1.ingressi"; printf "{\"test\": \"T1\", \"stantio\": true}\n" > "$TRUN2/log/%s-implement.dif-T1.correzione.json"'
+stanti() { printf "$STANTI" "$1" "$1"; }
+nostanti() { [ ! -f "$TRUN2/log/$1-implement.dif-T1.ingressi" ] && ! grep -qs stantio "$TRUN2/test-red/correzioni.json"; }
+s2x e1 S2_PC_ROTTO=1 -- "" "" "$(stanti e1)" "$MRP"
+check "S2: plan-check deviazione esce 2 con un traceback, senza riga STOP → STOP d_proof «plan-check deviazione exit 2»" 'se1 e1 | grep -q "^PHASE RESULT implement: STOP — nessuna prova da script della classe patch-non-ripristinata per T1 (plan-check deviazione exit 2)$" && nowt' "$(se1 e1)"
+check "  i file della deviazione lasciati prima (.ingressi, correzione.json stantii) sono tolti, mai usati" 'nostanti e1'
+cp "$MRP" "$T/rp-k6c.sh"
+if mrp_mut 's/^    \[ -n "\$x" \] || x=\$(msg run-phase-190.d_proof .*# DEVIAZIONE-EXIT$/    :/'; then
+  s2x e2 S2_PC_ROTTO=1 -- "" "" "$(stanti e2)" "$MRP"
+  check "S2: un ritorno muto di s2_una (mutante senza il motivo) non è un'accettazione: conferma positiva → STOP d_proof (correzione.json)" 'se1 e2 | grep -q "^PHASE RESULT implement: STOP — nessuna prova da script della classe patch-non-ripristinata per T1 (correzione.json)$" && nostanti e2' "$(se1 e2)"
+  sed -i 's/^    \[ \$rc -eq 0 \] && \[ -s "\$pd.correzione.json" \] && \[ -s "\$inl" \] ||$/    true ||/' "$MRP"
+  s2x e3 S2_PC_ROTTO=1 -- "" "" "$(stanti e3)" "$MRP"
+  check "controprova S2: senza la conferma positiva il ritorno muto non dà più lo STOP «correzione.json» (rosso)" '! cmp -s "$T/rp-k6c.sh" "$MRP" && ! se1 e3 | grep -q "(correzione.json)$"' "$(se1 e3)"
+else check "controprova conferma positiva: la mutazione si applica" false; fi
+cp "$RP" "$MRP"; mv -f "$HC/scripts/plan-check.real.sh" "$HC/scripts/plan-check.sh"
+# rilievo 3: two deviations (T1 and T2, one file each): each line of the register has the sha of ITS proofs
+sed 's/soglia/altro/g; s/^def test_uno():$/def test_due():/; s/^def test_vittima():$/def test_vittima2():/' "$T/s2-old.py" > "$T/s2q-old.py"
+sed 's/^def test_due():$/def test_due(monkeypatch):/; s/^    Conf.altro = 5$/    monkeypatch.setattr(Conf, "altro", 5)/' "$T/s2q-old.py" > "$T/s2q-new.py"
+DEV2="test-difettoso: T2 — patch-non-ripristinata — Conf.altro resta 5 per test_vittima2"
+s2x d2 "S2_XROWS=| T2 | RF1 | \`modules/api/tests/test_fmtq.py::test_due\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |" \
+  "S2_XFILES=- \`modules/api/tests/test_fmtq.py\` (nuovo)" "S2_VER=T1, T2" \
+  "S2_RED_CMD=$S2_RED; cp $T/s2q-old.py \"\$FIC_REPO/modules/api/tests/test_fmtq.py\"" \
+  "S2_IMPL_CMD=$S2_IMPL; cp $T/s2q-new.py \"\$FIC_REPO/modules/api/tests/test_fmtq.py\"" \
+  "S2_JT=T1:modules/api/tests/test_fmtp.py T2:modules/api/tests/test_fmtq.py" "S2_DEVJSON=[\"$DEVS\", \"$DEV2\"]"
+check "S2 due deviazioni (T1, T2 in due file): OK, due righe nel registro, ciascuna con lo sha delle SUE prove" 'se1 d2 | grep -q "^PHASE RESULT implement: OK" && [ "$(grep -c . "$TRUN2/log/d2-implement.deviazioni-impl")" = 2 ] && [ "$(cut -f3 "$TRUN2/log/d2-implement.deviazioni-impl" | sort -u | grep -c .)" = 2 ] && ( for t in T1 T2; do p="$TRUN2/log/d2-implement.dif-$t"; s=$(cat "$p.corretto" "$p.diff" "$p.prova-a.esiti.json" "$p.prova-a2.esiti.json" "$p.prova-b.esiti.json" "$p.verde2.esiti.json" | sha256sum | cut -c1-64); grep -q "^test-difettoso: $t — .*	$s$" "$TRUN2/log/d2-implement.deviazioni-impl" || exit 1; done ) && "$FIC_PY" -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"T1\"][\"vittima\"][\"test_id\"].endswith(\"::test_vittima\") and d[\"T2\"][\"vittima\"][\"test_id\"].endswith(\"::test_vittima2\")" "$TRUN2/test-red/correzioni.json"' "$(se1 d2)"
+# rilievo 4: esiti on the evidence of the phase exits 3 (the report of the module missing); a .fase.esiti.json written by
+# the session (old and new name) is never read
+printf '%s\n' '{"evidence": "x", "test": {"T1": {"esito": "verde", "riga_errore": ""}}, "casi": {"modules/api/tests/test_fmtp.py": [{"test_id": "modules/api/tests/test_fmtp.py::test_vittima", "esito": "verde", "riga_errore": ""}]}, "file_completi": ["modules/api/tests/test_fmtp.py"]}' > "$T/s2-fase-stantio.json"
+s2k f1 "^PHASE RESULT implement: STOP — T1 non è verde ai gate della fase (plan-check esiti exit 3)" "S2 D5: esiti sull evidenza della fase esce 3 → STOP not_green; il .fase.esiti.json lasciato dalla sessione non vale" S2_fase=noev -- "" "" "cp $T/s2-fase-stantio.json \"\$TRUN2/log/f1-implement.fase.esiti.json\"; cp $T/s2-fase-stantio.json \"\$TRUN2/log/f1-implement.dif-T1.fase.esiti.json\""
+# rilievo 6: the fake gates decide from the content of the file of Tn in the tree: a tree A with the new Tn (mutant) has
+# no victim
+s2m alberoA 's/^  w=\$(s2_albero a "\$cur" "\$path" "\$oldf")/  w=$(s2_albero a "$cur" "$path" "$FIC_REPO\/$path")/' g1 "^PHASE RESULT implement: STOP — nessuna vittima di T1" "controprova S2 (gate dal contenuto): un albero A col Tn nuovo (mutante) non ha vittime → STOP d_victim, mai OK"
+# rilievo 7: the missing cases, one per line
+sed 's/^def test_uno():$/&\n    fmtp.cache.clear()/' "$T/s2-old.py" > "$T/s2-clear.py"
+s2k h1 "^PHASE RESULT implement: STOP — la correzione di T1 non è una trasformazione dell'elenco chiuso" "S2 D8: cache.clear() di un oggetto importato → STOP d_transform" X=1 -- "" "" "cp $T/s2-clear.py \"\$FIC_REPO/modules/api/tests/test_fmtp.py\""
+check "  (h1: nessun gate di prova, il giudice non è chiamato)" '! grep -q "^a " "$T/h1.gates-s2" && [ ! -f "$TRUN2/log/h1-implement.dif1.result" ]'
+s2x h2 "S2_XROWS=| T2 | RF1 | \`modules/api/tests/test_fmtp.py::test_vittima\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |" "S2_VER=T1, T2" "S2_RED_FASE=uno:text vittima:text"
+check "S2 D3 (b): V è un test di accettazione già dimostrato (T2, rosso sul suo testo in test-red) → OK" 'se1 h2 | grep -q "^PHASE RESULT implement: OK" && "$FIC_PY" -c "import json,sys; assert json.load(open(sys.argv[1]))[\"test\"][\"T2\"][\"esito\"] == \"dimostrato\" and json.load(open(sys.argv[2]))[\"T1\"][\"vittima\"][\"test_id\"].endswith(\"::test_vittima\")" "$TRUN2/test-red/rossi.json" "$TRUN2/test-red/correzioni.json"' "$(se1 h2)"
+{ cat "$T/s2-old.py"; for x in b c d; do printf '\n\ndef test_vittima_%s():\n    assert Conf.soglia == 1\n' "$x"; done; } > "$T/s2-old4.py"
+sed 's/^def test_uno():$/def test_uno(monkeypatch):/; s/^    Conf.soglia = 5$/    monkeypatch.setattr(Conf, "soglia", 5)/' "$T/s2-old4.py" > "$T/s2-new4.py"
+s2k h3 "^PHASE RESULT implement: STOP — nessuna vittima di T1 .*più di 3 candidati" "S2 D3 (b): 4 candidati, i primi 3 rossi anche da soli → STOP d_victim (al più 3)" S2_CP_v1=rosso S2_CP_v2=rosso S2_CP_v3=rosso "S2_RED_CMD=${S2_RED/s2-old.py/s2-old4.py}" "S2_IMPL_CMD=${S2_IMPL/s2-new.py/s2-new4.py}"
+check "  (h3: tre lanci singoli, il quarto candidato mai)" 'grep -q "^v3 " "$T/h3.cp-s2" && ! grep -q "^v4 " "$T/h3.cp-s2"'
+s2k h4 "^PHASE RESULT implement: STOP — albero di prova non usabile" "S2: dipendenze diverse dal tree principale (requirements.txt nuovo, in file_dipendenze) → STOP d_tree" "MAAT_CONFIG=$T/cfg-s2d.json" "S2_XFILES=- \`modules/api/requirements.txt\` (nuovo)" -- "" "" 'printf "x\n" > "$FIC_REPO/modules/api/requirements.txt"'
+s2k h5 "^PHASE RESULT implement: STOP — test corretto accettato ma impronta non registrabile" "S2: approvazione STALE alla riregistrazione → STOP not_recorded" X=1 -- "" "" 'sed -i "s/^1\. RF1 — il messaggio\.$/1. RF1 — il messaggio cambiato./" "$TSP2"'
+s2k h6 "^PHASE RESULT implement: STOP — deviazione test-difettoso di T1: giudice incompleto" "S2 D7: il giudice riceve una riga trasformazione: diversa da quella calcolata → STOP" X=1 -- "" altra-tr
+rm -f "$FIC_REPO/modules/api/app/fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtp.py" "$FIC_REPO/modules/api/tests/test_fmtq.py" "$FIC_REPO/modules/api/requirements.txt"
+rm -rf "$FIC_REPO/modules/web" "$FIC_LOCK"
 export MAAT_CONFIG="$T/cfg-nativo.json"
 
 # 15. 1.9.0 K8 (S4), negative end to end: the proof is invalidated after the review, seen by the driver. A tracked file
