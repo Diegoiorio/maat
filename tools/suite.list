@@ -36,5 +36,6 @@ tools/esempi-equiv.test.sh
 tools/oracolo.test.sh
 cycle-state
 run-phase
+run-phase-s2
 driver
 driver-esiti

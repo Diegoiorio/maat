@@ -219,6 +219,7 @@ done («The parallel run», last point).
 | `tools/oracolo.test.sh`, the oracle on the whole corpus | about 70 minutes (1.5.0) | about 6 minutes |
 | `plugins/maat/scripts/driver.test.sh` (1.6.0) | about 7 minutes (409 s) on the CI runner; 1.8.0, sections 1–13: about 24 minutes (1424 s) | about 1–1.5 minutes (59–85 s); 1.8.0: 272 s |
 | `plugins/maat/scripts/driver-esiti.test.sh` (1.8.0: sections 14 and later of the driver, split off because the whole file passed the 1800 s limit of a suite on the Windows runner) | not measured alone yet | 49 s |
+| `plugins/maat/scripts/run-phase-s2.test.sh` (1.9.0: sections 13–15 of run-phase, split off because the whole file passed the 2800 s limit of a suite on the Windows runner) | about 64 minutes on the local machine | about 10 minutes (571 s) in WSL |
 
 The corpus has 65 specs, almost one per row of the table plus the mothers and rings of the chains: it is kept whole,
 not trimmed for speed. That is why the full run sends `tools/oracolo.test.sh` to WSL in its Windows part too, and why
@@ -238,8 +239,8 @@ refuses (exit 2) a groups file that does not cover `suite.list` exactly (an entr
 in the list) or that has not exactly the groups 1..n. A new suite goes into both files; to rebalance, move a line
 using the times of the last `riepilogo.txt`. `tools/esempi-equiv.test.sh`, the one that reads `MAAT_ATTESE_RICHIESTE`,
 is in group 4. Since 1.6.0 the same groups run on macOS (five since 1.8.0, balanced on the times of its first CI), and Windows has its own groups file,
-`tools/suite-gruppi-windows.list` (seven groups since 1.8.0, balanced on the times of the CI runner, and lines `- <entry> <reason>`
-for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/7
+`tools/suite-gruppi-windows.list` (seven groups since 1.8.0, eight since 1.9.0, balanced on the times of the CI runner, and lines `- <entry> <reason>`
+for what is left out there), read with `bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list --gruppo <k>/8
 <folder>`; a line `<group> VAR=value <entry>` runs that suite with the variable. The longest group, since 1.8.0, is
 about 10 minutes on Linux (1.6.0: three groups, not rebalanced after block C, the longest job about 12 minutes).
 
@@ -288,7 +289,7 @@ with the bash engine.
 
 `.github/workflows/ci.yml` runs at every push and pull request on GitHub, and by hand (`workflow_dispatch`). Since
 1.6.0 on three platforms, every job of every platform at the same time: Linux and macOS run the five groups of
-`tools/suite-gruppi.list`, Windows the seven of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
+`tools/suite-gruppi.list`, Windows the eight of `tools/suite-gruppi-windows.list`. The final jobs `linux`, `macos` and
 `windows` are green only if all the groups of their platform are, and **`ci`** only if all three are: `ci` is the
 check to require on `main`. `concurrency`: on a branch a new push stops the run of the same event and branch still
 going; on `main` and on tags every commit has its own run, never cancelled. Limits per job (about 1.5 × the longest

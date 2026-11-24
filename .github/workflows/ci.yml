@@ -180,15 +180,18 @@ jobs:
     # driver alone (1424 s, ~25 min with the setup); the limit stays.
     # 1.8.1: run-phase alone in group 2 took 1684 s on 1.8.0 (main) and passed the 1800 s limit with the 22 cases of
     # 1.8.1 (TIMEOUT, no red case; Linux 384 s, macOS 707 s): limits = 1.5 x ~1850 s -> suite 2800, group 3000, job 55.
-    timeout-minutes: 55
+    # 1.9.0: run-phase with the 1.9.0 sections passed 2800 s (TIMEOUT, group 2): sections 13-15 went to run-phase-s2,
+    # alone in an eighth group (tools/suite-gruppi-windows.list). run-phase (sections 1-12) took up to 2082 s on main
+    # (1.8.2): limits = 1.5 x ~2100 s -> suite 3300, group 3600 (= job - 300 s), job 65.
+    timeout-minutes: 65
     # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux)
     env:
-      MAAT_SUITE_TIMEOUT: "2800"
-      MAAT_GRUPPO_TIMEOUT: "3000"
+      MAAT_SUITE_TIMEOUT: "3300"
+      MAAT_GRUPPO_TIMEOUT: "3600"
     strategy:
       fail-fast: false
       matrix:
-        gruppo: [1, 2, 3, 4, 5, 6, 7]
+        gruppo: [1, 2, 3, 4, 5, 6, 7, 8]
     defaults:
       run:
         shell: bash
