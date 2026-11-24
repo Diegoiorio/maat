@@ -62,6 +62,7 @@ ECC=(
   "scripts/context-pack.sh	^SKIP = \\{	cartelle che il pacchetto di contesto non visita: lo stesso elenco del nucleo"
   "scripts/plan-check.sh	^SKIP = \\{	cartelle che plan-check.sh non visita: lo stesso elenco del nucleo"
   "scripts/maat-config.py	$NUCLEO_DIR	cartelle che il lettore salta (SALTA_DIR, ESCLUSE_ACCANTO): lo stesso elenco del nucleo"
+  "scripts/maat-doctor.sh	^BUILD_USCITE = \\(	1.9.0 K8: cartelle d'uscita tipiche di un build (dist, .output, .nuxt, build, target) che git deve ignorare (maat-doctor-190.build_untracked)"
 )
 
 # The catalog sections of the files excluded by name (1.4.0: their messages moved to lib/messages.tsv) are excluded with

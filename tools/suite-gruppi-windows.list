@@ -10,6 +10,7 @@
 # 1.8.0 (CI of the merged tree): the driver grew past the per-suite limit (TIMEOUT driver dopo 1800 s); its 1.8.0
 # sections went to driver-esiti (driver.test.sh 207 cases + driver-esiti 126 = the 333 of before; on Linux 272 s + 49 s).
 # The driver keeps its group (its sections 1-13 are the 1424 s measured before B8-B13); driver-esiti goes to group 7.
+# 1.9.0 (CI): eight groups; run-phase-s2 (the 1.9.0 sections of run-phase, split off) alone in group 8.
 # Locally the same set: bash tools/suite.sh --gruppi tools/suite-gruppi-windows.list <results dir> (from Git Bash).
 
 # left out on Windows
@@ -22,8 +23,13 @@
 # group 1: the driver (1424 s)
 1 driver
 
-# group 2: run-phase (1093 s; 1684 s on the CI of 1.8.0 main; over 1800 s with 1.8.1: the Windows limits rose, ci.yml)
+# group 2: run-phase (1093 s; 1684 s on the CI of 1.8.0 main; over 1800 s with 1.8.1: the Windows limits rose, ci.yml;
+# 1345-2082 s on 1.8.2 main; over 2800 s with the 1.9.0 sections, which went to run-phase-s2, group 8)
 2 run-phase
+
+# group 8 (1.9.0): run-phase-s2, the sections 13-15 of run-phase (K6a, K6b, K8), split off: the whole run-phase passed
+# 2800 s on the CI of 1.9.0 (TIMEOUT); the 1.9.0 sections alone took about 64 minutes on the local machine, ~1300 s on the runner (estimated: three times faster)
+8 run-phase-s2
 
 # group 3: the expected outputs of the public corpus (1050 s)
 3 tools/esempi-equiv.test.sh

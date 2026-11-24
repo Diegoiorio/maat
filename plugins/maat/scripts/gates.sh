@@ -10,7 +10,9 @@
 #
 # ROUTING: each file goes to the module of `maat_modulo_di` — «radice» (counts for the module's tests, checks, lint
 # and build) or «pacchetti» (under radice_pacchetti but outside the radice: lint and build only). A file outside every
-# module is covered by no gate: the line «non coperto: …» says so.
+# module is covered by no gate: the line «non coperto: …» says so. 1.9.0 (K8): with the build at closing on
+# (maat-config.py opzione build_chiusura) and level std, full or legacy, the build gate of a module takes the files
+# under its radice or radice_pacchetti whatever their routing, and the files outside every module (as gate-richiesti).
 #
 # GATES — those of `maat_gate_richiesti <level>` (section `gate` of maat.json), one JSON file each:
 #   tests-<module>      comandi.test on the tests that regola_test (accanto, specchio, nessuna) selects for the files of the
@@ -165,6 +167,27 @@ for f in ${FILES[@]+"${FILES[@]}"}; do
   esac
 done
 righe() { printf '%s' "${1:-}" | grep -v '^$'; }
+# 1.9.0 (K8, S4 point 2): with the build at closing on (maat-config.py opzione build_chiusura, the reader that
+# gate-richiesti uses too) and a level other than min, the files of a module's build gate are the touched files under
+# its radice or radice_pacchetti, independent of the routing above, plus those outside every module: so a file of a
+# shared package declared as a module of its own does not leave the frontend's build SKIPPED «nessun file». Without
+# any file every declaring module builds (interface (c)): the build command takes no file, «.» stands for the whole
+# repository. An unreadable switch: on, and its AVVISO line goes on the output (log/<label>.gates). Off or min: 1.8.
+BUILD_CHIUSURA=0 BUILD_AVVISI=""
+if [ "$level" != min ]; then
+  BUILD_CHIUSURA=$(lettore opzione build_chiusura 2>"$TMPD/opzione" | tr -d '\r')
+  BUILD_AVVISI=$(tr -d '\r' < "$TMPD/opzione" | grep '^AVVISO: ')
+  [ "$BUILD_CHIUSURA" = 0 ] || BUILD_CHIUSURA=1   # unreadable: on (the safe side)
+fi
+sotto_di() { [ -z "$2" ] || [ "$1" = "$2" ] || [ "${1#"$2"/}" != "$1" ]; }   # <file> <folder>
+file_build() { # <module>: one file per line
+  local f u x
+  if [ ${#FILES[@]} -eq 0 ]; then echo .; return; fi   # BUILD-SENZA-FILE-190
+  for f in ${FILES[@]+"${FILES[@]}"}; do
+    u=0; for x in ${UNCOV[@]+"${UNCOV[@]}"}; do [ "$x" = "$f" ] && u=1; done
+    if [ $u = 1 ] || sotto_di "$f" "${M_RAD[$1]}" || sotto_di "$f" "${M_PAC[$1]}"; then printf '%s\n' "$f"; fi
+  done
+}
 
 # --- the gates of the level and their commands ---
 gl=$(maat_gate_richiesti "$level" ${FILES[@]+"${FILES[@]}"} 2>"$TMPD/err" | tr -d '\r') || blocca "gate-richiesti: $(reader_err)"
@@ -272,6 +295,9 @@ while IFS=$'\t' read -r g m tipo; do
         *) BLKWHY[$g]="$(msg gates.checks_unresolved m="$m" rc="$rc" err="$C_ERR")" ;;
       esac ;;
     lint|build)
+      if [ "$tipo" = build ] && [ "$BUILD_CHIUSURA" = 1 ]; then   # BUILD-INSTRADA-190
+        mapfile -t af < <(file_build "$m")
+      fi
       GFILES[$g]=$(printf '%s\n' ${af[@]+"${af[@]}"})
       if [ ${#af[@]} -eq 0 ]; then SKIPWHY[$g]="$(msg gates.no_file_under root="${M_PACS[$m]}")"; continue; fi
       a=()
@@ -426,6 +452,7 @@ if [ "$after" != "$TREE" ]; then
 fi
 for g in ${GATES[@]+"${GATES[@]}"}; do py riga "$WEV" "$g" "$(cat "$EV/.$g.stato" 2>/dev/null)"; rm -f "$EV/.$g.stato"; done
 [ ${#UNCOV[@]} -eq 0 ] || echo "$(msg gates.uncovered files="${UNCOV[*]}")"
+[ -z "$BUILD_AVVISI" ] || printf '%s\n' "$BUILD_AVVISI"   # BUILD-AVVISO-190
 tot=$(py totale "$WEV" ${GATES[@]+"${GATES[@]}"})
 echo "gates: esito=$tot chiave=$KEY evidence=$WEV"
 case ${tot%% *} in PASS|SKIPPED) exit 0 ;; FAIL) exit 1 ;; *) exit 3 ;; esac

@@ -170,7 +170,32 @@ scripts/run-phase.sh	Deviazione: STOP — |\.deviazioni-test|deviazioni-accettat
 scripts/driver.py	[Dd]ecisione non verificata da script|DECISIONE NON VERIFICATA \(driver\): |Out of scope\|Fuori ambito\|Constraints\|Vincoli|Scheletro: SOPRA IL TETTO	B10: il token «decisione non verificata da script» (uguale in ogni lingua: lo STOP, la riga di driver.log letta da cycle-report.py, la riga del prompt della review), le intestazioni della spec lette dal controllo di scope e la riga di plan-check.sh skeleton riletta per il tipo cut
 scripts/cycle-report.py	Decisione non verificata da script: 	B10: lettura della riga di driver.log scritta dal driver
 scripts/plan-check.sh	^"(decisione|affermazione|atteso|riga)"$	B10/B11: chiavi dell'oggetto «sonda» di rossi.json (decisione, affermazione, testo atteso, riga), lette dal driver per il prompt della review
+# --- 1.9.0 (K1): plan-check.sh esiti, corretto, deviazione --famiglia test-difettoso (S2)
+scripts/plan-check.sh	patch-non-ripristinata|stato-condiviso	1.9.0 K1: nomi di classe di test-difettoso (token di --classe, della riga «trasformazione: <classe>/<runner> — <forma>» di corretto e di «Defect class:», letti da run-phase.sh: uguali in ogni lingua)
+scripts/plan-check.sh	rossi\.json	1.9.0 K1: nome del file del run dir test-red/rossi.json da cui corretto legge il nome di Tn (nei motivi di uscita 3 e di d_outside)
+# --- 1.9.0 (K6a): run-phase.sh, the common parts of S2
+scripts/run-phase.sh	--tutti|test-difettoso|ciclo\.correzione_test|\.deviazioni-impl|Deviazione accettata: 	1.9.0 K6a: l'opzione --tutti del giudice (DEV_PY), il prefisso della famiglia, la chiave di maat.json, il file del run dir log/<label>.deviazioni-impl (letto da classifica) e la riga di driver.log scritta dal driver (K4): token uguali in ogni lingua
+# --- 1.9.0 (K6b): run-phase.sh, the proofs of S2
+scripts/run-phase.sh	--vecchio|--nuovo|--classe|--dal-post|"controprova"|stato-condiviso|patch-non-ripristinata|Deviazione: ACCETTATA	1.9.0 K6b: le opzioni di plan-check.sh corretto e diff-test, la chiave controprova di maat.json, i nomi di classe di test-difettoso e la riga ACCETTATA di plan-check.sh deviazione: token uguali in ogni lingua
+# --- 1.9.0 (K6c): run-phase.sh, the reason of d_proof when plan-check.sh deviazione exits without a line
+scripts/run-phase.sh	plan-check deviazione exit 	1.9.0 K6c: nome del comando plan-check.sh deviazione nel motivo di d_proof («… (plan-check deviazione exit <rc>)», atteso da run-phase.test.sh): token uguali in ogni lingua
 # --- 13. 1.8.1 (G2-3): literals read by other code that the anti-leak scanner does not flag (only the weak word
 # «uso»), so they cannot be entries of their own (messages.test.sh refuses an entry without lines). Frozen all the
 # same: do not translate. scripts/driver.py LIMITE_USO_RIGA "Limite d'uso: " (prefix of a driver.log line);
 # scripts/cycle-report.py LIMITE_USO "limite d'uso" (name of a stop cause in metrics.csv, D7).
+
+# --- 1.9.0 (K): the switches of 1.9 (K2: ciclo.correzione_test, maat-config.py opzione, S14; K8: ciclo.build_chiusura)
+scripts/maat-config.py	^"(ciclo\.|correzione_test|build_chiusura|opzione)"$|^"ciclo\.correzione_test or ciclo\.build_chiusura => harness >=1\.9 or newer; a boolean"$	1.9.0 K2: chiavi di maat.json ciclo.correzione_test e ciclo.build_chiusura (S14), il comando opzione e la descrizione di S14 nella tabella SEMANTICA (documentazione): uguali in ogni lingua
+scripts/maat-doctor.sh	^"(ciclo|correzione_test)"$	1.9.0 K2: la chiave ciclo.correzione_test di maat.json letta per la riga default_on
+scripts/guard.py	^"li scrivono run-phase\.sh e plan-check\.sh[^"]*"$	1.9.0 K2 (review): già bilingue, tabella MSG it/en: terza parte della voce file_driver (i file del driver nella cartella del run)
+# --- 1.9.0 (K3): literals read by other code that the anti-leak scanner does not flag (a single token), so they
+# cannot be entries of their own (an entry without lines is refused). Frozen all the same: do not translate.
+# scripts/counterproof.sh: the option --senza-mutazione, the keys "senza_mutazione", "intero", "casi", "casi_completo"
+# of <id>.json (and "intero" of mutations.json), its "esito" values verde, rosso, rosso_import, rosso_raccolta, bloccato,
+# non_eseguita and the case outcomes verde, rosso, saltato (read by run-phase.sh, K6b);
+# scripts/worktree-lib.sh: the marker and name prefix fic-prova (fic-prova-<label>-<time>), the line type prepamb of
+# wt_conf and the values of WT_PROVA_ESITO (nostro, collegamenti, git), read by replay.sh.
+
+# --- 1.9.0 (K4): the class of a defective-test correction and its register, the report per family
+scripts/driver.py	\.deviazioni-impl|Deviazione accettata: |^"(deviazione-impl|test-difettoso|test-difettoso: )"$	K4: file del run dir scritto da run-phase.sh (log/<label>.deviazioni-impl), regola di classifica, famiglia e prefisso della riga di driver.log letta da run-phase.sh e cycle-report.py: token, uguali in ogni lingua
+scripts/cycle-report.py	\.deviazioni-(test|impl)| Deviazione accettata: |^"(deviazioni|ciclo|correzione_test|deviazioni_accettate|correzione_test_default|test-difettoso|test-difettoso: |dati-test: )"$	K4: file del run dir e chiavi di result.json e di maat.json lette, chiavi e nomi di famiglia del JSON del rapporto (D7)

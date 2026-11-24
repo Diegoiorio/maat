@@ -341,7 +341,11 @@ def _json_rule(p):
         # (written by run-phase.sh after the judge, on verified input) accepts it; cmd_valida does not change
         acc = _accettate(p[:-len(".result.json")] + ".deviazioni-test") \
             if d.get("fase") == "test-red" and p.endswith(".result.json") else set()
-        if [x for x in dev if not x.startswith(DIFENSIVA) and not (x.startswith(TEST_DATA) and x in acc)]:  # JSON-RULE-TEST-DATA
+        # 1.9.0 (K4): in implement/fix the same for a defective-test deviation accepted in log/<label>.deviazioni-impl
+        acc_i = _accettate(p[:-len(".result.json")] + ".deviazioni-impl") \
+            if d.get("fase") in FASI_IMPL and p.endswith(".result.json") else set()
+        dev_i = [x for x in dev if not (x.startswith(TEST_DIFETTOSO) and x in acc_i)]  # JSON-RULE-IMPL
+        if [x for x in dev_i if not x.startswith(DIFENSIVA) and not (x.startswith(TEST_DATA) and x in acc)]:  # JSON-RULE-TEST-DATA
             s = "STOP|" + T("cycle-state.json_dev", n=len(dev), devs=one("; ".join(dev)))
         elif bs.lower() not in NESSUNO:
             s = "STOP|" + T("cycle-state.json_blocked") + bs
@@ -1049,7 +1053,13 @@ CLASSI = ("OK", "OK-DEVIAZIONE", "RIPRENDIBILE", "UMANO", "TECNICO")
 # texts of the not valid decisions that are a claim about the code (_declassabile), the only ones a .ripresa declassifies
 Classe = collections.namedtuple("Classe", "classe regola causa prova decisioni declassate", defaults=((), ()))
 TEST_DATA = ("test-data: ", "dati-test: ")
-FASI_VALIDA = ("plan", "test-red", "implement", "review", "fix")   # the phases whose outcome passes through `valida`
+# 1.9.0 (K4): the family of a defective acceptance test corrected with proof in implement/fix (run-phase.sh verifies it
+# and writes log/<label>.deviazioni-impl); the prefix is the same in every language of the catalog, like test-data
+TEST_DIFETTOSO = ("test-difettoso: ", "defective-test: ")
+FAMIGLIA_DIFETTOSO = "test-difettoso"   # token of the «Deviazione accettata:» line of driver.log, every language
+FASI_IMPL = ("implement", "fix")
+DEV_ACCETTATA_RIGA = "Deviazione accettata: "   # prefix of the driver.log line (K0.6), every language
+FASI_VALIDA =("plan", "test-red", "implement", "review", "fix")   # the phases whose outcome passes through `valida`
 FASI_RIPRESA = ("plan", "test-red")   # (d): the only phases with a resume procedure
 TIPI_DECISIONE = {"cut": "cut", "taglio": "cut", "budget": "budget", "scope": "scope", "ambito": "scope",
                   "proof": "proof", "prova": "proof", "recurrence": "recurrence", "ricorrenza": "recurrence",
@@ -1390,6 +1400,27 @@ def _accettate(p):
     return acc
 
 
+def righe_dev_impl(run_fs, label):
+    """1.9.0 (K4, K0.6): the driver.log lines of the defective-test deviations accepted in log/<label>.deviazioni-impl,
+    «Deviazione accettata: <label> · test-difettoso · <Tn> · sha=<sha256[:12] of the file>», one per accepted deviation
+    in the order of the file; [] without the file"""
+    p = os.path.join(run_fs, "log", label + ".deviazioni-impl")
+    try:
+        with open(p, "rb") as fh:
+            b = fh.read()
+    except OSError:
+        return []
+    sha, acc, out = hashlib.sha256(b).hexdigest()[:12], _accettate(p), []
+    for l in b.decode("utf-8", "replace").replace("\r", "").split("\n"):
+        t = " ".join(l.split("\t")[0].split())
+        if t in acc and t.startswith(TEST_DIFETTOSO):
+            tn = t.split(": ", 1)[1].split(" — ", 1)[0].strip()
+            r = "%s%s · %s · %s · sha=%s" % (DEV_ACCETTATA_RIGA, label, FAMIGLIA_DIFETTOSO, tn, sha)
+            if r not in out:
+                out.append(r)
+    return out
+
+
 def errore_api(run_fs, label):
     """(1.8.1, G2-3) the API error of the sub-session: the LAST event `type == "result"` of log/<label>.jsonl, when it
     has `api_error_status` or `api_error`, as {"limite": usage limit?, "e": api_error, "s": status, "msg": result text};
@@ -1459,6 +1490,9 @@ def classifica(fase, run_fs, label, spec_fs):
     devs = [one(x) for x in (obj or {}).get("deviazioni") or [] if str(x).strip()]
     td = [d for d in devs if d.startswith(TEST_DATA)]
     altre = [d for d in devs if not d.startswith(DIFENSIVA) and not d.startswith(TEST_DATA)]
+    # 1.9.0 (K4): implement/fix, the defective-test family and the deviations that are neither difensiva nor of it
+    tdi = [d for d in devs if d.startswith(TEST_DIFETTOSO)] if fase in FASI_IMPL else []
+    altre_i = [d for d in devs if not d.startswith(DIFENSIVA) and not d.startswith(TEST_DIFETTOSO)]
     stato, decs = _stato_piano(spec_fs) if fase == "plan" else ("", [])
     nhd = stato.startswith("NEEDS HUMAN DECISION")
     # B10: every decision of a valid form also passes the check of its type; the not valid ones (form or check), with
@@ -1520,6 +1554,14 @@ def classifica(fase, run_fs, label, spec_fs):
                               rel(".deviazioni-test"))
             return Classe("UMANO", "deviazione-test", T("driver-180.c_dev_not_accepted", d="; ".join(fuori or td)[:300]),
                           rel(".result.json"))
+        if tdi:   # 1.9.0 (K4): every non-difensiva deviation of the family, every one accepted by script and judge
+            acc = _accettate(log(".deviazioni-impl"))
+            fuori = [d for d in tdi if d not in acc]
+            if not fuori and not altre_i and obj.get("esito") == "OK" and one(obj.get("bloccato_su")).lower() in NESSUNO:
+                return Classe("OK-DEVIAZIONE", "deviazione-impl", T("driver-190.c_ok_dev_impl", n=len(tdi)),
+                              rel(".deviazioni-impl"))  # OK-DEVIAZIONE-IMPL
+            return Classe("UMANO", "deviazione-impl", T("driver-190.c_dev_impl", d="; ".join(fuori or altre_i)[:300]),
+                          rel(".result.json"))
         jr = _json_rule(rj) if obj is not None else "OK|"
         if not jr.startswith("OK|"):   # an OK line that its result.json does not hold (fail-closed)
             return Classe("UMANO", "json", jr.split("|", 1)[-1] or esito[:300], rel(".result.json"))
@@ -1554,6 +1596,8 @@ def classifica(fase, run_fs, label, spec_fs):
             return Classe("RIPRENDIBILE", "aperti", T("driver-180.c_open", ids=", ".join(ap)), rel(".jsonl"))
     if fase == "test-red" and td:   # a STOP whose test-data deviations were all accepted: the phase's own cause
         return Classe("UMANO", "deviazione-test", esito[:300], rel(".result.json"))
+    if tdi:   # 1.9.0 (K4): a STOP with a defective-test deviation (run-phase did not accept it): the cause of the .esito
+        return Classe("UMANO", "deviazione-impl", esito[:300], rel(".result.json"))
     return Classe("UMANO", "stop", esito[:300], rel(".esito"))
 
 
@@ -2662,6 +2706,13 @@ def cmd_run(argv):
                 ev("%s%s · %s · %s" % (LIMITE_USO_RIGA, label, a["e"], a["s"]))  # RIGA-LIMITE-USO
             causa = causa_api(a) + (" · " + t if t else "") if a else t or T("driver-181.stderr_empty")
             return fine("STOP", "run-phase exit %d (%s): %s" % (prc, why, causa), 1)
+        if fase in FASI_IMPL and re.match(RIGA_OK, esito):
+            # 1.9.0 (K4, K0.6): an accepted defective-test correction is registered in driver.log, whatever ciclo.riprese:
+            # the count of one correction per test per cycle (run-phase.sh) reads these lines too
+            ci = classifica(fase, run_fs, label, spec_fs)
+            if ci.classe == "OK-DEVIAZIONE" and ci.regola == "deviazione-impl":
+                for r in righe_dev_impl(run_fs, label):  # RIGA-DEVIAZIONE-ACCETTATA
+                    ev(r)
         if rmax > 0 and re.match(RIGA_OK, esito):
             # B9 review: classifica after an OK line too (a plan OK on a DRAFT spec is UMANO, not the uncounted DRAFT ->
             # PLAN row of 1.7); OK and OK-DEVIAZIONE go on, TECNICO goes on to the checks of 1.7 below

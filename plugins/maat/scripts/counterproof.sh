@@ -2,7 +2,7 @@
 # counterproof.sh — the counterproofs of a review, run ONLY in the local copy (mirror), never in the working tree.
 #
 # Usage:
-#   PROJECT_ROOT=<repo> bash <plugin>/scripts/counterproof.sh <run-dir>/counterproof/mutations.json
+#   PROJECT_ROOT=<repo> bash <plugin>/scripts/counterproof.sh [--senza-mutazione] <run-dir>/counterproof/mutations.json
 # Launched by run_cp in run-phase.sh: inside WSL (/mnt/… paths, PROJECT_ROOT and MAAT_CONFIG translated) only on Windows
 # and with an `ambiente: wsl` module among those of the mutations; otherwise directly.
 # Project root: PROJECT_ROOT, otherwise FIC_REPO, otherwise the git toplevel of the working directory
@@ -23,6 +23,26 @@
 #     "assorbita": true, "motivo": "…"                      optional (L2, harness-pt11): written by
 #                                                           `plan-check.sh gen` after the test-red phase
 #   }
+# - 1.9.0 (K3) --senza-mutazione (the proofs of a defective-test deviation, run-phase.sh): every entry is WITHOUT
+#   "mutazione" (key absent or null) and without rosso_se.asserzione: "id", "file" (= test.percorso), "simbolo" (the
+#   test launched, optional), "test" {percorso, nome}, "rosso_se" {test_id}. Without the option an entry without a
+#   mutation -> exit 64 (counterproof-190.senza_mutazione); with the option an entry with one -> exit 64 (no mixed
+#   lists), and "assorbita" true too. Nothing is mutated: the named test alone runs in the copy of PROJECT_ROOT (the
+#   proof worktree, or the tree of the phase) with the vitest/pytest adapters (outcome from the report, never from the
+#   exit alone), with the lock, the sync and the manifest as for a mutation. <id>.json has the fields of today,
+#   "controprova": "-", "senza_mutazione": true, and "esito" one of: verde (the named test ran and passes) · rosso (ran
+#   and failed, on any assertion) · rosso_import · rosso_raccolta · bloccato (runner `comando` or other than
+#   pytest/vitest, no report, time cap) · non_eseguita (module without controprova). Exit: 0 every entry verde or rosso
+#   · 2 at least one other outcome · 3 environment · 5 copy not restored · 64 usage. The caller decides from <id>.json.
+#   An entry with "intero": true (only with the option; test.nome and rosso_se not needed) runs the WHOLE test file,
+#   without a name filter, and <id>.json adds "intero": true, "casi" (every case of the file in the report, in its order:
+#   {"test_id", "nome", "esito": verde|rosso|saltato, "messaggio"}; test_id as the casi of `plan-check.sh esiti`: pytest
+#   <test.percorso>::<classname without the module prefix>::<name>, vitest the full name) and "casi_completo" (the list
+#   holds as many cases as the report declares: pytest the sum of testsuite@tests, vitest numTotalTests, with no
+#   collection error). Its esito: report missing or unreadable, no case, or the list not complete -> bloccato; rosso if
+#   a case is red; the file itself failed (afterAll, a hook, an unhandled error, file status failed; pytest: an error
+#   outside every testcase) or a case skipped -> rosso_raccolta (rosso_import for an import error); verde only if every
+#   case is verde, the count holds and the file did not fail (spec 1.9.0, interface (a), amendment of 23/11).
 # - "assorbita": true (L2: NEW file, red at the base with a proven stub, green afterwards) -> the mutation is NOT
 #   run: <id>.json with outcome "assorbita" (counterproof ASSORBITA, reason), no runner. It does not enter the counts
 #   (prove=<n>/<tot> counts only those run); the last line adds "assorbite=<n>". Absorbed only -> exit 0 without
@@ -166,6 +186,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # JSON keys of mutations.json stay as they are in every language (protocol-strings.list).
 . "$HERE/lib/maat-msg.sh"
 usage() { echo "$(msg counterproof.usage)" >&2; exit 64; }
+NOMUT=0   # 1.9.0 (K3): --senza-mutazione, entries without a mutation run the named test alone
+[ "${1:-}" = --senza-mutazione ] && { NOMUT=1; shift; }
 [ $# -eq 1 ] || usage
 case "$1" in -*) usage ;; esac
 
@@ -312,7 +334,7 @@ def pattern(s):
     # prints it in FAILs ("describe > it") must be brought back to that form, or no test matches (all skipped)
     return re.sub(r"([\\^$.*+?()\[\]{}|/])", r"\\\1", s.replace(" > ", " "))
 
-def prep(mj, root, tmp, out):
+def prep(mj, root, tmp, out, senza="0"):
     mc = lettore()
     try:
         cfg, _p = mc.carica()
@@ -340,20 +362,33 @@ def prep(mj, root, tmp, out):
             die(where + ": " + T("counterproof.dup_id"))
         seen.add(mid)
         f, sym, mut, t, rs = m.get("file"), m.get("simbolo"), m.get("mutazione"), m.get("test"), m.get("rosso_se")
-        if not rel_ok(f):
-            die(where + ": " + T("counterproof.bad_file"))
-        if not isinstance(sym, str) or not sym.strip():
+        nomut = senza == "1"   # 1.9.0 (K3): --senza-mutazione, every entry without a mutation (no mixed lists)
+        if mut is None and not nomut:
+            die(where + ": " + T("counterproof-190.senza_mutazione"))
+        if mut is not None and nomut:
+            die(where + ": " + T("counterproof-190.con_mutazione"))
+        if not rel_ok(f) or (nomut and (not isinstance(t, dict) or f != t.get("percorso"))):
+            die(where + ": " + T("counterproof.bad_file"))   # without a mutation: file = test.percorso
+        if not nomut and (not isinstance(sym, str) or not sym.strip()):
             die(where + ": " + T("counterproof.no_symbol"))
-        if not isinstance(mut, dict) or not isinstance(mut.get("cerca"), str) or not mut["cerca"] or not isinstance(mut.get("sostituisci"), str):
+        if nomut:
+            mut = {"cerca": "", "sostituisci": ""}
+        elif not isinstance(mut, dict) or not isinstance(mut.get("cerca"), str) or not mut["cerca"] or not isinstance(mut.get("sostituisci"), str):
             die(where + ": " + T("counterproof.bad_mutation"))
-        if mut["cerca"] == mut["sostituisci"]:
+        elif mut["cerca"] == mut["sostituisci"]:
             die(where + ": " + T("counterproof.empty_mutation"))
         if not isinstance(t, dict) or not rel_ok(t.get("percorso")):
             die(where + ": " + T("counterproof.bad_test_path"))
         nome = t.get("nome") or ""
         if not isinstance(nome, str):
             die(where + ": " + T("counterproof.bad_test_name"))
-        if not isinstance(rs, dict) or not all(isinstance(rs.get(k), str) and rs[k].strip() for k in ("test_id", "asserzione")):
+        intero = m.get("intero", False)   # 1.9.0 (K3): the whole test file, every case of its report
+        if not isinstance(intero, bool) or (intero and not nomut):
+            die(where + ": " + T("counterproof-190.intero_solo"))
+        if intero:
+            nome, rs = "", {"test_id": ""}   # no name filter, nothing named
+        chiavi = () if intero else ("test_id",) if nomut else ("test_id", "asserzione")   # without a mutation: no assertion
+        if not isinstance(rs, dict) or not all(isinstance(rs.get(k), str) and rs[k].strip() for k in chiavi):
             die(where + ": " + T("counterproof.bad_red_if"))
         tp = t["percorso"]
         df, dt = mc.instrada(r, f), mc.instrada(r, tp)
@@ -364,7 +399,7 @@ def prep(mj, root, tmp, out):
             if not os.path.isfile(os.path.join(root, p)):
                 die(where + ": " + T("counterproof.file_missing_wt") + p)
         ab = m.get("assorbita", False)
-        if not isinstance(ab, bool) or not isinstance(m.get("motivo", ""), str):
+        if not isinstance(ab, bool) or not isinstance(m.get("motivo", ""), str) or (ab and nomut):
             die(where + ": " + T("counterproof.bad_absorbed"))
         if ab:  # L2 (harness-pt11): not run, the result is written below
             absorbed.append(m)
@@ -374,9 +409,10 @@ def prep(mj, root, tmp, out):
             why = T("counterproof.module_no_cp", mod=mod["nome"]) if not cp else T("counterproof.module_no_cmd", mod=mod["nome"])
             notrun.append((m, cp.get("runner"), why))
             continue
-        key = json.dumps([f, sym, mut["cerca"], mut["sostituisci"], tp, nome, rs["test_id"], rs["asserzione"]])
+        key = json.dumps([f, sym, mut["cerca"], mut["sostituisci"], tp, nome, rs["test_id"], rs.get("asserzione"), nomut, intero])
         if key not in groups:
-            groups[key] = {"entries": [], "runner": cp["runner"], "modulo": mod["nome"]}
+            groups[key] = {"entries": [], "runner": cp["runner"], "modulo": mod["nome"], "file": f, "nomut": nomut,
+                           "intero": intero}
             order.append(key)
         groups[key]["entries"].append(m)
     for mid in seen:
@@ -395,8 +431,10 @@ def prep(mj, root, tmp, out):
     for m, runner, why in notrun:  # NOT-RUN-DICHIARATO
         rec = dict(m)
         rec.update(vuoto)
-        rec.update({"esito": "non_eseguita", "controprova": "NOT RUN", "motivo": T("counterproof.not_run_declared") + why,
-                    "runner": runner, "eseguita_per": [m["id"]]})
+        rec.update({"esito": "non_eseguita", "controprova": "-" if senza == "1" else "NOT RUN",
+                    "motivo": T("counterproof.not_run_declared") + why, "runner": runner, "eseguita_per": [m["id"]]})
+        if senza == "1":
+            rec["senza_mutazione"] = True
         wjson_out(out, rec)
     usati = [x for x in r["moduli"] if any(groups[k]["modulo"] == x["nome"] for k in order)]
     con_copia = [x["nome"] for x in usati if x.get("copia")]
@@ -460,7 +498,7 @@ def prep(mj, root, tmp, out):
             json.dump(g["entries"], fh, ensure_ascii=False)
         tp = m["test"]["percorso"]
         trel = tp[len(radp):]
-        nome = m["test"].get("nome") or m["rosso_se"]["test_id"]
+        nome = "" if g["intero"] else m["test"].get("nome") or m["rosso_se"]["test_id"]   # whole file: no filter
         runner = g["runner"]
         if runner == "vitest":
             val = {"test": [trel], "nome": pattern(nome)}
@@ -474,9 +512,11 @@ def prep(mj, root, tmp, out):
         val["maat"] = (os.environ.get("MAAT_ROOT") or mc.PLUGIN).replace("\\", "/")
         wtxt(os.path.join(d, "runner"), runner)
         wtxt(os.path.join(d, "modulo"), g["modulo"])
-        wtxt(os.path.join(d, "file"), m["file"])
-        wtxt(os.path.join(d, "cerca"), m["mutazione"]["cerca"])
-        wtxt(os.path.join(d, "sost"), m["mutazione"]["sostituisci"])
+        wtxt(os.path.join(d, "file"), g["file"])
+        wtxt(os.path.join(d, "nomut"), "1" if g["nomut"] else "")   # 1.9.0 (K3): nothing to mutate
+        wtxt(os.path.join(d, "intero"), "1" if g["intero"] else "")   # 1.9.0 (K3): the whole file, every case
+        wtxt(os.path.join(d, "cerca"), "" if g["nomut"] else m["mutazione"]["cerca"])
+        wtxt(os.path.join(d, "sost"), "" if g["nomut"] else m["mutazione"]["sostituisci"])
         wtxt(os.path.join(d, "tpath"), tp)
         wtxt(os.path.join(d, "trel"), trel)
         wtxt(os.path.join(d, "radp"), radp)
@@ -585,10 +625,13 @@ def classify_vitest(report, trel, tid, asserz):
     return "rosso_raccolta", T("counterproof.not_run_named"), ""
 
 def red(msg, asserz, imp):
-    if norm(asserz) in msg:
+    # asserz None (1.9.0, K3, --senza-mutazione): no expected assertion, a red that is not an import error is «rosso»
+    if asserz is not None and norm(asserz) in msg:
         return "rosso_asserzione", T("counterproof.red_assert"), msg
     if imp.search(msg):
         return "rosso_import", T("counterproof.red_import"), msg
+    if asserz is None:
+        return "rosso", T("counterproof-190.red_any"), msg
     return "rosso_diverso", T("counterproof.red_other"), msg
 
 def suite_red(msg, imp):
@@ -640,6 +683,104 @@ def classify_pytest(report, trel, tid, asserz, rc, radp, seps):
         return "verde", T("counterproof.stays_green"), ""
     return "rosso_raccolta", T("counterproof.not_run_named"), ""
 
+def casi_vitest_file(report, trel):
+    # 1.9.0 (K3 bis): a whole file without a name filter, every case of the JSON report with its outcome;
+    # (esito, motivo, msg, casi, completo). Complete = the report declares numTotalTests and lists as many cases.
+    try:
+        with open(report, encoding="utf-8") as fh:
+            rep = json.load(fh)
+    except Exception:
+        return "bloccato", T("counterproof.no_json_report"), "", [], False
+    files = [r for r in rep.get("testResults", []) if (r.get("name") or "").replace("\\", "/").endswith("/" + trel)]
+    if len(files) != 1:
+        return "rosso_raccolta", T("counterproof.not_collected"), "", [], False
+    fr = files[0]
+    casi = []
+    for a in fr.get("assertionResults", []):
+        st = a.get("status")
+        e = "verde" if st == "passed" else "rosso" if st == "failed" else "saltato"
+        casi.append({"test_id": a.get("fullName") or "", "nome": a.get("title") or "", "esito": e,
+                     "messaggio": norm("\n".join(a.get("failureMessages") or []))[:4000]})
+    fmsg = norm(fr.get("message") or "")
+    if fr.get("status") == "failed" and fmsg and not casi:
+        e, m, msg = suite_red(fmsg, IMPORT_JS)
+        return e, m, msg, casi, False
+    tot = rep.get("numTotalTests")
+    completo = isinstance(tot, int) and tot == len(casi) and len(rep.get("testResults", [])) == 1
+    # the file itself failed (afterAll, a hook, an unhandled error: file status failed, a file message, the run not a
+    # success) while its cases are listed: never green (spec 1.9.0, interface (a), amendment of 23/11)
+    fallito = fr.get("status") == "failed" or bool(fmsg) or rep.get("success") is False \
+        or bool(rep.get("numFailedTestSuites")) or bool(rep.get("numRuntimeErrorTestSuites"))  # FILE-FALLITO
+    return esito_file(casi, completo, (fmsg or "status=%s" % fr.get("status")) if fallito else None, IMPORT_JS)
+
+
+def casi_pytest_file(report, trel, tp, rc):
+    # 1.9.0 (K3 bis): the same from the JUnit report; test_id as plan-check.sh esiti (casi): <test path of the
+    # plan> + "::" + the classname without the module prefix + "::" + name. Complete = the cases of the file are
+    # as many as the report declares (sum of testsuite@tests) and none is a collection error.
+    if rc in (4, 5):
+        return "rosso_raccolta", T("counterproof.pytest_collect", rc=rc), "", [], False
+    try:
+        root = ET.parse(report).getroot()
+    except Exception:
+        return "bloccato", T("counterproof.no_junit_report"), "", [], False
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    try:
+        tot = sum(int(s.get("tests")) for s in suites)
+    except (TypeError, ValueError):
+        tot = None
+    mod = trel[:-3].replace("/", ".") if trel.endswith(".py") else trel.replace("/", ".")
+    casi, coll, altri = [], [], 0
+    for c in root.iter("testcase"):
+        cn, nm = c.get("classname") or "", c.get("name") or ""
+        bad = [e for e in list(c) if e.tag in ("failure", "error")]
+        if not cn:
+            coll += bad
+            continue
+        if cn == mod:
+            rest = ""
+        elif cn.startswith(mod + "."):
+            rest = "::" + cn[len(mod) + 1:].replace(".", "::")
+        else:
+            altri += 1
+            continue
+        e = "rosso" if bad else "saltato" if any(x.tag == "skipped" for x in list(c)) else "verde"
+        casi.append({"test_id": tp + rest + "::" + nm, "nome": nm, "esito": e,
+                     "messaggio": norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in bad))[:4000]})
+    if coll:
+        e, m, msg = suite_red(norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in coll)), IMPORT_PY)
+        return e, m, msg, casi, False
+    # the file itself failed: a <failure>/<error> directly under a testsuite (outside every testcase), or suites that
+    # declare more errors than their testcases carry (spec 1.9.0, interface (a), amendment of 23/11)
+    fuori = [x for su in suites for x in list(su) if x.tag in ("failure", "error")]
+    try:
+        dich = sum(int(su.get("errors") or 0) for su in suites)
+    except ValueError:
+        dich = None
+    con_errore = sum(1 for c in root.iter("testcase") if any(x.tag == "error" for x in list(c)))
+    fallito = None
+    if fuori or dich is None or dich > con_errore:  # FILE-FALLITO
+        fallito = norm("\n".join((x.get("message") or "") + "\n" + (x.text or "") for x in fuori)) or "errors=%s" % dich
+    return esito_file(casi, tot is not None and tot == len(casi) and altri == 0, fallito, IMPORT_PY)
+
+
+def esito_file(casi, completo, fallito=None, imp=None):
+    # whole file: never green without the complete list (bloccato); rosso if a case is red; the file itself failed
+    # (fallito: its message) or a case skipped -> rosso_raccolta (rosso_import for an import error); green only if
+    # every case is green
+    if not casi or not completo:
+        return "bloccato", T("counterproof-190.casi_incompleti", n=len(casi)), "", casi, False
+    rossi = [x for x in casi if x["esito"] == "rosso"]
+    if rossi:
+        return "rosso", T("counterproof-190.file_rosso", n=len(rossi), tot=len(casi)), rossi[0]["messaggio"], casi, True
+    if fallito is not None:
+        e = "rosso_import" if imp is not None and imp.search(fallito) else "rosso_raccolta"
+        return e, T("counterproof-190.file_fallito", m=fallito[:300]), fallito[:4000], casi, True
+    saltati = [x for x in casi if x["esito"] != "verde"]
+    if saltati:
+        return "rosso_raccolta", T("counterproof-190.file_saltati", n=len(saltati), tot=len(casi)), "", casi, True
+    return "verde", T("counterproof-190.file_verde", tot=len(casi)), "", casi, True
+
 def classify_comando(rc):
     # comando runner: no report, only the exit code counts (weak proof)
     if rc != 0:
@@ -652,11 +793,21 @@ def result(d, out, report, rc, ms, log, cmd, why):
         entries = json.load(fh)
     runner, trel, radp = rtxt(os.path.join(d, "runner")), rtxt(os.path.join(d, "trel")), rtxt(os.path.join(d, "radp"))
     m0 = entries[0]
-    tid, asserz = m0["rosso_se"]["test_id"], m0["rosso_se"]["asserzione"]
+    nomut = os.path.exists(os.path.join(d, "nomut")) and rtxt(os.path.join(d, "nomut")) == "1"
+    intero = os.path.exists(os.path.join(d, "intero")) and rtxt(os.path.join(d, "intero")) == "1"
+    casi, completo = [], False
+    rs0 = m0.get("rosso_se") or {}   # a whole file (intero) names no test
+    tid, asserz = rs0.get("test_id", ""), None if nomut else rs0["asserzione"]
+    if nomut and not why and runner not in ("vitest", "pytest"):   # 1.9.0 (K3): no report, no outcome to read
+        why = T("counterproof-190.comando_senza_report")
     if why:
         esito, motivo, msg = "bloccato", why, ""
     elif rc == 124 or rc == 137:
         esito, motivo, msg = "bloccato", T("counterproof.timeout"), ""
+    elif intero and runner == "vitest":   # 1.9.0 (K3): the whole file, every case of the report
+        esito, motivo, msg, casi, completo = casi_vitest_file(report, trel)
+    elif intero and runner == "pytest":
+        esito, motivo, msg, casi, completo = casi_pytest_file(report, trel, rtxt(os.path.join(d, "tpath")), rc)
     elif runner == "vitest":
         esito, motivo, msg = classify_vitest(report, trel, tid, asserz)
     elif runner == "pytest":
@@ -668,6 +819,10 @@ def result(d, out, report, rc, ms, log, cmd, why):
     else:
         esito, motivo, msg = classify_comando(rc)
     cp = {"rosso_asserzione": "PASS", "rosso_generico": "PASS", "bloccato": "BLOCKED"}.get(esito, "FAIL")
+    if nomut:   # 1.9.0 (K3): no counterproof, only the outcome of the named test (the caller reads esito)
+        cp = "-"
+        if esito == "verde":
+            motivo = T("counterproof-190.green_alone")
     try:
         with open(log, encoding="utf-8", errors="replace") as fh:
             tail = [ANSI.sub("", x.rstrip("\n")) for x in fh.readlines()[-60:]]
@@ -682,12 +837,16 @@ def result(d, out, report, rc, ms, log, cmd, why):
             "duplicato_di": None if e["id"] == ids[0] else ids[0], "eseguita_per": ids,
             "messaggio": msg[:4000], "output_coda": tail,
         })
+        if nomut:
+            rec["senza_mutazione"] = True
+        if intero:   # 1.9.0 (K3): every case of the file and whether the list is the whole report
+            rec.update({"intero": True, "casi": casi, "casi_completo": bool(completo)})
         wjson_out(out, rec)
     print(cp, esito, len(ids), ",".join(ids), "--", motivo)
 
 cmd = sys.argv[1]
 if cmd == "prep":
-    prep(*sys.argv[2:6])
+    prep(*sys.argv[2:7])
 elif cmd == "riga":
     riga(*sys.argv[2:4])
 elif cmd == "apply":
@@ -776,8 +935,12 @@ cleanup() {
 CP_FINE=""
 trap '[ -n "$CP_FINE" ] || { CP_FINE=1; exit 143; }' TERM INT HUP
 trap cleanup EXIT
+# 1.9.0 (CI): the program goes into a file in $TMPD, never into `-c` (as plan-check.sh need_py): with the 1.9.0 additions
+# it is over 32k characters and Windows rejects the command line («Argument list too long», exit 64 on Git Bash)
+PYF="$TMPD/counterproof.py"
+printf '%s' "$PY" > "$PYF" || exit 3
 
-info=$("$FIC_PY" -c "$PY" prep "$MJ" "$ROOT" "$TMPD" "$OUT") || exit 64
+info=$("$FIC_PY" "$PYF" prep "$MJ" "$ROOT" "$TMPD" "$OUT" "$NOMUT") || exit 64
 read -r NU NT NA NN <<< "${info//$'\r'/}"
 echo "counterproof: $(msg counterproof.count nt="$NT" nu="$NU"), luogo=mirror"
 ABS=""; [ "${NA:-0}" -gt 0 ] && { ABS=" assorbite=$NA"; echo "counterproof: $(msg counterproof.absorbed na="$NA")"; }
@@ -787,7 +950,10 @@ if [ "${NN:-0}" -gt 0 ]; then
 fi
 if [ "$NU" -eq 0 ]; then   # nothing to run (absorbed or NOT RUN): no lock, no mirror
   E=PASS; [ "${NN:-0}" -gt 0 ] && E="NOT RUN"
-  echo "counterproof: esito=$E prove=0/0 fail=0 bloccate=0 tempo=0s luogo=-$ABS"; exit 0
+  echo "counterproof: esito=$E prove=0/0 fail=0 bloccate=0 tempo=0s luogo=-$ABS"
+  # 1.9.0 (K3): without a mutation an entry non_eseguita is not an outcome of the named test
+  [ "$NOMUT" = 1 ] && [ "${NN:-0}" -gt 0 ] && exit 2
+  exit 0
 fi
 
 blocked() { echo "counterproof: esito=BLOCKED ($1) luogo=-"; exit 3; }
@@ -955,19 +1121,29 @@ run_one() {
   # a Windows interpreter (.exe, launched from WSL) writes the report with a Windows path
   rep="$w/report"
   case "$py" in *.exe) command -v wslpath >/dev/null 2>&1 && rep=$(wslpath -w "$w/report") ;; esac
-  if [ -n "$py" ] && ! py_ok "$py"; then
+  if [ -s "$d/nomut" ] && case "$(cat "$d/runner")" in vitest|pytest) false ;; *) true ;; esac; then
+    why="$(msg counterproof-190.comando_senza_report)"   # 1.9.0 (K3): no report adapter, no outcome to read: not run
+  elif [ -n "$py" ] && ! py_ok "$py"; then
     why="$(msg counterproof.py_missing_run py="$py")"
-  elif ! line=$("$FIC_PY" -c "$PY" riga "$d" "$rep" 2>"$w/log"); then
+  elif ! line=$("$FIC_PY" "$PYF" riga "$d" "$rep" 2>"$w/log"); then
     why="$(msg counterproof.cmd_not_expandable err="$(head -1 "$w/log")")"
   elif line=${line%$'\r'}; [ ! -f "$mf" ]; then
     why="$(msg counterproof.file_missing_mirror f="$f")"
   elif ! mf=$(percorso_reale "$mroot/$f" "$mroot/${M_PAC[$mod]}"); then
     why="$(msg counterproof-180.link_outside f="$f" real="$(realpath -- "$mroot/$f" 2>/dev/null)" root="${M_PAC[$mod]}")"
+  elif [ -s "$d/nomut" ]; then   # 1.9.0 (K3): the named test alone, nothing mutated; the copy checked as after a mutation
+    run_cmd "$d" "$mroot" "$w" "$cache" "$line"
+    rc=$?
+    hashes "$mroot/${M_PAC[$mod]}" "$TMPD/list.$mod" > "$w/now.$mod"
+    if ! cmp -s "$TMPD/base.$mod" "$w/now.$mod"; then
+      echo "counterproof: $(msg counterproof.not_restored mroot="$mroot" mut="$(basename "$d")" f="$f")"; diff "$TMPD/base.$mod" "$w/now.$mod" | head -5
+      return 5
+    fi
   elif mt0=$(modo_tipo "$mf" "$mroot/$f"); ! cp -p "$mf" "$w/bak"; then
     why="$(msg counterproof.backup_failed f="$f")"
   else
     printf '%s' "$mf" > "$w/inflight"   # recorded BEFORE writing: the trap knows what to restore
-    if out=$("$FIC_PY" -c "$PY" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
+    if out=$("$FIC_PY" "$PYF" apply "$mf" "$d/cerca" "$d/sost" 2>&1); then
       run_cmd "$d" "$mroot" "$w" "$cache" "$line"
       rc=$?
     else
@@ -990,7 +1166,7 @@ run_one() {
     fi
   fi
   ms=$(( ($(date +%s%N) - t0) / 1000000 ))
-  line=$("$FIC_PY" -c "$PY" result "$d" "$OUT" "$w/report" "$rc" "$ms" "$w/log" "$CMD" "$why") ||
+  line=$("$FIC_PY" "$PYF" result "$d" "$OUT" "$w/report" "$rc" "$ms" "$w/log" "$CMD" "$why") ||
     { echo "counterproof: $(msg counterproof.result_unwritable out="$OUT")" >&2; return 64; }
   printf '%s\n' "$line" >> "$w/results"
   read -r cp esito _ ids _ <<< "$line"
@@ -1102,10 +1278,15 @@ fi
 TOT_S=$(( ($(date +%s%N) - T_ALL) / 1000000000 ))
 
 NPASS=0; NFAIL=0; NBLOCK=0
-while read -r cp _ n _; do
+while read -r cp es n _; do
   [ -n "${cp:-}" ] || continue
+  if [ "$cp" = - ]; then   # 1.9.0 (K3), --senza-mutazione: verde and rosso are outcomes, every other one is not
+    case "$es" in verde|rosso) NPASS=$((NPASS + n)) ;; *) NBLOCK=$((NBLOCK + n)) ;; esac
+    continue
+  fi
   case "$cp" in PASS) NPASS=$((NPASS + n)) ;; FAIL) NFAIL=$((NFAIL + n)) ;; *) NBLOCK=$((NBLOCK + n)) ;; esac
 done < <(cat "$TMPD/results" "$TMPD"/w*/results 2>/dev/null)
+[ "$NOMUT" = 1 ] && NBLOCK=$((NBLOCK + ${NN:-0}))   # non_eseguita: not an outcome of the named test
 
 # The working tree was never written from here: if it changed, someone else changed it during the
 # counterproofs, and the results apply to the state synced at the start. Declared, not hidden.

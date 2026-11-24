@@ -310,6 +310,42 @@ run-phase-181.round2_kept	second round of the gates not comparable ({why}): the 
 run-phase-181.r2_no_evidence	no evidence, or gates or rossi BLOCKED	nessuna evidenza, o gate o rossi BLOCKED
 run-phase-181.r2_differ	the outcomes of the acceptance tests differ, or a conflict without identity	gli esiti dei test di accettazione sono diversi, o un conflitto senza identità
 
+# 1.9.0 K1: plan-check.sh esiti and corretto (S2, interface (b) of the spec)
+plan-check-190.esiti_usage	usage: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]	uso: {script} esiti <spec> --evidence <dir> --out <file> [--run-dir <dir>]
+plan-check-190.corretto_usage	usage: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>	uso: {script} corretto <spec> <Tn> --classe stato-condiviso/shared-state/patch-non-ripristinata/unrestored-patch --vecchio <file> --nuovo <file> --run-dir <dir>
+
+# 1.9.0 K6a: run-phase.sh, the common parts of S2 (admission, gates before, judge of every call, register)
+run-phase-190.off	{fam} deviation switched off ({k}): STOP as in 1.8	deviazione {fam} spenta ({k}): STOP come in 1.8
+run-phase-190.gates	gates of the phase without evidence or BLOCKED (log/{label}.gates)	gate della fase senza evidenza o BLOCKED (log/{label}.gates)
+run-phase-190.d_proof	no script proof of the class {c} for {tn} ({why})	nessuna prova da script della classe {c} per {tn} ({why})
+run-phase-190.accepted_prompt	deviations accepted by script and judge (test-data, defective test: label, text, verdict): list them in the review section «Accepted test deviations» and judge whether each still leaves the requirement covered	deviazioni accettate da script e giudice (test-data, test difettoso: etichetta, testo, verdetto): elencale nella sezione di review «Deviazioni di test accettate» e giudica se ognuna lascia coperto il requisito
+run-phase-190.note_corrected	- note (corrected test, {label}): {text}	- nota (test corretto, {label}): {text}
+
+# 1.9.0 K6b: run-phase.sh, the proofs of S2 (D1-D8, proof trees, victim, two rounds, judge, re-recording)
+run-phase-190.form	{fam} deviation not in its form: {d}	deviazione {fam} fuori dalla sua forma: {d}
+run-phase-190.d_class	defect class not admitted in 1.9.0 (or for this language), or different from the judge's: {c}	classe del difetto non ammessa in 1.9.0 (o per questo linguaggio), o diversa da quella del giudice: {c}
+run-phase-190.d_once	{tn} already corrected in this cycle ({label})	{tn} già corretto in questo ciclo ({label})
+run-phase-190.d_files	files changed beyond the declared tests (or a conftest/setup/fixture file): {files}	file cambiati oltre i test dichiarati (o un file conftest/setup/fixture): {files}
+run-phase-190.d_outside	{f}: something changed outside the test {tn} (imports, fixtures, module code, other tests), or its body cannot be delimited	{f}: cambiato qualcosa fuori dal test {tn} (import, fixture, codice di modulo, altri test), o il suo corpo non è delimitabile
+run-phase-190.d_skip	the diff adds a skip marker: {m}	il diff aggiunge un marcatore di salto: {m}
+run-phase-190.d_assert	the assertions on the expected texts of {tn} changed, or there are none: {t}	le asserzioni sui testi attesi di {tn} sono cambiate, o non ce ne sono: {t}
+run-phase-190.d_transform	the correction of {tn} is not one transformation of the closed list limited to the test's own state ({why})	la correzione di {tn} non è una trasformazione dell'elenco chiuso limitata allo stato del test ({why})
+run-phase-190.d_on_text	the original {tn} fails on an expected text on the implementation: the code is at fault, not the test	il {tn} originale fallisce su un testo atteso sull'implementazione: è colpa del codice, non del test
+run-phase-190.d_old_load	the original {tn} does not load or is not collected on the implementation	il {tn} originale non si carica o non è raccolto sull'implementazione
+run-phase-190.d_victim	no victim of {tn} in its file: a test red in the file with the original {tn} (both rounds), green alone, and green in the file with the corrected one ({why})	nessuna vittima di {tn} nel suo file: un test rosso nel file con il {tn} originale (due giri), verde da solo e verde nel file con quello corretto ({why})
+run-phase-190.d_stub	the corrected {tn} is not red on its assertion on the test-red tree ({e})	il {tn} corretto non è rosso sulla sua asserzione sull'albero di test-red ({e})
+run-phase-190.d_tree	proof tree not usable ({why})	albero di prova non usabile ({why})
+run-phase-190.not_green	{tn} is not green on the gates of the phase ({e})	{tn} non è verde ai gate della fase ({e})
+run-phase-190.judge	{fam} deviation of {tn}: judge {st} (never, missing inputs {which}, refused: a call of the judge in the phase is not a complete ACCEPT)	deviazione {fam} di {tn}: giudice {st} (mai, ingressi mancanti {which}, rifiutato: una chiamata del giudice nella fase non è un ACCEPT completo)
+run-phase-190.judge_extra	the judge's prompt holds text beyond the inputs computed by the script	il prompt del giudice contiene testo oltre gli ingressi calcolati dallo script
+run-phase-190.not_recorded	corrected test accepted but fingerprint not recordable (approval STALE)	test corretto accettato ma impronta non registrabile (approvazione STALE)
+run-phase-190.ok_corrected	acceptance test {tn} corrected, proven red on the stub and green: {d}	test di accettazione {tn} corretto, provato rosso sullo stub e verde: {d}
+run-phase-190.why_wt	proof worktree {n} not created or the tree not applied	worktree di prova {n} non creato o albero non applicato
+run-phase-190.why_gates	gates of the proof tree {n} without evidence or BLOCKED	gate dell'albero di prova {n} senza evidenza o BLOCKED
+run-phase-190.why_cp	single run of {v} without an outcome (counterproof.sh --senza-mutazione)	lancio singolo di {v} senza esito (counterproof.sh --senza-mutazione)
+run-phase-190.why_more	more than 3 candidates: only the first 3 are tried	più di 3 candidati: si provano solo i primi 3
+run-phase-190.why_none	no other case of the file red in both rounds on A	nessun altro caso del file rosso in entrambi i giri su A
+
 # 1.8.2 D1 (S3): line endings of the cycle's worktree (ciclo-worktree.sh crea and rimuovi) and the doctor's warning
 worktree-cycle-182.eol_ext_on	extensions.worktreeConfig turned on in the main repository (only this worktree gets its own line-ending settings; rimuovi turns it off)	extensions.worktreeConfig accesa nel repository principale (solo questo worktree riceve le sue impostazioni del fine riga; rimuovi la spegne)
 worktree-cycle-182.eol_set	line endings of the worktree: core.autocrlf false and core.eol lf in its config.worktree (the main tree and the other worktrees unchanged)	fine riga del worktree: core.autocrlf false e core.eol lf nel suo config.worktree (tree principale e altri worktree invariati)
@@ -324,6 +360,20 @@ worktree-cycle-182.ext_off_failed	WARNING — git config --unset extensions.work
 maat-doctor-182.autocrlf	line endings: Git can check out this project with CRLF ({why}): in the cycle's worktrees the tests that read the sources line by line and the replacements made by scripts can break	fine riga: git può estrarre questo progetto in CRLF ({why}): nei worktree del ciclo si possono rompere i test che leggono i sorgenti riga per riga e le sostituzioni fatte da script
 maat-doctor-182.autocrlf_fix	put * text=auto eol=lf in .gitattributes (a decision of the project), or git config core.autocrlf false and git config core.eol lf	metti * text=auto eol=lf nel .gitattributes (decisione del progetto), o git config core.autocrlf false e git config core.eol lf
 maat-doctor-182.why_attr	.gitattributes with text and no eol=, core.eol native on Windows	.gitattributes con text senza eol=, core.eol native su Windows
+
+# 1.9.0 K2: the switch of the correction with proof of defective tests (maat-config.py opzione, S14) and the doctor's lines
+maat-config-190.usage_opzione	usage: opzione correzione_test|build_chiusura	uso: opzione correzione_test|build_chiusura
+maat-config-190.s14	ciclo.correzione_test or ciclo.build_chiusura needs "harness": ">=1.9" or newer	ciclo.correzione_test o ciclo.build_chiusura richiede "harness": ">=1.9" o più nuovo
+maat-config-190.s14_type	{k} is a boolean (true/false): {v}	{k} è un booleano (true/false): {v}
+maat-config-190.opzione_illeggibile	{k} unreadable ({why}): switched off, STOP as in 1.8	{k} illeggibile ({why}): spento, STOP come in 1.8
+maat-doctor-190.default_on	the 1.9 correction of defective tests with proof is on by default; to switch it off: ciclo.correzione_test false	la correzione con prova dei test difettosi della 1.9 è accesa per default; per spegnerla: ciclo.correzione_test false
+maat-doctor-190.prova_senza_preparazione	module {m}: the preparati ({guida}) are missing from the main tree: to correct a defective acceptance test with proof the proof worktree will have to run the preparazione (if it fails: STOP as in 1.8); run it now: {prep}	modulo {m}: i preparati ({guida}) mancano nel tree principale: per correggere con prova un test di accettazione difettoso il worktree di prova dovrà lanciare la preparazione (se fallisce: STOP come in 1.8); lanciala ora: {prep}
+
+# 1.9.0 K8 (S4): the build required at closing (maat-config.py opzione build_chiusura and gate-richiesti, the doctor)
+maat-config-190.build_illeggibile	{k} unreadable ({why}): switched on, the build is required	{k} illeggibile ({why}): acceso, il build è richiesto
+maat-doctor-190.build_on	module {m} declares comandi.build: since 1.9 the build runs at std too and closing requires it (ciclo.build_chiusura false = 1.8)	il modulo {m} dichiara comandi.build: dalla 1.9 il build gira anche in std e la chiusura lo richiede (ciclo.build_chiusura false = 1.8)
+maat-doctor-190.build_missing	module {m} has files that compile ({ext}) but no comandi.build: the cycle cannot check the build	il modulo {m} ha file che si compilano ({ext}) ma nessun comandi.build: il ciclo non può verificare il build
+maat-doctor-190.build_untracked	module {m}: the build output ({d}) is not ignored by git: a build would change the tree and block the gates	modulo {m}: l'uscita del build ({d}) non è ignorata da git: un build cambierebbe l'albero e bloccherebbe i gate
 
 # B11 (D3): rossi runs the probe of a declassified decision (plan-check.sh), verify_red says it (run-phase.sh), the
 # review prompt shows a disproved claim next to its row (driver.py)
@@ -405,6 +455,38 @@ cycle-state-180.stop_umano_ignoto	{label} printed OK on a plan still DRAFT (a fi
 maat-config-180.s12	ciclo.riprese needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	ciclo.riprese richiede "harness": ">=1.8" o successiva, così una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
 maat-config-180.s13	moduli[].{k} needs "harness": ">=1.8" or newer, so that an older Maat refuses the file with a clear error instead of ignoring the key	moduli[].{k} richiede "harness": ">=1.8" o successiva, così una Maat precedente rifiuta il file con un errore chiaro invece di ignorare la chiave
 maat-config-180.s12_negative	ciclo.riprese is {v}: it must be an integer >= 0 (0 = no resumes)	ciclo.riprese vale {v}: deve essere un intero >= 0 (0 = nessuna ripresa)
+
+# --- counterproof-190, worktree-lib-190 (1.9.0, K3, written by hand): counterproof.sh --senza-mutazione (an entry
+# without a mutation runs the named test alone; a runner without a report adapter gives no outcome to read); the proof
+# worktrees of worktree-lib.sh (wt_prova_*), whose marker is not the one of replay.sh
+counterproof-190.senza_mutazione	entry without a mutation: allowed only with --senza-mutazione	voce senza mutazione: ammessa solo con --senza-mutazione
+counterproof-190.con_mutazione	entry with a mutation: not allowed with --senza-mutazione (no mixed lists)	voce con mutazione: non ammessa con --senza-mutazione (niente liste miste)
+counterproof-190.comando_senza_report	the runner has no report adapter (only vitest and pytest): a run without a mutation gives no outcome to read	il runner non ha un adattatore con report (solo vitest e pytest): un lancio senza mutazione non dà un esito da leggere
+counterproof-190.red_any	the named test ran and is red	il test nominato è stato eseguito ed è rosso
+counterproof-190.green_alone	the named test ran and passes	il test nominato è stato eseguito e passa
+counterproof-190.intero_solo	intero must be true/false, and true only with --senza-mutazione	intero deve essere true/false, e true solo con --senza-mutazione
+counterproof-190.casi_incompleti	the report does not list every case of the file ({n} read): no outcome	il report non elenca ogni caso del file ({n} letti): nessun esito
+counterproof-190.file_rosso	{n} of {tot} cases of the file are red	{n} casi del file su {tot} sono rossi
+counterproof-190.file_verde	every case of the file ran, none red ({tot})	ogni caso del file è stato eseguito, nessuno rosso ({tot})
+counterproof-190.file_fallito	the file itself failed outside its cases (hook, afterAll, unhandled error): {m}	il file stesso è fallito fuori dai suoi casi (hook, afterAll, errore non gestito): {m}
+counterproof-190.file_saltati	{n} of {tot} cases of the file did not run (skipped): not green	{n} casi del file su {tot} non eseguiti (saltati): non verde
+worktree-lib-190.bad_ref	not a commit or tree reference: {r}	non è un riferimento di commit o di albero: {r}
+worktree-lib-190.bad_name	the name does not start with {pfx}-: {c}	il nome non comincia per {pfx}-: {c}
+worktree-lib-190.no_marker	the marker {pfx} is missing ({mk})	manca il marcatore {pfx} ({mk})
+worktree-lib-190.usage_crea	usage: wt_prova_crea <label> <base> (label of letters, digits, . _ -; base not empty)	uso: wt_prova_crea <label> <base> (label di lettere, cifre, . _ -; base non vuota)
+worktree-lib-190.usage_albero	usage: wt_prova_albero <worktree> <tree>	uso: wt_prova_albero <worktree> <albero>
+worktree-lib-190.usage_rimuovi	usage: wt_prova_rimuovi <worktree>	uso: wt_prova_rimuovi <worktree>
+worktree-lib-190.prep_copy	copy of the prepared file {rel} from the main tree failed	copia del file preparato {rel} dal tree principale fallita
+worktree-lib-190.prep_none	module {rad}: preparati missing in the main tree and no preparazione	modulo {rad}: preparati assenti nel tree principale e nessuna preparazione
+worktree-lib-190.prep_failed	module {rad}: preparati missing in the main tree and the preparazione failed ({cmd})	modulo {rad}: preparati assenti nel tree principale e preparazione fallita ({cmd})
+worktree-lib-190.prep_guide	module {rad}: the guide file of the preparati is missing in the proof worktree ({guida})	modulo {rad}: manca il file guida dei preparati nel worktree di prova ({guida})
+
+# --- driver-190, cycle-report-190 (1.9.0, K4, written by hand): the class of an implement/fix whose defective-test
+# deviations run-phase.sh accepted (log/<label>.deviazioni-impl); the report per family and the default switched on
+driver-190.c_ok_dev_impl	{n} implement deviations accepted by script and judge	{n} deviazioni d'implementazione accettate da script e giudice
+driver-190.c_dev_impl	implement deviation not accepted: {d}	deviazione d'implementazione non accettata: {d}
+cycle-report-190.accepted	Accepted deviations: test-data {td} · defective test {dt}	Deviazioni accettate: test-data {td} · test difettoso {dt}
+cycle-report-190.default_on	1.9 correction of defective tests with proof: on by default	correzione con prova dei test difettosi 1.9: accesa per default
 
 # --- run-phase (lingua-converti.py)
 run-phase.usage_fp	usage: {script} --harness-fp [<repo>]	uso: {script} --harness-fp [<repo>]

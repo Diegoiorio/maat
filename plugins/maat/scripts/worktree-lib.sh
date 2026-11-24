@@ -33,6 +33,7 @@ canon() { [ -n "${1:-}" ] && (cd "$1" 2>/dev/null && { pwd -W 2>/dev/null || pwd
 #   link  <path>                                         an entry of collega_nel_worktree (may contain *)
 #   dep   <glob>                                         an entry of file_dipendenze (git :(glob) pathspec)
 #   prep  <root> <guide file> <preparazione> <glob>…     a module with preparati (guide: the first glob without wildcards)
+#   prepamb <root> <ambiente> <name>                     the same module: where its preparazione runs (1.9.0, K3)
 #   copia <radice_pacchetti> <root> <guide file>         a module with copia (repo root = «.»)
 # Empty guide and preparazione are written «-» (the reader converts them back): with IFS=$'\t' two tabs in a row
 # are a single separator, and an empty field would shift the following ones.
@@ -72,6 +73,8 @@ for m in r["moduli"]:
     guida = next((g for g in pr if not any(c in g for c in "*?[")), "")
     if pr:
         print("\t".join(["prep", rad, v(guida), v(m.get("preparazione", ""))] + pr))
+        # 1.9.0 (K3): where wt_prova_crea runs the preparazione, as the module's gates (gates.sh esegui)
+        print("\t".join(["prepamb", rad, m.get("ambiente") or "nativo", m["nome"]]))
     if m.get("copia"):
         print("\t".join(["copia", mc.norm(m["radice_pacchetti"]) or ".", rad, v(guida)]))
 EOF
@@ -189,5 +192,200 @@ forget_mirror() { # $1 worktree: deletes the WSL copies of its lanes (~/fic-mirr
         } | if [ $WIN -eq 1 ]; then MSYS_NO_PATHCONV=1 wsl.exe -- bash -s; else bash -s; fi 2>&1); rc=$?
   [ -z "$out" ] || printf '%s\n' "$out"
   [ $rc -eq 0 ] || echo "${WT_TAG:-replay}: $(msg worktree-lib.forget_left l="$l" w="$w" w="$w" w="$w")" >&2
+  return 0
+}
+
+# --- throwaway proof worktrees (1.9.0, K3) ---------------------------------------------------------------------------
+# Created as corpus/replay.sh always created its own, now here so that replay.sh (fic-replay-*) and run-phase.sh (the
+# proof trees of a defective-test deviation, fic-prova-<label>-<AAAAMMGG-hhmmss>) share the code. The caller sets MAIN
+# (main tree) and FIC_PY (loaded from python.sh if missing); PROJECT_ROOT and MAAT_ROOT are the project and the plugin
+# that the ownership check refuses. Errors: one line on stderr.
+#   wt_prova_crea <label> <base>   → $(dirname MAIN)/fic-prova-<label>-<time>: worktree add --detach at <base>, the marker
+#        <git dir of the wt>/fic-prova («fic-prova», «path=<wt>», «created=<time>»), relative .git, one link_dep per
+#        dep_links of MAIN (linked, never copied). No project file copied by a fixed path: for each module with
+#        `preparati`, as ciclo-worktree.sh, the preparati COPIED from the main tree when its guide file (the first glob
+#        without wildcards; a module whose globs all have wildcards: any of its files) is there (same dependencies:
+#        wt_prova_albero checks them with deps_diff); only if missing there, the module's `preparazione` run in the
+#        worktree (its radice, the environment of its gates: WSL for `ambiente: wsl`); then the guide file must exist in
+#        the worktree. Stdout: one line, the absolute path. Exit 0 created · 1 not creatable (path exists, worktree add,
+#        marker or links failed: what was created is removed with wt_prova_rimuovi first) · 2 usage (<label> outside
+#        [A-Za-z0-9._-]+, empty <base>) · 4 preparati missing in the main tree and preparazione failed or absent, or the
+#        guide file missing afterwards (the worktree stays and its path is printed: the caller removes it).
+#   wt_prova_albero <wt> <tree>   → deps_diff <tree> not empty: exit 2, the files on stderr one per line; then the
+#        ownership check and `read-tree -u --reset <tree>` + `read-tree HEAD` (uncommitted changes). Stdout empty. Exit
+#        0 applied · 1 not ours or read-tree failed · 2 different dependencies.
+#   wt_prova_rimuovi <wt>   → the checks of wt_ours (prefix and marker fic-prova), then forget_mirror, unlink_deps
+#        (never recursive), `git worktree remove --force`. Stdout empty. Exit 0 removed, or <wt> missing and not listed
+#        (idempotent, for a trap) · 1 refused (not a proof worktree, or a link left: nothing deleted beyond the links)
+#        or git failed.
+# The pieces shared with replay.sh, parametric on the prefix (fic-replay / fic-prova), their commands through WT_ESEGUI
+# (a function that takes the command line; default _wt_esegui: eval): replay.sh sets its `act`, which prints the line
+# and runs it unless --dry-run, so its commands and its --dry-run stay byte for byte those of 1.8.
+#   wt_ours <path> <prefix>   0 if the path is a worktree created with that prefix: it exists; not the main tree, the
+#        project or the plugin, nor inside them; name «<prefix>-…»; root of a git worktree; the marker <prefix> in its git
+#        dir with its path; listed by `git worktree list` of MAIN. Otherwise 1, the reason on stderr.
+#   _wt_crea <wt> <base> <stamp> <prefix>  ·  _wt_applica <wt> <tree>  ·  _wt_rimuovi <wt> <prefix> (WT_PROVA_ESITO:
+#        nostro = check failed, collegamenti = a link left, git = git failed, empty = removed)
+_wt_esegui() { eval "$1"; }
+_wtq() { printf '%q' "$1"; }
+# the two texts that name the creator: replay.sh keeps its own (they name replay.sh), fic-prova the generic ones
+_wt_nome_errato() { if [ "$1" = fic-replay ]; then msg replay.bad_name c="$2"; else msg worktree-lib-190.bad_name pfx="$1" c="$2"; fi; }
+_wt_senza_marcatore() { if [ "$1" = fic-replay ]; then msg replay.no_marker mk="$2"; else msg worktree-lib-190.no_marker pfx="$1" mk="$2"; fi; }
+wt_ours() {
+  local p=$1 mk=$2 c gd f w found=0 mainc rootc maatc
+  [ -d "$p" ] || { echo "$(msg replay.not_exists p="$p")" >&2; return 1; }
+  c=$(canon "$p") mainc=$(canon "$MAIN") rootc=$(canon "${PROJECT_ROOT:-$MAIN}") maatc=$(canon "$MAAT_ROOT")
+  case "$c" in "$mainc"|"$mainc"/*) echo "$(msg replay.is_main c="$c")" >&2; return 1 ;; esac
+  case "$c" in "$rootc"|"$rootc"/*) echo "$(msg replay.is_project c="$c")" >&2; return 1 ;; esac
+  case "$c" in "$maatc"|"$maatc"/*) echo "$(msg replay.is_plugin c="$c")" >&2; return 1 ;; esac
+  case "$(basename "$c")" in "$mk"-*) ;; *) echo "$(_wt_nome_errato "$mk" "$c")" >&2; return 1 ;; esac
+  [ "$(canon "$(git -C "$c" rev-parse --show-toplevel 2>/dev/null)")" = "$c" ] ||
+    { echo "$(msg replay.not_wt_root c="$c")" >&2; return 1; }
+  gd=$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)
+  f="$gd/$mk"
+  [ -f "$f" ] || { echo "$(_wt_senza_marcatore "$mk" "$f")" >&2; return 1; }
+  [ "$(canon "$(sed -n 's/^path=//p' "$f")")" = "$c" ] || { echo "$(msg replay.marker_other path="$(sed -n 's/^path=//p' "$f")")" >&2; return 1; }
+  while IFS= read -r w; do [ "$(canon "$w")" = "$c" ] && found=1; done < <(git -C "$MAIN" worktree list --porcelain | sed -n 's/^worktree //p')
+  [ $found -eq 1 ] || { echo "$(msg replay.not_listed c="$c")" >&2; return 1; }
+  return 0
+}
+# a commit or tree reference written unquoted into an eval'd line (base, tree): only these characters, else exit 2
+WT_REF_RX='^[0-9A-Za-z^{}~._/-]+$'
+_wt_ref_ok() { [[ "$1" =~ $WT_REF_RX ]] || { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.bad_ref r="$1")" >&2; return 1; }; }
+_WT_PASSO=""   # the step _wt_crea reached: add (worktree add), marcatore, resto (relative .git, links)
+_wt_crea() { # <wt> <base> <stamp> <prefix>: the commands of replay.sh 1.8 (worktree add, marker, relative .git, links)
+  local wt=$1 base=$2 stamp=$3 mk=$4 ex=${WT_ESEGUI:-_wt_esegui} p
+  _WT_PASSO=""
+  _wt_ref_ok "$base" && [[ "$stamp" =~ ^[0-9A-Za-z._-]+$ ]] && [[ "$mk" =~ ^[a-z-]+$ ]] || return 2
+  _WT_PASSO=add
+  $ex "git -C $(_wtq "$MAIN") worktree add --detach $(_wtq "$wt") $base" || return 1
+  _WT_PASSO=marcatore
+  $ex "printf '$mk\npath=%s\ncreated=%s\n' $(_wtq "$wt") $stamp > \"\$(git -C $(_wtq "$wt") rev-parse --absolute-git-dir)/$mk\"" || return 1
+  _WT_PASSO=resto
+  $ex "fic_relgit $(_wtq "$wt")" || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    $ex "link_dep $(_wtq "$MAIN/$p") $(_wtq "$wt/$p")" || return 1
+  done < <(dep_links "$MAIN")
+  return 0
+}
+_wt_applica() { # <wt> <tree>: the tree as uncommitted changes
+  local ex=${WT_ESEGUI:-_wt_esegui}
+  _wt_ref_ok "$2" || return 2
+  $ex "git -C $(_wtq "$1") read-tree -u --reset $2 && git -C $(_wtq "$1") read-tree HEAD"
+}
+WT_PROVA_ESITO=""
+_wt_rimuovi() { # <wt> <prefix>: check, WSL copies, the links first (the removal must never follow them), then git
+  local wt=$1 mk=$2 rc
+  WT_PROVA_ESITO=""
+  wt_ours "$wt" "$mk" || { WT_PROVA_ESITO=nostro; return 1; }
+  forget_mirror "$wt"
+  unlink_deps "$wt" || { WT_PROVA_ESITO=collegamenti; return 1; }
+  git -C "$MAIN" worktree remove --force "$wt"; rc=$?
+  [ $rc -eq 0 ] || WT_PROVA_ESITO=git
+  return $rc
+}
+_wt_elencato() { # <path>: 0 if `git worktree list` of MAIN lists it (by canonical form, or by name when it is gone)
+  local c w cw
+  c=$(canon "$1"); [ -n "$c" ] || c=$1
+  while IFS= read -r w; do
+    [ "$w" = "$1" ] || [ "$w" = "$c" ] && return 0
+    cw=$(canon "$w"); [ -n "$cw" ] && [ "$cw" = "$c" ] && return 0
+  done < <(git -C "$MAIN" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+  return 1
+}
+_wt_prep_ha() { # <dir> <glob>…: 0 if at least one glob matches a file under <dir>
+  local d=$1 g f fs oifs; shift
+  for g in "$@"; do
+    oifs=$IFS; IFS=; fs=("$d"/$g); IFS=$oifs   # pk08: empty IFS, an entry with spaces is not split; $g unquoted: * expands
+    for f in "${fs[@]}"; do [ -f "$f" ] && return 0; done
+  done
+  return 1
+}
+_wt_prepara() { # <wt>: the preparati of every module (above); 0 ok, 4 otherwise (reason on stderr)
+  local wt=$1 k rad guida prepcmd globs pre g f rel oifs amb nome wd c tag=${WT_TAG:-worktree-lib}
+  local -a gl fs
+  local -A amb_di nome_di
+  while IFS=$'\t' read -r k rad amb nome; do
+    [ "$k" = prepamb ] && { amb_di[$rad]=$amb; nome_di[$rad]=$nome; }
+  done < <(wt_conf)
+  while IFS=$'\t' read -r k rad guida prepcmd globs; do
+    [ "$k" = prep ] || continue
+    [ "$guida" = - ] && guida=""; [ "$prepcmd" = - ] && prepcmd=""   # empty fields (wt_conf placeholder)
+    IFS=$'\t' read -ra gl <<< "$globs"
+    pre=""; [ "$rad" = . ] || pre="$rad/"
+    if { [ -n "$guida" ] && [ -f "$MAIN/$pre$guida" ]; } || { [ -z "$guida" ] && _wt_prep_ha "$MAIN/$pre" "${gl[@]}"; }; then
+      for g in "${gl[@]}"; do   # copied from the main tree, as ciclo-worktree.sh (a file already in the worktree stays)
+        oifs=$IFS; IFS=; fs=("$MAIN/$pre"$g); IFS=$oifs
+        for f in "${fs[@]}"; do
+          [ -f "$f" ] || continue
+          rel=${f#"$MAIN/"}
+          [ -f "$wt/$rel" ] && continue
+          mkdir -p "$(dirname "$wt/$rel")" && cp "$f" "$wt/$rel" ||
+            { echo "$tag: $(msg worktree-lib-190.prep_copy rel="$rel")" >&2; return 4; }
+        done
+      done
+    elif [ -z "$prepcmd" ]; then
+      echo "$tag: $(msg worktree-lib-190.prep_none rad="$rad")" >&2; return 4
+    else   # missing in the main tree: the module's preparazione in the worktree, where its gates run
+      amb=${amb_di[$rad]:-nativo} nome=${nome_di[$rad]:-}
+      if [ "$amb" = wsl ]; then
+        wd=$(canon "$wt/$pre"); wd=$(wslp "${wd:-$wt/$pre}")
+        c="{ export MAAT_MODULO=$(_wtq "$nome"); cd $(_wtq "$wd") && $prepcmd; } 2>&1"
+        if [ -n "${FIC_GATES_WSL:-}" ]; then "$FIC_GATES_WSL" "$c" >&2 </dev/null
+        elif command -v wsl >/dev/null 2>&1 || command -v wsl.exe >/dev/null 2>&1; then MSYS_NO_PATHCONV=1 wsl -- bash -lc "$c" >&2 </dev/null
+        else false
+        fi
+      else
+        (cd "$wt/$pre" && MAAT_MODULO=$nome bash -c "$prepcmd") >&2 </dev/null
+      fi || { echo "$tag: $(msg worktree-lib-190.prep_failed rad="$rad" cmd="$prepcmd")" >&2; return 4; }
+    fi
+    if { [ -n "$guida" ] && [ ! -f "$wt/$pre$guida" ]; } || { [ -z "$guida" ] && ! _wt_prep_ha "$wt/$pre" "${gl[@]}"; }; then
+      echo "$tag: $(msg worktree-lib-190.prep_guide rad="$rad" guida="${guida:-${gl[*]}}")" >&2; return 4
+    fi
+  done < <(wt_conf)
+  return 0
+}
+wt_prova_crea() {
+  local label=${1:-} base=${2:-} pd wt rc
+  [ $# -eq 2 ] && [ -n "$base" ] && [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] ||
+    { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.usage_crea)" >&2; return 2; }
+  _wt_ref_ok "$base" || return 2
+  [ -n "${FIC_PY:-}" ] || . "$MAAT_SCRIPTS/python.sh" >&2 ||
+    { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib.no_python)" >&2; return 1; }
+  wt_conf > /dev/null || return 1   # maat.json not readable: nothing to link or prepare would be a silent half tree
+  pd=$(canon "$(dirname "$MAIN")") && [ -n "$pd" ] ||
+    { echo "${WT_TAG:-worktree-lib}: $(msg replay.not_exists p="$(dirname "$MAIN")")" >&2; return 1; }
+  wt="$pd/fic-prova-$label-$(date +%Y%m%d-%H%M%S)"
+  { [ -e "$wt" ] || [ -L "$wt" ]; } && { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib.link_exists dst="$wt")" >&2; return 1; }
+  if ! WT_ESEGUI=_wt_esegui _wt_crea "$wt" "$base" "$(date +%Y%m%d-%H%M%S)" fic-prova >&2; then
+    if [ "$_WT_PASSO" = marcatore ]; then
+      # worktree added, marker not written: no link exists yet (they come after the marker), so the removal of
+      # exactly this path cannot follow one; wt_prova_rimuovi would refuse it for the missing marker
+      git -C "$MAIN" worktree remove --force "$wt" >&2 2>&1  # SENZA-MARCATORE
+    elif [ -n "$_WT_PASSO" ]; then
+      { [ -e "$wt" ] || _wt_elencato "$wt"; } && wt_prova_rimuovi "$wt" >&2
+    fi
+    return 1
+  fi
+  _wt_prepara "$wt"; rc=$?
+  printf '%s\n' "$wt"
+  return $rc
+}
+wt_prova_albero() {
+  local wt=${1:-} tr=${2:-} dd
+  [ $# -eq 2 ] && [ -n "$wt" ] && [ -n "$tr" ] || { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.usage_albero)" >&2; return 1; }
+  _wt_ref_ok "$tr" || return 1   # never eval'd; 1 (not applied), 2 stays «different dependencies» (interface (a))
+  dd=$(deps_diff "$tr")
+  [ -z "$dd" ] || { printf '%s\n' "$dd" >&2; return 2; }
+  wt_ours "$wt" fic-prova || return 1
+  WT_ESEGUI=_wt_esegui _wt_applica "$wt" "$tr" >&2 || return 1
+  return 0
+}
+wt_prova_rimuovi() {
+  local wt=${1:-}
+  [ -n "$wt" ] || { echo "${WT_TAG:-worktree-lib}: $(msg worktree-lib-190.usage_rimuovi)" >&2; return 1; }
+  { [ -e "$wt" ] || [ -L "$wt" ] || _wt_elencato "$wt"; } || return 0   # already gone and not listed: nothing to do
+  _wt_rimuovi "$wt" fic-prova >&2 || return 1
   return 0
 }

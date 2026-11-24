@@ -13,7 +13,8 @@
 # IT CONFIRMS IMPLEMENTED only if:
 #   1. every REQUIRED gate — the gates.sh list, `maat_gate_richiesti <level> <files of touched.txt>` from
 #      .claude/maat.json: tests-<module> for every module with a test command or with touched files, controlli-<module>
-#      for every module with checks, lint if the level requires it (build is optional, as in the review) — has
+#      for every module with checks, lint if the level requires it, build (1.9.0, K8: required with the build at
+#      closing on, ciclo.build_chiusura / FIC_BUILD_CHIUSURA; off = optional, as in 1.8) — has
 #      evidence/<CURRENT key>/<gate>.json with esito PASS and the report next to it, or SKIPPED (nothing to
 #      run, with the reason: satisfied as in the review). NOT RUN (declared: module without tests, skipped entries)
 #      does not satisfy and is not an error: the signature is at most NEEDS_VERIFICATION, with the reason «nessun test nel
@@ -117,14 +118,18 @@ case $level in min|std|full|legacy) ;; *) echo "finalize: $(msg finalize.unknown
 FILES=()
 [ -f "$run/touched.txt" ] && mapfile -t FILES < <(tr -d '\r' < "$run/touched.txt" | sed 's|^\./||' | grep -v '^$' | LC_ALL=C sort -u)
 
-# --- required gates: the gates.sh list (maat_gate_richiesti, same level and files), build excluded (optional,
-# as in the review). For each gate its module; for each module the report format and the root (merge). ---
+# --- required gates: the gates.sh list (maat_gate_richiesti, same level and files). 1.9.0 (K8, S4 point 3): with the
+# build at closing on (maat-config.py opzione build_chiusura: 1, also when unreadable) the build rows are required like
+# the others; off (0) -> build excluded, optional as in 1.8. For each gate its module; for each module the report
+# format and the root (merge). ---
 export PROJECT_ROOT=${FIC_GATES_ROOT:-$PROJECT_ROOT}   # the gates.sh project: <repo>/.claude/maat.json
 REQ=() GM=() MODINFO=() conf_err=""
+build_req=$( { [ -n "${FIC_PY:-}" ] && "$FIC_PY" "$HROOT/scripts/maat-config.py" opzione build_chiusura; } 2>/dev/null | tr -d '\r')
+[ "$build_req" = 0 ] || build_req=1   # not readable: required (the safe side)
 if . "$HROOT/scripts/lib/maat-conf.sh" 2>/dev/null && maat_conf_carica 2>/dev/null &&
    gl=$(maat_gate_richiesti "$level" ${FILES[@]+"${FILES[@]}"} 2>/dev/null | tr -d '\r'); then
   while IFS=$'\t' read -r g m t; do
-    [ -n "$g" ] && [ "$t" != build ] || continue
+    [ -n "$g" ] && { [ "$t" != build ] || [ "$build_req" = 1 ]; } || continue   # BUILD-RICHIESTO-190
     REQ+=("$g"); GM+=("$g=$m")
   done <<< "$gl"
   i=0

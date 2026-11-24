@@ -2,6 +2,141 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.9.0 — the build at closing, defective acceptance tests corrected with a proof
+
+**Why 1.9.0 and not a patch:** two defaults change. A `std` cycle no longer closes `IMPLEMENTED` without a build, and
+a defective acceptance test written by test-red, which was a STOP for a person, can now be corrected in implement/fix
+when scripts prove the defect. Both are on by default and can be switched off (`false` = 1.8). No format Maat reads
+changes incompatibly; the new files appear only in a 1.9 run dir. The harness fingerprint changes: update between
+cycles.
+
+- **The build is required at closing** (`ciclo.build_chiusura`, default `true`; `false` = 1.8). At `std`, `full` and
+  `legacy` (a plan without `Test level:`) `maat-config.py gate-richiesti` lists the `build` of every module with
+  `comandi.build` that has a touched file under its `radice` or `radice_pacchetti`, whatever module the file is routed
+  to (a shared package declared as a module of its own still builds the frontend that uses it), and of every such
+  module for a touched file outside every module (fail-closed: a `tsconfig`, a lockfile, also a README); `gates.sh`
+  gives that build the same files, and `finalize.sh` requires it like the other gates (missing → at most
+  `NEEDS_VERIFICATION`, `FAIL` → `FAIL`). Up to 1.8 the build ran only where `gate.<level>` listed it (`full`) and
+  `finalize.sh` never required it, so a `std` cycle closed `IMPLEMENTED` without one. `min` stays without a build
+  (declared limit). The label count is over the modules that declare `comandi.build`, as before.
+- **Switches.** `FIC_BUILD_CHIUSURA` (`0`|`1`) wins over the key; empty counts as unset (the key decides); any other
+  value, or a key that is not a boolean, keeps the build on with an `AVVISO` line (on is the safe side here).
+  `maat-config.py opzione build_chiusura` prints the value. A `maat.json` that sets the key declares `"harness":
+  ">=1.9"` or newer (S14).
+- **Cost.** One build more for each implement/fix that changes the tree; the review reuses the same evidence (no second
+  build); no build in test-red nor on the proof trees of a corrected test. A module on the WSL copy builds on the tree
+  (slower). A build that writes files git does not ignore changes the tree and makes the gates `BLOCKED`, now also at
+  `std`.
+- **`maat-doctor`**: `INFO` when a module declares `comandi.build` and `ciclo.build_chiusura` is not set;
+  `WARNING` when a module has tracked files that compile (`.vue`, `.tsx`, `.go`, `.rs`, `.java`, `.kt`, `.cs`, a `.ts`
+  that is not a test nor a `.d.ts`) but no `comandi.build`, and when a module with `comandi.build` has a build output
+  folder (`dist/`, `.output/`, `.nuxt/`, `build/`, `target/`) in the tree that git does not ignore. Never `MISSING`.
+- **A defective acceptance test is a deviation of implement/fix** (`ciclo.correzione_test`, default `true`; `false` =
+  the STOP of 1.8, byte for byte). Seen on real cycles: test-red writes an acceptance test that leaks state into the
+  other tests of its file (a patch never restored, shared test data changed in place), so a later test of the file can
+  never turn green and fixing the test after test-red was the STOP «tg_deviation». The family is
+  `test-difettoso: <Tn> — <class> — <why>` (`defective-test: `, the same token in every language), where `<Tn>` is the
+  acceptance test that **pollutes**, not the one that fails; `<why>` (at most 200 characters) is for the person and
+  the review and never reaches the judge. A STOP of `valida` whose only deviations are of this family (and defensive
+  ones) enters the verification; `run-phase.sh` first runs the gates of the phase under the same lock (no evidence or
+  `BLOCKED` → STOP), and the following review reuses that evidence.
+- **Two classes, closed list**: `stato-condiviso`/`shared-state` and `patch-non-ripristinata`/`unrestored-patch`, Python
+  with `pytest` or JS/TS with `vitest`. Any other class (after unmount, async, `expect` message, type), language or
+  runner is the STOP `d_class`.
+- **The proofs, all by script** (D1–D8), on the tree of the phase and on throw-away worktrees:
+  - D1, nothing changes outside `<Tn>`: the changed acceptance files are files of the declared tests, the other files
+    are in the plan, never a `conftest.py`, a `setup*`/`vitest.setup*` or a fixture file (`d_files`); Python: the
+    module without the node of `<Tn>` has the same `ast.dump` (only `import copy` may be added); JS/TS: every byte
+    outside the body of `<Tn>` is the same (`d_outside`); no skip marker added (`d_skip`).
+  - D2, the assertions on the expected texts are identical: the protected nodes (Python: an `assert`, a comparison or
+    an `assert*` call holding an expected text) or protected lines (JS/TS: `expect(`/`assert` with an expected text)
+    of the old and new `<Tn>` are the same multiset, and the old one has at least one (`d_assert`).
+  - D3, the defect is of the test: on tree **A** (the current tree with the file of `<Tn>` at its test-red version),
+    two rounds of gates on that file (`.prova-a`, `.prova-a2`). The old `<Tn>` must be green in both; red on an
+    expected text is the code's fault (`d_on_text`), an import, collection or missing-symbol red is `d_old_load`,
+    any other red `d_proof`. Then the **victim V**: a case of the same file red in both rounds on A (at most 3 candidates, in the
+    order of the report), green when run alone on A (`counterproof.sh --senza-mutazione`), and green in its file with
+    the new `<Tn>` in two rounds on the tree of the phase (pytest: the gates; vitest: two runs of the whole file, since
+    the text log of vitest does not list an all-green file). No such V → `d_victim`. V green alone proves an
+    order dependency, not that the code is right: that is what D8 is for.
+  - D4, red on the stub: on tree **B** (the post-tree of test-red with the new `<Tn>`) the new `<Tn>` is `dimostrato`
+    (`.prova-b`, `d_stub`): a `return` or a `try` added before the assertion would make it green there.
+  - D5, green on the code: the new `<Tn>` is green in its file on the gates of the phase and on a second round
+    (`.verde2`), and green alone (`not_green`).
+  - D6, once: one correction per test per cycle, counted from the `Deviazione accettata:` lines of `driver.log` and
+    from `log/deviazioni-accettate.txt` (deleting the file does not lower the count; `d_once`).
+  - D7, the judge (below). D8, the transformation (below).
+  The proof trees are worktrees `fic-prova-<label>-<a|b>-<time>` next to the main tree (`worktree-lib.sh`:
+  `wt_prova_crea`, `wt_prova_albero`, `wt_prova_rimuovi`, now shared with `corpus/replay.sh`, which keeps its
+  commands): dependencies linked, never copied; the `preparati` of a module copied from the main tree, or produced by
+  its `preparazione` only when they are missing there; removed at the end, on a STOP and on a signal. Their gates run
+  without the build. Different dependencies, a worktree not created, missing `preparati` that the `preparazione`
+  cannot produce, or gates `BLOCKED` → `d_tree`.
+- **D8, a closed list of transformations, limited to the test's own state.** The diff from the test-red version must be
+  exactly one of: pytest `X.attr = v` (or `setattr`) assigned in `<Tn>` → `monkeypatch.setattr(X, "attr", v)` with the
+  fixture added; `patch(...).start()` without `.stop()` → the same call as a `with` around exactly the following
+  statements, or `.stop()` in a `finally`; vitest `vi.spyOn` created in `<Tn>` → `.mockRestore()` or
+  `vi.restoreAllMocks()` (only when no other `vi.spyOn` is in the file) in a `try/finally`; pytest
+  `copy.deepcopy(NAME)`, vitest `structuredClone(NAME)`, `{ ...NAME }` or `[...NAME]`, where `NAME` is defined once in
+  the test file by a literal, a constant or a built-in constructor that uses no imported name. Anything else is
+  fail-closed `d_transform`: a write into the state of a production module (`setattr` on an imported name, a
+  `reset`/`clear`/`cache_clear` of an imported object, `importlib.reload`), a copy of an object that is not defined in
+  the test file, a new patch, two transformations, one more statement, a wrapper inside a protected assertion (that one
+  is `d_assert`), or a form not recognised with certainty. The syntax analysis only recognises a transformation of the
+  list; it is never on its own the proof that a change is safe.
+- **The judge** (`maat:spec-plan-reviewer-light` in the foreground) gets only inputs the script recomputes: the blocks
+  of `plan-check.sh deviazione - <spec> <Tn> --famiglia test-difettoso --classe <class>` (fixed instructions, test row,
+  trace rows, the line `defect: <Tn> — <class>`), the line `trasformazione: …` of `plan-check.sh corretto`, and the diff
+  of the test file from the post-tree of test-red (`diff-test … --dal-post`, or its `diff file:` line). Stricter than
+  the judge of test-data: **every** call of that agent in the main session of the phase counts, complete or not, and
+  each must be a complete foreground `Deviation verdict: ACCEPT`; one incomplete, refused or failing call → refused; the
+  prompt, the inputs taken out once, must hold no other non-blank character (`judge_extra`); the answer names every
+  requirement of `<Tn>` and `Defect class:` the declared class. The victim and the outcomes of D3 are computed after
+  the phase, so they are script proofs, not inputs of the judge. The judge is no longer the only barrier: D2, D3 and
+  D8 are.
+- **The fingerprint is re-recorded only by the script.** On acceptance `run-phase.sh` keeps `test-red/tests.red.txt`
+  (the test-red base), rewrites `test-red/tests.txt`, runs `plan-check.sh basis --write-tests` and `gen` (an approval
+  `STALE` → STOP `not_recorded`), and writes `test-red/correzioni.json` (old and new sha256, outcomes on A and B, the
+  victim, the transformation, for the review); `rossi.json` stays that of test-red. The guard now denies every phase
+  any write under `<run>.run/test-red/`. The register: `log/<label>.deviazioni-impl` («text, verdict, sha256 of the
+  proofs»), the same lines in `log/deviazioni-accettate.txt` (the review receives them, with a prompt that names both
+  families), a note `note (corrected test, <label>)` in the changelog of the plan, outside the fingerprint, and the
+  driver's line `Deviazione accettata: <label> · test-difettoso · <Tn> · sha=…`. The driver classifies the phase
+  `OK-DEVIAZIONE` (rule `deviazione-impl`); a deviation not accepted is a human STOP with its cause.
+  `cycle-report.py` counts accepted deviations per family (`Accepted deviations: test-data … · defective test …`),
+  never among the human STOPs, and says when a project took the default without choosing it.
+- **New options of the scripts.** `plan-check.sh esiti <spec> --evidence <dir> --out <file> [--run-dir <d>]`: the
+  outcome of every test as `rossi` classifies it, plus `riga_errore` (only the line of the exception or assertion,
+  never the test source printed in a traceback) and `casi` (every case of the files of the tests); it never writes
+  `rossi.json`. `plan-check.sh corretto <spec> <Tn> --classe <c> --vecchio <file> --nuovo <file> --run-dir <d>`: the
+  D1/D2/D8 comparison, lines `violazione <key>: …`, `zone protette: <n>` and `trasformazione: <class>/<runner> —
+  <form>`. `plan-check.sh deviazione … --famiglia test-difettoso [--classe <c>]` and `diff-test … --dal-post`.
+  `counterproof.sh --senza-mutazione`: entries without a mutation run the named test alone (or, with `"intero": true`,
+  its whole file) with the `pytest`/`vitest` adapters in the mirror copy, with lock and manifest; outcome `verde`,
+  `rosso`, `rosso_import`, `rosso_raccolta`, `bloccato` or `non_eseguita`; no mixed lists.
+  `maat-config.py opzione correzione_test|build_chiusura` prints `1` or `0`. `FIC_CORREZIONE_TEST` (`0`|`1`) wins over
+  the key; any other value, empty included, is unreadable and switches the family off with an `AVVISO` (off is the
+  safe side here, the opposite of the build). A `maat.json` that sets `ciclo.correzione_test` declares `"harness":
+  ">=1.9"` (S14). `maat-doctor`: `INFO` when the project takes the new default without having chosen it, `WARNING`
+  when the `preparati` of a module are missing from the main tree (a proof worktree would have to run the
+  `preparazione`).
+- **Cost of a correction**: three targeted rounds of gates in proof worktrees (two on A, one on B, without build), a
+  second round on the file of `<Tn>` in the tree of the phase, two to four single runs, and the copy of the `preparati`
+  for each proof worktree. With the WSL `copia` the copy of the worktree must be ready, otherwise STOP.
+- **Declared limits.** Only the two classes and only the transformations of D8; any other correction, even a right
+  one, is the STOP of 1.8. A copy of the test data (`copy.deepcopy`, `structuredClone`) hides a code that changes the
+  data it receives, and breaks or hides production state keyed on object identity (a `WeakMap`, a memo on `id()`):
+  the judge is told to refuse that, and the review sees it. `<Tn>` must be an acceptance test of the table; a victim in
+  another file (state shared between files) is `d_victim`; at most 3 victim candidates. In vitest a file with an
+  error of the file (`afterAll`, a hook) and a red case is `rosso`, not `rosso_raccolta`: the error of the hook does
+  not stop the victim there (only a file whose cases are all green is `rosso_raccolta`). Writes through Bash to
+  `test-red/`, to the spec or to the live jsonl are still not seen by the guard (as in 1.7–1.8): the fingerprints and
+  `basis` `FRESH` remain. A phase can write `.claude/maat.json` (for example `ciclo.build_chiusura: false` with
+  `"harness": ">=1.9"`) and the closing would leave out the build, the same class as `gate.<level>` in 1.8: it stays
+  visible in `touched.txt` and to the review, no new guard.
+- **Postponed** after the benchmark: the contradictions of a spec that implement resolves on its own (S1) and the class
+  `tipo`/type of a defective test.
+
 ## 1.8.2 — LF in the cycle worktrees, expected texts checked against the code
 
 A patch: no default and no format Maat reads changes.

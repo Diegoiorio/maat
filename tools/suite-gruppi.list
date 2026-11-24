@@ -9,10 +9,13 @@
 # tools/esempi-equiv.test.sh (the expected outputs, and their strict checks with MAAT_ATTESE_RICHIESTE) is in group 4.
 # driver-esiti (the 1.8.0 sections of driver.test.sh, split off for the Windows limit) stays with the driver in group 2:
 # the group does the same work as before.
+# 1.9.0 (CI): run-phase-s2 (sections 13-15 of run-phase, split off) goes with the oracle in group 1: group 3 took
+# 947 s of 1200 on Linux and hit the 1500 s of macOS (run-phase 1051-1078 s; the oracle alone 329-348 · 675-772 s).
 # A suite red only in the parallel run goes in a group of its own (docs/TESTING-harness.md, «The parallel run»).
 
-# group 1: the oracle
+# group 1: the oracle and (1.9.0) run-phase-s2
 1 tools/oracolo.test.sh
+1 run-phase-s2
 
 # group 2: the driver, the plan
 2 driver

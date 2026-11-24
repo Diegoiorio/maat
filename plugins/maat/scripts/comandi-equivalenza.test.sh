@@ -32,6 +32,10 @@
 # messages of the extra file <copia>/packages/ui, build <repo>/modules/app); no self-invocation (the wrapper only once
 # per gate, inside the copy only vitest, npm run -s lint, eslint); S5 and S6 of `valida`; exit 64 of
 # test-fast.sh with two modules with a copy and no MAAT_MODULO.
+# 1.9.0 (K8): the current plugin runs with the closing build OFF (FIC_BUILD_CHIUSURA=0 on gates.sh and finalize.sh):
+# spec 1.9.0, interface (c), off = the rows of 1.8 byte for byte, the behaviour the frozen reference records. With the
+# build on (the 1.9 default) the std cases add the build of the touched frontend: one case checks that this, and only
+# this, is the difference.
 # Counterproofs (here): signing IMPLEMENTED only with PASS => the «.vue senza test» case diverges; a line changed in a
 # copy of riferimento.txt => that case diverges (the test really reads the file); the real base sha written in a copy of
 # riferimento.txt => hygiene red; norm without the <base> rule => the «lint-con-base» case diverges; norm without the
@@ -177,7 +181,7 @@ gira() {
   local run="$T/wf-$h/spec-$n.run"; mkdir -p "$run"; printf '%s\n' "$@" > "$run/touched.txt"
   [ "$b" = si ] && echo "$BASE_SHA" > "$run/base.txt"
   : > "$REC"
-  out=$(cd "$R" && HOME=$hm FIC_GATES_HARNESS=$hr bash "$hr/scripts/gates.sh" --run-dir "$run" "$l" "$@" 2>&1)
+  out=$(cd "$R" && HOME=$hm FIC_BUILD_CHIUSURA=${BC-0} FIC_GATES_HARNESS=$hr bash "$hr/scripts/gates.sh" --run-dir "$run" "$l" "$@" 2>&1)
   printf '%s\n' "$out" > "$T/$h.gates"
   # two lanes in parallel (native pytest, the rest in WSL): order matters within each lane, not between the two
   { norm < "$REC" | grep -v '^PYTEST '; norm < "$REC" | grep '^PYTEST '; } > "$T/$h.rec"
@@ -186,7 +190,7 @@ gira() {
   ev=$(printf '%s\n' "$out" | sed -n 's/^gates: .* evidence=\(.*\)$/\1/p' | tail -1)
   { [ -n "$ev" ] && norm_chiave < "$ev/chiave.txt"; } > "$T/$h.chiave"
   spec "${run%.run}.md"
-  (cd "$R" && HOME=$hm FIC_GATES_HARNESS=$hr FIC_GATES="$hr/scripts/gates.sh" bash "${FZH:-$hr/scripts/finalize.sh}" --level "$l" "$run" 2>&1) |
+  (cd "$R" && HOME=$hm FIC_BUILD_CHIUSURA=${BC-0} FIC_GATES_HARNESS=$hr FIC_GATES="$hr/scripts/gates.sh" bash "${FZH:-$hr/scripts/finalize.sh}" --level "$l" "$run" 2>&1) |
     sed -n 's/^finalize: esito=\([A-Z_]*\).*/\1/p' > "$T/$h.firma"
   mkdir -p "$T/visti-$h"; cp "$REC" "$T/visti-$h/$n.rec.grezzo"
   { [ -n "$ev" ] && cat "$ev/chiave.txt"; } > "$T/visti-$h/$n.chiave.grezzo"
@@ -269,6 +273,11 @@ cnt() { grep -c "$1" "$T/nuovo.rec"; }
 caso vue-con-test
 chk "  tests-fe: vitest in <copia>/apps/admin, test relativo alla radice" 'grep -qx "NPX <copia>/apps/admin|vitest run components/goals/Riga.test.ts" "$T/nuovo.rec"' "$(cat "$T/nuovo.rec")"
 chk "  niente autorichiamo: l'involucro una volta, dentro la copia solo vitest" '[ "$(cnt "^INV ")" = 1 ] && [ "$(grep -v "^INV " "$T/nuovo.rec" | grep -vc "^NPX <copia>/apps/admin|vitest run ")" = 0 ]' "$(cat "$T/nuovo.rec")"
+# 1.9.0 (K8): the same case with the closing build on (FIC_BUILD_CHIUSURA empty = the key, absent = on): exactly one
+# command more, the build of the frontend
+cp "$T/nuovo.rec" "$T/spento.rec"
+BC= gira nuovo vue-con-test-k8 std no modules/app/apps/admin/components/goals/Riga.vue
+chk "  1.9.0 K8, build alla chiusura acceso (default): in più solo il build del frontend" '[ "$(diff "$T/spento.rec" "$T/nuovo.rec" | grep "^[<>]")" = "> NPM <repo>/modules/app|run build:admin" ]' "$(diff "$T/spento.rec" "$T/nuovo.rec")"
 # --- 2. .vue without test: tests-fe SKIPPED and signature IMPLEMENTED, as before ---
 caso vue-senza-test
 chk "  tests-fe SKIPPED e firma IMPLEMENTED" 'grep -q "^tests-fe: SKIPPED" "$T/nuovo.righe" && [ "$(cat "$T/nuovo.firma")" = IMPLEMENTED ]' "$(cat "$T/nuovo.righe" "$T/nuovo.firma")"

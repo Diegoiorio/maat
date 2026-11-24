@@ -101,25 +101,8 @@ MAINGIT=$(git -C "$MAIN" rev-parse --absolute-git-dir 2>/dev/null) || die "$(msg
 MAINC=$(canon "$MAIN") ROOTC=$(canon "$ROOT") MAATC=$(canon "$MAAT_ROOT")
 
 # --- check: is the path a worktree created by replay.sh? (0 = yes; otherwise the reason on stderr) ---
-ours() {
-  local p c gd mk w found=0
-  p=$1
-  [ -d "$p" ] || { echo "$(msg replay.not_exists p="$p")" >&2; return 1; }
-  c=$(canon "$p")
-  case "$c" in "$MAINC"|"$MAINC"/*) echo "$(msg replay.is_main c="$c")" >&2; return 1 ;; esac
-  case "$c" in "$ROOTC"|"$ROOTC"/*) echo "$(msg replay.is_project c="$c")" >&2; return 1 ;; esac
-  case "$c" in "$MAATC"|"$MAATC"/*) echo "$(msg replay.is_plugin c="$c")" >&2; return 1 ;; esac
-  case "$(basename "$c")" in fic-replay-*) ;; *) echo "$(msg replay.bad_name c="$c")" >&2; return 1 ;; esac
-  [ "$(canon "$(git -C "$c" rev-parse --show-toplevel 2>/dev/null)")" = "$c" ] ||
-    { echo "$(msg replay.not_wt_root c="$c")" >&2; return 1; }
-  gd=$(git -C "$c" rev-parse --absolute-git-dir 2>/dev/null)
-  mk="$gd/fic-replay"
-  [ -f "$mk" ] || { echo "$(msg replay.no_marker mk="$mk")" >&2; return 1; }
-  [ "$(canon "$(sed -n 's/^path=//p' "$mk")")" = "$c" ] || { echo "$(msg replay.marker_other path="$(sed -n 's/^path=//p' "$mk")")" >&2; return 1; }
-  while IFS= read -r w; do [ "$(canon "$w")" = "$c" ] && found=1; done < <(git -C "$MAIN" worktree list --porcelain | sed -n 's/^worktree //p')
-  [ $found -eq 1 ] || { echo "$(msg replay.not_listed c="$c")" >&2; return 1; }
-  return 0
-}
+# 1.9.0 (K3): the check is wt_ours of worktree-lib.sh with the fic-replay prefix (same checks, same texts)
+ours() { wt_ours "$1" fic-replay; }
 
 # FIC_REPLAY_LIB=1: functions only (for the tests, which exercise them on synthetic directories)
 [ "${FIC_REPLAY_LIB:-0}" = 1 ] && return 0
@@ -154,10 +137,12 @@ if [ "$MODE" = remove ]; then
   echo "+ unlink_deps $(q "$c")"
   echo "+ git -C $(q "$MAIN") worktree remove --force $(q "$c")"
   [ $DRY -eq 1 ] && exit 0
-  forget_mirror "$c"
-  unlink_deps "$c" || refuse "$(msg replay.links_left c="$c")"
-  git -C "$MAIN" worktree remove --force "$c"
-  exit $?
+  _wt_rimuovi "$c" fic-replay; rc=$?   # forget_mirror, unlink_deps, then git worktree remove (worktree-lib.sh)
+  case "$WT_PROVA_ESITO" in
+    nostro) refuse "$(msg replay.not_ours p="$RM_PATH")" ;;
+    collegamenti) refuse "$(msg replay.links_left c="$c")" ;;
+  esac
+  exit $rc
 fi
 
 . "$MAAT_SCRIPTS/python.sh" || die "$(msg replay.no_python)"
@@ -308,30 +293,28 @@ cleanup() {
     return 0
   fi
   mkdir -p "$OUT" && cp "$RUN_DST"/log/"$LABEL".* "$OUT"/ 2>/dev/null
-  if ! ours "$CREATED"; then
-    echo "replay: $(msg replay.check_failed wt="$CREATED")" >&2
-  elif forget_mirror "$CREATED" && ! unlink_deps "$CREATED"; then   # links first: the removal must never follow them
-    echo "replay: $(msg replay.links_left_wt wt="$CREATED")" >&2
-  else
-    git -C "$MAIN" worktree remove --force "$CREATED" || echo "replay: $(msg replay.remove_failed wt="$CREATED")" >&2
-  fi
+  # the check, forget_mirror, the links first (the removal must never follow them), then git: worktree-lib.sh
+  _wt_rimuovi "$CREATED" fic-replay
+  case "$WT_PROVA_ESITO" in
+    nostro) echo "replay: $(msg replay.check_failed wt="$CREATED")" >&2 ;;
+    collegamenti) echo "replay: $(msg replay.links_left_wt wt="$CREATED")" >&2 ;;
+    git) echo "replay: $(msg replay.remove_failed wt="$CREATED")" >&2 ;;
+  esac
 }
 trap cleanup EXIT
 
-# 1. worktree at the base, marker in its git dir
+# 1. worktree at the base, marker in its git dir; 1b. gates runnable as in the original: relative .git (WSL git),
+# linked dependencies (1.9.0, K3: _wt_crea of worktree-lib.sh, its commands through act), nuxi tsconfig
 [ $DRY -eq 1 ] || CREATED=$WT   # the trap removes it only if it passes the check
-act "git -C $(q "$MAIN") worktree add --detach $(q "$WT") $BASE"
-act "printf 'fic-replay\npath=%s\ncreated=%s\n' $(q "$WT") $STAMP > \"\$(git -C $(q "$WT") rev-parse --absolute-git-dir)/fic-replay\""
-# 1b. gates runnable as in the original: relative .git (WSL git), linked dependencies, nuxi tsconfig
-act "fic_relgit $(q "$WT")"
-while IFS= read -r p; do
-  [ -n "$p" ] && act "link_dep $(q "$MAIN/$p") $(q "$WT/$p")"
-done < <(dep_links "$MAIN")
+WT_ESEGUI=act _wt_crea "$WT" "$BASE" "$STAMP" fic-replay ||   # act dies on a failed step; 2: a reference refused
+  die "$(msg replay.step_failed s="_wt_crea $BASE")"
 NUXT=modules/app/apps/admin/.nuxt
 [ -f "$MAIN/$NUXT/tsconfig.json" ] &&
   act "mkdir -p $(q "$WT/$NUXT") && cp $(q "$MAIN/$NUXT/tsconfig.json") $(q "$WT/$NUXT/") && { cp $(q "$MAIN/$NUXT")/*.d.ts $(q "$WT/$NUXT/") 2>/dev/null; true; }"
 # 2. code at the phase state, as uncommitted changes
-[ -n "$STATE" ] && act "git -C $(q "$WT") read-tree -u --reset $STATE && git -C $(q "$WT") read-tree HEAD"
+if [ -n "$STATE" ]; then   # worktree-lib.sh, through act
+  WT_ESEGUI=act _wt_applica "$WT" "$STATE" || die "$(msg replay.step_failed s="_wt_applica $STATE")"
+fi
 # 2b. dependencies equal for git (checked above): the normalized fingerprint matches that of the main
 # tree, i.e. the worktree's WSL copy will be seeded (fic-mirror.sh). Not with --non-confrontabile.
 [ -z "$NONCONF" ] && act "deps_fp_check $(q "$MAIN") $(q "$WT")"

@@ -33,7 +33,7 @@ While it works, Maat:
 - Author: [Diego Iorio](https://github.com/Diegoiorio). [MIT](LICENSE) license: free to use, modify and
   redistribute.
 - Full guide to the flows, with diagrams: [`docs/GUIDA-FLUSSI.html`](docs/GUIDA-FLUSSI.html) (open it in a browser).
-- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.8.2**.
+- What's new in each version: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.9.0**.
 
 ## When to use Maat
 
@@ -91,11 +91,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.8.2 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.0 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.8.2` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.9.0` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -131,7 +131,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.8.2/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.9.0/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -217,7 +217,7 @@ After every phase a script (never the model) gives its outcome a class, and the 
 | Class | Example | What the driver does |
 |---|---|---|
 | OK | the phase did its job | goes on |
-| OK with an accepted deviation | test-red changed only test data, and an independent reviewer and a script agreed | goes on; the deviation is shown to the code review |
+| OK with an accepted deviation | test-red changed only test data, and an independent reviewer and a script agreed; since 1.9.0, implement/fix corrected a defective acceptance test with a proof (below) | goes on; the deviation is shown to the code review |
 | Resumable | a plan that stops with the spec still `DRAFT`; an `Open decision:` that is not proved; a test that needs a stub (a missing symbol); a background agent not collected | **relaunches the same phase** with the open findings in its prompt |
 | Human | a real decision the code and the tests cannot take, with its proof; a limit shown by a probe; a refused deviation; a conflict with the suite; a plan that prints `OK` on a spec still `DRAFT` or `NEEDS HUMAN DECISION` | final STOP (exit 1), the line says why and where the proof is; a plan `OK` on `DRAFT` is registered (`Stop umano:` in `driver.log`) and stays stopped until the State changes (approve the plan or change the spec) |
 | Technical | a failed run, invalid output, a blocked gate, a busy lock | STOP, WAIT or BUSY, as before |
@@ -233,13 +233,30 @@ Some human decisions are **not verified by a script** (the types `recurrence`, `
 To get the STOPs of 1.7 back, set `"ciclo": { "riprese": 0 }` in `.claude/maat.json` (or `FIC_RIPRESE=0`); a file
 that uses the key declares `"harness": ">=1.8"`.
 
+**Deviations accepted with a proof (1.9.0).** Sometimes test-red writes an acceptance test that leaks state into the
+other tests of its file: a patch never restored, shared test data changed in place. No code can make the victim test
+green in that file. Up to 1.8 that was a STOP for a person. Now implement (or fix) may declare
+`defective-test: <Tn> — <class> — <why>` (Italian `test-difettoso: `), where `<Tn>` is the test that pollutes, and
+correct it inside its own body. Only two classes are admitted, `shared-state` and `unrestored-patch` (pytest or
+vitest), and only with one transformation of a closed list (`monkeypatch.setattr`, `with patch`, `.stop()` or
+`mockRestore()` in a `finally`, `copy.deepcopy`, `structuredClone`, a spread). `run-phase.sh` accepts it only when its
+scripts prove it in throw-away worktrees: nothing changed outside `<Tn>`, its assertions on the expected texts are
+identical, a victim test of the same file is red with the old `<Tn>`, green alone and green with the new one, the new
+`<Tn>` is still red on the test-red tree and green on the code, and an independent judge said ACCEPT on inputs the
+script recomputes. Any check that fails or cannot be made is the STOP of 1.8. One correction per test per cycle. To
+switch it off: `"ciclo": { "correzione_test": false }` (with `"harness": ">=1.9"`) or `FIC_CORREZIONE_TEST=0`.
+
 ### Useful options
 
 - `--worktree`: the cycle works in a separate copy of the repo, on its own branch, so you can keep working in the
   main folder. Run it from the main folder of the repo. If Git could check it out with CRLF (`core.autocrlf=true`, the
   default of Git for Windows), the worktree alone gets `core.autocrlf false` and `core.eol lf` and its files come out
   with LF; an `eol=` in `.gitattributes` still decides.
-- `--tests=min|std|full`: how many tests to run, from a few to all of them.
+- `--tests=min|std|full`: how many tests to run, from a few to all of them. Since 1.9.0 `std` and `full` (and a plan
+  without `Test level:`) also run the **build** of every module with `comandi.build` whose files the cycle touched
+  (under its `radice` or `radice_pacchetti`; every such module for a file outside every module), and the closing
+  requires it: a cycle no longer ends `IMPLEMENTED` without a build. `min` has no build. To get 1.8 back set
+  `"ciclo": { "build_chiusura": false }` (with `"harness": ">=1.9"`) or `FIC_BUILD_CHIUSURA=0`.
 - `--full`: always the full size (the flow of 1.6), whatever the size of the plan.
 - `--light`: the small size even above the numeric thresholds (files, steps, tests…), never above a critical
   surface, a migration, a destructive or security word. Not together with `--full`.
@@ -282,15 +299,25 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.8.2`, from the project folder:
+`v1.9.0`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.8.2 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.0 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.8.x to 1.9.0 two defaults change. At `std` and `full` (and for a plan without `Test level:`) the cycle runs the
+**build** of the modules it touched that declare `comandi.build`, and the closing requires it: a cycle that closed
+`IMPLEMENTED` without a build now ends at most `NEEDS_VERIFICATION` (above, «Useful options»). A defective acceptance
+test written by test-red can be corrected in implement/fix with a proof (above, «Deviations accepted with a proof»)
+instead of stopping. `ciclo.build_chiusura: false` and `ciclo.correzione_test: false` (or `FIC_BUILD_CHIUSURA=0`,
+`FIC_CORREZIONE_TEST=0`) give back 1.8; a `maat.json` that sets either key declares `"harness": ">=1.9"`. `maat-doctor`
+says, with an `INFO` line, when a project takes these defaults without having chosen them. The harness fingerprint
+changes: update **between** cycles, never during one. Specs, approved plans, `maat.json` and the run dirs are read as
+before; the new files appear only in a run dir of 1.9. See `CHANGELOG.md`.
 
 From 1.7.x to 1.8.0 the default changes: a STOP that a script judges resumable is relaunched by the driver (above,
 «When a phase stops: resumes»), test-red accepts judged deviations of test data and writes additive stubs in existing
@@ -335,8 +362,8 @@ claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK with version 1.5.1. `claude plugin update`
-accepts a lower version (no need to uninstall and install again). To come back to 1.8.2, the same two commands with
-`#v1.8.2`.
+accepts a lower version (no need to uninstall and install again). To come back to 1.9.0, the same two commands with
+`#v1.9.0`.
 
 - **A cycle in progress** stops with «harness changed», as after any change of version, with the remedy of always:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, run from the project folder (on

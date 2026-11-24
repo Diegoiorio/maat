@@ -6,6 +6,8 @@
 #   RP=/path/variant.sh bash .../run-phase.test.sh   # the variant must live in this folder
 #     (1.6.0: the outcome is validated by driver.py valida, the only engine: a mutation of the validator is made in
 #     driver.py, FIC_DRIVER_PY; the internal validator VALIDA_PY is gone)
+# Sections 13-15 (1.9.0: K6a, K6b, K8) are in run-phase-s2.test.sh (split off in 1.9.0: the whole file passed the
+# per-suite limit of the Windows runner).
 # The real lock (inside .git) is not touched: FIC_LOCK points to a temporary directory; FIC_REPO points
 # to a temporary git repo, so the fake claude changes files there and not in the project.
 set -uo pipefail
@@ -1423,5 +1425,6 @@ else
   check "controprova (WSLENV): senza wslenv_add il wsl finto vede la lingua vuota (il caso w1 sarebbe rosso)" 'grep -qx "MAAT_LINGUA=" "$T/w5-plan.wsl-0"'
 fi
 
+# 13-15 (1.9.0: K6a, K6b, K8): in run-phase-s2.test.sh (split off in 1.9.0 for the per-suite limit of the Windows CI).
 echo "run-phase.test.sh: $((n - fail))/$n ok"
 [ $fail -eq 0 ]

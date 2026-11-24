@@ -132,7 +132,7 @@ fi
 
 # --- counterproof 2: controlli-<modulo> removed from the gates required by finalize.sh => the red case signs NEEDS_VERIFICATION ---
 MF="$W/mut-controlli.sh"
-sed 's/^    \[ -n "\$g" \] && \[ "\$t" != build \] || continue$/    [ -n "$g" ] \&\& [ "$t" != build ] \&\& [ "$t" != controlli ] || continue/' "$FZ" > "$MF"
+sed 's/^\(    \[ -n "\$g" \] && { \[ "\$t" != build \] || \[ "\$build_req" = 1 \]; }\) || continue   # BUILD-RICHIESTO-190$/\1 \&\& [ "$t" != controlli ] || continue/' "$FZ" > "$MF"
 if cmp -s "$FZ" "$MF"; then ko "controprova controlli non richiesti: la mutazione non si applica"; else
   printf 'if then\n' > "$R/script/deploy.sh"
   caso mut-controlli std "$GT" "$MF"

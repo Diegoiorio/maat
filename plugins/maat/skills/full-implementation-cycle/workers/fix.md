@@ -8,5 +8,6 @@ section, plus the do-not-touch and mixed lists of the run directory, plus the ge
 `workers/implement.md` (a test `FAIL` that only asks to realign a generated file is fixed by its command). Any other
 unnamed file stays a deviation; `Rigenerati: <paths>` in the `PHASE RESULT` summary. Handle its report as `workers/implement.md`
 says (deviation → STOP, unless all are `defensive: …` (or `difensiva: …`): recorded, no STOP; migration → STOP, partial → one
-relaunch in `fix` mode). The next review computes the
+relaunch in `fix` mode). A `defective-test: …` deviation: the same family of `workers/implement.md` (`corretto`, the judge on those blocks only, then OK).
+The next review computes the
 delta itself from the changed snapshot. JSON: `"fase": "fix"`.
