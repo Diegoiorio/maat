@@ -2167,7 +2167,10 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
     printf '%s/staging/\n' "${sa#"$sr"/}" > "$scope"
     echo "$plan_fp" > "$dir/staging.fp"; rm -f "$dir/staging.origine"   # 1.8.0: parked by test-stage, not by a STOP
   fi
-  FIC_SCOPE=$(maat_cygm "$scope" 2>/dev/null || printf '%s' "$scope"); export FIC_SCOPE
+  # 1.9.1 (C4): absolute, so the guard does not open it against the session's current folder (a `cd` into evidence/
+  # made an in-scope Edit denied)
+  sab="$(cd "$(dirname "$scope")" && pwd)/$(basename "$scope")"
+  FIC_SCOPE=$(maat_cygm "$sab" 2>/dev/null || printf '%s' "$sab"); export FIC_SCOPE
   if [ "$phase" = test-red ] && { [ -d "$dir/staging" ] || [ -f "$dir/staging.fp" ]; }; then
     sfp=$([ -f "$dir/staging.fp" ] && tr -d '\r\n' < "$dir/staging.fp")
     if [ -n "$sfp" ] && [ "$sfp" = "$plan_fp" ] && [ -d "$dir/staging" ]; then   # CONFRONTO-IMPRONTA-STAGING

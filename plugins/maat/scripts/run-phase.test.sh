@@ -764,9 +764,12 @@ printf '%s\n' "# F" "## Piano di implementazione" "Plan status: APPROVED" > "$T/
 FAKE_OUT="$T/70-test-red" bash "$RP" "$T/w3/spec-f1.run" 70-test-red "$T/prompt.md" 2>/dev/null </dev/null; rc=$?
 check "test-red su un piano in formato 1 → exit 2, nessuna sotto-sessione" '[ $rc -eq 2 ] && [ ! -f "$T/70-test-red.args" ]'
 mkspec
+mkdir -p "$T/w3c4"; cp "$TSP" "$T/w3c4/spec-t.md"   # 1.9.1 (C4): the same fresh plan, for the run with a relative run dir
 FAKE_CMD="$WRITE_RED" trun 71-test-red; rc=$?
 check "test-red: rossi dimostrati → .esito OK" '[ $rc -eq 0 ] && [ "$(sed -n 1p "$TRUN/log/71-test-red.esito")" = "ESITO FASE x: OK — finto" ]'
 check "  FIC_PHASE=test-red e FIC_SCOPE = log/<label>.scope (test del piano + file nuovi)" 'grep -qx "FIC_PHASE=test-red" "$T/71-test-red.env" && grep -q "^FIC_SCOPE=.*71-test-red.scope$" "$T/71-test-red.env" && [ "$(cat "$TRUN/log/71-test-red.scope")" = "$(printf "modules/api/tests/test_calc.py\nmodules/api/app/calc.py")" ]'
+# 1.9.1 (C4): FIC_SCOPE absolute (/… on Linux, WSL, macOS; C:/… on Git Bash after maat_cygm), and it is the scope file
+check "  (1.9.1 C4) FIC_SCOPE assoluto (/… o C:/…) e apribile" 'v=$(sed -n "s/^FIC_SCOPE=//p" "$T/71-test-red.env" | tr -d "\r"); printf "%s\n" "$v" | grep -Eq "^(/|[A-Za-z]:/)" && [ -f "$v" ]'
 check "  fase di codice: attribuzione in touched.txt, lock rilasciato" 'grep -qx modules/api/tests/test_calc.py "$TRUN/touched.txt" && grep -qx modules/api/app/calc.py "$TRUN/touched.txt" && [ -s "$TRUN/log/71-test-red.post-tree" ] && [ ! -d "$FIC_LOCK" ]'
 check "  gates.sh mirato (std, test del piano) con l'esito atteso FAIL" '[ "$(sed -n 3p "$T/71-test-red.gates-args")" = std ] && grep -qx modules/api/tests/test_calc.py "$T/71-test-red.gates-args" && grep -q "^exit=1 livello=std" "$TRUN/log/71-test-red.gates"'
 check "  chiusura: stub, tests.txt, tests <fp> nella basis, mutazione assorbita (L2)" 'grep -q "\"somma\"" "$TRUN/test-red/stubs.json" && [ -s "$TRUN/test-red/tests.txt" ] && grep -q "^Approved basis: .* · tests [0-9a-f]\{12\}$" "$TSP" && grep -q "\"assorbita\": true" "$TRUN/counterproof/mutations.json"'
@@ -777,6 +780,11 @@ check "  cycle-state: dopo test-red OK → IMPLEMENT" 'bash "$(dirname "$RP")/cy
 # Counterproof by mutation at the end of section 10 (redirect without the [ -f ] check => red).
 touched_err() { grep -qsE 'touched\.txt: ' "$T/$1.err" "$TRUN/log/$1.stderr"; }
 check "  test-red senza touched.txt prima della fase: nessun errore «touched.txt: …» nello stderr" '[ -f "$TRUN/log/71-test-red.touched-pre" ] && ! touched_err 71-test-red'
+# 1.9.1 (C4, N7): the driver passes the run dir RELATIVE to the root; FIC_SCOPE must still reach the phase absolute
+# (before: relative, opened by the guard against the session's current folder). Falsifiable: with the old export the
+# value is «spec-t.run/log/71c-test-red.scope».
+(cd "$T/w3c4" && FAKE_OUT="$T/71c-test-red" FIC_GATES="$T/gates-red" bash "$RP" spec-t.run 71c-test-red "$T/prompt.md" 2>/dev/null </dev/null)
+check "  (1.9.1 C4) run dir relativa: FIC_SCOPE assoluto (/… o C:/…) e apribile" 'v=$(sed -n "s/^FIC_SCOPE=//p" "$T/71c-test-red.env" | tr -d "\r"); printf "%s\n" "$v" | grep -Eq "^(/|[A-Za-z]:/).*/spec-t\.run/log/71c-test-red\.scope$" && [ -f "$v" ]'
 cp "$TSP" "$T/w3/spec-t.dopo-red"
 FAKE_CMD='printf "def somma(a, b):\n    return a + b\n" > "$FIC_REPO/modules/api/app/calc.py"' FAKE_OUT="$T/72-implement" bash "$RP" "$TRUN" 72-implement "$T/prompt.md" 2>/dev/null </dev/null
 check "implement che riempie lo stub → OK (lo stub non e' un test)" '[ "$(sed -n 1p "$TRUN/log/72-implement.esito")" = "ESITO FASE x: OK — finto" ]'
