@@ -69,7 +69,8 @@ c=\${1//\/mnt\//\/}
 env -u MAAT_CONFIG -u MAAT_LINGUA PATH="$FB:\$PATH" bash -c "\$c" 2>>"$W/wsl-stderr"
 EOF
 printf '#!/usr/bin/env bash\necho "${FAKE_NODE:-v18.19.0}"\n' > "$FB/node"
-printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "DIRNPM $PWD" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
+# DIRNPM: the directory in the native form (pwd -W in Git Bash: under the fake WSL the same folder is /c/…, not /tmp/…)
+printf '#!/usr/bin/env bash\necho "NPM $*" >> "$GLOG"; echo "DIRNPM $(pwd -W 2>/dev/null || pwd)" >> "$GLOG"; echo "build ok"\n' > "$FB/npm"
 # fake venv python: --version, pip freeze, pytest (JUnit unless FAKE_NOJUNIT)
 cat > "$FB/venv-python" <<'EOF'
 #!/usr/bin/env bash
@@ -366,7 +367,7 @@ else chk "16 controprova: senza la stampa dell AVVISO -> rosso" '! caso_k8_avvis
 : > "$GLOG"; printf ' ' >> "$R/modules/app/packages/ui/Button.vue"
 g16 std modules/app/packages/ui/Button.vue
 chk "16 modulo wsl con copia: build in WSL sul tree (radice_pacchetti), non nella copia, senza test-fast.sh" \
-  '[ "$(calls NPM)" = 1 ] && grep -qx "DIRNPM $R/modules/app" "$GLOG" && [ "$(calls VF)" = 0 ]' "$out"$'\n'"$(cat "$GLOG")"
+  '[ "$(calls NPM)" = 1 ] && grep -qxF "DIRNPM $(cd "$R/modules/app" && { pwd -W 2>/dev/null || pwd; })" "$GLOG" && [ "$(calls VF)" = 0 ]' "$out"$'\n'"$(cat "$GLOG")"
 M16="$W/gates-k8-mut.sh"
 sed 's/^      if \[ "$tipo" = build \] && \[ "$BUILD_CHIUSURA" = 1 \]; then   # BUILD-INSTRADA-190$/      if false; then/' "$GT" > "$M16"
 if cmp -s "$GT" "$M16"; then ko "16 controprova: la riga dell'instradamento del build non c'e'"
