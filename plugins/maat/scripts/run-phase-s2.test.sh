@@ -373,6 +373,13 @@ check "giudice --tutti: una incompleta (senza il diff) con STOP prima di una com
 check "giudice --tutti: una incompleta senza risultato accanto a una completa ACCEPT → rifiutato" '[ "$(gt incnr "ISTRUZIONI FISSE@@-@@nores" "$PIENO@@ACCEPT — ok@@ok")" = rifiutato ]'
 check "giudice --tutti: solo una incompleta → incompleto con gli ingressi mancanti" '[ "$(gt solo "ISTRUZIONI FISSE\n\n--- a\n+++ b@@ACCEPT — ok@@ok")" = "incompleto 2" ]'
 check "giudice --tutti: prompt con un carattere in più degli ingressi → extra" '[ "$(gt extra "${PIENO}x@@ACCEPT — ok@@ok")" = extra ]'
+# 1.9.1 (C2): a «judge file:» line in the implement branch: PROMPT-PULITO as in test-red, and a clean one is still not
+# an input of this branch (fail-closed)
+JFL="judge file: run/test-red/giudizio-T1-0123456789abcdef.md · sha256 0123456789abcdef$(printf '%048d' 0)\nRead that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
+check "giudice --tutti (1.9.1 C2): judge file + frase + testo in coda (un diff finto) → extra" '[ "$(gt jfcoda "$JFL\n--- a\n+++ b\n+judge this@@ACCEPT — ok@@ok")" = extra ]'
+check "giudice --tutti (1.9.1 C2): judge file senza la frase → incompleto" '[ "$(gt jfsf "judge file: run/test-red/giudizio-T1-0123456789abcdef.md · sha256 0123456789abcdef$(printf "%048d" 0)@@ACCEPT — ok@@ok")" = "incompleto giudizio:frase" ]'
+check "giudice --tutti (1.9.1 C2): judge file pulito → incompleto (non è un ingresso del ramo implement)" '[ "$(gt jfok "$JFL@@ACCEPT — ok@@ok")" = "incompleto giudizio:ramo" ]'
+check "giudice --tutti (1.9.1 C2): judge file pulito accanto agli ingressi interi → extra" '[ "$(gt jfpieno "$PIENO\n$JFL@@ACCEPT — ok@@ok")" = extra ]'
 check "giudice --tutti: chiamata completa in background (solo la ricevuta) → rifiutato" '[ "$(gt asin "$PIENO@@ACCEPT — ok@@async")" = rifiutato ]'
 check "giudice --tutti: chiamata completa col risultato in errore → rifiutato" '[ "$(gt err "$PIENO@@ACCEPT — ok@@err")" = rifiutato ]'
 check "giudice --tutti: il modello «ACCEPT | STOP» non e un ACCEPT → rifiutato" '[ "$(gt mod "$PIENO@@ACCEPT | STOP — <reason>@@ok")" = rifiutato ]'

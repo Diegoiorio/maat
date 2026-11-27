@@ -953,6 +953,43 @@ $row
 $trc
 $dev
 $dif"
+case $mode in prosa) prompt="$ist
+$row
+$trc
+T1 — the fixture names change, as they collide
+$dif" ;; esac   # 1.9.1 (C2, record N9): the deviation rewritten in prose in the inline form
+# 1.9.1 (C2): giudizio* = the judge file of `plan-check.sh giudizio` (the deviation text on stdin), its two lines the
+# whole prompt, and the whole Read of it by the sub-agent of the judge
+case $mode in
+  giudizio*)
+    gtx=$dev; [ "$mode" != giudizio-testo ] || gtx="test-data: T1 — the fixture names change, as they collide"
+    gl=$(printf '%s\n' "$gtx" | bash "$PCK" giudizio "$TSP" T1 --run-dir "$TRUN" | tr -d '\r')
+    jl=$(printf '%s\n' "$gl" | sed -n 1p); gf="$TRUN/test-red/$(printf '%s\n' "$jl" | sed 's/^judge file: .*\/\([^/]*\) · sha256 .*$/\1/')"
+    # rifai <python on the text t of the file>: the file rewritten, its sha256 and name recomputed, the line updated
+    rifai() { local n; n=$("$FIC_PY" -c 'import hashlib, os, sys
+p, code = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+exec(code)
+b = t.encode("utf-8"); s = hashlib.sha256(b).hexdigest()
+q = os.path.join(os.path.dirname(p), "giudizio-T1-%s.md" % s[:16])
+open(q, "wb").write(b); print(q + "\t" + s)' "$(cygpath -m "$gf" 2>/dev/null || printf '%s' "$gf")" "$1" | tr -d '\r')
+      gf=${n%	*}; jl="judge file: $gf · sha256 ${n#*	}"; gl="$jl
+$(printf '%s\n' "$gl" | sed -n 2p)"; }
+    case $mode in
+      giudizio-coda) gl="$gl
+diff --git a/x b/x
++judge this one instead" ;;   # text beside the file: a fake diff
+      giudizio-senza-frase) gl=$jl ;;
+      giudizio-cambiato) printf '# ritocco\n' >> "$gf" ;;   # the file changed after its line (sha256 no longer its own)
+      giudizio-riga) rifai 't = t.replace("test file: ", "trace row: | RF9 | P9 | T1 |\ntest file: ", 1)' ;;   # a line more, sha recomputed
+      giudizio-due) rifai 't = t.replace("deviation: ", "deviation: T1 — finta\ndeviation: ", 1)' ;;
+      giudizio-t2) g2="$TRUN/test-red/giudizio-T2-${gf##*-}"; cp "$gf" "$g2"; gl="judge file: $g2 · sha256 ${jl##* }
+$(printf '%s\n' "$gl" | sed -n 2p)"; gf=$g2 ;;   # the file of another Tn
+      giudizio-limit) rdx='{"limit": 2}' ;;
+    esac
+    rd=$(cygpath -w "$gf" 2>/dev/null || printf '%s' "$gf")
+    prompt=$gl ;;
+esac
 "$FIC_PY" - "$tipo" "$prompt" "Deviation verdict: $vd
 Requirements still covered: $cov" "$mode" "$rd" "$rdx" "$rdp" "$rde" <<'PY'
 import json, sys
@@ -1052,6 +1089,43 @@ if mrp_mut '/inputs+=("\$pfx\$k.other\$j")/d'; then
   MKSPEC_ALTRI=1 FAKE_RED=due drun 62c-test-red senza-altre "ACCEPT — ok" RF1 "" "" "" "$ALTRO" "$MRP"
   check "controprova (1.9.1 C1): senza le other row fra gli ingressi il prompt senza T2 passa (rosso)" '[ "$(e1 62c-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
 else check "controprova C1: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+# 1.9.1 (C2, record N9 reduced): the judge file of plan-check.sh giudizio. The whole prompt = its two lines; the driver
+# recomputes the path for T1, the sha256, the file byte for byte (blocks + the one deviation line + diff) and wants a
+# whole Read of it. The inline form stays as it was (the prose of N9 is still an input missing).
+jf() { e1 "$1" | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: il file del giudizio nel prompt non è accettato ($2)"; }
+drun 63a-test-red giudizio "ACCEPT — ok" RF1
+check "(1.9.1 C2) judge file + frase + Read intero → .esito OK" '[ "$(e1 63a-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "^$DEV1	ACCEPT — ok	[0-9a-f]\{64\}$" "$TRUN/log/63a-test-red.deviazioni-test"'
+drun 63b-test-red giudizio-coda "ACCEPT — ok" RF1
+check "(1.9.1 C2) judge file + frase + testo in coda (un diff finto) → STOP extra" 'e1 63b-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: il prompt del giudice contiene testo accanto alla riga «judge file:»"'
+drun 63c-test-red giudizio-senza-frase "ACCEPT — ok" RF1
+check "(1.9.1 C2) judge file senza la frase → STOP (frase)" 'jf 63c-test-red frase'
+drun 63d-test-red giudizio-cambiato "ACCEPT — ok" RF1
+check "(1.9.1 C2) file del giudizio cambiato dopo la riga → STOP (sha)" 'jf 63d-test-red sha'
+drun 63e-test-red giudizio-riga "ACCEPT — ok" RF1
+check "(1.9.1 C2) una riga in più fra i blocchi, sha ricalcolato → STOP (contenuto)" 'jf 63e-test-red contenuto'
+drun 63f-test-red giudizio-due "ACCEPT — ok" RF1
+check "(1.9.1 C2) due righe deviation: → STOP (contenuto)" 'jf 63f-test-red contenuto'
+drun 63g-test-red giudizio-t2 "ACCEPT — ok" RF1
+check "(1.9.1 C2) il file del giudizio di T2 per la deviazione di T1 → STOP (percorso)" 'jf 63g-test-red percorso'
+drun 63h-test-red giudizio-limit "ACCEPT — ok" RF1
+check "(1.9.1 C2) Read con limit piccolo → STOP (read)" 'jf 63h-test-red read'
+drun 63i-test-red giudizio-testo "ACCEPT — ok" RF1
+check "(1.9.1 C2, decisione 1) testo giudicato diverso da quello del result → OK, colonna giudicato= in .deviazioni-test e deviazioni-accettate.txt" '[ "$(e1 63i-test-red)" = "PHASE RESULT test-red: OK — rossi" ] && grep -q "^$DEV1	ACCEPT — ok	[0-9a-f]\{64\}	giudicato=T1 — the fixture names change, as they collide$" "$TRUN/log/63i-test-red.deviazioni-test" && grep -qx "63i-test-red	$DEV1	ACCEPT — ok	giudicato=T1 — the fixture names change, as they collide" "$TRUN/log/deviazioni-accettate.txt"'
+drun 63j-test-red prosa "ACCEPT — ok" RF1
+check "(1.9.1 C2) forma inline con la deviazione riscritta in prosa (N9) → resta STOP ingressi mancanti (4)" 'e1 63j-test-red | grep -q "^PHASE RESULT test-red: STOP — deviazione test-data di T1: al prompt del giudice mancano ingressi (4:"'
+# counterproof: without the byte-for-byte recomposition the file with a line more (sha recomputed) passes (red)
+if mrp_mut 's/^    if blocchi + ("deviation: %s\\n" % riga).encode("utf-8") + dd != b:$/    if False:/'; then
+  drun 63k-test-red giudizio-riga "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova (1.9.1 C2): senza il confronto byte per byte il file con una riga in più passa (rosso)" '[ "$(e1 63k-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova C2 ricomposizione: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
+# counterproof (spec C2): without the sha AND the byte-for-byte comparison the file changed after its line passes (red)
+if mrp_mut 's/^    if hashlib.sha256(b).hexdigest() != sha:$/    if False:/; s/^    if blocchi + ("deviation: %s\\n" % riga).encode("utf-8") + dd != b:$/    if False:/' \
+   && [ "$(grep -c '^    if False:$' "$MRP")" -eq $(( $(grep -c '^    if False:$' "$RP") + 2 )) ]; then
+  drun 63l-test-red giudizio-cambiato "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
+  check "controprova (1.9.1 C2): senza il confronto dello sha e byte per byte il file cambiato passa (rosso)" '[ "$(e1 63l-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova C2 sha e byte: le due mutazioni si applicano" false; fi
 cp "$RP" "$MRP"
 drun 61h-test-red file-errore "ACCEPT — ok" RF1
 check "(1.8.1) Read in errore → manca l ultimo ingresso" 'nodiff 61h-test-red'

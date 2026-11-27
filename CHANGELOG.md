@@ -25,7 +25,9 @@ update between cycles.
   STOP that names what failed (`frase`, `percorso`, `file`, `sha`, `contenuto`, `tn`, `read`), or «text beside the judge
   file» for anything more in the prompt. The inline form is unchanged. When the text in the result differs from the
   judged one, `.deviazioni-test` and `deviazioni-accettate.txt` keep the declared text and add
-  `giudicato=<judged text>`. Only test-red: the defective-test family of implement/fix keeps its inline prompt.
+  `giudicato=<judged text>`. Only test-red: the defective-test family of implement/fix keeps its inline prompt; there a
+  `judge file:` line gets the same check of the text beside it (`extra`, or the sentence missing) and, clean, is still a
+  STOP (inputs missing).
 - **The guard opens `FIC_SCOPE` from the repository root.** test-red received a scope file path relative to the root
   and the guard opened it against the current folder of the session: after a `cd` into the evidence folder an in-scope
   `Edit` was denied. `run-phase.sh` now exports it absolute, and the guard resolves a relative one on `FIC_REPO`, never

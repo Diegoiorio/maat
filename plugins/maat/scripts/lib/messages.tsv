@@ -338,6 +338,10 @@ run-phase-190.d_tree	proof tree not usable ({why})	albero di prova non usabile (
 run-phase-190.not_green	{tn} is not green on the gates of the phase ({e})	{tn} non è verde ai gate della fase ({e})
 run-phase-190.judge	{fam} deviation of {tn}: judge {st} (never, missing inputs {which}, refused: a call of the judge in the phase is not a complete ACCEPT)	deviazione {fam} di {tn}: giudice {st} (mai, ingressi mancanti {which}, rifiutato: una chiamata del giudice nella fase non è un ACCEPT completo)
 run-phase-190.judge_extra	the judge's prompt holds text beyond the inputs computed by the script	il prompt del giudice contiene testo oltre gli ingressi calcolati dallo script
+plan-check-191.giudizio_stdin	plan-check.sh: the deviation text on stdin must be exactly one line, not blank	plan-check.sh giudizio: il testo della deviazione su stdin deve essere esattamente una riga non vuota
+plan-check-191.giudizio_limit	plan-check.sh: the judge file is over the limits of Read (2000 lines of 2000 characters): paste the blocks instead	plan-check.sh giudizio: il file del giudizio supera i limiti di Read (2000 righe di 2000 caratteri): incolla i blocchi
+run-phase-191.dev_judge_extra	test-data deviation of {tn}: the prompt of the judge holds text beside the «judge file:» line and its sentence	deviazione test-data di {tn}: il prompt del giudice contiene testo accanto alla riga «judge file:» e alla sua frase
+run-phase-191.dev_judge_file	test-data deviation of {tn}: the judge file of the prompt is not accepted ({why})	deviazione test-data di {tn}: il file del giudizio nel prompt non è accettato ({why})
 run-phase-190.not_recorded	corrected test accepted but fingerprint not recordable (approval STALE)	test corretto accettato ma impronta non registrabile (approvazione STALE)
 run-phase-190.ok_corrected	acceptance test {tn} corrected, proven red on the stub and green: {d}	test di accettazione {tn} corretto, provato rosso sullo stub e verde: {d}
 run-phase-190.why_wt	proof worktree {n} not created or the tree not applied	worktree di prova {n} non creato o albero non applicato
