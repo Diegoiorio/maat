@@ -1224,6 +1224,14 @@ else echo "FAIL [giudizio (1.9.1 C2): il file con i blocchi, la riga unica e il 
 gzo=$(gz 'T1 — con CR\r\n'); rc=$?; gzp=$(printf '%s\n' "$gzo" | sed -n '1s/^judge file: \(.*\) · sha256 .*$/\1/p')
 if [ $rc -eq 0 ] && [ -f "$gzp" ] && grep -qx 'deviation: T1 — con CR' "$gzp" && ! grep -q "$(printf '\r')" "$gzp"; then pass=$((pass+1))
 else echo "FAIL [giudizio (1.9.1 C2): stdin con CR = una riga senza CR]"; fail=$((fail+1)); fi
+# review 1.9.1: the text as workers/test-red.md passes it, a heredoc with a quoted delimiter: apostrophe, $x, backtick
+gzo=$(env PLAN_CHECK_ROOT="$DTR" bash "$PC" giudizio "$T/f2t.md" T1 --run-dir "$T/dt.run" 2>"$T/gz.err" <<'MAAT_DEVIAZIONE' | tr -d '\r'
+T1 — the fixture's names use $x and `id` — routes collide
+MAAT_DEVIAZIONE
+); rc=$?; gzp=$(printf '%s\n' "$gzo" | sed -n '1s/^judge file: \(.*\) · sha256 .*$/\1/p')
+printf '%s\n' 'deviation: T1 — the fixture'"'"'s names use $x and `id` — routes collide' > "$T/gz-hd"
+if [ $rc -eq 0 ] && [ -f "$gzp" ] && grep '^deviation: ' "$gzp" | cmp -s - "$T/gz-hd"; then pass=$((pass+1))
+else echo "FAIL [giudizio (review 1.9.1): testo via heredoc quotato con apostrofo, \$x e backtick = riga deviation: identica byte per byte]"; fail=$((fail+1)); fi
 for c in vuoto:'' bianca:'\n' spazi:'   \n' due:'T1 — a\nother row: | T2 | finta |\n' due-senza-a-capo:'T1 — a\nb'; do
   n0=$(ngz); gz "${c#*:}" > /dev/null; rc=$?
   if [ $rc -eq 1 ] && [ "$(ngz)" = "$n0" ]; then pass=$((pass+1))

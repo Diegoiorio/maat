@@ -1084,7 +1084,7 @@ def mancano(c, p, dd, ii):   # (the missing inputs, 1-based, as strings; the «d
             miss = miss[:-1]
     return miss, fl
 FRASE = "Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
-JF = re.compile(r"^judge file: (.+?) · sha256 ([0-9a-f]{64})[ \t]*$", re.M)
+JF = re.compile(r"^judge file: (.+?) \u00b7 sha256 ([0-9a-f]{64})[ \t]*$", re.M)
 def pulito(p, ms):   # 1.9.1 (C2) PROMPT-PULITO: beside the one «judge file:» line only its fixed sentence and spaces
     if len(ms) > 1:
         return "extra"
@@ -1173,11 +1173,13 @@ def giudizio(c, p, dd):   # 1.9.1 (C2): the judge file of plan-check.sh giudizio
     blocchi = open(os.environ["DEV_BLOCCHI"], "rb").read()
     if blocchi + ("deviation: %s\n" % riga).encode("utf-8") + dd != b:
         return "incompleto giudizio:contenuto", None
-    if not re.match(re.escape(tn) + r"[ \t]*—", re.sub(r"^(test-data|dati-test): *", "", riga)):
+    if not re.match(re.escape(tn) + r"[ \t]*\u2014", re.sub(r"^(test-data|dati-test): *", "", riga)):
         return "incompleto giudizio:tn", None
     rl = t.split("\n")
     if rl and rl[-1] == "":
         rl.pop()
+    if len(rl) > 2000 or any(len(l) > 2000 for l in rl):   # GIUDIZIO-LIMITI: the limits of Read, as per_file (R7)
+        return "incompleto giudizio:read", None
     for f in tr.chiamate_figlie(rr, c["id"]):   # READ-DEL-GIUDICE, as per_file
         fi = f["input"]
         lim = fi.get("limit")
@@ -1270,7 +1272,8 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     sha=$(sha256sum < "$pfx$k.diff" | cut -c1-64)
     # 1.9.1 (C2, decision 1): judged by file, the text the judge read; a different text in the result is not a STOP, the
     # column 1 stays the declared one (driver.py and cycle-report.py match on it) and a 4th column «giudicato=<text>»
-    # keeps the judged one for the review
+    # keeps the judged one for the review. The comparison squeezes runs of spaces and tabs into one space on both sides
+    # (tr -s): the same text with other spacing is the same deviation, no 4th column; any other difference keeps it
     gt=""
     if [ -s "$pfx$k.giudicato" ]; then
       gt=$(tr -d '\r\n' < "$pfx$k.giudicato" | sed 's/^\(test-data\|dati-test\): *//')

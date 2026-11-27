@@ -963,7 +963,15 @@ $dif" ;; esac   # 1.9.1 (C2, record N9): the deviation rewritten in prose in the
 case $mode in
   giudizio*)
     gtx=$dev; [ "$mode" != giudizio-testo ] || gtx="test-data: T1 — the fixture names change, as they collide"
-    gl=$(printf '%s\n' "$gtx" | bash "$PCK" giudizio "$TSP" T1 --run-dir "$TRUN" | tr -d '\r')
+    if [ "$mode" = giudizio-grande ]; then   # review 1.9.1: over the limits of Read (giudizio refuses it, exit 3), so
+      # written here as plan-check composes it: blocks, the line, the diff; name and sha its own
+      gb=$(bash "$PCK" deviazione - "$TSP" T1 </dev/null | tr -d '\r'); gtf=$(printf '%s\n' "$gb" | sed -n 's/^test file: //p' | head -1)
+      mkdir -p "$TRUN/test-red"
+      { printf '%s\n' "$gb"; printf 'deviation: %s\n' "$gtx"; bash "$PCK" diff-test "$TSP" "$gtf" --run-dir "$TRUN"; } > "$TRUN/test-red/gg.tmp"
+      gs=$(sha256sum < "$TRUN/test-red/gg.tmp" | cut -c1-64); mv -f "$TRUN/test-red/gg.tmp" "$TRUN/test-red/giudizio-T1-${gs:0:16}.md"
+      gl="judge file: $TRUN/test-red/giudizio-T1-${gs:0:16}.md · sha256 $gs
+Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
+    else gl=$(printf '%s\n' "$gtx" | bash "$PCK" giudizio "$TSP" T1 --run-dir "$TRUN" | tr -d '\r'); fi
     jl=$(printf '%s\n' "$gl" | sed -n 1p); gf="$TRUN/test-red/$(printf '%s\n' "$jl" | sed 's/^judge file: .*\/\([^/]*\) · sha256 .*$/\1/')"
     # rifai <python on the text t of the file>: the file rewritten, its sha256 and name recomputed, the line updated
     rifai() { local n; n=$("$FIC_PY" -c 'import hashlib, os, sys
@@ -986,6 +994,10 @@ diff --git a/x b/x
       giudizio-t2) g2="$TRUN/test-red/giudizio-T2-${gf##*-}"; cp "$gf" "$g2"; gl="judge file: $g2 · sha256 ${jl##* }
 $(printf '%s\n' "$gl" | sed -n 2p)"; gf=$g2 ;;   # the file of another Tn
       giudizio-limit) rdx='{"limit": 2}' ;;
+      giudizio-piano) sed -i 's/test_somma` (nuovo)/test_somma` (nuovo, rivisto)/' "$TSP" ;;   # a plan line changed after giudizio
+      giudizio-cartella) mkdir -p "$TRUN/altrove"; cp "$gf" "$TRUN/altrove/"; gf="$TRUN/altrove/${gf##*/}"
+        gl="judge file: $gf · sha256 ${jl##* }
+$(printf '%s\n' "$gl" | sed -n 2p)" ;;   # the right name in another folder
     esac
     rd=$(cygpath -w "$gf" 2>/dev/null || printf '%s' "$gf")
     prompt=$gl ;;
@@ -1126,6 +1138,21 @@ if mrp_mut 's/^    if hashlib.sha256(b).hexdigest() != sha:$/    if False:/; s/^
   drun 63l-test-red giudizio-cambiato "ACCEPT — ok" RF1 "" "" "" "" "$MRP"
   check "controprova (1.9.1 C2): senza il confronto dello sha e byte per byte il file cambiato passa (rosso)" '[ "$(e1 63l-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
 else check "controprova C2 sha e byte: le due mutazioni si applicano" false; fi
+cp "$RP" "$MRP"
+# review 1.9.1: the limits of Read on the judge file (as per_file), a plan line changed after giudizio, the right name in
+# another folder
+GRANDE='seq 1 2100 | sed "s/^/# r/" >> "$FIC_REPO/modules/api/tests/test_calc.py"'
+drun 63m-test-red giudizio-grande "ACCEPT — ok" RF1 "" "" "" "$GRANDE"
+check "(1.9.1 review) file del giudizio oltre 2000 righe, scritto senza giudizio, sha coerente, Read senza limit → STOP (read)" 'jf 63m-test-red read'
+drun 63n-test-red giudizio-piano "ACCEPT — ok" RF1
+check "(1.9.1 review) una riga del piano cambiata dopo giudizio → STOP (non accettato)" 'e1 63n-test-red | grep -q "^PHASE RESULT test-red: STOP — "'
+drun 63o-test-red giudizio-cartella "ACCEPT — ok" RF1
+check "(1.9.1 review) il percorso col nome giusto in un altra cartella → STOP (percorso)" 'jf 63o-test-red percorso'
+# counterproof: without GIUDIZIO-LIMITI the judge file over the limits of Read passes (red)
+if mrp_mut '/# GIUDIZIO-LIMITI:/{N;d;}'; then
+  drun 63p-test-red giudizio-grande "ACCEPT — ok" RF1 "" "" "" "$GRANDE" "$MRP"
+  check "controprova (1.9.1 review): senza i limiti di Read il file del giudizio oltre 2000 righe passa (rosso)" '[ "$(e1 63p-test-red)" = "PHASE RESULT test-red: OK — rossi" ]'
+else check "controprova limiti del giudizio: la mutazione si applica" false; fi
 cp "$RP" "$MRP"
 drun 61h-test-red file-errore "ACCEPT — ok" RF1
 check "(1.8.1) Read in errore → manca l ultimo ingresso" 'nodiff 61h-test-red'
