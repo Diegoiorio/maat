@@ -2,6 +2,35 @@
 
 Format: one section per version (`MAJOR.MINOR.PATCH`), most recent first.
 
+## 1.9.1 — test-red judges a deviation on the right inputs, the guard reads its scope from the repository
+
+A patch: three STOPs of test-red that no person needed to decide, seen on a development benchmark round of 1.9.0
+(5 of 8 tasks closed `IMPLEMENTED` with every hidden test green, no false `IMPLEMENTED`, 3 STOPs in test-red). No
+default changes and no check that guards against a false `IMPLEMENTED` is relaxed. The harness fingerprint changes:
+update between cycles.
+
+- **The judge of a test-data deviation sees the other planned tests of the same file.** The diff it judges is of the
+  whole test file, so it also holds the changes another planned test of that file makes; with only the row of its own
+  test the judge took them as unauthorized and stopped. `plan-check.sh deviazione` now prints an `other row:` line for
+  every other test of the plan with the same file (both families), the fixed instructions say those changes are planned
+  and not part of the deviation, and `run-phase.sh` counts those lines among the inputs the prompt must hold. The diff
+  stays whole and recomputed; the new lines come from the approved plan.
+- **The judge's inputs in one file composed by Maat** (`plan-check.sh giudizio <spec> <Tn> --run-dir <d>`, the
+  deviation text on stdin, exactly one line). The session had to paste every block verbatim and rewrote the deviation
+  text in prose, an input missing. `giudizio` writes `<d>/test-red/giudizio-<Tn>-<sha16>.md` (the lines of `deviazione
+  -`, `deviation: <text>`, the diff of `diff-test`) and prints two lines, `judge file: <path> · sha256 <sha>` and a fixed
+  sentence, which are the whole prompt. The driver accepts that form only when nothing else is in the prompt, the path
+  is the one it computes for that test, the file has that sha256, holds one `deviation:` line and is byte for byte the
+  blocks it recomputes now with that line and the recomputed diff, and the judge's sub-agent read it whole. Otherwise a
+  STOP that names what failed (`frase`, `percorso`, `file`, `sha`, `contenuto`, `tn`, `read`), or «text beside the judge
+  file» for anything more in the prompt. The inline form is unchanged. When the text in the result differs from the
+  judged one, `.deviazioni-test` and `deviazioni-accettate.txt` keep the declared text and add
+  `giudicato=<judged text>`. Only test-red: the defective-test family of implement/fix keeps its inline prompt.
+- **The guard opens `FIC_SCOPE` from the repository root.** test-red received a scope file path relative to the root
+  and the guard opened it against the current folder of the session: after a `cd` into the evidence folder an in-scope
+  `Edit` was denied. `run-phase.sh` now exports it absolute, and the guard resolves a relative one on `FIC_REPO`, never
+  on the current folder (relative without `FIC_REPO`: denied). Unreadable stays denied.
+
 ## 1.9.0 — the build at closing, defective acceptance tests corrected with a proof
 
 **Why 1.9.0 and not a patch:** two defaults change. A `std` cycle no longer closes `IMPLEMENTED` without a build, and
