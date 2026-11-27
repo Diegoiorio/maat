@@ -541,6 +541,8 @@ $(printf '%s\n' "$out" | sed -n 's/^test row: //p')
 
 $(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
 
+$(printf '%s\n' "$out" | sed -n 's/^other row: //p')
+
 $(printf '%s\n' "$out" | grep '^defect: ')
 "
   case $mode in senza-tr) ;; *) p="$p

@@ -1154,6 +1154,7 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }
     printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')" > "$pfx$k.row"
     printf '%s\n' "$out" | sed -n 's/^trace row: //p' > "$pfx$k.traces"
+    printf '%s\n' "$out" | sed -n 's/^other row: //p' > "$pfx$k.others"   # 1.9.1 (C1): the other tests of the file
     # 1.8.1 (G2-2): the text WITHOUT its family prefix (the regex of tn above): a substring of both forms, so the
     # prompt may hold it with or without the label; .deviazioni-test and deviazioni-accettate.txt keep $d (R9)
     printf '%s' "$(printf '%s\n' "$d" | sed 's/^\(test-data\|dati-test\): *//')" > "$pfx$k.text"   # TESTO-SENZA-PREFISSO
@@ -1164,6 +1165,8 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ -s "$pfx$k.instr" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
     local inputs=("$pfx$k.instr" "$pfx$k.row") l j=0
     while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
+    j=0
+    while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.other$j"; inputs+=("$pfx$k.other$j"); done < "$pfx$k.others"
     inputs+=("$pfx$k.text" "$pfx$k.diff-in")
     st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" \
       "$pfx$k.diff" "$dir" "$(pc_root)" "${inputs[@]}" 2>>"$err" | tr -d '\r')
@@ -1866,6 +1869,7 @@ s2_una() { # $1 = Tn, $2 = class, $3 = deviation, $4 = evidence of the phase, $5
   w_in "$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')"
   w_in "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')"
   while IFS= read -r x; do w_in "$x"; done < <(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+  while IFS= read -r x; do w_in "$x"; done < <(printf '%s\n' "$out" | sed -n 's/^other row: //p')   # 1.9.1 (C1)
   w_in "$(printf '%s\n' "$out" | grep '^defect: ' | head -1)"
   # (D7, amendment of 23/11) the victim and the outcomes of D3 are computed here AFTER the phase: script proofs, never
   # inputs of the judge (the phase could not paste them); they go into correzioni.json for the review

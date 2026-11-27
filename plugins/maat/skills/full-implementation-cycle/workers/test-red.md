@@ -15,7 +15,7 @@ End with `PHASE RESULT test-red: OK — <tests, stubs>` and the JSON block (`"fa
 Only data, fixtures, internal names or the organization of the tests — never an assertion, a requirement, a file or
 the name of a test. For each one, before closing, launch in the **foreground** (never `run_in_background`) the agent
 `maat:spec-plan-reviewer-light` with a prompt made of these blocks, each pasted **verbatim** (without its prefix):
-the lines `judge instructions:`, `test row:` and `trace row:` of
+the lines `judge instructions:`, `test row:`, `trace row:` and `other row:` (the other planned tests of the same file) of
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`, the deviation text (with or without its
 `test-data:` label), and the output of
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" diff-test <spec> <its test file> --run-dir <run-dir>`, run after

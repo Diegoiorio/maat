@@ -1150,8 +1150,25 @@ if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].st
 else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
 expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\. " "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
 # 1.8.1 (G2-2, R8): the sentence of the diff file, on the same single line judge instructions:
-expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\.$" "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\. " "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
 refute "^If the prompt|^diff of the test file" "deviazione - (1.8.1): la frase nuova non va a capo (una sola riga di istruzioni)" -- bash "$PC" deviazione - "$T/f2t.md" T1
+# 1.9.1 (C1, N2 of the benchmark): «other row: » for every OTHER planned test of the SAME file (the diff is of the whole
+# file), in plan order; none for a test of another file; both families; the fixed sentence on the one instructions line
+sed 's/^\(| T1 | RF1 | `modules\/api\/tests\/test_calc.py::test_somma` .*\)$/\1\n| T3 | RF1 | `modules\/api\/tests\/test_calc.py::test_diff` (nuovo) | rosso se: `assert 0 == 1` | — |/' "$T/f2t.md" > "$T/f2t-altri.md"
+c1o=$(bash "$PC" deviazione - "$T/f2t-altri.md" T1 2>&1 | tr -d '\r')
+if [ "$(printf '%s\n' "$c1o" | grep -c '^other row: ')" = 1 ] && printf '%s\n' "$c1o" | grep -q '^other row: | T3 | RF1 | `modules/api/tests/test_calc.py::test_diff`' \
+   && ! printf '%s\n' "$c1o" | grep -q '^other row: .*fmt\.test\.ts'; then pass=$((pass+1))
+else echo "FAIL [deviazione - (1.9.1 C1): una sola other row, T3 dello stesso file, nessuna per T2 di un altro file]"; printf '%s\n' "$c1o" | sed 's/^/    /'; fail=$((fail+1)); fi
+refute "^other row: " "deviazione - (1.9.1 C1): nessun altro test nello stesso file = nessuna other row" -- bash "$PC" deviazione - "$T/f2t.md" T1
+c1d=$(bash "$PC" deviazione - "$T/f2t-altri.md" T1 --famiglia test-difettoso --classe stato-condiviso 2>&1 | tr -d '\r')
+if [ "$(printf '%s\n' "$c1d" | grep -c '^other row: ')" = 1 ] && printf '%s\n' "$c1d" | grep -q '^other row: | T3 |' \
+   && [ "$(printf '%s\n' "$c1d" | grep -c '^judge instructions: .*The `other row:` lines are other planned tests of the same file')" = 1 ]; then pass=$((pass+1))
+else echo "FAIL [deviazione - --famiglia test-difettoso (1.9.1 C1): la other row e la frase fissa]"; printf '%s\n' "$c1d" | sed 's/^/    /'; fail=$((fail+1)); fi
+expect 0 "^judge instructions: Judge a test deviation .* it is the diff of the test file\. The \`other row:\` lines are other planned tests of the same file: their changes in the diff are planned and are not part of this deviation; judge only the change of the test row, and STOP if a change outside the scope of the other rows touches an assertion\.$" "deviazione - (1.9.1 C1): la frase delle other row in coda all'unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+refute "^The \`other row:\`" "deviazione - (1.9.1 C1): la frase non va a capo" -- bash "$PC" deviazione - "$T/f2t.md" T1
+if mutpc c1altre 's/^    altre_righe(M, righe, T, tid)$/    pass/'; then
+  refute "^other row: " "controprova (1.9.1 C1): senza la stampa delle other row la riga di T3 sparisce (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-c1altre/plan-check.sh" deviazione - "$T/f2t-altri.md" T1
+else echo "FAIL [controprova C1 other row: la mutazione non si applica]"; fail=$((fail+1)); fi
 expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
 if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1

@@ -62,8 +62,9 @@ JSON: the union of `deviazioni`, `file`, `gate_interni`, the first `bloccato_su`
   run `plan-check.sh corretto <spec> <Tn> --classe <class> --vecchio <tmp> --nuovo <Tn's file> --run-dir <run-dir>` (no
   `trasformazione:` line → STOP), then the judge in the **foreground** (`maat:spec-plan-reviewer-light`), its prompt only
   these blocks verbatim, blank lines between: the output of `plan-check.sh deviazione - <spec> <Tn> --famiglia
-  test-difettoso --classe <class>`, that `trasformazione:` line, the output of `plan-check.sh diff-test <spec> <Tn's
-  file> --run-dir <run-dir> --dal-post`; nothing else in the prompt. ACCEPT →
+  test-difettoso --classe <class>` (its `other row:` lines, the other planned tests of the same file, included), that
+  `trasformazione:` line, the output of `plan-check.sh diff-test <spec> <Tn's file> --run-dir <run-dir> --dal-post`;
+  nothing else in the prompt. ACCEPT →
   `PHASE RESULT … OK` with the deviation in `deviazioni` (prefix first; `run-phase.sh` proves it again and records the
   test fingerprint); otherwise, or in doubt → STOP;
 - `Blocked on: migration to apply` (`Bloccato su: migrazione da applicare`) → STOP: the file is written; the user applies it by hand (`psql`,
