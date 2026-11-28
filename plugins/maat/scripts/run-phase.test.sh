@@ -969,7 +969,10 @@ case $mode in
       mkdir -p "$TRUN/test-red"
       { printf '%s\n' "$gb"; printf 'deviation: %s\n' "$gtx"; bash "$PCK" diff-test "$TSP" "$gtf" --run-dir "$TRUN"; } > "$TRUN/test-red/gg.tmp"
       gs=$(sha256sum < "$TRUN/test-red/gg.tmp" | cut -c1-64); mv -f "$TRUN/test-red/gg.tmp" "$TRUN/test-red/giudizio-T1-${gs:0:16}.md"
-      gl="judge file: $TRUN/test-red/giudizio-T1-${gs:0:16}.md · sha256 $gs
+      # the path in the form plan-check prints it (maat_cygm, C:/… on Windows): a /tmp/… of Git Bash is not a path
+      # native python resolves, so the line would be STOP (percorso) instead of (read)
+      gp=$(cygpath -m "$TRUN/test-red/giudizio-T1-${gs:0:16}.md" 2>/dev/null || printf '%s' "$TRUN/test-red/giudizio-T1-${gs:0:16}.md")
+      gl="judge file: $gp · sha256 $gs
 Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
     else gl=$(printf '%s\n' "$gtx" | bash "$PCK" giudizio "$TSP" T1 --run-dir "$TRUN" | tr -d '\r'); fi
     jl=$(printf '%s\n' "$gl" | sed -n 1p); gf="$TRUN/test-red/$(printf '%s\n' "$jl" | sed 's/^judge file: .*\/\([^/]*\) · sha256 .*$/\1/')"

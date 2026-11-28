@@ -97,7 +97,10 @@ jobs:
     # Measure (CI of 1.6.0): the three groups took 810, 984 and 900 s, Homebrew setup included. Longest ~16.4 min;
     # limit = first multiple of 5 min above 1.5 × 16.4 = 24.6 → 25, rounded up to 30 for the Homebrew setup without
     # its cache. 1.8.0: five groups of about 10-12 minutes; the limit stays.
-    timeout-minutes: 30
+    # 1.9.1: group 1 hit the 1500 s of the group (oracle 786 s, run-phase-s2 cut at 715 s; Linux 315 + 388 s); no other
+    # group has room for run-phase-s2 (groups 2-5 took 813, 1105, 745, 664 s), so the limits grow: job 40, group
+    # 2100 = 40 × 60 - 300, suite 1500 (run-phase-s2 over 715 s, run-phase 749 s).
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -109,9 +112,9 @@ jobs:
       HOMEBREW_NO_ANALYTICS: "1"
       MAAT_BREW: "bash coreutils gnu-sed findutils grep gawk diffutils flock rsync"
       # 1.8.0: the limit of each suite and of the group, below the job's (as for Linux; 1500 = 30 × 60 - 300: the steps
-      # out of «Suites» at most 116 s on the macOS runs measured, see the linux job)
-      MAAT_SUITE_TIMEOUT: "1200"
-      MAAT_GRUPPO_TIMEOUT: "1500"
+      # out of «Suites» at most 116 s on the macOS runs measured, see the linux job); 1.9.1: 2100 = 40 × 60 - 300
+      MAAT_SUITE_TIMEOUT: "1500"
+      MAAT_GRUPPO_TIMEOUT: "2100"
     steps:
       - uses: actions/checkout@v4
         with:
