@@ -311,9 +311,9 @@ ci_gruppo() {
 check "  ci.yml: linux, macos e windows impostano MAAT_GRUPPO_TIMEOUT almeno 300 s sotto timeout-minutes × 60 e non sotto MAAT_SUITE_TIMEOUT" \
   'ci_gruppo "$CIY" linux-gruppo && ci_gruppo "$CIY" macos-gruppo && ci_gruppo "$CIY" windows-gruppo'
 grep -v 'MAAT_GRUPPO_TIMEOUT:' "$CIY" > "$T/ci-g0.yml"
-awk '/^  macos-gruppo:$/ { s = 1 } /^  windows-gruppo:$/ { s = 0 } s && /MAAT_GRUPPO_TIMEOUT:/ { sub(/[0-9]+/, "1800") } 1' "$CIY" > "$T/ci-g1.yml"
+awk '/^  macos-gruppo:$/ { s = 1 } /^  windows-gruppo:$/ { s = 0 } s && /MAAT_GRUPPO_TIMEOUT:/ { sub(/[0-9]+/, "2400") } 1' "$CIY" > "$T/ci-g1.yml"
 awk '/^  windows-gruppo:$/ { s = 1 } /^  linux:$/ { s = 0 } s && /MAAT_GRUPPO_TIMEOUT:/ { sub(/[0-9]+/, "1000") } 1' "$CIY" > "$T/ci-g2.yml"
-check "controprova: senza MAAT_GRUPPO_TIMEOUT, macos a 1800 (= 30 × 60), windows a 1000 (sotto MAAT_SUITE_TIMEOUT) → rosso" \
+check "controprova: senza MAAT_GRUPPO_TIMEOUT, macos a 2400 (= 40 × 60, 1.9.1), windows a 1000 (sotto MAAT_SUITE_TIMEOUT) → rosso" \
   '! cmp -s "$CIY" "$T/ci-g0.yml" && ! ci_gruppo "$T/ci-g0.yml" linux-gruppo && ! cmp -s "$CIY" "$T/ci-g1.yml" && ! ci_gruppo "$T/ci-g1.yml" macos-gruppo &&
    ! cmp -s "$CIY" "$T/ci-g2.yml" && ! ci_gruppo "$T/ci-g2.yml" windows-gruppo'
 rm -f "$R/tools/finta-dorme.test.sh" "$R/tools/finta-rossa.test.sh"
