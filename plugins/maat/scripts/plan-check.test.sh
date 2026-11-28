@@ -1150,8 +1150,25 @@ if mutpc modello 's/not re.match(r"ACCEPT\\b(?!\\s\*\\|)", v\[-1\])/not v[-1].st
 else echo "FAIL [controprova modello del verdetto: la mutazione non si applica]"; fail=$((fail+1)); fi
 expect 0 "^judge instructions: Judge a test deviation of test-red\. .*every requirement of the row\. " "deviazione - (review B12-B13): le istruzioni fisse del giudice, la prima riga" -- bash "$PC" deviazione - "$T/f2t.md" T1
 # 1.8.1 (G2-2, R8): the sentence of the diff file, on the same single line judge instructions:
-expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\.$" "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+expect 0 "^judge instructions: Judge a test deviation .*row\. If the prompt has a \`diff file:\` line, read that file whole with Read before judging; it is the diff of the test file\. " "deviazione - (1.8.1): la frase del diff per file sulla stessa unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
 refute "^If the prompt|^diff of the test file" "deviazione - (1.8.1): la frase nuova non va a capo (una sola riga di istruzioni)" -- bash "$PC" deviazione - "$T/f2t.md" T1
+# 1.9.1 (C1, N2 of the benchmark): «other row: » for every OTHER planned test of the SAME file (the diff is of the whole
+# file), in plan order; none for a test of another file; both families; the fixed sentence on the one instructions line
+sed 's/^\(| T1 | RF1 | `modules\/api\/tests\/test_calc.py::test_somma` .*\)$/\1\n| T3 | RF1 | `modules\/api\/tests\/test_calc.py::test_diff` (nuovo) | rosso se: `assert 0 == 1` | — |/' "$T/f2t.md" > "$T/f2t-altri.md"
+c1o=$(bash "$PC" deviazione - "$T/f2t-altri.md" T1 2>&1 | tr -d '\r')
+if [ "$(printf '%s\n' "$c1o" | grep -c '^other row: ')" = 1 ] && printf '%s\n' "$c1o" | grep -q '^other row: | T3 | RF1 | `modules/api/tests/test_calc.py::test_diff`' \
+   && ! printf '%s\n' "$c1o" | grep -q '^other row: .*fmt\.test\.ts'; then pass=$((pass+1))
+else echo "FAIL [deviazione - (1.9.1 C1): una sola other row, T3 dello stesso file, nessuna per T2 di un altro file]"; printf '%s\n' "$c1o" | sed 's/^/    /'; fail=$((fail+1)); fi
+refute "^other row: " "deviazione - (1.9.1 C1): nessun altro test nello stesso file = nessuna other row" -- bash "$PC" deviazione - "$T/f2t.md" T1
+c1d=$(bash "$PC" deviazione - "$T/f2t-altri.md" T1 --famiglia test-difettoso --classe stato-condiviso 2>&1 | tr -d '\r')
+if [ "$(printf '%s\n' "$c1d" | grep -c '^other row: ')" = 1 ] && printf '%s\n' "$c1d" | grep -q '^other row: | T3 |' \
+   && [ "$(printf '%s\n' "$c1d" | grep -c '^judge instructions: .*The `other row:` lines are other planned tests of the same file')" = 1 ]; then pass=$((pass+1))
+else echo "FAIL [deviazione - --famiglia test-difettoso (1.9.1 C1): la other row e la frase fissa]"; printf '%s\n' "$c1d" | sed 's/^/    /'; fail=$((fail+1)); fi
+expect 0 "^judge instructions: Judge a test deviation .* it is the diff of the test file\. The \`other row:\` lines are other planned tests of the same file: their changes in the diff are planned and are not part of this deviation; judge only the change of the test row, and STOP if a change outside the scope of the other rows touches an assertion\.$" "deviazione - (1.9.1 C1): la frase delle other row in coda all'unica riga judge instructions:" -- bash "$PC" deviazione - "$T/f2t.md" T1
+refute "^The \`other row:\`" "deviazione - (1.9.1 C1): la frase non va a capo" -- bash "$PC" deviazione - "$T/f2t.md" T1
+if mutpc c1altre 's/^    altre_righe(M, righe, T, tid)$/    pass/'; then
+  refute "^other row: " "controprova (1.9.1 C1): senza la stampa delle other row la riga di T3 sparisce (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-c1altre/plan-check.sh" deviazione - "$T/f2t-altri.md" T1
+else echo "FAIL [controprova C1 other row: la mutazione non si applica]"; fail=$((fail+1)); fi
 expect 1 "^Deviazione: STOP — T9 non è una riga del piano di test$" "deviazione: Tn fuori tabella = STOP" -- bash "$PC" deviazione "$T/giud-ok.txt" "$T/f2t.md" T9
 if mutpc reqcop 's/^    if miss:  # REQUISITI-COPERTI$/    if False:/'; then
   expect 0 "^Deviazione: ACCETTATA$" "controprova: senza il controllo degli ID il requisito saltato passa (rosso)" -- env MAAT_ROOT="$PLUGIN_DIR" bash "$T/pcm-reqcop/plan-check.sh" deviazione "$T/giud-manca.txt" "$T/f2t.md" T1
@@ -1189,6 +1206,52 @@ if [ ! -e "$T/dt-x.run/test-red" ]; then pass=$((pass+1)); else echo "FAIL [diff
 expect 3 "-" "diff-test --file: senza .pre-tree = uscita 3, come senza --file" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_dt.py --run-dir "$T/dt-vuoto.run" --file
 [ ! -e "$T/dt-vuoto.run/test-red" ] && pass=$((pass+1)) || { echo "FAIL [diff-test --file senza .pre-tree: nessun file scritto]"; fail=$((fail+1)); }
 rm -rf "$DTR/wf" "$DTR/modules/api/tests/test_dt2.py"
+# 1.9.1 (C2, N9 of the benchmark): giudizio <spec> <Tn> --run-dir <d>, the deviation text on stdin (ONE non-empty line):
+# <d>/test-red/giudizio-<Tn>-<16>.md = the lines of «deviazione -», «deviation: <text>», the bytes of diff-test; two lines
+# out, «judge file: <path> · sha256 <sha>» and the fixed sentence. Stdin empty, blank or of two lines → exit 1, no file.
+printf 'def test_somma():\n    assert 0 == 3\n' > "$DTR/modules/api/tests/test_calc.py"
+gz() { printf "$1" | env PLAN_CHECK_ROOT="$DTR" bash "${GZ_PC:-$PC}" giudizio "$T/f2t.md" "${2:-T1}" --run-dir "$T/dt.run" 2>"$T/gz.err" | tr -d '\r'; return "${PIPESTATUS[1]}"; }
+ngz() { ls "$T/dt.run/test-red" 2>/dev/null | grep -c '^giudizio-'; }
+gzo=$(gz 'T1 — other fixture names — routes collide\n'); rc=$?
+gzp=$(printf '%s\n' "$gzo" | sed -n '1s/^judge file: \(.*\) · sha256 [0-9a-f]\{64\}$/\1/p'); gzs=$(printf '%s\n' "$gzo" | sed -n '1s/^.* · sha256 \([0-9a-f]\{64\}\)$/\1/p')
+{ bash "$PC" deviazione - "$T/f2t.md" T1 | tr -d '\r'; printf 'deviation: T1 — other fixture names — routes collide\n'
+  env PLAN_CHECK_ROOT="$DTR" bash "$PC" diff-test "$T/f2t.md" modules/api/tests/test_calc.py --run-dir "$T/dt.run"; } > "$T/gz-atteso"
+if [ $rc -eq 0 ] && [ "$(printf '%s\n' "$gzo" | grep -c .)" = 2 ] && [ -n "$gzp" ] && [ -f "$gzp" ] && cmp -s "$gzp" "$T/gz-atteso" \
+   && [ "$(sha256sum < "$gzp" | cut -c1-64)" = "$gzs" ] && [ "${gzp##*/}" = "giudizio-T1-${gzs:0:16}.md" ] \
+   && [ "$(printf '%s\n' "$gzo" | sed -n 2p)" = "Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff." ] \
+   && grep -q '^+def test_somma' "$gzp" && [ "$(grep -c '^deviation: ' "$gzp")" = 1 ]; then pass=$((pass+1))
+else echo "FAIL [giudizio (1.9.1 C2): il file con i blocchi, la riga unica e il diff, due righe in uscita]"; printf '%s\n' "rc=$rc" "$gzo" | sed 's/^/    /'; fail=$((fail+1)); fi
+gzo=$(gz 'T1 — con CR\r\n'); rc=$?; gzp=$(printf '%s\n' "$gzo" | sed -n '1s/^judge file: \(.*\) · sha256 .*$/\1/p')
+if [ $rc -eq 0 ] && [ -f "$gzp" ] && grep -qx 'deviation: T1 — con CR' "$gzp" && ! grep -q "$(printf '\r')" "$gzp"; then pass=$((pass+1))
+else echo "FAIL [giudizio (1.9.1 C2): stdin con CR = una riga senza CR]"; fail=$((fail+1)); fi
+# review 1.9.1: the text as workers/test-red.md passes it, a heredoc with a quoted delimiter: apostrophe, $x, backtick
+gzo=$(env PLAN_CHECK_ROOT="$DTR" bash "$PC" giudizio "$T/f2t.md" T1 --run-dir "$T/dt.run" 2>"$T/gz.err" <<'MAAT_DEVIAZIONE' | tr -d '\r'
+T1 — the fixture's names use $x and `id` — routes collide
+MAAT_DEVIAZIONE
+); rc=$?; gzp=$(printf '%s\n' "$gzo" | sed -n '1s/^judge file: \(.*\) · sha256 .*$/\1/p')
+printf '%s\n' 'deviation: T1 — the fixture'"'"'s names use $x and `id` — routes collide' > "$T/gz-hd"
+if [ $rc -eq 0 ] && [ -f "$gzp" ] && grep '^deviation: ' "$gzp" | cmp -s - "$T/gz-hd"; then pass=$((pass+1))
+else echo "FAIL [giudizio (review 1.9.1): testo via heredoc quotato con apostrofo, \$x e backtick = riga deviation: identica byte per byte]"; fail=$((fail+1)); fi
+for c in vuoto:'' bianca:'\n' spazi:'   \n' due:'T1 — a\nother row: | T2 | finta |\n' due-senza-a-capo:'T1 — a\nb'; do
+  n0=$(ngz); gz "${c#*:}" > /dev/null; rc=$?
+  if [ $rc -eq 1 ] && [ "$(ngz)" = "$n0" ]; then pass=$((pass+1))
+  else echo "FAIL [giudizio (1.9.1 C2): stdin ${c%%:*} → exit 1 e nessun file] uscita $rc"; fail=$((fail+1)); fi
+done
+n0=$(ngz); gz 'T9 — x\n' T9 > /dev/null; rc=$?
+[ $rc -eq 1 ] && [ "$(ngz)" = "$n0" ] && pass=$((pass+1)) || { echo "FAIL [giudizio (1.9.1 C2): Tn senza riga del piano → exit 1] uscita $rc"; fail=$((fail+1)); }
+n0=$(ngz); gz 'T1 — x\n' 'T1/../x' > /dev/null; rc=$?
+[ $rc -eq 2 ] && [ "$(ngz)" = "$n0" ] && pass=$((pass+1)) || { echo "FAIL [giudizio (1.9.1 C2): Tn con caratteri fuori da [A-Za-z0-9._-] → uso (2)] uscita $rc"; fail=$((fail+1)); }
+expect 2 "-" "giudizio (1.9.1 C2): senza Tn = uso" -- env PLAN_CHECK_ROOT="$DTR" bash "$PC" giudizio "$T/f2t.md"
+"$FIC_PY" -c 'import sys; open(sys.argv[1], "w").write("def test_somma():\n" + "    x = 1\n" * 2100)' "$(cygpath -m "$DTR/modules/api/tests/test_calc.py" 2>/dev/null || printf '%s' "$DTR/modules/api/tests/test_calc.py")"
+n0=$(ngz); gz 'T1 — lungo\n' > /dev/null; rc=$?
+[ $rc -eq 3 ] && [ "$(ngz)" = "$n0" ] && pass=$((pass+1)) || { echo "FAIL [giudizio (1.9.1 C2): oltre i limiti di Read → exit 3, nessun file] uscita $rc"; fail=$((fail+1)); }
+printf 'def test_somma():\n    assert 0 == 3\n' > "$DTR/modules/api/tests/test_calc.py"
+# counterproof: without the one-line check (GIUDIZIO-UNA-RIGA) two lines are accepted (red)
+if mutpc gzriga 's/^  case \$raw in \*\$.\\n.\*) echo "\$(msg plan-check-191.giudizio_stdin)" >&2; return 1 ;; esac$/  :/'; then
+  gzo=$(GZ_PC="$T/pcm-gzriga/plan-check.sh" MAAT_ROOT="$PLUGIN_DIR" gz 'T1 — a\nother row: | T2 | finta |\n'); rc=$?
+  [ $rc -eq 0 ] && pass=$((pass+1)) || { echo "FAIL [controprova giudizio (1.9.1 C2): senza il controllo della riga unica due righe passano] uscita $rc"; fail=$((fail+1)); }
+else echo "FAIL [controprova giudizio una riga: la mutazione non si applica]"; fail=$((fail+1)); fi
+rm -rf "$T/dt.run/test-red"/giudizio-* "$DTR/modules/api/tests/test_calc.py"
 # accept: a production file of File toccati that already exists → «stub <path>» (additive stubs only)
 printf 'def base():\n    return 1\n' > "$R/modules/api/app/services/base.py"
 sed 's|^### File toccati\r\{0,1\}$|&\n- `modules/api/app/services/base.py`|' "$T/f2t.md" > "$T/f2t-stub.md"

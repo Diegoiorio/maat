@@ -14,8 +14,20 @@ End with `PHASE RESULT test-red: OK — <tests, stubs>` and the JSON block (`"fa
 
 Only data, fixtures, internal names or the organization of the tests — never an assertion, a requirement, a file or
 the name of a test. For each one, before closing, launch in the **foreground** (never `run_in_background`) the agent
-`maat:spec-plan-reviewer-light` with a prompt made of these blocks, each pasted **verbatim** (without its prefix):
-the lines `judge instructions:`, `test row:` and `trace row:` of
+`maat:spec-plan-reviewer-light`. Recommended prompt: after the test file is final, run (the text in a heredoc with a
+quoted delimiter: an apostrophe, `$` or a backtick reach the script as written)
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" giudizio <spec> <Tn> --run-dir <run-dir> <<'MAAT_DEVIAZIONE'
+<the deviation text, one line>
+MAAT_DEVIAZIONE
+```
+
+and make its two output lines (`judge file: <path> · sha256 <sha>` and the sentence after it) the **whole** prompt,
+nothing else: the file holds every input, composed by the script, and you copy nothing by hand. Use the same one-line
+text in `deviazioni`. Otherwise (exit 3: the file is over the limits of Read) a prompt made of these blocks, each pasted
+**verbatim** (without its prefix):
+the lines `judge instructions:`, `test row:`, `trace row:` and `other row:` (the other planned tests of the same file) of
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" deviazione - <spec> <Tn>`, the deviation text (with or without its
 `test-data:` label), and the output of
 `bash "${CLAUDE_PLUGIN_ROOT}/scripts/plan-check.sh" diff-test <spec> <its test file> --run-dir <run-dir>`, run after

@@ -2522,6 +2522,19 @@ DEV_ISTRUZIONI = ("Judge a test deviation of test-red. Answer with two lines: «
                   "requirement, a file or a test name, and the assertion still proves every requirement of the row. "
                   "If the prompt has a `diff file:` line, read that file whole with Read before judging; it is the "
                   "diff of the test file.")
+# 1.9.1 (C1, N2 of the benchmark): the diff is of the WHOLE test file, so it also holds the changes other planned tests of
+# the same file make. Their plan rows reach the judge as «other row: » lines, with this fixed sentence (in both families).
+DEV_ALTRE = ("The `other row:` lines are other planned tests of the same file: their changes in the diff are planned "
+             "and are not part of this deviation; judge only the change of the test row, and STOP if a change "
+             "outside the scope of the other rows touches an assertion.")
+DEV_ISTRUZIONI = DEV_ISTRUZIONI.rstrip() + " " + DEV_ALTRE
+
+
+def altre_righe(M, righe, T, tid):
+    """1.9.1 (C1): «other row: <plan line>» for every OTHER test of the plan with the same file, in plan order"""
+    for t, U in M["tests"].items():
+        if t != tid and U["path"] == T["path"]:
+            print("other row: " + righe.get(U["n"], ""))
 
 
 def cmd_deviazione(M, ris, tid):
@@ -2538,6 +2551,7 @@ def cmd_deviazione(M, ris, tid):
             print("trace row: " + righe.get(n, ""))
             if r not in ids:
                 ids.append(r)
+    altre_righe(M, righe, T, tid)
     print("test file: " + T["path"])
     if ris == "-":
         return 0
@@ -3318,7 +3332,7 @@ DEV_ISTRUZIONI_DIFETTO = ("Judge a defective-test deviation of implement. Answer
                           "may keep state keyed on object identity (a WeakMap, a memo on id() or on the reference) that "
                           "a copy of the test data would break or hide. If the prompt has a `diff file:` line, read that "
                           "file whole with Read before judging; it is the diff of the test file from the post-tree of "
-                          "test-red.")
+                          "test-red. " + DEV_ALTRE)
 DEV_CLASSE = re.compile(r"^[ \t>*_`-]*Defect class:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
 
 
@@ -3352,6 +3366,7 @@ def dev_difetto(M, ris, tid, classe):
             print("trace row: " + righe.get(n, ""))
             if r not in ids:
                 ids.append(r)
+    altre_righe(M, righe, T, tid)
     cl = CLASSI_DIF.get(classe) if classe else None
     if classe and cl is None:  # CLASSE-AMMESSA
         return controllo("d_class", classe[:100])
@@ -4421,6 +4436,52 @@ cmd_diff_test() {
   printf 'diff file: %s · sha256 %s\n' "$ab" "$sha"
 }
 
+# 1.9.1 (C2, N9 of the benchmark): the inputs of the judge of a test-data deviation in ONE file composed here, so the
+# session never copies a block verbatim (it rewrote the deviation text in prose). The deviation text on stdin, exactly
+# one non-empty line (CR removed, a final newline allowed): more lines could fake «other row:» or a diff. The file
+# <run>/test-red/giudizio-<Tn>-<sha16>.md = the lines of «deviazione - <spec> <Tn>», «deviation: <text>», then the bytes
+# of «diff-test <spec> <its test file> --run-dir <run>». Prints «judge file: <path> · sha256 <sha>» (path relative to
+# the repository root as «diff file:») and the fixed sentence: the two lines are the whole prompt of the judge.
+# Exit 0 · 1 stdin not one line or no row of Tn · 2 usage · 3 no diff or over the limits of Read (2000 lines of 2000)
+GIUDIZIO_FRASE="Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
+cmd_giudizio() {
+  local spec="" tn="" run=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-dir) [ $# -ge 2 ] || die_usage; run="$2"; shift 2 ;;
+      -*) die_usage ;;
+      *) if [ -z "$spec" ]; then spec="$1"; elif [ -z "$tn" ]; then tn="$1"; else die_usage; fi; shift ;;
+    esac
+  done
+  [ -n "$spec" ] && [ -f "$spec" ] && [ -n "$tn" ] || die_usage
+  case $tn in *[!A-Za-z0-9._-]*) die_usage ;; esac
+  [ -n "$run" ] || run="${spec%.md}.run"
+  local raw out file sha td dest ab rt
+  raw=$(tr -d '\r'; printf x); raw=${raw%x}; raw=${raw%$'\n'}   # GIUDIZIO-UNA-RIGA
+  case $raw in *$'\n'*) echo "$(msg plan-check-191.giudizio_stdin)" >&2; return 1 ;; esac
+  [ -n "${raw//[[:space:]]/}" ] || { echo "$(msg plan-check-191.giudizio_stdin)" >&2; return 1; }
+  local rc
+  out=$(cmd_deviazione - "$spec" "$tn"); rc=$?; out=$(printf '%s\n' "$out" | tr -d '\r')
+  [ $rc -eq 0 ] || { printf '%s\n' "$out"; return 1; }
+  file=$(printf '%s\n' "$out" | sed -n 's/^test file: //p' | head -1)
+  cmd_diff_test "$spec" "$file" --run-dir "$run" > "$TMPD/giudizio.diff" || return 3
+  { printf '%s\n' "$out"; printf 'deviation: %s\n' "$raw"; cat "$TMPD/giudizio.diff"; } > "$TMPD/giudizio.md"
+  "$FIC_PY" -c 'import sys
+t = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+r = t.split("\n")
+if r and r[-1] == "":
+    r.pop()
+sys.exit(0 if len(r) <= 2000 and all(len(l) <= 2000 for l in r) else 1)' "$(maat_cygm "$TMPD/giudizio.md" 2>/dev/null || printf '%s' "$TMPD/giudizio.md")" ||
+    { echo "$(msg plan-check-191.giudizio_limit)" >&2; return 3; }
+  sha=$(sha256sum < "$TMPD/giudizio.md" | cut -c1-64)
+  td="$run/test-red"; dest="$td/giudizio-$tn-${sha:0:16}.md"
+  mkdir -p "$td" && cp "$TMPD/giudizio.md" "$dest.tmp" && mv -f "$dest.tmp" "$dest" || { rm -f "$dest.tmp"; return 3; }
+  ab=$(cd "$td" && pwd)/${dest##*/}; rt=$(cd "$(repo_root "$spec")" 2>/dev/null && pwd)
+  if [ -n "$rt" ] && [ "${ab#"$rt"/}" != "$ab" ]; then ab=${ab#"$rt"/}
+  else ab=$(maat_cygm "$ab" 2>/dev/null || printf '%s' "$ab"); fi
+  printf 'judge file: %s · sha256 %s\n%s\n' "$ab" "$sha" "$GIUDIZIO_FRASE"
+}
+
 cmd_route() {
   local spec="" diff=""
   while [ $# -gt 0 ]; do
@@ -4627,6 +4688,7 @@ case "$sub" in
   accept|tests|stubs|rossi|l2|additivo) cmd_f2x "$sub" "$@" ;;
   deviazione) cmd_deviazione "$@" ;;
   diff-test) cmd_diff_test "$@" ;;
+  giudizio) cmd_giudizio "$@" ;;
   esiti) cmd_esiti "$@" ;;
   corretto) cmd_corretto "$@" ;;
   *) die_usage ;;

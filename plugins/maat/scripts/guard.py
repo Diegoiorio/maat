@@ -942,10 +942,26 @@ def check_heredoc(cmd):
         deny("heredoc_py")
 
 
+def scope_file():
+    """1.9.1 (C4): the FIC_SCOPE file to open. Absolute: as is. Relative: resolved on FIC_REPO (the documented base,
+    «relative to the repo») with norm(), NEVER on the current folder of the session or of the hook (a `cd` into
+    evidence/ made an in-scope Edit denied). Relative without an absolute FIC_REPO: "" (unreadable -> denied)."""
+    s = os.environ.get("FIC_SCOPE") or ""
+    if not s:
+        return ""
+    t = s.replace("\\", "/")
+    if t.startswith("/") or re.match(r"^[a-zA-Z]:/", t):
+        return s
+    repo = (os.environ.get("FIC_REPO") or "").replace("\\", "/")
+    if not (repo.startswith("/") or re.match(r"^[a-zA-Z]:/", repo)):
+        return ""
+    return norm(t, norm(repo, repo))
+
+
 def in_scope(rel):
     """Rule 5: is rel (relative to the repo, in pfold form) in the FIC_SCOPE scope? Unreadable scope -> no."""
     try:
-        with open(os.environ.get("FIC_SCOPE") or "", encoding="utf-8") as f:
+        with open(scope_file(), encoding="utf-8") as f:
             entries = [pfold(ln.strip().replace("\\", "/")) for ln in f if ln.strip()]
     except OSError:
         return False

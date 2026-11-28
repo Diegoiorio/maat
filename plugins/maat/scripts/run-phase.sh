@@ -977,6 +977,12 @@ chiusura_prep() {
 # to <run dir>/test-red/diff-test-<s[:16]>.diff (relative paths on <root>), that file still with sha256 <s>, at most
 # 2000 lines of at most 2000 characters, and a Read of <p> by the sub-agent of THAT call (transcript.chiamate_figlie)
 # without offset, without limit or with limit ≥ its lines, with a result not in error. Anything else: input missing.
+# 1.9.1 (C2): a call whose prompt has a «judge file: <p> · sha256 <s>» line (plan-check.sh giudizio) is judged on that file
+# only: the prompt holds that line and the fixed sentence and nothing else («extra»); <p> is the path computed here for
+# DEV_TN (<run dir>/test-red/giudizio-<Tn>-<s[:16]>.md); the file has sha256 <s>, ONE «deviation: » line, and is byte for
+# byte the blocks of DEV_BLOCCHI + that line + the recomputed diff; a whole Read of it by the sub-agent of that call.
+# Otherwise «incompleto giudizio:<why>» (frase, percorso, file, sha, contenuto, tn, read). The judged line goes to
+# DEV_TESTO_OUT. Without the line: the inline form above, unchanged.
 # 1.9.0 (K6a, K0.3) «ammesse-impl <result.json> <jsonl> <originale 0|1>»: the same for implement/fix and the family
 # «test-difettoso: » / «defective-test: » (every deviation of the family or defensive, at least one of the family).
 # 1.9.0 (K6a, K0.5) «giudice --tutti <jsonl> <out prefix> <run dir> <root> <n> {<k> <diff> <input file>…}×n»: one group of
@@ -1077,11 +1083,25 @@ def mancano(c, p, dd, ii):   # (the missing inputs, 1-based, as strings; the «d
         if fl is not None:
             miss = miss[:-1]
     return miss, fl
+FRASE = "Read that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
+JF = re.compile(r"^judge file: (.+?) \u00b7 sha256 ([0-9a-f]{64})[ \t]*$", re.M)
+def pulito(p, ms):   # 1.9.1 (C2) PROMPT-PULITO: beside the one «judge file:» line only its fixed sentence and spaces
+    if len(ms) > 1:
+        return "extra"
+    q = p[:ms[0].start()] + p[ms[0].end():]
+    if FRASE not in q:
+        return "incompleto giudizio:frase"
+    if re.sub(r"\s", "", q.replace(FRASE, "", 1)):
+        return "extra"
+    return None
 if tutti:
     ACC = re.compile(r"^[ \t>*_`-]*Deviation verdict:[ \t*_`]*(.*?)[ \t*_`]*$", re.M)
     compl, incompl, esito = [], [], ""
     for c in calls:
         p = tr.testo(c["input"].get("prompt")).replace("\r", "")
+        ms = list(JF.finditer(p))
+        if ms:   # 1.9.1 (C2): the same PROMPT-PULITO here; a clean judge file is not an input of this branch (fail-closed)
+            print(pulito(p, ms) or "incompleto giudizio:ramo"); sys.exit(0)
         best = None
         for g, (dd, ii) in enumerate(G):
             miss, fl = mancano(c, p, dd, ii)
@@ -1116,10 +1136,73 @@ if tutti:
     for g, t in res.items():
         open("%s%d.result" % (A[1], g + 1), "w", encoding="utf-8").write(t)
     print("ok"); sys.exit(0)
+def giudizio(c, p, dd):   # 1.9.1 (C2): the judge file of plan-check.sh giudizio; None without a «judge file:» line
+    ms = list(JF.finditer(p))
+    if not ms:
+        return None
+    e = pulito(p, ms)
+    if e:
+        return e, None
+    m = ms[0]
+    # GIUDIZIO-PERCORSO: the path the driver computes for the Tn of THIS deviation, never the one of the prompt;
+    # its 16 hex = the head of the sha256 of the line
+    tn, sha = os.environ.get("DEV_TN", ""), m.group(2)
+    mm = re.match(r"^giudizio-(.+)-([0-9a-f]{16})\.md$", posixpath.basename(m.group(1).replace("\\", "/")))
+    if not tn or not mm or mm.group(1) != tn or mm.group(2) != sha[:16]:
+        return "incompleto giudizio:percorso", None
+    atteso = os.path.join(RUND, "test-red", "giudizio-%s-%s.md" % (tn, sha[:16]))
+    posti = {chiave(atteso), chiave(os.path.realpath(atteso))}
+    if chiave(m.group(1)) not in posti:
+        return "incompleto giudizio:percorso", None
+    try:
+        b = open(atteso, "rb").read()
+    except OSError:
+        return "incompleto giudizio:file", None
+    if hashlib.sha256(b).hexdigest() != sha:
+        return "incompleto giudizio:sha", None
+    try:
+        t = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return "incompleto giudizio:contenuto", None
+    dl = [l for l in t.split("\n") if l.startswith("deviation: ")]
+    if len(dl) != 1:
+        return "incompleto giudizio:contenuto", None
+    riga = dl[0][len("deviation: "):]
+    # GIUDIZIO-RICOMPOSTO: the whole file again from the blocks computed NOW, the one line and the recomputed diff,
+    # byte for byte (never a containment check)
+    blocchi = open(os.environ["DEV_BLOCCHI"], "rb").read()
+    if blocchi + ("deviation: %s\n" % riga).encode("utf-8") + dd != b:
+        return "incompleto giudizio:contenuto", None
+    if not re.match(re.escape(tn) + r"[ \t]*\u2014", re.sub(r"^(test-data|dati-test): *", "", riga)):
+        return "incompleto giudizio:tn", None
+    rl = t.split("\n")
+    if rl and rl[-1] == "":
+        rl.pop()
+    if len(rl) > 2000 or any(len(l) > 2000 for l in rl):   # GIUDIZIO-LIMITI: the limits of Read, as per_file (R7)
+        return "incompleto giudizio:read", None
+    for f in tr.chiamate_figlie(rr, c["id"]):   # READ-DEL-GIUDICE, as per_file
+        fi = f["input"]
+        lim = fi.get("limit")
+        if f["name"] == "Read" and isinstance(fi.get("file_path"), str) and chiave(fi["file_path"]) in posti \
+                and "offset" not in fi and ("limit" not in fi or (type(lim) is int and lim >= len(rl))) \
+                and any(not err for _n, _t, err, _a in f["results"]):
+            return "ok", riga
+    return "incompleto giudizio:read", None
 dd, ii = G[0]
 esito = "asincrono"
 for c in calls:
     p = tr.testo(c["input"].get("prompt")).replace("\r", "")
+    g = giudizio(c, p, dd)
+    if g is not None:
+        if g[0] != "ok":
+            esito = g[0]
+            continue
+        for _n, t, err, asin in c["results"]:
+            if not asin and not err:
+                open(A[1], "w", encoding="utf-8").write(t)
+                open(os.environ["DEV_TESTO_OUT"], "w", encoding="utf-8").write(g[1])
+                print("ok"); sys.exit(0)
+        continue
     miss, _fl = mancano(c, p, dd, ii)
     if miss:
         esito = "incompleto " + ",".join(miss)
@@ -1139,7 +1222,7 @@ pc_root() { # the repository root of plan-check.sh (its repo_root): the base of 
   if [ -n "${PLAN_CHECK_ROOT:-}" ]; then printf '%s' "$PLAN_CHECK_ROOT"; else git -C "$(dirname "$SPEC_F")" rev-parse --show-toplevel 2>/dev/null || pwd; fi
 }
 deviazioni_test() { # $1 = file with the test-data deviations (one per line); prints the cause of a STOP, nothing if accepted
-  local d tn k=0 dl rc st out vd sha tmp="$dir/log/$label.deviazioni-test.tmp" pfx="$dir/log/$label.dev"
+  local d tn k=0 dl rc st out vd sha gt tmp="$dir/log/$label.deviazioni-test.tmp" pfx="$dir/log/$label.dev"
   "$FIC_PY" -c 'import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8")).get("test") or {}
 sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" for v in d.values()) else 1)' "$TR/rossi.json" 2>>"$err" ||
@@ -1154,6 +1237,7 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }
     printf '%s' "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')" > "$pfx$k.row"
     printf '%s\n' "$out" | sed -n 's/^trace row: //p' > "$pfx$k.traces"
+    printf '%s\n' "$out" | sed -n 's/^other row: //p' > "$pfx$k.others"   # 1.9.1 (C1): the other tests of the file
     # 1.8.1 (G2-2): the text WITHOUT its family prefix (the regex of tn above): a substring of both forms, so the
     # prompt may hold it with or without the label; .deviazioni-test and deviazioni-accettate.txt keep $d (R9)
     printf '%s' "$(printf '%s\n' "$d" | sed 's/^\(test-data\|dati-test\): *//')" > "$pfx$k.text"   # TESTO-SENZA-PREFISSO
@@ -1164,12 +1248,21 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ -s "$pfx$k.instr" ] || { msg run-phase-180.dev_no_diff tn="$tn"; return 0; }
     local inputs=("$pfx$k.instr" "$pfx$k.row") l j=0
     while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.trace$j"; inputs+=("$pfx$k.trace$j"); done < "$pfx$k.traces"
+    j=0
+    while IFS= read -r l; do j=$((j + 1)); printf '%s' "$l" > "$pfx$k.other$j"; inputs+=("$pfx$k.other$j"); done < "$pfx$k.others"
     inputs+=("$pfx$k.text" "$pfx$k.diff-in")
-    st=$(MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" \
+    # 1.9.1 (C2): the blocks of `deviazione -` as plan-check.sh giudizio writes them (the judge file is recomposed from
+    # them); the text the judge read comes back in $pfx$k.giudicato
+    printf '%s\n' "$out" > "$pfx$k.blocchi"; rm -f "$pfx$k.giudicato"
+    st=$(DEV_TN=$tn DEV_BLOCCHI=$(maat_cygm "$pfx$k.blocchi" 2>/dev/null || printf '%s' "$pfx$k.blocchi") \
+      DEV_TESTO_OUT=$(maat_cygm "$pfx$k.giudicato" 2>/dev/null || printf '%s' "$pfx$k.giudicato") \
+      MAAT_SCRIPTS_PY=$(maat_cygm "$MAAT_SCRIPTS" 2>/dev/null || printf '%s' "$MAAT_SCRIPTS") "$FIC_PY" -c "$DEV_PY" giudice "$log" "$pfx$k.result" \
       "$pfx$k.diff" "$dir" "$(pc_root)" "${inputs[@]}" 2>>"$err" | tr -d '\r')
     case "$st" in
       ok) ;;
       mai) msg run-phase-180.dev_judge_never tn="$tn"; return 0 ;;   # GIUDICE-CHIAMATO
+      extra) msg run-phase-191.dev_judge_extra tn="$tn"; return 0 ;;
+      "incompleto giudizio:"*) msg run-phase-191.dev_judge_file tn="$tn" why="${st#incompleto giudizio:}"; return 0 ;;
       incompleto*) msg run-phase-180.dev_judge_input tn="$tn" which="${st#incompleto }"; return 0 ;;
       *) msg run-phase-180.dev_judge_async tn="$tn"; return 0 ;;
     esac
@@ -1177,11 +1270,21 @@ sys.exit(0 if d and all(isinstance(v, dict) and v.get("esito") == "dimostrato" f
     [ $rc -eq 0 ] || { printf '%s\n' "$out" | sed -n 's/^Deviazione: STOP — //p' | head -1; return 0; }  # DEVIAZIONE-ACCETTATA
     vd=$(tr -d '\r' < "$pfx$k.result" | sed -n 's/^[ \t>*_`-]*Deviation verdict:[ \t*_`]*//p' | tail -1 | sed 's/[ \t*_`]*$//')
     sha=$(sha256sum < "$pfx$k.diff" | cut -c1-64)
-    printf '%s\t%s\t%s\n' "$d" "$vd" "$sha" >> "$tmp"
+    # 1.9.1 (C2, decision 1): judged by file, the text the judge read; a different text in the result is not a STOP, the
+    # column 1 stays the declared one (driver.py and cycle-report.py match on it) and a 4th column «giudicato=<text>»
+    # keeps the judged one for the review. The comparison squeezes runs of spaces and tabs into one space on both sides
+    # (tr -s): the same text with other spacing is the same deviation, no 4th column; any other difference keeps it
+    gt=""
+    if [ -s "$pfx$k.giudicato" ]; then
+      gt=$(tr -d '\r\n' < "$pfx$k.giudicato" | sed 's/^\(test-data\|dati-test\): *//')
+      [ "$(printf '%s' "$gt" | tr -s ' \t' ' ')" != "$(printf '%s\n' "$d" | sed 's/^\(test-data\|dati-test\): *//' | tr -s ' \t' ' ')" ] || gt=""
+    fi
+    if [ -n "$gt" ]; then printf '%s\t%s\t%s\tgiudicato=%s\n' "$d" "$vd" "$sha" "$gt" >> "$tmp"
+    else printf '%s\t%s\t%s\n' "$d" "$vd" "$sha" >> "$tmp"; fi
   done < "$1"
   mv -f "$tmp" "$dir/log/$label.deviazioni-test"
   { [ -f "$dir/log/deviazioni-accettate.txt" ] && tr -d '\r' < "$dir/log/deviazioni-accettate.txt" | grep -v "^$label	"
-    awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
+    awk -F'\t' -v l="$label" '{ print l "\t" $1 "\t" $2 ($4 != "" ? "\t" $4 : "") }' "$dir/log/$label.deviazioni-test"; } > "$dir/log/deviazioni-accettate.txt.tmp" &&
     mv -f "$dir/log/deviazioni-accettate.txt.tmp" "$dir/log/deviazioni-accettate.txt"
 }
 # 1.8.1 (G2-1): the second round of verify_red (RED2_PY). «ammesso <rossi.json>»: exit 0 when the STOP of rossi has
@@ -1866,6 +1969,7 @@ s2_una() { # $1 = Tn, $2 = class, $3 = deviation, $4 = evidence of the phase, $5
   w_in "$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')"
   w_in "$(printf '%s\n' "$out" | sed -n 's/^test row: //p')"
   while IFS= read -r x; do w_in "$x"; done < <(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+  while IFS= read -r x; do w_in "$x"; done < <(printf '%s\n' "$out" | sed -n 's/^other row: //p')   # 1.9.1 (C1)
   w_in "$(printf '%s\n' "$out" | grep '^defect: ' | head -1)"
   # (D7, amendment of 23/11) the victim and the outcomes of D3 are computed here AFTER the phase: script proofs, never
   # inputs of the judge (the phase could not paste them); they go into correzioni.json for the review
@@ -2167,7 +2271,10 @@ if [ "$phase" = test-red ] || [ "$phase" = test-stage ]; then
     printf '%s/staging/\n' "${sa#"$sr"/}" > "$scope"
     echo "$plan_fp" > "$dir/staging.fp"; rm -f "$dir/staging.origine"   # 1.8.0: parked by test-stage, not by a STOP
   fi
-  FIC_SCOPE=$(maat_cygm "$scope" 2>/dev/null || printf '%s' "$scope"); export FIC_SCOPE
+  # 1.9.1 (C4): absolute, so the guard does not open it against the session's current folder (a `cd` into evidence/
+  # made an in-scope Edit denied)
+  sab="$(cd "$(dirname "$scope")" && pwd)/$(basename "$scope")"
+  FIC_SCOPE=$(maat_cygm "$sab" 2>/dev/null || printf '%s' "$sab"); export FIC_SCOPE
   if [ "$phase" = test-red ] && { [ -d "$dir/staging" ] || [ -f "$dir/staging.fp" ]; }; then
     sfp=$([ -f "$dir/staging.fp" ] && tr -d '\r\n' < "$dir/staging.fp")
     if [ -n "$sfp" ] && [ "$sfp" = "$plan_fp" ] && [ -d "$dir/staging" ]; then   # CONFRONTO-IMPRONTA-STAGING

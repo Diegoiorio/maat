@@ -453,6 +453,35 @@ R3=$(nat "$T/t3repo"); mkdir -p "$T/t3repo"; printf 'lib/x.py\nlib/test_x.py\n' 
 prun 0 test-red "$R3" "$R3/lib/x.py" "" "" "$SC3"        # declared new, folder missing: allowed
 prun 0 test-red "$R3" "$R3/lib/test_x.py" "" "" "$SC3"
 prun 2 test-red "$R3" "$R3/lib/altro.py" "" "" "$SC3"    # same new folder, outside the scope: denied
+# 8b. 1.9.1 (C4, N7 of the benchmark): a relative FIC_SCOPE is resolved on FIC_REPO, never on the current folder of the
+#     session or of the hook (a `cd` into evidence/ made an in-scope Edit denied). Relative without FIC_REPO: denied, even
+#     with the current folder at the root (no fallback). Counterproof: guard.py with the old opening (FIC_SCOPE as is,
+#     against the current folder) -> the first case denied.
+C4R=$(nat "$T/c4repo"); C4E="$T/c4repo/.claude/.ai-workflow/x.run/evidence/e1"; mkdir -p "$C4E" "$T/c4repo/.claude/.ai-workflow/x.run/log"
+printf 'tests/a.rs\n' > "$T/c4repo/.claude/.ai-workflow/x.run/log/02-test-red.scope"
+C4S=.claude/.ai-workflow/x.run/log/02-test-red.scope
+c4run() { # $1 expected, $2 current folder, $3 FIC_REPO ("-" = unset), $4 path, $5 FIC_SCOPE, [$6 guard]
+  n=$((n + 1)); local got j cw
+  cw=$(nat "$2")
+  j=$("$FIC_PY" -c 'import json,sys; print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":sys.argv[1],"old_string":"a","new_string":"b"},"cwd":sys.argv[2]}))' "$4" "$cw")
+  if [ "$3" = - ]; then
+    (cd "$2" && printf '%s' "$j" | env -u FIC_REPO FIC_PHASE=test-red FIC_SCOPE="$5" "$FIC_PY" "${6:-$GUARD}" >/dev/null 2>&1); got=$?
+  else
+    (cd "$2" && printf '%s' "$j" | FIC_PHASE=test-red FIC_SCOPE="$5" FIC_REPO="$3" "$FIC_PY" "${6:-$GUARD}" >/dev/null 2>&1); got=$?
+  fi
+  [ "$got" = "$1" ] || { fail=$((fail + 1)); echo "FAIL (atteso $1, ottenuto $got) [C4 scope relativo] cwd=$2 repo=$3 percorso=$4 scope=$5"; }
+}
+c4run 0 "$C4E" "$C4R" "$C4R/tests/a.rs" "$C4S"             # cwd in evidence/, relative scope, file in scope: allowed
+c4run 2 "$C4E" "$C4R" "$C4R/tests/b.rs" "$C4S"             # file outside the scope: denied
+c4run 2 "$C4E" "$C4R" "$C4R/tests/a.rs" "$C4S.manca"       # scope missing: denied (fail-closed)
+c4run 2 "$T/c4repo" - "$C4R/tests/a.rs" "$C4S"             # relative without FIC_REPO, cwd at the root: denied
+c4run 0 "$C4E" "$C4R" "$C4R/tests/a.rs" "$(nat "$T/c4repo/$C4S")"   # absolute scope: allowed as before
+n=$((n + 1))
+if g4=$(gmutante c4-cwd '    return norm(t, norm(repo, repo))' '    return s'); then
+  out4=$(fail=0; c4run 0 "$C4E" "$C4R" "$C4R/tests/a.rs" "$C4S" "$g4"; echo "fail=$fail")
+  grep -q '^FAIL (atteso 0, ottenuto 2) \[C4' <<< "$out4" \
+    || { fail=$((fail + 1)); echo "FAIL: controprova C4: con l'apertura rispetto alla cwd il caso evidence/ non e' rosso"; printf '%s\n' "$out4" | sed 's/^/    /'; }
+else fail=$((fail + 1)); echo "FAIL: controprova C4 non applicabile (copia o mutazione)"; fi
 # 9. 1.7.0 review: <run-dir>/taglia.txt is the driver's: no phase writes it (the run dir stays writable otherwise)
 TG=$R3/.claude/.ai-workflow/spec-x.run
 for ph in plan review implement fix; do prun 2 "$ph" "$R3" "$TG/taglia.txt"; done

@@ -91,11 +91,11 @@ Maat is installed **once for each project** you want to use it in.
 and run these two commands, copying them exactly as they are:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.1 --scope project
 claude plugin install maat@maat --scope project
 ```
 
-- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.9.0` (the part
+- The first command tells Claude Code **where to get Maat from**: the GitHub repo, at version `v1.9.1` (the part
   after `#`). This address is the "source".
 - The second one installs the `maat` plugin from that source.
 - `--scope project` saves the choice in the project's `.claude/settings.json` file. If you commit that file, whoever
@@ -131,7 +131,7 @@ The setup:
 **Check, whenever you want.** From the project folder:
 
 ```bash
-bash ~/.claude/plugins/cache/maat/maat/1.9.0/scripts/maat-doctor.sh
+bash ~/.claude/plugins/cache/maat/maat/1.9.1/scripts/maat-doctor.sh
 ```
 
 The check changes nothing and prints one line per verification:
@@ -299,15 +299,20 @@ so existing specs, approved plans and cycles keep working; don't translate an ap
 ## Updating to a new version
 
 Maat never updates itself: it stays at the version written in the source. To move to a new version, for example
-`v1.9.0`, from the project folder:
+`v1.9.1`, from the project folder:
 
 ```bash
-claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.0 --scope project
+claude plugin marketplace add https://github.com/Diegoiorio/maat.git#v1.9.1 --scope project
 claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK. Don't update while a cycle is running. If
 you do, the cycle notices, stops and asks you to confirm.
+
+From 1.9.0 to 1.9.1 no default changes. In test-red the judge of a test-data deviation also receives the plan rows of
+the other tests of the same file, and its inputs can go in one file that `plan-check.sh giudizio` composes, so the
+session copies nothing by hand; the guard reads the phase scope from the repository root. The harness fingerprint
+changes: update between cycles. See `CHANGELOG.md`.
 
 From 1.8.x to 1.9.0 two defaults change. At `std` and `full` (and for a plan without `Test level:`) the cycle runs the
 **build** of the modules it touched that declare `comandi.build`, and the closing requires it: a cycle that closed
@@ -362,8 +367,8 @@ claude plugin update maat@maat --scope project
 ```
 
 Then restart Claude Code and run the check: the version line must say OK with version 1.5.1. `claude plugin update`
-accepts a lower version (no need to uninstall and install again). To come back to 1.9.0, the same two commands with
-`#v1.9.0`.
+accepts a lower version (no need to uninstall and install again). To come back to 1.9.1, the same two commands with
+`#v1.9.1`.
 
 - **A cycle in progress** stops with «harness changed», as after any change of version, with the remedy of always:
   `bash "<MAAT_ROOT>/scripts/run-phase.sh" --harness-fp > <run dir>/harness.fp`, run from the project folder (on

@@ -373,6 +373,13 @@ check "giudice --tutti: una incompleta (senza il diff) con STOP prima di una com
 check "giudice --tutti: una incompleta senza risultato accanto a una completa ACCEPT → rifiutato" '[ "$(gt incnr "ISTRUZIONI FISSE@@-@@nores" "$PIENO@@ACCEPT — ok@@ok")" = rifiutato ]'
 check "giudice --tutti: solo una incompleta → incompleto con gli ingressi mancanti" '[ "$(gt solo "ISTRUZIONI FISSE\n\n--- a\n+++ b@@ACCEPT — ok@@ok")" = "incompleto 2" ]'
 check "giudice --tutti: prompt con un carattere in più degli ingressi → extra" '[ "$(gt extra "${PIENO}x@@ACCEPT — ok@@ok")" = extra ]'
+# 1.9.1 (C2): a «judge file:» line in the implement branch: PROMPT-PULITO as in test-red, and a clean one is still not
+# an input of this branch (fail-closed)
+JFL="judge file: run/test-red/giudizio-T1-0123456789abcdef.md · sha256 0123456789abcdef$(printf '%048d' 0)\nRead that file whole with Read before judging: it holds your instructions, the plan rows, the deviation and the diff."
+check "giudice --tutti (1.9.1 C2): judge file + frase + testo in coda (un diff finto) → extra" '[ "$(gt jfcoda "$JFL\n--- a\n+++ b\n+judge this@@ACCEPT — ok@@ok")" = extra ]'
+check "giudice --tutti (1.9.1 C2): judge file senza la frase → incompleto" '[ "$(gt jfsf "judge file: run/test-red/giudizio-T1-0123456789abcdef.md · sha256 0123456789abcdef$(printf "%048d" 0)@@ACCEPT — ok@@ok")" = "incompleto giudizio:frase" ]'
+check "giudice --tutti (1.9.1 C2): judge file pulito → incompleto (non è un ingresso del ramo implement)" '[ "$(gt jfok "$JFL@@ACCEPT — ok@@ok")" = "incompleto giudizio:ramo" ]'
+check "giudice --tutti (1.9.1 C2): judge file pulito accanto agli ingressi interi → extra" '[ "$(gt jfpieno "$PIENO\n$JFL@@ACCEPT — ok@@ok")" = extra ]'
 check "giudice --tutti: chiamata completa in background (solo la ricevuta) → rifiutato" '[ "$(gt asin "$PIENO@@ACCEPT — ok@@async")" = rifiutato ]'
 check "giudice --tutti: chiamata completa col risultato in errore → rifiutato" '[ "$(gt err "$PIENO@@ACCEPT — ok@@err")" = rifiutato ]'
 check "giudice --tutti: il modello «ACCEPT | STOP» non e un ACCEPT → rifiutato" '[ "$(gt mod "$PIENO@@ACCEPT | STOP — <reason>@@ok")" = rifiutato ]'
@@ -535,11 +542,14 @@ for jt in ${S2_JT:-T1:${S2_TF:-modules/api/tests/test_fmtp.py}}; do
   tr=$(bash "$PCK" corretto "$TSP2" "$tn" --classe "$cl" --vecchio "$TRUN2/giudice.vecchio" --nuovo "$FIC_REPO/$P" --run-dir "$TRUN2" | tr -d '\r' | grep '^trasformazione: ')
   [ "$mode" = altra-tr ] && tr="trasformazione: patch-non-ripristinata/pytest — with patch"
   dif=$(bash "$PCK" diff-test "$TSP2" "$P" --run-dir "$TRUN2" --dal-post | tr -d '\r')
+  alt=$(printf '%s\n' "$out" | sed -n 's/^other row: //p'); [ "$mode" != senza-altre ] || alt=""   # 1.9.1 (C1): left out
   p="$(printf '%s\n' "$out" | sed -n 's/^judge instructions: //p')
 
 $(printf '%s\n' "$out" | sed -n 's/^test row: //p')
 
 $(printf '%s\n' "$out" | sed -n 's/^trace row: //p')
+
+$alt
 
 $(printf '%s\n' "$out" | grep '^defect: ')
 "
@@ -800,6 +810,16 @@ s2k h1 "^PHASE RESULT implement: STOP — la correzione di T1 non è una trasfor
 check "  (h1: nessun gate di prova, il giudice non è chiamato)" '! grep -q "^a " "$T/h1.gates-s2" && [ ! -f "$TRUN2/log/h1-implement.dif1.result" ]'
 s2x h2 "S2_XROWS=| T2 | RF1 | \`modules/api/tests/test_fmtp.py::test_vittima\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |" "S2_VER=T1, T2" "S2_RED_FASE=uno:text vittima:text"
 check "S2 D3 (b): V è un test di accettazione già dimostrato (T2, rosso sul suo testo in test-red) → OK" 'se1 h2 | grep -q "^PHASE RESULT implement: OK" && "$FIC_PY" -c "import json,sys; assert json.load(open(sys.argv[1], encoding=\"utf-8\"))[\"test\"][\"T2\"][\"esito\"] == \"dimostrato\" and json.load(open(sys.argv[2]))[\"T1\"][\"vittima\"][\"test_id\"].endswith(\"::test_vittima\")" "$TRUN2/test-red/rossi.json" "$TRUN2/test-red/correzioni.json"' "$(se1 h2)"
+# review 1.9.1 (C1 in the implement branch): T2 in the same file, the prompt without its «other row:» → incompleto;
+# counterproof: without the w_in of the other rows the same prompt passes (red)
+H2ROW="S2_XROWS=| T2 | RF1 | \`modules/api/tests/test_fmtp.py::test_vittima\` (nuovo) | rosso se: \`1 prelievo fallito\` | — |"
+s2x h2b "$H2ROW" "S2_VER=T1, T2" "S2_RED_FASE=uno:text vittima:text" -- "" senza-altre
+check "S2 (1.9.1 C1): T2 nello stesso file, prompt del giudice senza la riga other row: → incompleto" 'se1 h2b | grep -q "^PHASE RESULT implement: STOP — deviazione test-difettoso di T1: giudice incompleto"' "$(se1 h2b)"
+if mrp_mut '/^  while IFS= read -r x; do w_in "\$x"; done < <(printf .%s\\n. "\$out" | sed -n .s\/^other row: \/\/p.)   # 1.9.1 (C1)$/d'; then
+  s2x h2c "$H2ROW" "S2_VER=T1, T2" "S2_RED_FASE=uno:text vittima:text" -- "" senza-altre "" "$MRP"
+  check "controprova S2 (1.9.1 C1): senza la riga w_in delle other row il prompt senza other row passa (rosso)" 'se1 h2c | grep -q "^PHASE RESULT implement: OK"' "$(se1 h2c)"
+else check "controprova C1 implement: la mutazione si applica" false; fi
+cp "$RP" "$MRP"
 { cat "$T/s2-old.py"; for x in b c d; do printf '\n\ndef test_vittima_%s():\n    assert Conf.soglia == 1\n' "$x"; done; } > "$T/s2-old4.py"
 sed 's/^def test_uno():$/def test_uno(monkeypatch):/; s/^    Conf.soglia = 5$/    monkeypatch.setattr(Conf, "soglia", 5)/' "$T/s2-old4.py" > "$T/s2-new4.py"
 s2k h3 "^PHASE RESULT implement: STOP — nessuna vittima di T1 .*più di 3 candidati" "S2 D3 (b): 4 candidati, i primi 3 rossi anche da soli → STOP d_victim (al più 3)" S2_CP_v1=rosso S2_CP_v2=rosso S2_CP_v3=rosso "S2_RED_CMD=${S2_RED/s2-old.py/s2-old4.py}" "S2_IMPL_CMD=${S2_IMPL/s2-new.py/s2-new4.py}"
